@@ -1,15 +1,16 @@
 import { Button } from "antd";
 import { StarFilled, ThunderboltFilled } from "@ant-design/icons";
+import type { Category } from "../../../types/home";
 import CategorySidebar from "./CategorySidebar";
 import CategoryMegaMenu from "./CategoryMegaMenu";
-import { useHomeStore } from "../../stores/useHomeStore";
-import { CATEGORIES_DATA, HERO_BANNER_URL } from "../../data/homeData";
+import { useHomeStore } from "../../../stores/useHomeStore";
+import { CATEGORIES_DATA, HERO_BANNER_URL } from "../../../data/homeData";
 
 export default function HeroSection() {
   const activeCategoryId = useHomeStore((state) => state.activeCategoryId);
   const setActiveCategoryId = useHomeStore((state) => state.setActiveCategoryId);
   const clearActiveCategory = useHomeStore((state) => state.clearActiveCategory);
-  const currentCategory = CATEGORIES_DATA.find((c:any) => c.id === activeCategoryId);
+  const currentCategory = CATEGORIES_DATA.find((category: Category) => category.id === activeCategoryId);
 
   return (
     <section className="relative pt-5" onMouseLeave={clearActiveCategory}>

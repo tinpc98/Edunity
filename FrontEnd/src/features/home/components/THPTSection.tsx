@@ -1,8 +1,8 @@
 import { useState } from "react";
-import SectionHeader from "./SectionHeader";
+import SectionHeader from "../../../components/common/SectionHeader";
 import FeaturedClassCard from "./FeaturedClassCard";
 import ClassCard from "./ClassCard";
-import { THPT_CLASSES } from "../../data/homeData";
+import { THPT_CLASSES } from "../../../data/homeData";
 
 const FILTERS = ["Tất cả", "Toán học", "Ngữ văn", "Tiếng Anh", "Vật lí - Hóa học", "ĐGNL (HSA/TSA)"];
 

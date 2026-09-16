@@ -1,5 +1,5 @@
-import { NEWS_LIST } from "../../data/homeData";
-import SectionHeader from "./SectionHeader";
+import { NEWS_LIST } from "../../../data/homeData";
+import SectionHeader from "../../../components/common/SectionHeader";
 import { RightOutlined } from "@ant-design/icons";
 
 export default function NewsSection() {

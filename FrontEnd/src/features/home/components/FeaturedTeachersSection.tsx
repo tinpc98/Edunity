@@ -1,6 +1,6 @@
 import { Button, Tag } from "antd";
 import { CheckCircleFilled, StarFilled, ArrowRightOutlined } from "@ant-design/icons";
-import { FEATURED_TEACHERS } from "../../data/homeData";
+import { FEATURED_TEACHERS } from "../../../data/homeData";
 
 export default function FeaturedTeachersSection() {
   return (

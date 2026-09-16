@@ -1,8 +1,8 @@
 import { useState } from "react";
-import SectionHeader from "./SectionHeader";
+import SectionHeader from "../../../components/common/SectionHeader";
 import FeaturedClassCard from "./FeaturedClassCard";
 import ClassCard from "./ClassCard";
-import { THCS_CLASSES } from "../../data/homeData";
+import { THCS_CLASSES } from "../../../data/homeData";
 
 const FILTERS = ["Lớp 6", "Lớp 7", "Lớp 8", "Lớp 9 (Thi vào 10)"];
 

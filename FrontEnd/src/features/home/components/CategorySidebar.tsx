@@ -1,4 +1,4 @@
-import type { Category } from "../../types/home";
+import type { Category } from "../../../types/home";
 import { RightOutlined, AppstoreOutlined } from "@ant-design/icons";
 
 interface CategorySidebarProps {

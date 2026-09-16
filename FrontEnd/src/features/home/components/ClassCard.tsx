@@ -1,4 +1,4 @@
-import type { ClassItem } from "../../types/home";
+import type { ClassItem } from "../../../types/home";
 
 import { Button } from "antd";
 

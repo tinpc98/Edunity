@@ -1,5 +1,5 @@
 import { CheckCircleFilled, VideoCameraFilled, TeamOutlined, StarFilled } from "@ant-design/icons";
-import { STATS_ITEMS } from "../../data/homeData";
+import { STATS_ITEMS } from "../../../data/homeData";
 
 export default function StatsStrip() {
   return (

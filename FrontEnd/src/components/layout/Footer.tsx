@@ -1,6 +1,5 @@
-import React from "react";
 import { LOGO_URL } from "../../data/homeData";
-import { PhoneOutlined, MailOutlined, GlobalOutlined, FacebookOutlined, YoutubeOutlined, ShareAltOutlined } from "@ant-design/icons";
+import { PhoneOutlined, MailOutlined, FacebookOutlined, YoutubeOutlined, ShareAltOutlined } from "@ant-design/icons";
 
 export default function Footer() {
   return (

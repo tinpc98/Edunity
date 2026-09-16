@@ -1,4 +1,4 @@
-import type { Category } from "../../types/home";
+import type { Category } from "../../../types/home";
 import { ArrowRightOutlined, CheckCircleOutlined } from "@ant-design/icons";
 
 const SEMESTER_CATEGORIES = new Set(["thpt", "thcs", "vao-10", "luyen-thi-dh"]);

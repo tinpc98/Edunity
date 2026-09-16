@@ -1,5 +1,4 @@
-import { TESTIMONIALS } from "../../data/homeData";
-import SectionHeader from "./SectionHeader";
+import { TESTIMONIALS } from "../../../data/homeData";
 import { StarFilled } from "@ant-design/icons";
 
 export default function TestimonialSection() {
