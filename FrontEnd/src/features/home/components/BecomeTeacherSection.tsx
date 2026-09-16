@@ -1,5 +1,5 @@
 import { Button } from "antd";
-import { CheckCircleFilled, RightOutlined, VideoCameraFilled, BarChartOutlined } from "@ant-design/icons";
+import { CheckCircleFilled, RightOutlined, VideoCameraFilled } from "@ant-design/icons";
 
 export default function BecomeTeacherSection() {
   return (

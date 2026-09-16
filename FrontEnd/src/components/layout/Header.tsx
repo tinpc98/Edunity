@@ -1,6 +1,5 @@
-import React from "react";
 import { Input, Button } from "antd";
-import { SearchOutlined, UserOutlined, AppstoreOutlined } from "@ant-design/icons";
+import { SearchOutlined, UserOutlined } from "@ant-design/icons";
 import { LOGO_URL } from "../../data/homeData";
 import { useHomeStore } from "../../stores/useHomeStore";
 

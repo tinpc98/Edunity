@@ -1,6 +1,6 @@
-import SectionHeader from "./SectionHeader";
+import SectionHeader from "../../../components/common/SectionHeader";
 import ClassCard from "./ClassCard";
-import { FREE_CLASSES } from "../../data/homeData";
+import { FREE_CLASSES } from "../../../data/homeData";
 
 export default function FreeClassSection() {
   return (
