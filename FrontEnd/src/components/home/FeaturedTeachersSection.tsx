@@ -1,4 +1,3 @@
-import React from "react";
 import { Button, Tag } from "antd";
 import { CheckCircleFilled, StarFilled, ArrowRightOutlined } from "@ant-design/icons";
 import { FEATURED_TEACHERS } from "../../data/homeData";
@@ -10,13 +9,13 @@ export default function FeaturedTeachersSection() {
         <div>
           <div className="flex items-center gap-2 mb-1.5"><span className="w-1 h-5 bg-cyan-600 rounded-full" /><span className="text-[10px] font-bold tracking-wider text-cyan-700 uppercase">Học trực tiếp cùng chuyên gia</span></div>
           <h2 className="text-[25px] font-extrabold text-slate-900 tracking-tight">Giáo viên nổi bật</h2>
-          <p className="text-[12px] text-slate-500 mt-1">Kết nối với những giáo viên uy tín, có lớp live đang mở đăng ký trên Edunity.</p>
+          {/* <p className="text-[12px] text-slate-500 mt-1">Kết nối với những giáo viên uy tín, có lớp live đang mở đăng ký trên Edunity.</p> */}
         </div>
         <a href="#" className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">Xem tất cả giáo viên <ArrowRightOutlined /></a>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
-        {FEATURED_TEACHERS.map((teacher, index) => (
+        {FEATURED_TEACHERS.map((teacher:any, index:any) => (
           <article key={teacher.id} className="bg-white border border-slate-100 rounded-2xl p-5 text-center shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all min-h-[300px] flex flex-col">
             <div className={`mx-auto w-[92px] h-[92px] rounded-full p-[3px] ${index % 2 === 0 ? "bg-indigo-500" : "bg-cyan-500"} relative`}>
               <img src={teacher.avatar} alt={teacher.name} className="w-full h-full rounded-full object-cover border-[3px] border-white" />

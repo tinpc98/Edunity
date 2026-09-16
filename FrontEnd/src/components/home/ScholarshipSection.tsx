@@ -1,4 +1,3 @@
-import React from "react";
 import { Button, Progress } from "antd";
 import { CheckCircleOutlined, ArrowRightOutlined, FileTextOutlined, HeartOutlined, ClockCircleOutlined } from "@ant-design/icons";
 

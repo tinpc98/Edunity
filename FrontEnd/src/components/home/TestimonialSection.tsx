@@ -1,6 +1,5 @@
-import React from "react";
-import SectionHeader from "./SectionHeader";
 import { TESTIMONIALS } from "../../data/homeData";
+import SectionHeader from "./SectionHeader";
 import { StarFilled } from "@ant-design/icons";
 
 export default function TestimonialSection() {
@@ -30,7 +29,7 @@ export default function TestimonialSection() {
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        {TESTIMONIALS.map((item) => (
+        {TESTIMONIALS.map((item:any) => (
           <div key={item.id} className="bg-white rounded-2xl border border-slate-100 p-6 flex flex-col justify-between shadow-xs">
             <div>
               <div className="flex items-center justify-between mb-3">

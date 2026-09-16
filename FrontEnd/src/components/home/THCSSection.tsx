@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import SectionHeader from "./SectionHeader";
 import FeaturedClassCard from "./FeaturedClassCard";
 import ClassCard from "./ClassCard";
@@ -14,7 +14,7 @@ export default function THCSSection() {
       <SectionHeader
         categoryTag="Nền tảng vững chắc"
         title="Lớp THCS Sắp Khai Giảng & Luyện Thi Vào 10"
-        subtitle="Chọn lớp live theo khối, lịch học và giáo viên; ưu tiên lớp sĩ số nhỏ đang còn chỗ."
+        // subtitle="Chọn lớp live theo khối, lịch học và giáo viên; ưu tiên lớp sĩ số nhỏ đang còn chỗ."
         filterButtons={FILTERS}
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
@@ -43,7 +43,7 @@ export default function THCSSection() {
           />
         </div>
         <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {THCS_CLASSES.slice(0, 6).map((cls) => <ClassCard key={cls.id} classItem={cls} compact />)}
+          {THCS_CLASSES.slice(0, 6).map((cls:any) => <ClassCard key={cls.id} classItem={cls} compact />)}
         </div>
       </div>
     </section>

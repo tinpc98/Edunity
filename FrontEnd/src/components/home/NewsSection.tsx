@@ -1,6 +1,5 @@
-import React from "react";
-import SectionHeader from "./SectionHeader";
 import { NEWS_LIST } from "../../data/homeData";
+import SectionHeader from "./SectionHeader";
 import { RightOutlined } from "@ant-design/icons";
 
 export default function NewsSection() {
@@ -14,7 +13,7 @@ export default function NewsSection() {
       />
 
       <div className="grid grid-cols-3 gap-6">
-        {NEWS_LIST.map((item) => (
+        {NEWS_LIST.map((item:any) => (
           <div
             key={item.id}
             className="group bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-xs hover:shadow-md transition duration-300 flex flex-col justify-between"

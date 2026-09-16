@@ -1,7 +1,17 @@
-import React from "react";
 import { RightOutlined } from "@ant-design/icons";
 
-export default function SectionHeader({ categoryTag, title, subtitle, filterButtons = [], activeFilter, onFilterChange, viewAllLink = "#", viewAllText = "Xem tất cả" }) {
+interface SectionHeaderProps {
+  categoryTag?: string;
+  title: string;
+  subtitle?: string;
+  filterButtons?: string[];
+  activeFilter?: string;
+  onFilterChange?: (filter: string) => void;
+  viewAllLink?: string;
+  viewAllText?: string;
+}
+
+export default function SectionHeader({ categoryTag, title, subtitle, filterButtons = [], activeFilter, onFilterChange, viewAllLink = "#", viewAllText = "Xem tất cả" }: SectionHeaderProps) {
   return (
     <div className="mb-5 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
       <div className="max-w-[560px]">

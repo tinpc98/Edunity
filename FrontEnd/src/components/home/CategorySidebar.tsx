@@ -1,7 +1,13 @@
-import React from "react";
+import type { Category } from "../../types/home";
 import { RightOutlined, AppstoreOutlined } from "@ant-design/icons";
 
-export default function CategorySidebar({ categories, activeCategoryId, onSelectCategory }) {
+interface CategorySidebarProps {
+  categories: Category[];
+  activeCategoryId: string | null;
+  onSelectCategory: (categoryId: string) => void;
+}
+
+export default function CategorySidebar({ categories, activeCategoryId, onSelectCategory }: CategorySidebarProps) {
   return (
     <aside className="w-[248px] h-full bg-white rounded-[18px] border border-slate-100 shadow-sm p-3 flex flex-col shrink-0">
       <div>

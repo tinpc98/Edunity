@@ -1,9 +1,13 @@
-import React from "react";
+import type { Category } from "../../types/home";
 import { ArrowRightOutlined, CheckCircleOutlined } from "@ant-design/icons";
 
 const SEMESTER_CATEGORIES = new Set(["thpt", "thcs", "vao-10", "luyen-thi-dh"]);
 
-export default function CategoryMegaMenu({ category }) {
+interface CategoryMegaMenuProps {
+  category: Category | undefined;
+}
+
+export default function CategoryMegaMenu({ category }: CategoryMegaMenuProps) {
   if (!category) return null;
 
   const showSemester = SEMESTER_CATEGORIES.has(category.id);
