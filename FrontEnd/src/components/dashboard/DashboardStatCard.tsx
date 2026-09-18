@@ -2,7 +2,7 @@ import React from "react";
 import { Card, Typography, Flex, Tag } from "antd";
 import { ArrowUpOutlined, ArrowDownOutlined } from "@ant-design/icons";
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface DashboardStatCardProps {
   title: string;
