@@ -24,9 +24,9 @@ const teacherMenuItems = [
     label: 'GIẢNG DẠY',
     children: [
       {
-        key: 'lop-cua-toi',
+        key: ROUTES.TEACHER.CLASSES,
         icon: <BookOutlined className="text-[18px]" />,
-        label: 'Lớp của tôi',
+        label: <Link to={ROUTES.TEACHER.CLASSES}>Lớp của tôi</Link>,
       },
       {
         key: 'lich-giang-day',

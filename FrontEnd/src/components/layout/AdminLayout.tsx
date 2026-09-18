@@ -34,9 +34,9 @@ const adminMenuItems = [
         label: 'Người dùng',
       },
       {
-        key: 'giao-vien',
+        key: ROUTES.ADMIN.TEACHER_VERIFICATIONS,
         icon: <IdcardOutlined className="text-[18px]" />,
-        label: 'Giáo viên',
+        label: <Link to={ROUTES.ADMIN.TEACHER_VERIFICATIONS}>Giáo viên</Link>,
       },
       {
         key: 'khoa-hoc',
@@ -55,14 +55,14 @@ const adminMenuItems = [
     label: 'HỌC BỔNG',
     children: [
       {
-        key: 'chien-dich',
+        key: ROUTES.ADMIN.CAMPAIGNS,
         icon: <SafetyCertificateOutlined className="text-[18px]" />,
-        label: 'Chiến dịch',
+        label: <Link to={ROUTES.ADMIN.CAMPAIGNS}>Chiến dịch</Link>,
       },
       {
-        key: 'ho-so-ung-tuyen',
+        key: ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS,
         icon: <ProfileOutlined className="text-[18px]" />,
-        label: 'Hồ sơ ứng tuyển',
+        label: <Link to={ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS}>Hồ sơ ứng tuyển</Link>,
       },
     ]
   },
