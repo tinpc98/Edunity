@@ -13,4 +13,20 @@ export interface RegisterResponse {
   role: "STUDENT";
 }
 
-export type AuthUser = Omit<RegisterResponse, "status">;
+export interface LoginPayload {
+  email: string;
+  password: string;
+  rememberMe?: boolean;
+}
+
+export interface AuthUser {
+  userId: string;
+  fullName: string;
+  email: string;
+  role: "STUDENT" | "TEACHER" | "SPONSOR" | "ADMIN";
+}
+
+export interface LoginResponse {
+  accessToken: string;
+  user: AuthUser;
+}
