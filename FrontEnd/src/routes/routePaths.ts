@@ -1,5 +1,12 @@
 export const ROUTES = {
   HOME: "/",
+  AUTH: {
+    LOGIN: "/login",
+    REGISTER: "/register",
+    TEACHER_REGISTER: "/register/teacher",
+    TEACHER_QUALIFICATION: "/register/teacher/qualification",
+    TEACHER_PENDING: "/register/teacher/pending",
+  },
   STUDENT: {
     HOME: "/student",
   },
