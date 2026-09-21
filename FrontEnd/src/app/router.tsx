@@ -19,6 +19,7 @@ import ScholarshipApplicationsPage from "../features/admin/scholarships/Scholars
 import ScholarshipApplicationReviewPage from "../features/admin/scholarships/ScholarshipApplicationReviewPage";
 import SponsorLayout from "../components/layout/SponsorLayout";
 import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
+import RegisterPage from "../features/auth/RegisterPage";
 import { ROUTES } from "../routes/routePaths";
 
 const router = createBrowserRouter([
@@ -28,6 +29,10 @@ const router = createBrowserRouter([
       {
         path: ROUTES.HOME,
         element: <HomePage />,
+      },
+      {
+        path: ROUTES.AUTH.REGISTER,
+        element: <RegisterPage />,
       },
     ],
   },
