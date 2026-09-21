@@ -1,4 +1,4 @@
-import { Button, Checkbox, Form, Input, notification } from "antd";
+import { App as AntdApp, Button, Checkbox, Form, Input } from "antd";
 import { CheckCircleFilled, LockOutlined, MailOutlined, UserOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
@@ -23,14 +23,14 @@ const benefits = [
 
 export default function RegisterPage() {
   const [form] = Form.useForm<RegisterFormValues>();
-  const [notificationApi, contextHolder] = notification.useNotification();
+  const { notification: notificationApi } = AntdApp.useApp();
   const navigate = useNavigate();
 
   const registerMutation = useMutation({
     mutationFn: (payload: RegisterPayload) => registerUser(payload),
     onSuccess: () => {
       notificationApi.success({
-        message: "Đăng ký thành công",
+        title: "Đăng ký thành công",
         description: "Tài khoản của bạn đã được tạo thành công.",
         placement: "topRight",
       });
@@ -41,7 +41,7 @@ export default function RegisterPage() {
         form.setFields([{ name: "email", errors: ["Email này đã được sử dụng."] }]);
       }
       notificationApi.error({
-        message: "Đăng ký thất bại",
+        title: "Đăng ký thất bại",
         description: error.message || "Đã xảy ra lỗi. Vui lòng thử lại.",
         placement: "topRight",
       });
@@ -59,7 +59,6 @@ export default function RegisterPage() {
 
   return (
     <>
-      {contextHolder}
       <main className="site-container flex min-h-[calc(100vh-72px)] items-center py-14">
         <div className="grid w-full gap-16 lg:grid-cols-[minmax(0,1fr)_460px]">
           <section className="max-w-[570px] pb-4">

@@ -1,4 +1,4 @@
-import { Button, Checkbox, Form, Input, notification } from "antd";
+import { App as AntdApp, Button, Checkbox, Form, Input } from "antd";
 import { CheckCircleFilled, LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
@@ -21,7 +21,7 @@ const benefits = [
 
 export default function LoginPage() {
   const [form] = Form.useForm<LoginFormValues>();
-  const [notificationApi, contextHolder] = notification.useNotification();
+  const { notification: notificationApi } = AntdApp.useApp();
   const setAuth = useAuthStore((state) => state.setAuth);
   const navigate = useNavigate();
 
@@ -29,7 +29,7 @@ export default function LoginPage() {
     mutationFn: (payload: LoginPayload) => loginUser(payload),
     onSuccess: (data) => {
       notificationApi.success({
-        message: "Đăng nhập thành công",
+        title: "Đăng nhập thành công",
         description: "Chào mừng bạn quay trở lại Edunity.",
         placement: "topRight",
       });
@@ -38,7 +38,7 @@ export default function LoginPage() {
     },
     onError: (error: Error) => {
       notificationApi.error({
-        message: "Đăng nhập thất bại",
+        title: "Đăng nhập thất bại",
         description: error.message || "Đã xảy ra lỗi. Vui lòng thử lại.",
         placement: "topRight",
       });
@@ -55,7 +55,6 @@ export default function LoginPage() {
 
   return (
     <>
-      {contextHolder}
       <main className="site-container flex min-h-[calc(100vh-72px)] items-center py-14">
         <div className="grid w-full gap-16 lg:grid-cols-[minmax(0,1fr)_460px]">
           <section className="max-w-[570px] pb-4">
@@ -89,7 +88,7 @@ export default function LoginPage() {
               requiredMark={false}
               onFinish={handleSubmit}
               initialValues={{ rememberMe: false }}
-              autoComplete="on"
+              autoComplete="off"
               scrollToFirstError
             >
               <Form.Item
@@ -100,7 +99,7 @@ export default function LoginPage() {
                   { type: "email", message: "Vui lòng nhập đúng định dạng email." },
                 ]}
               >
-                <Input prefix={<MailOutlined className="text-slate-400" />} placeholder="example@email.com" autoComplete="email" size="large" />
+                <Input prefix={<MailOutlined className="text-slate-400" />} placeholder="example@email.com" autoComplete="username" size="large" />
               </Form.Item>
 
               <Form.Item
