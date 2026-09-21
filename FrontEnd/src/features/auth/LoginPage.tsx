@@ -85,7 +85,7 @@ export default function LoginPage() {
             <Form
               form={form}
               layout="vertical"
-              requiredMark={false}
+              requiredMark
               onFinish={handleSubmit}
               initialValues={{ rememberMe: false }}
               autoComplete="off"

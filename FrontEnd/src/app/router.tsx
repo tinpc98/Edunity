@@ -21,6 +21,9 @@ import SponsorLayout from "../components/layout/SponsorLayout";
 import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
 import LoginPage from "../features/auth/LoginPage";
 import RegisterPage from "../features/auth/RegisterPage";
+import TeacherRegisterPage from "../features/auth/TeacherRegisterPage";
+import TeacherQualificationPage from "../features/auth/TeacherQualificationPage";
+import TeacherPendingPage from "../features/auth/TeacherPendingPage";
 import { ROUTES } from "../routes/routePaths";
 
 const router = createBrowserRouter([
@@ -38,6 +41,18 @@ const router = createBrowserRouter([
       {
         path: ROUTES.AUTH.LOGIN,
         element: <LoginPage />,
+      },
+      {
+        path: ROUTES.AUTH.TEACHER_REGISTER,
+        element: <TeacherRegisterPage />,
+      },
+      {
+        path: ROUTES.AUTH.TEACHER_QUALIFICATION,
+        element: <TeacherQualificationPage />,
+      },
+      {
+        path: ROUTES.AUTH.TEACHER_PENDING,
+        element: <TeacherPendingPage />,
       },
     ],
   },

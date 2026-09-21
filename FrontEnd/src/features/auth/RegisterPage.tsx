@@ -97,7 +97,7 @@ export default function RegisterPage() {
             <Form
               form={form}
               layout="vertical"
-              requiredMark={false}
+              requiredMark
               onFinish={handleSubmit}
               autoComplete="on"
               scrollToFirstError
@@ -174,7 +174,7 @@ export default function RegisterPage() {
                 Đã có tài khoản? <Link to={ROUTES.AUTH.LOGIN} className="font-bold text-indigo-600 hover:text-indigo-700">Đăng nhập</Link>
               </p>
               <p className="mt-3 text-xs text-slate-400">
-                Bạn là giáo viên? <a href="#teacher-register" className="font-semibold text-indigo-600 hover:text-indigo-700">Đăng ký trở thành giáo viên</a>
+                Bạn là giáo viên? <Link to={ROUTES.AUTH.TEACHER_REGISTER} className="font-semibold text-indigo-600 hover:text-indigo-700">Đăng ký trở thành giáo viên</Link>
               </p>
             </div>
           </section>
