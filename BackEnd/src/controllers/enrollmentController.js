@@ -1,33 +1,19 @@
 const enrollmentService = require("../services/enrollmentService");
-const { AppError, ENROLLMENT_NOT_FOUND } = require("../utils/errors");
+const { serializeDecimal128 } = require("../utils/serialize");
+const { ENROLLMENT_NOT_FOUND } = require("../utils/errors");
 
 const createEnrollment = async (req, res, next) => {
   try {
-    const studentId = req.user.id; // Mocked from auth middleware
+    const studentId = req.user.id;
     const classId = req.params.classId;
 
     const enrollment = await enrollmentService.createEnrollment(studentId, classId);
-
-    // Convert decimal128 to string for response consistency
-    const responseData = {
-      ...enrollment.toObject(),
-      tuitionAmount: enrollment.tuitionAmount.toString(),
-      amountPaidViaPayment: enrollment.amountPaidViaPayment.toString(),
-      amountPaidViaScholarship: enrollment.amountPaidViaScholarship.toString(),
-    };
-
+    
     res.status(201).json({
       success: true,
-      data: responseData
+      data: serializeDecimal128(enrollment)
     });
   } catch (err) {
-    if (err instanceof AppError) {
-      return res.status(err.statusCode).json({
-        success: false,
-        error: err.code,
-        message: err.message
-      });
-    }
     next(err);
   }
 };
@@ -35,21 +21,19 @@ const createEnrollment = async (req, res, next) => {
 const getMyEnrollments = async (req, res, next) => {
   try {
     const studentId = req.user.id;
-    const enrollments = await enrollmentService.getMyEnrollments(studentId);
-    
-    const responseData = enrollments.map(e => {
-      const obj = e.toObject();
-      return {
-        ...obj,
-        tuitionAmount: obj.tuitionAmount.toString(),
-        amountPaidViaPayment: obj.amountPaidViaPayment.toString(),
-        amountPaidViaScholarship: obj.amountPaidViaScholarship.toString(),
-      };
-    });
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
 
+    const { items, total } = await enrollmentService.getMyEnrollments(studentId, page, limit);
+    
     res.status(200).json({
       success: true,
-      data: responseData
+      data: {
+        items: items.map(serializeDecimal128),
+        page,
+        limit,
+        total
+      }
     });
   } catch (err) {
     next(err);
@@ -66,25 +50,41 @@ const getEnrollmentById = async (req, res, next) => {
       throw ENROLLMENT_NOT_FOUND();
     }
 
-    const responseData = {
-      ...enrollment.toObject(),
-      tuitionAmount: enrollment.tuitionAmount.toString(),
-      amountPaidViaPayment: enrollment.amountPaidViaPayment.toString(),
-      amountPaidViaScholarship: enrollment.amountPaidViaScholarship.toString(),
-    };
+    res.status(200).json({
+      success: true,
+      data: serializeDecimal128(enrollment)
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const cancelEnrollment = async (req, res, next) => {
+  try {
+    const studentId = req.user.id;
+    const enrollmentId = req.params.id;
+
+    await enrollmentService.cancelEnrollment(studentId, enrollmentId);
+    
+    res.status(200).json({
+      success: true,
+      message: "Enrollment cancelled successfully"
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getClassAvailability = async (req, res, next) => {
+  try {
+    const classId = req.params.classId;
+    const availability = await enrollmentService.getClassAvailability(classId);
 
     res.status(200).json({
       success: true,
-      data: responseData
+      data: serializeDecimal128(availability)
     });
   } catch (err) {
-    if (err instanceof AppError) {
-      return res.status(err.statusCode).json({
-        success: false,
-        error: err.code,
-        message: err.message
-      });
-    }
     next(err);
   }
 };
@@ -92,5 +92,7 @@ const getEnrollmentById = async (req, res, next) => {
 module.exports = {
   createEnrollment,
   getMyEnrollments,
-  getEnrollmentById
+  getEnrollmentById,
+  cancelEnrollment,
+  getClassAvailability
 };

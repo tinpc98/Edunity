@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Class = require("../models/Class");
 const Enrollment = require("../models/Enrollment");
+const User = require("../models/User");
 const { getSetting } = require("../utils/settings");
 const { 
   CLASS_FULL, 
@@ -10,7 +11,29 @@ const {
   DUPLICATE_ENROLLMENT 
 } = require("../utils/errors");
 
-const createEnrollment = async (studentId, classId) => {
+const createEnrollment = async (studentId, classId, retried = false) => {
+  if (!mongoose.isValidObjectId(classId) || !mongoose.isValidObjectId(studentId)) {
+    throw CLASS_NOT_FOUND();
+  }
+
+  const student = await User.findById(studentId);
+  if (!student || student.role !== "STUDENT") {
+    const error = new Error("Only STUDENT can enroll");
+    error.code = "FORBIDDEN";
+    error.statusCode = 403;
+    throw error;
+  }
+
+  // Check active enrollment first
+  const activeEnrollment = await Enrollment.findOne({
+    studentId,
+    classId,
+    enrollmentStatus: { $in: ["PENDING_PAYMENT", "CONFIRMED", "COMPLETED"] }
+  });
+  if (activeEnrollment) {
+    throw DUPLICATE_ENROLLMENT();
+  }
+
   const session = await mongoose.startSession();
   
   let newEnrollment = null;
@@ -99,13 +122,13 @@ const createEnrollment = async (studentId, classId) => {
     return newEnrollment;
   } catch (err) {
     // If we caught a DUPLICATE_ENROLLMENT, check if the existing enrollment is actually expired but not processed yet
-    if (err.code === "DUPLICATE_ENROLLMENT") {
+    if (err.code === "DUPLICATE_ENROLLMENT" && !retried) {
       const existing = await Enrollment.findOne({ studentId, classId, enrollmentStatus: "PENDING_PAYMENT" });
       if (existing && existing.holdExpiresAt && existing.holdExpiresAt <= new Date()) {
-        const { expireEnrollmentTransaction } = require("../jobs/expireEnrollmentsJob");
-        await expireEnrollmentTransaction(existing._id);
-        // Try creating again after expiring the old one
-        return await createEnrollment(studentId, classId);
+        const { releaseReservation } = require("./reservationService");
+        await releaseReservation(existing._id, "EXPIRED");
+        // Try creating again after expiring the old one (only once)
+        return await createEnrollment(studentId, classId, true);
       }
     }
     throw err;
@@ -114,17 +137,71 @@ const createEnrollment = async (studentId, classId) => {
   }
 };
 
-const getMyEnrollments = async (studentId) => {
-  return await Enrollment.find({ studentId }).sort({ createdAt: -1 }).populate("classId", "className coverImage classType price startDate endDate status");
+const getMyEnrollments = async (studentId, page = 1, limit = 20) => {
+  const skip = (page - 1) * limit;
+  const total = await Enrollment.countDocuments({ studentId });
+  const items = await Enrollment.find({ studentId })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate("classId", "className coverImage classType price startDate endDate status capacity enrolledCount");
+  
+  return { items, page, limit, total };
 };
 
 const getEnrollmentById = async (studentId, enrollmentId) => {
+  if (!mongoose.isValidObjectId(enrollmentId)) throw CLASS_NOT_FOUND(); // Using CLASS_NOT_FOUND as general 404 for now, or ENROLLMENT_NOT_FOUND
   const enrollment = await Enrollment.findOne({ _id: enrollmentId, studentId }).populate("classId");
   return enrollment;
+};
+
+const cancelEnrollment = async (studentId, enrollmentId) => {
+  if (!mongoose.isValidObjectId(enrollmentId)) throw CLASS_NOT_FOUND();
+  
+  const enrollment = await Enrollment.findOne({ _id: enrollmentId, studentId });
+  if (!enrollment) {
+    const err = new Error("Enrollment not found");
+    err.code = "ENROLLMENT_NOT_FOUND";
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (enrollment.enrollmentStatus !== "PENDING_PAYMENT") {
+    const err = new Error("Enrollment is not cancellable");
+    err.code = "ENROLLMENT_NOT_CANCELLABLE";
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const { releaseReservation } = require("./reservationService");
+  const success = await releaseReservation(enrollmentId, "CANCELLED");
+  return success;
+};
+
+const getClassAvailability = async (classId) => {
+  if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
+  const targetClass = await Class.findById(classId);
+  if (!targetClass) throw CLASS_NOT_FOUND();
+
+  const now = new Date();
+  const enrollmentOpen = targetClass.status === "OPEN" &&
+    (!targetClass.enrollmentStart || targetClass.enrollmentStart <= now) &&
+    (!targetClass.enrollmentEnd || targetClass.enrollmentEnd >= now);
+
+  return {
+    capacity: targetClass.capacity,
+    enrolledCount: targetClass.enrolledCount,
+    remaining: Math.max(0, targetClass.capacity - targetClass.enrolledCount),
+    enrollmentOpen,
+    classType: targetClass.classType,
+    price: targetClass.price
+  };
 };
 
 module.exports = {
   createEnrollment,
   getMyEnrollments,
-  getEnrollmentById
+  getEnrollmentById,
+  cancelEnrollment,
+  getClassAvailability
 };
