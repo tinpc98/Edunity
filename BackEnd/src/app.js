@@ -9,13 +9,23 @@ app.use("/api", enrollmentRoutes);
 
 const { startJob } = require("./jobs/expireEnrollmentsJob");
 
+const { AppError } = require("./utils/errors");
+
 // Global Error Handler
 app.use((err, req, res, next) => {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      success: false,
+      error: err.code,
+      message: err.message
+    });
+  }
+
   console.error("Unhandled Error:", err);
   res.status(500).json({
     success: false,
     error: "INTERNAL_SERVER_ERROR",
-    message: err.message
+    message: "An unexpected error occurred"
   });
 });
 
