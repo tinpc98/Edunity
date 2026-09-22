@@ -3,102 +3,139 @@ const Class = require("../src/models/Class");
 const Enrollment = require("../src/models/Enrollment");
 const ScholarshipUsage = require("../src/models/ScholarshipUsage");
 const Scholarship = require("../src/models/Scholarship");
-const { expireEnrollmentTransaction } = require("../src/jobs/expireEnrollmentsJob");
+const User = require("../src/models/User");
+const Course = require("../src/models/Course");
+const Category = require("../src/models/Category");
+const Subject = require("../src/models/Subject");
+const { runJob, expireEnrollmentTransaction } = require("../src/jobs/expireEnrollmentsJob");
+const { cancelEnrollment } = require("../src/services/enrollmentService");
+const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
 
-// Mock mongoose models
-jest.mock("../src/models/Class");
-jest.mock("../src/models/Enrollment");
-jest.mock("../src/models/ScholarshipUsage");
-jest.mock("../src/models/Scholarship");
+beforeAll(async () => {
+  await connectDB();
+  await syncIndexes();
+});
 
-mongoose.startSession = jest.fn();
+afterAll(async () => {
+  await disconnectDB();
+});
 
-describe("Background Job: Expire Enrollments", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+beforeEach(async () => {
+  await clearDB();
+});
 
-  describe("Idempotency Test", () => {
-    it("should process expiry and release scholarship, and skip if already processed", async () => {
-      const classId = new mongoose.Types.ObjectId().toString();
-      const enrollmentId = new mongoose.Types.ObjectId().toString();
-      const scholarshipId = new mongoose.Types.ObjectId().toString();
+describe("Background Job & Concurrency on Real DB", () => {
+  let student, teacher, category, subject, course, cls, scholarship;
 
-      const mockSession = {
-        withTransaction: jest.fn(async (cb) => {
-          await cb();
-        }),
-        endSession: jest.fn(),
-      };
-      mongoose.startSession.mockResolvedValue(mockSession);
-
-      // Mocks for first run (successfully finds and processes)
-      const mockEnrollment = {
-        _id: enrollmentId,
-        classId: classId,
-        enrollmentStatus: "PENDING_PAYMENT",
-      };
-
-      Enrollment.findOneAndUpdate.mockResolvedValueOnce(mockEnrollment);
-
-      const saveMock = jest.fn();
-      ScholarshipUsage.find.mockReturnValue({
-        session: jest.fn().mockResolvedValue([
-          { scholarshipId, amount: 50, status: "PENDING", save: saveMock }
-        ])
-      });
-
-      Class.updateOne.mockResolvedValue({ modifiedCount: 1 });
-      Scholarship.updateOne.mockResolvedValue({ modifiedCount: 1 });
-
-      const res1 = await expireEnrollmentTransaction(enrollmentId);
-      expect(res1).toBe(true);
-
-      expect(Class.updateOne).toHaveBeenCalledWith(
-        { _id: classId },
-        { $inc: { enrolledCount: -1 } },
-        expect.anything()
-      );
-      
-      expect(saveMock).toHaveBeenCalled();
-      expect(Scholarship.updateOne).toHaveBeenCalledWith(
-        { _id: scholarshipId },
-        { $inc: { remainingAmount: 50 } },
-        expect.anything()
-      );
-
-      // Mocks for second run (already processed, should return gracefully without updates)
-      Enrollment.findOneAndUpdate.mockResolvedValueOnce(null);
-      Class.updateOne.mockClear(); // Reset the call count for assertions
-      
-      const res2 = await expireEnrollmentTransaction(enrollmentId);
-      expect(res2).toBe(true);
-      expect(Class.updateOne).not.toHaveBeenCalled(); // Should not decrement again
+  beforeEach(async () => {
+    student = await User.create({ name: "S1", email: "s1@test.com", password: "123", role: "STUDENT" });
+    teacher = await User.create({ name: "T1", email: "t1@test.com", password: "123", role: "TEACHER" });
+    category = await Category.create({ name: "Cat1" });
+    subject = await Subject.create({ name: "Sub1", categoryId: category._id });
+    course = await Course.create({
+      title: "Course 1",
+      teacherId: teacher._id,
+      categoryId: category._id,
+      subjectId: subject._id,
+      price: 100
+    });
+    cls = await Class.create({
+      courseId: course._id,
+      courseTitle: course.title,
+      teacherId: teacher._id,
+      teacherName: teacher.name,
+      categoryId: category._id,
+      subjectId: subject._id,
+      className: `Class 1`,
+      classType: "PAID",
+      price: 100,
+      capacity: 10,
+      enrolledCount: 1, // manually set to 1 for tests
+      status: "OPEN"
+    });
+    scholarship = await Scholarship.create({
+      name: "Scholar",
+      code: "SCHOLAR",
+      amountType: "FIXED",
+      amountValue: 50,
+      minPurchase: 0,
+      maxDiscount: 50,
+      validFrom: new Date(Date.now() - 10000),
+      validTo: new Date(Date.now() + 10000),
+      remainingAmount: 0 // Assume fully used initially for testing refund
     });
   });
 
-  describe("Race Condition Test (Job vs Webhook)", () => {
-    it("should prevent job from modifying if webhook confirms it first", async () => {
-      const classId = new mongoose.Types.ObjectId().toString();
-      const enrollmentId = new mongoose.Types.ObjectId().toString();
-
-      const mockSession = {
-        withTransaction: jest.fn(async (cb) => {
-          await cb();
-        }),
-        endSession: jest.fn(),
-      };
-      mongoose.startSession.mockResolvedValue(mockSession);
-
-      // Simulate a concurrent webhook that already updated the status to CONFIRMED
-      // The findOneAndUpdate with condition `enrollmentStatus: "PENDING_PAYMENT"` will return null
-      Enrollment.findOneAndUpdate.mockResolvedValueOnce(null);
-
-      const res = await expireEnrollmentTransaction(enrollmentId);
-      expect(res).toBe(true); // Should return true to indicate no error occurred, it was just idempotent
-
-      // Check that it did NOT decrement capacity
-      expect(Class.updateOne).not.toHaveBeenCalled();
+  it("should run job 2 times consecutively and only decrement enrolledCount by 1", async () => {
+    const enrollment = await Enrollment.create({
+      studentId: student._id,
+      classId: cls._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      enrollmentStatus: "PENDING_PAYMENT",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("100"),
+      holdExpiresAt: new Date(Date.now() - 1000) // expired
     });
+
+    // Run first time
+    await expireEnrollmentTransaction(enrollment._id);
+    // Run second time
+    await expireEnrollmentTransaction(enrollment._id);
+
+    const updatedCls = await Class.findById(cls._id);
+    expect(updatedCls.enrolledCount).toBe(0); // Decremented from 1 to 0, but only once
+  });
+
+  it("job and cancel simultaneously should ensure only one wins", async () => {
+    const enrollment = await Enrollment.create({
+      studentId: student._id,
+      classId: cls._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      enrollmentStatus: "PENDING_PAYMENT",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("100"),
+      holdExpiresAt: new Date(Date.now() - 1000)
+    });
+
+    const promises = [
+      expireEnrollmentTransaction(enrollment._id),
+      cancelEnrollment(student._id, enrollment._id).catch(() => false) // Catch error to prevent test crash
+    ];
+
+    await Promise.all(promises);
+
+    const updatedCls = await Class.findById(cls._id);
+    expect(updatedCls.enrolledCount).toBe(0); // Should only decrement once
+  });
+
+  it("should release scholarship and refund remainingAmount", async () => {
+    const enrollment = await Enrollment.create({
+      studentId: student._id,
+      classId: cls._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      enrollmentStatus: "PENDING_PAYMENT",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("100"),
+      holdExpiresAt: new Date(Date.now() - 1000)
+    });
+
+    await ScholarshipUsage.create({
+      scholarshipId: scholarship._id,
+      enrollmentId: enrollment._id,
+      studentId: student._id,
+      amount: 50,
+      status: "PENDING"
+    });
+
+    await expireEnrollmentTransaction(enrollment._id);
+
+    const updatedUsage = await ScholarshipUsage.findOne({ enrollmentId: enrollment._id });
+    expect(updatedUsage.status).toBe("RELEASED");
+
+    const updatedScholarship = await Scholarship.findById(scholarship._id);
+    expect(updatedScholarship.remainingAmount.toString()).toBe("50");
   });
 });
