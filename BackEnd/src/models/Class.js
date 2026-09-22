@@ -52,15 +52,14 @@ classSchema.index({ categoryId: 1, subjectId: 1, gradeLevel: 1, classType: 1, st
 classSchema.index({ className: "text" });
 
 // BR-09 / BR-10
-classSchema.pre("validate", function classPriceRule(next) {
+classSchema.pre("validate", function classPriceRule() {
   const price = this.price ? Number(this.price.toString()) : 0;
   if (this.classType === "FREE" && price !== 0) {
-    return next(new Error("FREE class must have price = 0"));
+    throw new Error("FREE class must have price = 0");
   }
   if (this.classType === "PAID" && price <= 0) {
-    return next(new Error("PAID class must have price > 0"));
+    throw new Error("PAID class must have price > 0");
   }
-  next();
 });
 
 module.exports = mongoose.model("Class", classSchema);
