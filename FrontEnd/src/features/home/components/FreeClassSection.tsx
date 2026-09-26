@@ -9,6 +9,7 @@ export default function FreeClassSection() {
         categoryTag="Lớp live miễn phí"
         title="Lớp Học Miễn Phí Sắp Khai Giảng"
         // subtitle="Các lớp live miễn phí vẫn có giáo viên, lịch học, sĩ số và số lượng chỗ đăng ký rõ ràng như các lớp trả phí."
+        viewAllLink="/classes?classTypes=FREE"
         viewAllText="Xem tất cả lớp miễn phí"
       />
 
