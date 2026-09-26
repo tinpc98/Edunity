@@ -218,6 +218,8 @@ export const MOCK_COURSES: MockCourse[] = [
  * Raw Mock Class Entities strictly conforming to BackEnd/src/models/Class.js
  */
 export const RAW_MOCK_CLASSES: ClassEntity[] = [
+  // COURSE: CRS_TOAN_12 (Toán 12 – Ôn thi THPT Quốc Gia & Vận Dụng Nâng Cao)
+  // Class 1 (Teacher: ThS. Nguyễn Văn Đức)
   {
     _id: "CLS_001",
     courseId: "CRS_TOAN_12",
@@ -227,7 +229,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THPT",
     subjectId: "SUB_MATH",
     gradeLevel: "GRADE_12",
-    className: "Toán 12 Live – Chinh Phục 9+ THPT QG & HSA",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
     coverImage: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1680000,
@@ -244,6 +246,63 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.95,
     ratingCount: 124,
   },
+  // Class 2 of CRS_TOAN_12 (Different Teacher: Cô Mai Lan)
+  {
+    _id: "CLS_016",
+    courseId: "CRS_TOAN_12",
+    courseTitle: "Toán 12 – Ôn thi THPT Quốc Gia & Vận Dụng Nâng Cao",
+    teacherId: "TEA_002",
+    teacherName: "Cô Mai Lan",
+    categoryId: "CAT_THPT",
+    subjectId: "SUB_MATH",
+    gradeLevel: "GRADE_12",
+    className: "Tăng Tốc 9+ Toán 12",
+    coverImage: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=600&q=80",
+    classType: "PAID",
+    price: 1800000,
+    capacity: 16,
+    enrolledCount: 14,
+    enrollmentStart: "2026-08-20",
+    enrollmentEnd: "2026-10-25",
+    startDate: "2026-10-18",
+    status: "OPEN",
+    schedule: [
+      { dayOfWeek: 6, startTime: "08:30", endTime: "10:30" }, // Sat
+      { dayOfWeek: 0, startTime: "08:30", endTime: "10:30" }, // Sun
+    ],
+    ratingAverage: 4.98,
+    ratingCount: 82,
+  },
+  // Class 3 of CRS_TOAN_12 (Different Teacher: Thầy Đặng Tuấn)
+  {
+    _id: "CLS_019",
+    courseId: "CRS_TOAN_12",
+    courseTitle: "Toán 12 – Ôn thi THPT Quốc Gia & Vận Dụng Nâng Cao",
+    teacherId: "TEA_005",
+    teacherName: "Thầy Đặng Tuấn",
+    categoryId: "CAT_THPT",
+    subjectId: "SUB_MATH",
+    gradeLevel: "GRADE_12",
+    className: "Chiến Thuật Bứt Phá Điểm 9+ Toán 12",
+    coverImage: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    classType: "PAID",
+    price: 1450000,
+    capacity: 18,
+    enrolledCount: 11,
+    enrollmentStart: "2026-08-20",
+    enrollmentEnd: "2026-10-30",
+    startDate: "2026-10-24",
+    status: "OPEN",
+    schedule: [
+      { dayOfWeek: 3, startTime: "19:30", endTime: "21:00" }, // Wed
+      { dayOfWeek: 6, startTime: "19:30", endTime: "21:00" }, // Sat
+    ],
+    ratingAverage: 4.89,
+    ratingCount: 47,
+  },
+
+  // COURSE: CRS_TOAN_10 (Toán 10 – Nền tảng tư duy đại số & hình học mới)
+  // Class 1 (Teacher: Cô Mai Lan)
   {
     _id: "CLS_002",
     courseId: "CRS_TOAN_10",
@@ -253,7 +312,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THPT",
     subjectId: "SUB_MATH",
     gradeLevel: "GRADE_10",
-    className: "Toán 10 – Nền tảng tư duy đại số & hình học mới",
+    className: "Nền Tảng Đại Số & Vectơ Nâng Cao",
     coverImage: "https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1250000,
@@ -270,6 +329,36 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.9,
     ratingCount: 88,
   },
+  // Class 2 of CRS_TOAN_10 (Different Teacher: Thầy Hoàng Nam)
+  {
+    _id: "CLS_022",
+    courseId: "CRS_TOAN_10",
+    courseTitle: "Toán 10 – Nền tảng tư duy đại số & hình học mới",
+    teacherId: "TEA_003",
+    teacherName: "Thầy Hoàng Nam",
+    categoryId: "CAT_THPT",
+    subjectId: "SUB_MATH",
+    gradeLevel: "GRADE_10",
+    className: "Chinh Phục Hàm Số & Hệ Thống Đề Kiểm Tra",
+    coverImage: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=600&q=80",
+    classType: "PAID",
+    price: 1150000,
+    capacity: 16,
+    enrolledCount: 9,
+    enrollmentStart: "2026-08-15",
+    enrollmentEnd: "2026-10-28",
+    startDate: "2026-10-20",
+    status: "OPEN",
+    schedule: [
+      { dayOfWeek: 3, startTime: "18:00", endTime: "19:30" },
+      { dayOfWeek: 5, startTime: "18:00", endTime: "19:30" },
+    ],
+    ratingAverage: 4.86,
+    ratingCount: 38,
+  },
+
+  // COURSE: CRS_VAN_11 (Ngữ văn 11 – Đọc hiểu & Viết nghị luận điểm cao)
+  // Class 1 (Teacher: Thầy Hoàng Nam)
   {
     _id: "CLS_003",
     courseId: "CRS_VAN_11",
@@ -279,7 +368,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THPT",
     subjectId: "SUB_LITERATURE",
     gradeLevel: "GRADE_11",
-    className: "Ngữ văn 11 – Đọc hiểu & Viết nghị luận chuyên sâu",
+    className: "Đột Phá Tư Duy Nghị Luận Văn Học",
     coverImage: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 980000,
@@ -296,6 +385,36 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.92,
     ratingCount: 65,
   },
+  // Class 2 of CRS_VAN_11 (Different Teacher: Thầy Paul & Cô Trang)
+  {
+    _id: "CLS_023",
+    courseId: "CRS_VAN_11",
+    courseTitle: "Ngữ văn 11 – Đọc hiểu & Viết nghị luận điểm cao",
+    teacherId: "TEA_006",
+    teacherName: "Thầy Paul & Cô Trang",
+    categoryId: "CAT_THPT",
+    subjectId: "SUB_LITERATURE",
+    gradeLevel: "GRADE_11",
+    className: "Kỹ Năng Đọc Hiểu & Nghị Luận Xã Hội Điểm 8+",
+    coverImage: "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=600&q=80",
+    classType: "PAID",
+    price: 920000,
+    capacity: 14,
+    enrolledCount: 8,
+    enrollmentStart: "2026-08-15",
+    enrollmentEnd: "2026-10-25",
+    startDate: "2026-10-21",
+    status: "OPEN",
+    schedule: [
+      { dayOfWeek: 3, startTime: "20:00", endTime: "21:30" },
+      { dayOfWeek: 6, startTime: "20:00", endTime: "21:30" },
+    ],
+    ratingAverage: 4.9,
+    ratingCount: 52,
+  },
+
+  // COURSE: CRS_ANH_10 (Tiếng Anh 10 – Global Success & IELTS Foundation)
+  // Class 1 (Teacher: Cô Jessica Trần)
   {
     _id: "CLS_004",
     courseId: "CRS_ANH_10",
@@ -305,7 +424,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THPT",
     subjectId: "SUB_ENGLISH",
     gradeLevel: "GRADE_10",
-    className: "Tiếng Anh 10 – Bứt phá ngữ pháp & IELTS Foundation",
+    className: "IELTS Foundation Bứt Phá",
     coverImage: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1450000,
@@ -322,6 +441,35 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.9,
     ratingCount: 94,
   },
+  // Class 2 of CRS_ANH_10 (Different Teacher: Thầy Paul & Cô Trang)
+  {
+    _id: "CLS_017",
+    courseId: "CRS_ANH_10",
+    courseTitle: "Tiếng Anh 10 – Global Success & IELTS Foundation",
+    teacherId: "TEA_006",
+    teacherName: "Thầy Paul & Cô Trang",
+    categoryId: "CAT_THPT",
+    subjectId: "SUB_ENGLISH",
+    gradeLevel: "GRADE_10",
+    className: "Phản Xạ Tiếng Anh Tự Tin & Nghe Hiểu",
+    coverImage: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80",
+    classType: "PAID",
+    price: 1200000,
+    capacity: 15,
+    enrolledCount: 8,
+    enrollmentStart: "2026-08-20",
+    enrollmentEnd: "2026-10-28",
+    startDate: "2026-10-22",
+    status: "OPEN",
+    schedule: [
+      { dayOfWeek: 3, startTime: "14:30", endTime: "16:00" }, // Wed afternoon
+      { dayOfWeek: 5, startTime: "14:30", endTime: "16:00" }, // Fri afternoon
+    ],
+    ratingAverage: 4.88,
+    ratingCount: 36,
+  },
+
+  // COURSE: CRS_HOA_11 (Hóa học 11 – Chuyên đề Hóa hữu cơ ứng dụng)
   {
     _id: "CLS_005",
     courseId: "CRS_HOA_11",
@@ -331,7 +479,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THPT",
     subjectId: "SUB_CHEMISTRY",
     gradeLevel: "GRADE_11",
-    className: "Hóa học 11 – Chuyên đề Hóa hữu cơ thực chiến",
+    className: "Chuyên Đề Hiđrocacbon & Dẫn Xuất Thực Chiến",
     coverImage: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1100000,
@@ -348,6 +496,8 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.88,
     ratingCount: 52,
   },
+
+  // COURSE: CRS_LY_11 (Vật lý 11 – Cơ học & Nhiệt học ứng dụng thực tế)
   {
     _id: "CLS_006",
     courseId: "CRS_LY_11",
@@ -357,7 +507,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THPT",
     subjectId: "SUB_PHYSICS",
     gradeLevel: "GRADE_11",
-    className: "Vật lý 11 – Cơ học & Nhiệt học ứng dụng thực tế",
+    className: "Cơ Học Ứng Dụng & Giải Quyết Bài Toán Thực Tế",
     coverImage: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1500000,
@@ -374,6 +524,9 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.85,
     ratingCount: 43,
   },
+
+  // COURSE: CRS_ANH_SPEAKING (English Speaking Club – Phản xạ cùng giáo viên bản ngữ)
+  // Class 1 (Teacher: Mr. David Miller)
   {
     _id: "CLS_007",
     courseId: "CRS_ANH_SPEAKING",
@@ -383,7 +536,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_SKILLS",
     subjectId: "SUB_ENGLISH",
     gradeLevel: "GRADE_11",
-    className: "English Speaking Club Live – Giao tiếp tự tin chuẩn IPA",
+    className: "Giao Tiếp Tự Tin Chuẩn Bản Ngữ",
     coverImage: "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=600&q=80",
     classType: "FREE",
     price: 0,
@@ -399,6 +552,35 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.95,
     ratingCount: 110,
   },
+  // Class 2 of CRS_ANH_SPEAKING (Different Teacher: Cô Jessica Trần)
+  {
+    _id: "CLS_021",
+    courseId: "CRS_ANH_SPEAKING",
+    courseTitle: "English Speaking Club – Phản xạ cùng giáo viên bản ngữ",
+    teacherId: "TEA_004",
+    teacherName: "Cô Jessica Trần",
+    categoryId: "CAT_SKILLS",
+    subjectId: "SUB_ENGLISH",
+    gradeLevel: "GRADE_11",
+    className: "Thuyết Trình & Hùng Biện Tiếng Anh Thực Chiến",
+    coverImage: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80",
+    classType: "FREE",
+    price: 0,
+    capacity: 18,
+    enrolledCount: 13,
+    enrollmentStart: "2026-08-15",
+    enrollmentEnd: "2026-10-28",
+    startDate: "2026-10-17",
+    status: "OPEN",
+    schedule: [
+      { dayOfWeek: 0, startTime: "15:00", endTime: "16:30" }, // Sun afternoon
+    ],
+    ratingAverage: 4.92,
+    ratingCount: 68,
+  },
+
+  // COURSE: CRS_TIN_REACT (Lập trình ReactJS & Tư duy số cho học sinh)
+  // Class 1 (Teacher: Thầy Hoàng Long)
   {
     _id: "CLS_008",
     courseId: "CRS_TIN_REACT",
@@ -408,7 +590,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_SKILLS",
     subjectId: "SUB_INFORMATICS",
     gradeLevel: "GRADE_10",
-    className: "Workshop Live: ReactJS & Tư Duy Số Ứng Dụng",
+    className: "ReactJS Thực Chiến – Web App Cơ Bản",
     coverImage: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
     classType: "FREE",
     price: 0,
@@ -424,6 +606,34 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.9,
     ratingCount: 78,
   },
+  // Class 2 of CRS_TIN_REACT (Teacher: Thầy Hoàng Long)
+  {
+    _id: "CLS_020",
+    courseId: "CRS_TIN_REACT",
+    courseTitle: "Lập trình ReactJS & Tư duy số cho học sinh",
+    teacherId: "TEA_008",
+    teacherName: "Thầy Hoàng Long",
+    categoryId: "CAT_SKILLS",
+    subjectId: "SUB_INFORMATICS",
+    gradeLevel: "GRADE_10",
+    className: "Tư Duy Lập Trình Frontend & UI Hiện Đại",
+    coverImage: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=600&q=80",
+    classType: "FREE",
+    price: 0,
+    capacity: 20,
+    enrolledCount: 15,
+    enrollmentStart: "2026-08-15",
+    enrollmentEnd: "2026-10-28",
+    startDate: "2026-10-18",
+    status: "OPEN",
+    schedule: [
+      { dayOfWeek: 6, startTime: "14:00", endTime: "16:00" }, // Sat afternoon
+    ],
+    ratingAverage: 4.88,
+    ratingCount: 54,
+  },
+
+  // COURSE: CRS_TOAN_6 (Toán 6 – Chuẩn chương trình mới Cánh diều & KNTT)
   {
     _id: "CLS_009",
     courseId: "CRS_TOAN_6",
@@ -433,7 +643,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THCS",
     subjectId: "SUB_MATH",
     gradeLevel: "GRADE_6",
-    className: "Toán 6 – Chân trời sáng tạo & Cánh diều (Chuẩn mới)",
+    className: "Số Học Trực Quan & Nền Tảng Hình Học Cơ Bản",
     coverImage: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 850000,
@@ -450,6 +660,8 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.88,
     ratingCount: 39,
   },
+
+  // COURSE: CRS_TOAN_7 (Toán 7 – Hình học trực quan & Số học nâng cao)
   {
     _id: "CLS_010",
     courseId: "CRS_TOAN_7",
@@ -459,7 +671,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THCS",
     subjectId: "SUB_MATH",
     gradeLevel: "GRADE_7",
-    className: "Toán 7 – Hình học trực quan & Số học nâng cao",
+    className: "Tam Giác Bằng Nhau & Biểu Thức Đại Số Thực Chiến",
     coverImage: "https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 890000,
@@ -476,6 +688,8 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.89,
     ratingCount: 47,
   },
+
+  // COURSE: CRS_TOAN_8 (Toán 8 – Đại số thực chiến & Bất đẳng thức)
   {
     _id: "CLS_011",
     courseId: "CRS_TOAN_8",
@@ -485,7 +699,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THCS",
     subjectId: "SUB_MATH",
     gradeLevel: "GRADE_8",
-    className: "Toán 8 – Đại số & Bất đẳng thức thực chiến thi HSG",
+    className: "Bất Đẳng Thức & Đa Thức Nâng Cao Thi HSG",
     coverImage: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 950000,
@@ -502,6 +716,8 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.93,
     ratingCount: 58,
   },
+
+  // COURSE: CRS_VAN_9 (Ngữ văn 9 – Tổng ôn tác phẩm trọng tâm vào 10)
   {
     _id: "CLS_012",
     courseId: "CRS_VAN_9",
@@ -511,7 +727,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THCS",
     subjectId: "SUB_LITERATURE",
     gradeLevel: "GRADE_9",
-    className: "Ngữ văn 9 – Tổng ôn 12 tác phẩm trọng tâm thi vào 10",
+    className: "Bí Kíp Đạt 8+ Nghị Luận Văn Học Vào 10",
     coverImage: "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 920000,
@@ -528,6 +744,9 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.96,
     ratingCount: 72,
   },
+
+  // COURSE: CRS_TOAN_9 (Toán 9 – Luyện thi tuyển sinh vào 10 chuyên & công lập)
+  // Class 1 (Teacher: Thầy Paul & Cô Trang)
   {
     _id: "CLS_013",
     courseId: "CRS_TOAN_9",
@@ -537,7 +756,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THCS",
     subjectId: "SUB_MATH",
     gradeLevel: "GRADE_9",
-    className: "Toán 9 – Đột phá 9+ Thi vào lớp 10 Chuyên Hà Nội",
+    className: "Đột Phá Điểm 9+ Toán Vào 10 Hà Nội",
     coverImage: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1150000,
@@ -554,6 +773,35 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.94,
     ratingCount: 66,
   },
+  // Class 2 of CRS_TOAN_9 (Different Teacher: ThS. Nguyễn Văn Đức)
+  {
+    _id: "CLS_024",
+    courseId: "CRS_TOAN_9",
+    courseTitle: "Toán 9 – Luyện thi tuyển sinh vào 10 chuyên & công lập",
+    teacherId: "TEA_001",
+    teacherName: "ThS. Nguyễn Văn Đức",
+    categoryId: "CAT_THCS",
+    subjectId: "SUB_MATH",
+    gradeLevel: "GRADE_9",
+    className: "Chinh Phục Hình Học & Bất Đẳng Thức Thi Tuyển Sinh",
+    coverImage: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=600&q=80",
+    classType: "PAID",
+    price: 1050000,
+    capacity: 16,
+    enrolledCount: 10,
+    enrollmentStart: "2026-08-20",
+    enrollmentEnd: "2026-10-30",
+    startDate: "2026-10-25",
+    status: "OPEN",
+    schedule: [
+      { dayOfWeek: 2, startTime: "18:00", endTime: "19:30" },
+      { dayOfWeek: 5, startTime: "18:00", endTime: "19:30" },
+    ],
+    ratingAverage: 4.91,
+    ratingCount: 55,
+  },
+
+  // COURSE: CRS_LY_12 (Vật lý 12 Live – Chinh phục 9+ Kỳ thi ĐGNL & THPT)
   {
     _id: "CLS_014",
     courseId: "CRS_LY_12",
@@ -563,7 +811,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THPT",
     subjectId: "SUB_PHYSICS",
     gradeLevel: "GRADE_12",
-    className: "Vật lý 12 Live – Ôn thi ĐGNL HSA & Bách Khoa 2026",
+    className: "Dao Động Cơ & Sóng Cơ Luyện Đề Chuẩn Cấu Trúc",
     coverImage: "https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1400000,
@@ -580,6 +828,8 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.9,
     ratingCount: 54,
   },
+
+  // COURSE: CRS_HOA_12 (Hóa học 12 – Ôn luyện toàn diện lý thuyết & bài tập)
   {
     _id: "CLS_015",
     courseId: "CRS_HOA_12",
@@ -589,7 +839,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THPT",
     subjectId: "SUB_CHEMISTRY",
     gradeLevel: "GRADE_12",
-    className: "Hóa 12 – Chinh phục lý thuyết đếm & Vận dụng cao 9+",
+    className: "Tổng Ôn Lý Thuyết Đếm & Dạng Bài Este Vận Dụng Cao",
     coverImage: "https://images.unsplash.com/photo-1603126857599-f6e157fa2fe6?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1350000,
@@ -606,58 +856,8 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     ratingAverage: 4.87,
     ratingCount: 45,
   },
-  {
-    _id: "CLS_016",
-    courseId: "CRS_TOAN_12",
-    courseTitle: "Toán 12 – Ôn thi THPT Quốc Gia & Vận Dụng Nâng Cao",
-    teacherId: "TEA_001",
-    teacherName: "ThS. Nguyễn Văn Đức",
-    categoryId: "CAT_THPT",
-    subjectId: "SUB_MATH",
-    gradeLevel: "GRADE_12",
-    className: "Toán 12 – Luyện đề buổi sáng cuối tuần (VIP)",
-    coverImage: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=600&q=80",
-    classType: "PAID",
-    price: 1800000,
-    capacity: 16,
-    enrolledCount: 14,
-    enrollmentStart: "2026-08-20",
-    enrollmentEnd: "2026-10-25",
-    startDate: "2026-10-18",
-    status: "OPEN",
-    schedule: [
-      { dayOfWeek: 6, startTime: "08:30", endTime: "10:30" }, // Sat morning
-      { dayOfWeek: 0, startTime: "08:30", endTime: "10:30" }, // Sun morning
-    ],
-    ratingAverage: 4.98,
-    ratingCount: 82,
-  },
-  {
-    _id: "CLS_017",
-    courseId: "CRS_ANH_10",
-    courseTitle: "Tiếng Anh 10 – Global Success & IELTS Foundation",
-    teacherId: "TEA_004",
-    teacherName: "Cô Jessica Trần",
-    categoryId: "CAT_THPT",
-    subjectId: "SUB_ENGLISH",
-    gradeLevel: "GRADE_10",
-    className: "Tiếng Anh 10 Buổi chiều – Nghe hiểu & Viết đoạn văn",
-    coverImage: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80",
-    classType: "PAID",
-    price: 1200000,
-    capacity: 15,
-    enrolledCount: 8,
-    enrollmentStart: "2026-08-20",
-    enrollmentEnd: "2026-10-28",
-    startDate: "2026-10-22",
-    status: "OPEN",
-    schedule: [
-      { dayOfWeek: 3, startTime: "14:30", endTime: "16:00" }, // Wed afternoon
-      { dayOfWeek: 5, startTime: "14:30", endTime: "16:00" }, // Fri afternoon
-    ],
-    ratingAverage: 4.88,
-    ratingCount: 36,
-  },
+
+  // COURSE: CRS_TOAN_11 (Toán 11 – Hình học không gian & Lượng giác)
   {
     _id: "CLS_018",
     courseId: "CRS_TOAN_11",
@@ -667,7 +867,7 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     categoryId: "CAT_THPT",
     subjectId: "SUB_MATH",
     gradeLevel: "GRADE_11",
-    className: "Toán 11 – Chinh phục Hình không gian & Lượng giác 8.5+",
+    className: "Hình Học Không Gian & Khoảng Cách 8.5+",
     coverImage: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1300000,
@@ -744,6 +944,7 @@ export function transformToDiscoveryItem(entity: ClassEntity): ClassDiscoveryIte
 
   return {
     id: entity._id,
+    className: entity.className,
     title: entity.className,
     courseId: entity.courseId,
     courseTitle: entity.courseTitle,

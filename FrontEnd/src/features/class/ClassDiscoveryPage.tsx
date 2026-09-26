@@ -177,16 +177,6 @@ export default function ClassDiscoveryPage() {
         />
       </div>
 
-      {/* Page Header (Title + Subtitle) */}
-      <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight !mb-1">
-          Khám phá lớp học trực tuyến
-        </h1>
-        <p className="text-slate-600 text-sm">
-          Tìm lớp học phù hợp với mục tiêu và lịch học của bạn.
-        </p>
-      </div>
-
       {/* Error state if any */}
       {isError && (
         <div className="mb-6">

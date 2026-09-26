@@ -18,7 +18,9 @@ export default function ClassCard({ item }: ClassCardProps) {
 
   const {
     id,
+    className,
     title,
+    courseTitle,
     teacherName,
     teacherAvatar,
     gradeLabel,
@@ -110,10 +112,21 @@ export default function ClassCard({ item }: ClassCardProps) {
           </div>
         </div>
 
-        {/* Class Title */}
-        <h3 className="text-[13.5px] font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors min-h-[38px] !m-0">
-          {title}
+        {/* Primary Title: Class Name */}
+        <h3
+          title={className || title}
+          className="text-[14px] font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors min-h-[40px] !m-0"
+        >
+          {className || title}
         </h3>
+
+        {/* Secondary Context: Course Relationship */}
+        <div className="flex items-center gap-1.5 text-[11.5px] text-slate-500 min-h-[18px]">
+          <span className="text-slate-400 shrink-0 font-normal">Thuộc khóa:</span>
+          <span className="font-medium text-slate-600 truncate" title={courseTitle}>
+            {courseTitle}
+          </span>
+        </div>
 
         {/* Schedule & Capacity Badges */}
         <div className="rounded-lg bg-slate-50 p-2 space-y-1 text-[11px] text-slate-600 border border-slate-100">
@@ -123,12 +136,13 @@ export default function ClassCard({ item }: ClassCardProps) {
           </div>
 
           <div
-            className={`flex items-center gap-1.5 font-semibold ${isFull
-              ? "text-rose-600"
-              : nearlyFull
+            className={`flex items-center gap-1.5 font-semibold ${
+              isFull
+                ? "text-rose-600"
+                : nearlyFull
                 ? "text-amber-600"
                 : "text-emerald-700"
-              }`}
+            }`}
           >
             <TeamOutlined className="shrink-0" />
             {isFull ? (

@@ -71,6 +71,7 @@ export type TimeOfDay = "MORNING" | "AFTERNOON" | "EVENING";
  */
 export interface ClassDiscoveryItem {
   id: string;
+  className: string;
   title: string;
   courseId: string;
   courseTitle: string;
