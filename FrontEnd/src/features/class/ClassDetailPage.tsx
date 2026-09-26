@@ -10,7 +10,8 @@ import {
   BookOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { useClassDetailQuery } from "../hooks/useClassDiscovery";
+import { useClassDetailQuery } from "./hooks/useClassDiscovery";
+
 
 export default function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();

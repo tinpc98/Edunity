@@ -1,5 +1,5 @@
 import { Checkbox } from "antd";
-import type { BackendClassType } from "../../types/classDiscovery";
+import type { BackendClassType } from "../../../../types/classDiscovery";
 
 interface ClassTypeFilterProps {
   selectedTypes: BackendClassType[];

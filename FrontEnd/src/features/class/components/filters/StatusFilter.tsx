@@ -1,5 +1,5 @@
 import { Checkbox } from "antd";
-import type { BackendClassStatus } from "../../types/classDiscovery";
+import type { BackendClassStatus } from "../../../../types/classDiscovery";
 
 interface StatusFilterProps {
   selectedStatuses: BackendClassStatus[];

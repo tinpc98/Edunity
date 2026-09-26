@@ -1,4 +1,4 @@
-import type { ClassDiscoveryItem } from "../types/classDiscovery";
+import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
 import ClassCard from "./ClassCard";
 import ClassCardSkeleton from "./ClassCardSkeleton";
 import ClassDiscoveryEmpty from "./ClassDiscoveryEmpty";

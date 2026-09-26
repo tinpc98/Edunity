@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Input, Select, Tag } from "antd";
 import { SearchOutlined, CloseCircleOutlined } from "@ant-design/icons";
-import type { SortOption } from "../types/classDiscovery";
+import type { SortOption } from "../../../types/classDiscovery";
 
 interface SearchToolbarProps {
   total: number;

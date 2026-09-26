@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FilterOutlined, ReloadOutlined } from "@ant-design/icons";
-import type { FilterMetadata, FilterState } from "../types/classDiscovery";
+import type { FilterMetadata, FilterState } from "../../../types/classDiscovery";
 import FilterSection from "./FilterSection";
 import SubjectFilter from "./filters/SubjectFilter";
 import GradeFilter from "./filters/GradeFilter";

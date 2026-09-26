@@ -1,5 +1,5 @@
 import { Checkbox } from "antd";
-import type { BackendGradeLevel } from "../../types/classDiscovery";
+import type { BackendGradeLevel } from "../../../../types/classDiscovery";
 
 interface GradeOption {
   level: BackendGradeLevel;

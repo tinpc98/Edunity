@@ -6,11 +6,11 @@ import {
   useClassDiscoveryFilters,
   useClassDiscoveryQuery,
   useFilterMetadataQuery,
-} from "../hooks/useClassDiscovery";
-import FilterSidebar from "../components/FilterSidebar";
-import SearchToolbar from "../components/SearchToolbar";
-import ClassGrid from "../components/ClassGrid";
-import { GRADE_LEVEL_LABELS } from "../data/mockClassDiscovery";
+} from "./hooks/useClassDiscovery";
+import FilterSidebar from "./components/FilterSidebar";
+import SearchToolbar from "./components/SearchToolbar";
+import ClassGrid from "./components/ClassGrid";
+import { GRADE_LEVEL_LABELS } from "../../data/mockClassDiscovery";
 
 export default function ClassDiscoveryPage() {
   const { filters, updateFilters, resetAllFilters, hasActiveFilters } =

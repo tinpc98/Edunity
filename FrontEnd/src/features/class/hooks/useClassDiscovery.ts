@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { classDiscoveryService } from "../services/classDiscovery.service";
+import { classDiscoveryService } from "../../../services/classDiscovery.service";
 import type {
   BackendClassStatus,
   BackendClassType,
@@ -9,7 +9,7 @@ import type {
   FilterState,
   SortOption,
   TimeOfDay,
-} from "../types/classDiscovery";
+} from "../../../types/classDiscovery";
 
 export function useClassDiscoveryQuery(filters: FilterState) {
   return useQuery({

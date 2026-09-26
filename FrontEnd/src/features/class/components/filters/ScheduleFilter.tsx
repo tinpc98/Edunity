@@ -1,5 +1,5 @@
 import { Checkbox } from "antd";
-import type { TimeOfDay } from "../../types/classDiscovery";
+import type { TimeOfDay } from "../../../../types/classDiscovery";
 
 interface ScheduleFilterProps {
   selectedTimes: TimeOfDay[];

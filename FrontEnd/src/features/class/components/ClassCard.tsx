@@ -7,7 +7,7 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
 } from "@ant-design/icons";
-import type { ClassDiscoveryItem } from "../types/classDiscovery";
+import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
 
 interface ClassCardProps {
   item: ClassDiscoveryItem;
@@ -123,13 +123,12 @@ export default function ClassCard({ item }: ClassCardProps) {
           </div>
 
           <div
-            className={`flex items-center gap-1.5 font-semibold ${
-              isFull
-                ? "text-rose-600"
-                : nearlyFull
+            className={`flex items-center gap-1.5 font-semibold ${isFull
+              ? "text-rose-600"
+              : nearlyFull
                 ? "text-amber-600"
                 : "text-emerald-700"
-            }`}
+              }`}
           >
             <TeamOutlined className="shrink-0" />
             {isFull ? (
@@ -144,28 +143,30 @@ export default function ClassCard({ item }: ClassCardProps) {
         </div>
 
         {/* Price & Actions Row */}
-        <div className="mt-auto pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+        <div className="mt-auto pt-2.5 border-t border-slate-100">
           {/* Price */}
-          <div>
-            <div className="text-[10px] text-slate-400">Học phí trọn gói</div>
+          <div className="mb-2.5">
+            <div className="text-[10px] text-slate-400">
+              Học phí trọn gói
+            </div>
+
             <div
-              className={`text-base font-extrabold ${
-                isFree ? "text-emerald-600" : "text-indigo-700"
-              }`}
+              className={`text-base font-extrabold ${isFree ? "text-emerald-600" : "text-indigo-700"
+                }`}
             >
               {formattedPrice}
             </div>
           </div>
 
           {/* Action CTAs */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2">
             <Button
               size="small"
               onClick={(e) => {
                 e.stopPropagation();
                 handleViewDetail();
               }}
-              className="text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:border-indigo-400 rounded h-7 px-2.5"
+              className="flex-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:border-indigo-400 rounded h-8"
             >
               Chi tiết
             </Button>
@@ -175,7 +176,7 @@ export default function ClassCard({ item }: ClassCardProps) {
                 type="primary"
                 size="small"
                 onClick={handleRegister}
-                className="bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold rounded h-7 px-3 shadow-sm border-none inline-flex items-center gap-1"
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold rounded h-8 shadow-sm border-none inline-flex items-center justify-center gap-1"
               >
                 <CheckCircleOutlined className="text-[11px]" />
                 Đăng ký ngay
@@ -184,9 +185,13 @@ export default function ClassCard({ item }: ClassCardProps) {
               <Button
                 size="small"
                 disabled
-                className="text-xs font-medium rounded h-7 px-2.5 bg-slate-100 text-slate-400 border-slate-200"
+                className="flex-1 text-xs font-medium rounded h-8 bg-slate-100 text-slate-400 border-slate-200"
               >
-                {isFull ? "Đã đủ chỗ" : status === "COMPLETED" ? "Đã kết thúc" : "Đóng đăng ký"}
+                {isFull
+                  ? "Đã đủ chỗ"
+                  : status === "COMPLETED"
+                    ? "Đã kết thúc"
+                    : "Đóng đăng ký"}
               </Button>
             )}
           </div>
