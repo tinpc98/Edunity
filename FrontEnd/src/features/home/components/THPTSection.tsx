@@ -18,6 +18,7 @@ export default function THPTSection() {
         filterButtons={FILTERS}
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
+        viewAllLink="/classes?grades=GRADE_10,GRADE_11,GRADE_12"
         viewAllText="Xem tất cả"
       />
 

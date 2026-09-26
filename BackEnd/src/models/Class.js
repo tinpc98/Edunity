@@ -34,7 +34,7 @@ const classSchema = new Schema(
     endDate: Date,
     status: {
       type: String,
-      enum: ["DRAFT", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
+      enum: ["DRAFT", "PENDING_APPROVAL", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
       default: "DRAFT",
     },
 

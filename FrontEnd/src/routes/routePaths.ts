@@ -1,5 +1,15 @@
 export const ROUTES = {
   HOME: "/",
+  CLASSES: "/classes",
+  CLASS_DETAIL: "/classes/:classId",
+  ENROLLMENT: "/enrollment/:classId",
+  AUTH: {
+    LOGIN: "/login",
+    REGISTER: "/register",
+    TEACHER_REGISTER: "/register/teacher",
+    TEACHER_QUALIFICATION: "/register/teacher/qualification",
+    TEACHER_PENDING: "/register/teacher/pending",
+  },
   STUDENT: {
     HOME: "/student",
   },

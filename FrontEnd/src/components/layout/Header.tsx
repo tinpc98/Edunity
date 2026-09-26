@@ -1,19 +1,28 @@
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Input, Button } from "antd";
 import { SearchOutlined, UserOutlined } from "@ant-design/icons";
 import { LOGO_URL } from "../../data/homeData";
 import { useHomeStore } from "../../stores/useHomeStore";
-
-const NAV_LINKS = [
-  { label: "Giới thiệu", href: "#" },
-  { label: "Giáo viên", href: "#" },
-  { label: "Khóa học", href: "#", active: true },
-  { label: "Học bổng", href: "#" },
-  { label: "Hỗ trợ", href: "#" }
-];
+import { ROUTES } from "../../routes/routePaths";
 
 export default function Header() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const searchKeyword = useHomeStore((state) => state.searchKeyword);
   const setSearchKeyword = useHomeStore((state) => state.setSearchKeyword);
+
+  const navLinks = [
+    { label: "Giới thiệu", href: "#", isRoute: false },
+    { label: "Giáo viên", href: "#", isRoute: false },
+    {
+      label: "Khóa học",
+      href: ROUTES.CLASSES,
+      isRoute: true,
+      active: location.pathname.startsWith("/classes"),
+    },
+    { label: "Học bổng", href: "#", isRoute: false },
+    { label: "Hỗ trợ", href: "#", isRoute: false },
+  ];
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-slate-100 shadow-sm">
@@ -36,6 +45,11 @@ export default function Header() {
             placeholder="Tìm kiếm khóa học, môn học, giáo viên..."
             value={searchKeyword}
             onChange={(event) => setSearchKeyword(event.target.value)}
+            onPressEnter={() => {
+              if (searchKeyword.trim()) {
+                navigate(`${ROUTES.CLASSES}?search=${encodeURIComponent(searchKeyword.trim())}`);
+              }
+            }}
             allowClear
             className="rounded-full bg-slate-50 border-slate-200 hover:border-indigo-400 focus:border-indigo-600 h-10 text-[13px] px-3"
           />
@@ -44,19 +58,29 @@ export default function Header() {
         {/* Navigation & Auth */}
         <div className="flex items-center gap-4 shrink-0">
           <nav className="flex items-center gap-3">
-            {NAV_LINKS.map((item, idx) => (
-              <a
-                key={idx}
-                href={item.href}
-                className={`text-[13px] font-medium transition-colors ${
-                  item.active
-                    ? "text-indigo-600 font-semibold bg-indigo-50 px-2.5 py-1.5 rounded-md"
-                    : "text-slate-600 hover:text-indigo-600"
-                }`}
-              >
-                {item.label}
-              </a>
-            ))}
+            {navLinks.map((item, idx) =>
+              item.isRoute ? (
+                <Link
+                  key={idx}
+                  to={item.href}
+                  className={`text-[13px] font-medium transition-colors ${
+                    item.active
+                      ? "text-indigo-600 font-semibold bg-indigo-50 px-2.5 py-1.5 rounded-md"
+                      : "text-slate-600 hover:text-indigo-600"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <a
+                  key={idx}
+                  href={item.href}
+                  className="text-[13px] font-medium text-slate-600 hover:text-indigo-600 transition-colors"
+                >
+                  {item.label}
+                </a>
+              )
+            )}
           </nav>
 
           <div className="flex items-center gap-2 pl-2 border-l border-slate-200">

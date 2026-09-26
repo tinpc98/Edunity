@@ -32,8 +32,12 @@ export default function HeroSection() {
                 <h1 className="text-[31px] font-black leading-[1.16] tracking-tight">Học Trực Tiếp Cùng Giáo Viên Phù Hợp Với Bạn</h1>
                 <p className="text-sm text-slate-100 leading-6 max-w-[520px]">Tìm lớp học live phù hợp, trao đổi trực tiếp với giáo viên qua micro và bảng số, được giải đáp ngay trong buổi học.</p>
                 <div className="flex items-center gap-2.5 pt-1">
-                  <Button type="primary" className="bg-indigo-600 hover:bg-indigo-700 font-bold text-[13px] h-10 px-4 rounded-lg border-none">Khám phá lớp học</Button>
-                  <Button className="bg-white/15 hover:bg-white/25 text-white font-bold text-[13px] h-10 px-4 rounded-lg border-white/30 backdrop-blur">Xem lớp đang mở</Button>
+                  <a href="/classes">
+                    <Button type="primary" className="bg-indigo-600 hover:bg-indigo-700 font-bold text-[13px] h-10 px-4 rounded-lg border-none">Khám phá lớp học</Button>
+                  </a>
+                  <a href="/classes?statuses=OPEN">
+                    <Button className="bg-white/15 hover:bg-white/25 text-white font-bold text-[13px] h-10 px-4 rounded-lg border-white/30 backdrop-blur">Xem lớp đang mở</Button>
+                  </a>
                 </div>
               </div>
             </div>
