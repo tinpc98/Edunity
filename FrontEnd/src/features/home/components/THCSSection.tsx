@@ -18,6 +18,7 @@ export default function THCSSection() {
         filterButtons={FILTERS}
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
+        viewAllLink="/classes?grades=GRADE_6,GRADE_7,GRADE_8,GRADE_9"
         viewAllText="Xem tất cả khóa THCS"
       />
 

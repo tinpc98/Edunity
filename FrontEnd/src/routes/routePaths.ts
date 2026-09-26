@@ -1,5 +1,8 @@
 export const ROUTES = {
   HOME: "/",
+  CLASSES: "/classes",
+  CLASS_DETAIL: "/classes/:classId",
+  ENROLLMENT: "/enrollment/:classId",
   AUTH: {
     LOGIN: "/login",
     REGISTER: "/register",

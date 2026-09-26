@@ -1,6 +1,9 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import PublicLayout from "../components/layout/PublicLayout";
 import HomePage from "../features/home/HomePage";
+import ClassDiscoveryPage from "../features/class/ClassDiscoveryPage";
+// import ClassDetailPage from "../features/class/pages/ClassDetailPage";
+import EnrollmentPage from "../features/enrollment/EnrollmentPage";
 import StudentLayout from "../components/layout/StudentLayout";
 import StudentHomePage from "../features/student/home/StudentHomePage";
 import TeacherLayout from "../components/layout/TeacherLayout";
@@ -25,6 +28,7 @@ import TeacherRegisterPage from "../features/auth/TeacherRegisterPage";
 import TeacherQualificationPage from "../features/auth/TeacherQualificationPage";
 import TeacherPendingPage from "../features/auth/TeacherPendingPage";
 import { ROUTES } from "../routes/routePaths";
+import ClassDetailPage from "../features/class/ClassDetailPage";
 
 const router = createBrowserRouter([
   {
@@ -33,6 +37,18 @@ const router = createBrowserRouter([
       {
         path: ROUTES.HOME,
         element: <HomePage />,
+      },
+      {
+        path: ROUTES.CLASSES,
+        element: <ClassDiscoveryPage />,
+      },
+      {
+        path: ROUTES.CLASS_DETAIL,
+        element: <ClassDetailPage />,
+      },
+      {
+        path: ROUTES.ENROLLMENT,
+        element: <EnrollmentPage />,
       },
       {
         path: ROUTES.AUTH.REGISTER,
