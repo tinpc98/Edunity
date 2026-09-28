@@ -14,6 +14,7 @@ export const ROUTES = {
   },
   STUDENT: {
     HOME: "/student",
+    CLASS_SESSIONS: "/student/classes/:classId",
   },
   TEACHER: {
     HOME: "/teacher",

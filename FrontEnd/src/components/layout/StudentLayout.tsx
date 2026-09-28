@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, Dropdown, Badge, Button, App as AntdApp } from "antd";
 import type { MenuProps } from "antd";
@@ -22,7 +22,6 @@ export default function StudentLayout() {
   const { notification } = AntdApp.useApp();
   const { user, isAuthenticated, logout } = useAuthStore();
 
-  const [activeMenu, setActiveMenu] = useState("my-classes");
 
   // Auth Guard: Only authenticated STUDENT can access
   useEffect(() => {
@@ -107,11 +106,11 @@ export default function StudentLayout() {
 
             <Link
               to={ROUTES.STUDENT.HOME}
-              onClick={() => setActiveMenu("my-classes")}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${activeMenu === "my-classes" && location.pathname === ROUTES.STUDENT.HOME
-                ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
-                }`}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                location.pathname === ROUTES.STUDENT.HOME || location.pathname.startsWith("/student/classes")
+                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+              }`}
             >
               <BookOutlined className="text-sm" />
               <span>Lớp học của tôi</span>
@@ -119,11 +118,14 @@ export default function StudentLayout() {
 
             <button
               type="button"
-              onClick={() => setActiveMenu("schedule")}
-              className={`w-full text-left flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${activeMenu === "schedule"
-                ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50 cursor-pointer"
-                }`}
+              onClick={() => {
+                notification.info({
+                  message: "Lịch học",
+                  description: "Tính năng lịch học trực tuyến đang được hoàn thiện.",
+                  placement: "topRight",
+                });
+              }}
+              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-indigo-600 hover:bg-slate-50 cursor-pointer transition-all"
             >
               <CalendarOutlined className="text-sm" />
               <span>Lịch học</span>
@@ -138,11 +140,14 @@ export default function StudentLayout() {
 
             <button
               type="button"
-              onClick={() => setActiveMenu("profile")}
-              className={`w-full text-left flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${activeMenu === "profile"
-                ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50 cursor-pointer"
-                }`}
+              onClick={() => {
+                notification.info({
+                  message: "Hồ sơ cá nhân",
+                  description: "Tính năng quản lý hồ sơ cá nhân đang được hoàn thiện.",
+                  placement: "topRight",
+                });
+              }}
+              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-indigo-600 hover:bg-slate-50 cursor-pointer transition-all"
             >
               <UserOutlined className="text-sm" />
               <span>Hồ sơ cá nhân</span>
@@ -150,11 +155,14 @@ export default function StudentLayout() {
 
             <button
               type="button"
-              onClick={() => setActiveMenu("payments")}
-              className={`w-full text-left flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${activeMenu === "payments"
-                ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50 cursor-pointer"
-                }`}
+              onClick={() => {
+                notification.info({
+                  message: "Lịch sử thanh toán",
+                  description: "Tính năng lịch sử thanh toán đang được hoàn thiện.",
+                  placement: "topRight",
+                });
+              }}
+              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-indigo-600 hover:bg-slate-50 cursor-pointer transition-all"
             >
               <WalletOutlined className="text-sm" />
               <span>Lịch sử thanh toán</span>

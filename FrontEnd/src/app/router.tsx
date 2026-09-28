@@ -8,6 +8,7 @@ import PaymentSuccessPage from "../features/enrollment/PaymentSuccessPage";
 import EnrollmentPage from "../features/enrollment/EnrollmentPage";
 import StudentLayout from "../components/layout/StudentLayout";
 import StudentHomePage from "../features/student/home/StudentHomePage";
+import StudentClassSessionsPage from "../features/student/classes/StudentClassSessionsPage";
 import TeacherLayout from "../components/layout/TeacherLayout";
 import TeacherHomePage from "../features/teacher/home/TeacherHomePage";
 import TeacherClassesPage from "../features/teacher/classes/TeacherClassesPage";
@@ -89,6 +90,10 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <StudentHomePage />,
+      },
+      {
+        path: "classes/:classId",
+        element: <StudentClassSessionsPage />,
       },
     ],
   },

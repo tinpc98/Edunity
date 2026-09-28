@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Skeleton, App as AntdApp } from "antd";
 import {
@@ -11,7 +11,7 @@ import { useAuthStore } from "../../../stores/auth.store";
 import { enrollmentService } from "../../../services/enrollment.service";
 import { classDiscoveryService } from "../../../services/classDiscovery.service";
 import { ROUTES } from "../../../routes/routePaths";
-import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
+import type { ClassDiscoveryItem, SessionEntity } from "../../../types/classDiscovery";
 
 type FilterTab = "ALL" | "IN_PROGRESS" | "COMPLETED";
 
@@ -22,9 +22,12 @@ interface EnrolledClassItem {
   completedSessions: number;
   progressPercent: number;
   learningStatus: "IN_PROGRESS" | "COMPLETED";
+  hasLiveSession: boolean;
+  liveSession: SessionEntity | null;
 }
 
 export default function StudentHomePage() {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { notification } = AntdApp.useApp();
   const [activeTab, setActiveTab] = useState<FilterTab>("ALL");
@@ -46,7 +49,7 @@ export default function StudentHomePage() {
     (e) => e.enrollmentStatus === "CONFIRMED" || e.enrollmentStatus === "COMPLETED"
   );
 
-  // Query 2: Resolve Class entity and Session progress for each confirmed enrollment
+  // Query 2: Resolve Class entity, Sessions progress, and LIVE state for each confirmed enrollment
   const {
     data: enrolledClasses,
     isLoading: isLoadingClasses,
@@ -58,9 +61,9 @@ export default function StudentHomePage() {
       user?.userId,
       confirmedEnrollments.map((e) => `${e.id}_${e.enrollmentStatus}`).join(","),
     ],
-    queryFn: async () => {
+    queryFn: async (): Promise<EnrolledClassItem[]> => {
       const results = await Promise.all(
-        confirmedEnrollments.map(async (enr) => {
+        confirmedEnrollments.map(async (enr): Promise<EnrolledClassItem | null> => {
           const [classItem, sessions] = await Promise.all([
             classDiscoveryService.fetchClassById(enr.classId),
             classDiscoveryService.fetchSessionsByClassId(enr.classId),
@@ -92,6 +95,12 @@ export default function StudentHomePage() {
             ? "COMPLETED"
             : "IN_PROGRESS";
 
+          // LIVE state rule: strictly derived from Session.status === "IN_PROGRESS"
+          const liveSession = sessions.find(
+            (s) => s.classId === classItem.id && s.status === "IN_PROGRESS"
+          );
+          const hasLiveSession = Boolean(liveSession);
+
           return {
             enrollmentId: enr.id,
             classItem,
@@ -99,11 +108,19 @@ export default function StudentHomePage() {
             completedSessions,
             progressPercent,
             learningStatus,
+            hasLiveSession,
+            liveSession: liveSession || null,
           };
         })
       );
 
-      return results.filter((r): r is EnrolledClassItem => Boolean(r));
+      const validList: EnrolledClassItem[] = [];
+      for (const item of results) {
+        if (item !== null) {
+          validList.push(item);
+        }
+      }
+      return validList;
     },
     enabled: Boolean(user?.userId) && confirmedEnrollments.length > 0,
   });
@@ -129,12 +146,42 @@ export default function StudentHomePage() {
     return true;
   });
 
-  const handleCardClick = (classItem: ClassDiscoveryItem) => {
+  // Handler for normal non-live card click -> Student Class Learning / Session List
+  const handleNormalClassClick = (item: EnrolledClassItem) => {
+    navigate(`/student/classes/${item.classItem.id}`);
+  };
+
+  // Handler for LIVE card click -> directly to Live Classroom
+  const handleLiveClassClick = (item: EnrolledClassItem) => {
+    if (!item.liveSession?.meetingRoomId) {
+      notification.warning({
+        message: "Phòng học trực tuyến",
+        description: "Phòng học hiện chưa sẵn sàng.",
+        placement: "topRight",
+      });
+      return;
+    }
+
+    // Since Live Classroom route is not yet in the routing table, provide clear feedback:
     notification.info({
-      message: "Không gian lớp học",
-      description: `Không gian học tập trực tuyến cho "${classItem.className}" đang được chuẩn bị.`,
+      message: "Vào phòng học LIVE",
+      description: `Đang kết nối vào phòng học trực tiếp "${item.liveSession.title}" (Phòng: ${item.liveSession.meetingRoomId}). Tính năng phòng học Live Classroom đang được hoàn thiện.`,
       placement: "topRight",
     });
+  };
+
+  const handleCardClick = (item: EnrolledClassItem) => {
+    if (item.hasLiveSession) {
+      handleLiveClassClick(item);
+    } else {
+      handleNormalClassClick(item);
+    }
+  };
+
+  // Secondary action handler for LIVE card: "Xem các buổi →"
+  const handleViewSessionsClick = (e: React.MouseEvent, item: EnrolledClassItem) => {
+    e.stopPropagation();
+    handleNormalClassClick(item);
   };
 
   return (
@@ -262,16 +309,18 @@ export default function StudentHomePage() {
             return (
               <div
                 key={enrollmentId}
-                onClick={() => handleCardClick(classItem)}
+                onClick={() => handleCardClick(item)}
                 className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-2xs hover:shadow-md hover:border-indigo-300 transition-all duration-200 cursor-pointer group"
               >
-                {/* 4. Cover Image (height 155px) & Status Badge */}
+                {/* 4. Cover Image (height 155px) & Status Badges */}
                 <div className="relative h-[155px] w-full overflow-hidden bg-slate-100">
                   <img
                     src={classItem.coverImage}
                     alt={classItem.className}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
+
+                  {/* Learning Status Badge (Top-Left) */}
                   <div className="absolute top-2.5 left-2.5">
                     {item.learningStatus === "IN_PROGRESS" ? (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase bg-emerald-500 text-white shadow-xs">
@@ -283,6 +332,19 @@ export default function StudentHomePage() {
                       </span>
                     )}
                   </div>
+
+                  {/* 9 & 10. LIVE Badge (Top-Right of cover image, pulse only on dot) */}
+                  {item.hasLiveSession && (
+                    <div className="absolute top-2.5 right-2.5 z-10">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase bg-rose-600 text-white shadow-xs">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+                        </span>
+                        LIVE
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* 5. Compact Card Content (16px padding) */}
@@ -334,6 +396,20 @@ export default function StudentHomePage() {
                       />
                     </div>
                   </div>
+
+                  {/* 14. "Xem các buổi →" ONLY for LIVE Class */}
+                  {item.hasLiveSession && (
+                    <div className="flex justify-end mt-2 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={(e) => handleViewSessionsClick(e, item)}
+                        className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <span>Xem các buổi</span>
+                        <span>&rarr;</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
