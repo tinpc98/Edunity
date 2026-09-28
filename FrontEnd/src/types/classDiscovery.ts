@@ -100,6 +100,7 @@ export interface ClassDiscoveryItem {
   teacherName: string;
   teacherAvatar?: string;
   teacherTitle?: string;
+  qualificationSummary?: string;
   teacherBiography?: string;
   gradeLevel: BackendGradeLevel | null;
   gradeLabel: string;

@@ -7,9 +7,8 @@ interface ClassTeacherTabProps {
 }
 
 export default function ClassTeacherTab({ item }: ClassTeacherTabProps) {
-  const teacherBio =
-    item.teacherBiography ||
-    "Cô Mai Lan là giáo viên Toán có nhiều năm kinh nghiệm giảng dạy học sinh THPT, đặc biệt trong luyện thi đại học. Phương pháp giảng dạy rõ ràng, bám sát chương trình và chú trọng giúp học sinh phát triển tư duy giải bài.";
+  const qualification = item.qualificationSummary || item.teacherTitle;
+  const teacherBio = item.teacherBiography;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs flex flex-col gap-5">
@@ -35,9 +34,9 @@ export default function ClassTeacherTab({ item }: ClassTeacherTabProps) {
         <div className="flex-1">
           <h3 className="text-lg font-bold text-slate-900 m-0">{item.teacherName}</h3>
 
-          {item.teacherTitle && (
+          {qualification && (
             <div className="text-xs font-semibold text-indigo-600 mt-1">
-              {item.teacherTitle}
+              {qualification}
             </div>
           )}
 
@@ -48,9 +47,11 @@ export default function ClassTeacherTab({ item }: ClassTeacherTabProps) {
           </div>
 
           {/* Biography */}
-          <p className="text-sm text-slate-600 leading-relaxed mt-4 pt-3 border-t border-slate-100 m-0">
-            {teacherBio}
-          </p>
+          {teacherBio && (
+            <p className="text-sm text-slate-600 leading-relaxed mt-4 pt-3 border-t border-slate-100 m-0">
+              {teacherBio}
+            </p>
+          )}
 
           {/* Action button */}
           <div className="mt-5">

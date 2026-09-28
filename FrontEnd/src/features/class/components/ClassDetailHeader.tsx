@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Breadcrumb } from "antd";
-import { HomeOutlined, StarFilled, UserOutlined } from "@ant-design/icons";
+import { HomeOutlined, StarFilled } from "@ant-design/icons";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
 
 interface ClassDetailHeaderProps {
@@ -86,21 +86,11 @@ export default function ClassDetailHeader({ item }: ClassDetailHeaderProps) {
           )}
         </div>
 
-        {/* Teacher Summary Line */}
-        <div className="flex items-center gap-3 text-xs text-slate-600 pt-2 border-t border-slate-100">
-          <div className="flex items-center gap-2">
-            {item.teacherAvatar ? (
-              <img
-                src={item.teacherAvatar}
-                alt={item.teacherName}
-                className="w-7 h-7 rounded-full object-cover border border-slate-200"
-              />
-            ) : (
-              <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
-                <UserOutlined />
-              </div>
-            )}
-            <span className="font-semibold text-slate-800 text-sm">{item.teacherName}</span>
+        {/* Teacher Summary Line (Compact, no avatar) */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-2 border-t border-slate-100">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400">Giảng viên:</span>
+            <span className="font-semibold text-slate-700">{item.teacherName}</span>
           </div>
 
           <div className="flex items-center gap-1 font-semibold text-slate-700">
