@@ -84,13 +84,13 @@ export default function Header() {
       <div className="site-container h-[72px] flex items-center justify-between gap-4">
         {/* Brand & Category Button */}
         <div className="flex items-center gap-4 shrink-0">
-          <a href="/" className="flex items-center gap-3">
+          <Link to={ROUTES.HOME} className="flex items-center gap-3">
             <img src={LOGO_URL} alt="Edunity" className="h-9 w-auto object-contain" />
             <div className="flex flex-col">
               <span className="text-xl font-black tracking-tight text-indigo-900 leading-none">Edunity</span>
               <span className="text-[9px] font-bold text-indigo-600 tracking-wider uppercase mt-1">Học Trực Tuyến Live</span>
             </div>
-          </a>
+          </Link>
         </div>
 
         {/* Global Search */}
