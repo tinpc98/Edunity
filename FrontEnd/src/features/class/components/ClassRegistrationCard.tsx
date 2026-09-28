@@ -1,61 +1,21 @@
-import { useNavigate, Link } from "react-router-dom";
-import { Button, Progress, App as AntdApp } from "antd";
+import { Link } from "react-router-dom";
+import { Button, Progress } from "antd";
 import { ArrowRightOutlined } from "@ant-design/icons";
-import { useMutation } from "@tanstack/react-query";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
-import { useAuthStore } from "../../../stores/auth.store";
-import { enrollmentService } from "../../../services/enrollment.service";
+import { useClassEnrollment } from "../hooks/useClassEnrollment";
 
 interface ClassRegistrationCardProps {
   item: ClassDiscoveryItem;
 }
 
 export default function ClassRegistrationCard({ item }: ClassRegistrationCardProps) {
-  const navigate = useNavigate();
-  const { notification } = AntdApp.useApp();
-  const { user, isAuthenticated } = useAuthStore();
+  const { handleEnrollClass, isEnrolling } = useClassEnrollment();
 
   const isFree = item.classType === "FREE";
   const capacityPercent = Math.min(
     100,
     Math.round((item.enrolledCount / (item.capacity || 1)) * 100)
   );
-
-  const enrollMutation = useMutation({
-    mutationFn: (payload: { classId: string; studentId: string }) =>
-      enrollmentService.createOrGetPendingEnrollment(payload),
-    onSuccess: (enrollment) => {
-      navigate(`/checkout/${enrollment.id}`);
-    },
-    onError: (error: Error) => {
-      notification.error({
-        message: "Không thể tiếp tục đăng ký",
-        description: error.message || "Đã xảy ra lỗi khi tạo đơn đăng ký.",
-        placement: "topRight",
-      });
-    },
-  });
-
-  const handleEnrollClick = () => {
-    if (!isAuthenticated || !user) {
-      navigate(`/login?redirect=${encodeURIComponent(`/classes/${item.id}`)}`);
-      return;
-    }
-
-    if (user.role !== "STUDENT") {
-      notification.error({
-        message: "Quyền truy cập bị từ chối",
-        description: "Chỉ tài khoản học viên (Student) mới có thể đăng ký tham gia lớp học.",
-        placement: "topRight",
-      });
-      return;
-    }
-
-    enrollMutation.mutate({
-      classId: item.id,
-      studentId: user.userId,
-    });
-  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm flex flex-col gap-5">
@@ -98,9 +58,9 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
         <Button
           type="primary"
           size="large"
-          loading={enrollMutation.isPending}
-          disabled={enrollMutation.isPending}
-          onClick={handleEnrollClick}
+          loading={isEnrolling}
+          disabled={isEnrolling}
+          onClick={() => handleEnrollClass(item)}
           className="bg-indigo-600 hover:bg-indigo-700 font-bold text-sm h-12 rounded-xl shadow-xs border-none w-full flex items-center justify-center gap-2"
         >
           <span>Đăng ký lớp ngay</span>

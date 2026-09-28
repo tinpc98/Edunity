@@ -8,6 +8,7 @@ import {
   CheckCircleOutlined,
 } from "@ant-design/icons";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
+import { useClassEnrollment } from "../hooks/useClassEnrollment";
 
 interface ClassCardProps {
   item: ClassDiscoveryItem;
@@ -15,6 +16,7 @@ interface ClassCardProps {
 
 export default function ClassCard({ item }: ClassCardProps) {
   const navigate = useNavigate();
+  const { handleEnrollClass, isEnrolling, enrollingClassId } = useClassEnrollment();
 
   const {
     id,
@@ -43,8 +45,7 @@ export default function ClassCard({ item }: ClassCardProps) {
 
   const handleRegister = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!canEnroll) return;
-    navigate(`/enrollment/${id}`);
+    handleEnrollClass(item);
   };
 
   const handleViewDetail = () => {
@@ -189,6 +190,8 @@ export default function ClassCard({ item }: ClassCardProps) {
               <Button
                 type="primary"
                 size="small"
+                loading={isEnrolling && enrollingClassId === id}
+                disabled={isEnrolling}
                 onClick={handleRegister}
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold rounded h-8 shadow-sm border-none inline-flex items-center justify-center gap-1"
               >

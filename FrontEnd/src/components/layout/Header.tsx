@@ -1,8 +1,16 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Input, Button } from "antd";
-import { SearchOutlined, UserOutlined } from "@ant-design/icons";
+import { Input, Button, Dropdown, Avatar } from "antd";
+import type { MenuProps } from "antd";
+import {
+  SearchOutlined,
+  UserOutlined,
+  DownOutlined,
+  BookOutlined,
+  LogoutOutlined,
+} from "@ant-design/icons";
 import { LOGO_URL } from "../../data/homeData";
 import { useHomeStore } from "../../stores/useHomeStore";
+import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
 
 export default function Header() {
@@ -10,6 +18,14 @@ export default function Header() {
   const navigate = useNavigate();
   const searchKeyword = useHomeStore((state) => state.searchKeyword);
   const setSearchKeyword = useHomeStore((state) => state.setSearchKeyword);
+
+  const { user, isAuthenticated, logout } = useAuthStore();
+  const isStudent = isAuthenticated && user?.role === "STUDENT";
+
+  const handleLogout = () => {
+    logout();
+    navigate(ROUTES.HOME);
+  };
 
   const navLinks = [
     { label: "Giới thiệu", href: "#", isRoute: false },
@@ -22,6 +38,45 @@ export default function Header() {
     },
     { label: "Học bổng", href: "#", isRoute: false },
     { label: "Hỗ trợ", href: "#", isRoute: false },
+  ];
+
+  const userMenuItems: MenuProps["items"] = [
+    {
+      key: "user-info",
+      disabled: true,
+      label: (
+        <div className="py-1 px-0.5 cursor-default">
+          <div className="font-bold text-slate-800 text-xs">{user?.fullName}</div>
+          <div className="text-[11px] text-slate-400 font-normal truncate max-w-[180px]">
+            {user?.email}
+          </div>
+        </div>
+      ),
+    },
+    {
+      type: "divider",
+    },
+    {
+      key: "profile",
+      icon: <UserOutlined className="text-xs text-slate-500" />,
+      label: <span className="text-xs font-medium">Hồ sơ cá nhân</span>,
+    },
+    {
+      key: "my-learning",
+      icon: <BookOutlined className="text-xs text-indigo-600" />,
+      label: <span className="text-xs font-medium">My Learning</span>,
+      onClick: () => navigate(ROUTES.STUDENT.HOME),
+    },
+    {
+      type: "divider",
+    },
+    {
+      key: "logout",
+      danger: true,
+      icon: <LogoutOutlined className="text-xs" />,
+      label: <span className="text-xs font-medium">Đăng xuất</span>,
+      onClick: handleLogout,
+    },
   ];
 
   return (
@@ -83,20 +138,52 @@ export default function Header() {
             )}
           </nav>
 
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-            <Button type="text" className="font-semibold text-[13px] text-slate-700 hover:text-indigo-600 h-10 px-3">
-              Đăng nhập
-            </Button>
-            <Button
-              type="primary"
-              className="bg-indigo-600 hover:bg-indigo-700 font-semibold text-[13px] rounded-lg h-10 px-4 shadow-sm shadow-indigo-200 border-none"
-            >
-              Đăng ký miễn phí
-            </Button>
-            <button className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition">
-              <UserOutlined />
-            </button>
-          </div>
+          {isStudent && user ? (
+            <div className="flex items-center pl-2 border-l border-slate-200">
+              <Dropdown menu={{ items: userMenuItems }} trigger={["hover", "click"]} placement="bottomRight">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+                >
+                  {user.avatarUrl ? (
+                    <Avatar src={user.avatarUrl} size={36} />
+                  ) : (
+                    <Avatar
+                      size={36}
+                      className="bg-indigo-600 text-white font-bold text-sm flex items-center justify-center"
+                    >
+                      {user.fullName ? user.fullName.charAt(0).toUpperCase() : <UserOutlined />}
+                    </Avatar>
+                  )}
+                  <DownOutlined className="text-[10px] text-slate-400 mr-1" />
+                </button>
+              </Dropdown>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+              <Button
+                type="text"
+                onClick={() => navigate(ROUTES.AUTH.LOGIN)}
+                className="font-semibold text-[13px] text-slate-700 hover:text-indigo-600 h-10 px-3"
+              >
+                Đăng nhập
+              </Button>
+              <Button
+                type="primary"
+                onClick={() => navigate(ROUTES.AUTH.REGISTER)}
+                className="bg-indigo-600 hover:bg-indigo-700 font-semibold text-[13px] rounded-lg h-10 px-4 shadow-sm shadow-indigo-200 border-none"
+              >
+                Đăng ký miễn phí
+              </Button>
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.AUTH.LOGIN)}
+                className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer"
+              >
+                <UserOutlined />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
