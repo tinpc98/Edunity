@@ -3,6 +3,8 @@ import PublicLayout from "../components/layout/PublicLayout";
 import HomePage from "../features/home/HomePage";
 import ClassDiscoveryPage from "../features/class/ClassDiscoveryPage";
 // import ClassDetailPage from "../features/class/pages/ClassDetailPage";
+import CheckoutPage from "../features/enrollment/CheckoutPage";
+import PaymentSuccessPage from "../features/enrollment/PaymentSuccessPage";
 import EnrollmentPage from "../features/enrollment/EnrollmentPage";
 import StudentLayout from "../components/layout/StudentLayout";
 import StudentHomePage from "../features/student/home/StudentHomePage";
@@ -49,6 +51,14 @@ const router = createBrowserRouter([
       {
         path: ROUTES.ENROLLMENT,
         element: <EnrollmentPage />,
+      },
+      {
+        path: ROUTES.CHECKOUT,
+        element: <CheckoutPage />,
+      },
+      {
+        path: ROUTES.PAYMENT_SUCCESS,
+        element: <PaymentSuccessPage />,
       },
       {
         path: ROUTES.AUTH.REGISTER,

@@ -1,7 +1,7 @@
 import { App as AntdApp, Button, Checkbox, Form, Input } from "antd";
 import { CheckCircleFilled, LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { loginUser } from "../../services/auth.service";
 import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
@@ -24,6 +24,8 @@ export default function LoginPage() {
   const { notification: notificationApi } = AntdApp.useApp();
   const setAuth = useAuthStore((state) => state.setAuth);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectUrl = searchParams.get("redirect");
 
   const loginMutation = useMutation({
     mutationFn: (payload: LoginPayload) => loginUser(payload),
@@ -34,7 +36,7 @@ export default function LoginPage() {
         placement: "topRight",
       });
       setAuth(data.user, data.accessToken);
-      navigate(ROUTES.HOME);
+      navigate(redirectUrl || ROUTES.HOME);
     },
     onError: (error: Error) => {
       notificationApi.error({
