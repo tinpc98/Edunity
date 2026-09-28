@@ -3,6 +3,7 @@ import type {
   FilterMetadata,
   FilterState,
   PaginatedResult,
+  SessionEntity,
 } from "../types/classDiscovery";
 import {
   COMMON_DISCOVERY_GRADES,
@@ -11,6 +12,7 @@ import {
   MOCK_SUBJECTS,
   MOCK_TEACHERS,
   RAW_MOCK_CLASSES,
+  RAW_MOCK_SESSIONS,
   transformToDiscoveryItem,
 } from "../data/mockClassDiscovery";
 
@@ -179,6 +181,15 @@ class ClassDiscoveryService {
     const found = RAW_MOCK_CLASSES.find((c) => c._id === classId);
     if (!found) return null;
     return transformToDiscoveryItem(found);
+  }
+
+  async fetchSessionsByClassId(classId: string): Promise<SessionEntity[]> {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const sessions = RAW_MOCK_SESSIONS.filter((s) => s.classId === classId);
+    // Sort chronologically by startDatetime
+    return [...sessions].sort(
+      (a, b) => new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime()
+    );
   }
 }
 

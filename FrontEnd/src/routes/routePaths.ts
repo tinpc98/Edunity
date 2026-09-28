@@ -3,6 +3,8 @@ export const ROUTES = {
   CLASSES: "/classes",
   CLASS_DETAIL: "/classes/:classId",
   ENROLLMENT: "/enrollment/:classId",
+  CHECKOUT: "/checkout/:enrollmentId",
+  PAYMENT_SUCCESS: "/checkout/:enrollmentId/success",
   AUTH: {
     LOGIN: "/login",
     REGISTER: "/register",
@@ -12,6 +14,7 @@ export const ROUTES = {
   },
   STUDENT: {
     HOME: "/student",
+    CLASS_SESSIONS: "/student/classes/:classId",
   },
   TEACHER: {
     HOME: "/teacher",

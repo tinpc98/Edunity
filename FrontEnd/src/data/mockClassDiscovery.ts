@@ -2,6 +2,8 @@ import type {
   BackendGradeLevel,
   ClassDiscoveryItem,
   ClassEntity,
+  ScheduleEntry,
+  SessionEntity,
   TimeOfDay,
 } from "../types/classDiscovery";
 
@@ -55,20 +57,28 @@ export interface MockTeacher {
   name: string;
   avatar: string;
   title: string;
+  qualificationSummary?: string;
+  biography?: string;
 }
 
 export const MOCK_TEACHERS: MockTeacher[] = [
   {
     id: "TEA_001",
     name: "ThS. Nguyễn Văn Đức",
-    title: "15 năm kinh nghiệm Chuyên Sư Phạm",
+    title: "Thạc sĩ Toán học · Giáo viên THPT",
+    qualificationSummary: "Thạc sĩ Toán học · Giáo viên THPT",
     avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+    biography:
+      "ThS. Nguyễn Văn Đức là giáo viên Toán có nhiều năm kinh nghiệm nghiên cứu và giảng dạy chương trình THPT, chuyên sâu về các chuyên đề Đại số, Giải tích và luyện thi đại học. Phương pháp sư phạm logic, bám sát bản chất giúp học sinh hiểu sâu và vận dụng bài tập linh hoạt.",
   },
   {
     id: "TEA_002",
     name: "Cô Mai Lan",
-    title: "Tổ trưởng Chuyên KHTN",
+    title: "Th.S, Giáo viên Toán",
+    qualificationSummary: "Th.S, Giáo viên Toán",
     avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=200&q=80",
+    biography:
+      "Cô Mai Lan là giáo viên Toán có nhiều năm kinh nghiệm giảng dạy học sinh THPT, đặc biệt trong luyện thi đại học. Phương pháp giảng dạy rõ ràng, bám sát chương trình và chú trọng giúp học sinh phát triển tư duy giải bài.",
   },
   {
     id: "TEA_003",
@@ -250,13 +260,13 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
   {
     _id: "CLS_016",
     courseId: "CRS_TOAN_12",
-    courseTitle: "Toán 12 – Ôn thi THPT Quốc Gia & Vận Dụng Nâng Cao",
+    courseTitle: "Toán 12 – 9+ Trong Tầm Tay",
     teacherId: "TEA_002",
     teacherName: "Cô Mai Lan",
     categoryId: "CAT_THPT",
     subjectId: "SUB_MATH",
     gradeLevel: "GRADE_12",
-    className: "Tăng Tốc 9+ Toán 12",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
     coverImage: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=600&q=80",
     classType: "PAID",
     price: 1800000,
@@ -265,13 +275,16 @@ export const RAW_MOCK_CLASSES: ClassEntity[] = [
     enrollmentStart: "2026-08-20",
     enrollmentEnd: "2026-10-25",
     startDate: "2026-10-18",
+    endDate: "2026-12-20",
     status: "OPEN",
     schedule: [
       { dayOfWeek: 6, startTime: "08:30", endTime: "10:30" }, // Sat
       { dayOfWeek: 0, startTime: "08:30", endTime: "10:30" }, // Sun
     ],
-    ratingAverage: 4.98,
+    ratingAverage: 5.0,
     ratingCount: 82,
+    description:
+      "Lớp tập trung vào các chuyên đề Đại số và Hình học trọng tâm của Toán 12, kết hợp ôn lý thuyết, luyện dạng bài và chữa đề trực tiếp. Học viên được hướng dẫn phương pháp làm bài hiệu quả từ cơ bản đến nâng cao.",
   },
   // Class 3 of CRS_TOAN_12 (Different Teacher: Thầy Đặng Tuấn)
   {
@@ -929,6 +942,25 @@ export function deriveStatusLabel(status: ClassEntity["status"], isFull: boolean
   }
 }
 
+export function deriveScheduleDaysAndTime(schedule: ScheduleEntry[]): { days: string; time: string } {
+  if (!schedule || schedule.length === 0) {
+    return { days: "Linh hoạt", time: "08:30 – 10:30" };
+  }
+  const dayNames: Record<number, string> = {
+    0: "Chủ nhật",
+    1: "Thứ 2",
+    2: "Thứ 3",
+    3: "Thứ 4",
+    4: "Thứ 5",
+    5: "Thứ 6",
+    6: "Thứ 7",
+  };
+  const daysArr = schedule.map((s) => dayNames[s.dayOfWeek] || `Thứ ${s.dayOfWeek}`);
+  const days = daysArr.join(" & ");
+  const time = `${schedule[0].startTime} – ${schedule[0].endTime}`;
+  return { days, time };
+}
+
 /**
  * Transforms ClassEntity into ClassDiscoveryItem ViewModel
  */
@@ -940,6 +972,7 @@ export function transformToDiscoveryItem(entity: ClassEntity): ClassDiscoveryIte
   const canEnroll = entity.status === "OPEN" && !isFull;
   const timeOfDay = deriveTimeOfDay(entity.schedule);
   const scheduleText = deriveScheduleText(entity.schedule);
+  const { days: scheduleDays, time: scheduleTime } = deriveScheduleDaysAndTime(entity.schedule);
   const statusLabel = deriveStatusLabel(entity.status, isFull);
 
   return {
@@ -953,7 +986,9 @@ export function transformToDiscoveryItem(entity: ClassEntity): ClassDiscoveryIte
     teacherId: entity.teacherId,
     teacherName: entity.teacherName,
     teacherAvatar: teacher?.avatar,
-    teacherTitle: teacher?.title,
+    teacherTitle: teacher?.qualificationSummary || teacher?.title,
+    qualificationSummary: teacher?.qualificationSummary || teacher?.title,
+    teacherBiography: teacher?.biography,
     gradeLevel: entity.gradeLevel,
     gradeLabel: entity.gradeLevel ? GRADE_LEVEL_LABELS[entity.gradeLevel] || entity.gradeLevel : "Khối lớp",
     coverImage:
@@ -973,10 +1008,15 @@ export function transformToDiscoveryItem(entity: ClassEntity): ClassDiscoveryIte
     statusLabel,
     canEnroll,
     startDate: entity.startDate ? formatDateVN(entity.startDate) : "Sắp xếp",
+    endDate: entity.endDate,
+    formattedEndDate: entity.endDate ? formatDateVN(entity.endDate) : undefined,
     scheduleText,
+    scheduleDays,
+    scheduleTime,
     timeOfDay,
     ratingAverage: entity.ratingAverage,
     ratingCount: entity.ratingCount,
+    description: entity.description,
   };
 }
 
@@ -991,3 +1031,280 @@ function formatDateVN(dateStr: string): string {
     return dateStr;
   }
 }
+
+/**
+ * Backend-aligned Sessions Mock Data (Class -> Sessions)
+ * Strictly conforms to BackEnd/src/models/Session.js:
+ * { classId, className, teacherId, title, startDatetime, endDatetime, meetingRoomId, status, createdAt }
+ */
+export const RAW_MOCK_SESSIONS: SessionEntity[] = [
+  // 12 Sessions for CLS_001 (Đại Số Và Hình Học Cực Đỉnh - ThS. Nguyễn Văn Đức)
+  // Schedule: Thứ 3 & Thứ 6 (19:30 - 21:00), Khai giảng: 2026-10-05
+  {
+    _id: "SES_001_01",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Khảo sát sự biến thiên của hàm số",
+    startDatetime: "2026-10-06T19:30:00+07:00",
+    endDatetime: "2026-10-06T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_02",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Cực trị của hàm số",
+    startDatetime: "2026-10-09T19:30:00+07:00",
+    endDatetime: "2026-10-09T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_03",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Giá trị lớn nhất và giá trị nhỏ nhất",
+    startDatetime: "2026-10-13T19:30:00+07:00",
+    endDatetime: "2026-10-13T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_04",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Đường tiệm cận của đồ thị hàm số",
+    startDatetime: "2026-10-16T19:30:00+07:00",
+    endDatetime: "2026-10-16T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_05",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Hàm số mũ và logarit",
+    startDatetime: "2026-10-20T19:30:00+07:00",
+    endDatetime: "2026-10-20T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_06",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Phương trình mũ và logarit",
+    startDatetime: "2026-10-23T19:30:00+07:00",
+    endDatetime: "2026-10-23T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_07",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Nguyên hàm",
+    startDatetime: "2026-10-27T19:30:00+07:00",
+    endDatetime: "2026-10-27T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_08",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Tích phân và ứng dụng",
+    startDatetime: "2026-10-30T19:30:00+07:00",
+    endDatetime: "2026-10-30T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_09",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Số phức",
+    startDatetime: "2026-11-03T19:30:00+07:00",
+    endDatetime: "2026-11-03T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_10",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Hình học không gian",
+    startDatetime: "2026-11-06T19:30:00+07:00",
+    endDatetime: "2026-11-06T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_11",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Hệ tọa độ Oxyz",
+    startDatetime: "2026-11-10T19:30:00+07:00",
+    endDatetime: "2026-11-10T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  {
+    _id: "SES_001_12",
+    classId: "CLS_001",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_001",
+    title: "Tổng ôn và chữa đề",
+    startDatetime: "2026-11-13T19:30:00+07:00",
+    endDatetime: "2026-11-13T21:00:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+
+  // 12 Sessions for CLS_016 (Đại Số Và Hình Học Cực Đỉnh - Cô Mai Lan)
+  // Schedule: Thứ 7 & Chủ nhật (08:30 - 10:30), Khai giảng: 2026-10-18, Kết thúc: 2026-12-20
+  {
+    _id: "SES_016_01",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Khảo sát sự biến thiên của hàm số",
+    startDatetime: "2026-10-18T08:30:00+07:00",
+    endDatetime: "2026-10-18T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_02",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Cực trị của hàm số",
+    startDatetime: "2026-10-24T08:30:00+07:00",
+    endDatetime: "2026-10-24T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_03",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Giá trị lớn nhất và giá trị nhỏ nhất",
+    startDatetime: "2026-10-25T08:30:00+07:00",
+    endDatetime: "2026-10-25T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_04",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Đường tiệm cận của đồ thị hàm số",
+    startDatetime: "2026-10-31T08:30:00+07:00",
+    endDatetime: "2026-10-31T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_05",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Hàm số mũ và logarit",
+    startDatetime: "2026-11-01T08:30:00+07:00",
+    endDatetime: "2026-11-01T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_06",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Phương trình mũ và logarit",
+    startDatetime: "2026-11-07T08:30:00+07:00",
+    endDatetime: "2026-11-07T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_07",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Nguyên hàm",
+    startDatetime: "2026-11-08T08:30:00+07:00",
+    endDatetime: "2026-11-08T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_08",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Tích phân và ứng dụng",
+    startDatetime: "2026-11-14T08:30:00+07:00",
+    endDatetime: "2026-11-14T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_09",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Số phức",
+    startDatetime: "2026-11-15T08:30:00+07:00",
+    endDatetime: "2026-11-15T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_10",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Hình học không gian",
+    startDatetime: "2026-11-21T08:30:00+07:00",
+    endDatetime: "2026-11-21T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_11",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Hệ tọa độ Oxyz",
+    startDatetime: "2026-11-22T08:30:00+07:00",
+    endDatetime: "2026-11-22T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+  {
+    _id: "SES_016_12",
+    classId: "CLS_016",
+    className: "Đại Số Và Hình Học Cực Đỉnh",
+    teacherId: "TEA_002",
+    title: "Tổng ôn và chữa đề",
+    startDatetime: "2026-11-28T08:30:00+07:00",
+    endDatetime: "2026-11-28T10:30:00+07:00",
+    status: "SCHEDULED",
+    createdAt: "2026-08-20T00:00:00Z",
+  },
+];

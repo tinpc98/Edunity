@@ -3,9 +3,12 @@ import PublicLayout from "../components/layout/PublicLayout";
 import HomePage from "../features/home/HomePage";
 import ClassDiscoveryPage from "../features/class/ClassDiscoveryPage";
 // import ClassDetailPage from "../features/class/pages/ClassDetailPage";
+import CheckoutPage from "../features/enrollment/CheckoutPage";
+import PaymentSuccessPage from "../features/enrollment/PaymentSuccessPage";
 import EnrollmentPage from "../features/enrollment/EnrollmentPage";
 import StudentLayout from "../components/layout/StudentLayout";
 import StudentHomePage from "../features/student/home/StudentHomePage";
+import StudentClassSessionsPage from "../features/student/classes/StudentClassSessionsPage";
 import TeacherLayout from "../components/layout/TeacherLayout";
 import TeacherHomePage from "../features/teacher/home/TeacherHomePage";
 import TeacherClassesPage from "../features/teacher/classes/TeacherClassesPage";
@@ -51,6 +54,14 @@ const router = createBrowserRouter([
         element: <EnrollmentPage />,
       },
       {
+        path: ROUTES.CHECKOUT,
+        element: <CheckoutPage />,
+      },
+      {
+        path: ROUTES.PAYMENT_SUCCESS,
+        element: <PaymentSuccessPage />,
+      },
+      {
         path: ROUTES.AUTH.REGISTER,
         element: <RegisterPage />,
       },
@@ -79,6 +90,10 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <StudentHomePage />,
+      },
+      {
+        path: "classes/:classId",
+        element: <StudentClassSessionsPage />,
       },
     ],
   },

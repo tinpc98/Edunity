@@ -8,6 +8,7 @@ import {
   CheckCircleOutlined,
 } from "@ant-design/icons";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
+import { useClassEnrollment } from "../hooks/useClassEnrollment";
 
 interface ClassCardProps {
   item: ClassDiscoveryItem;
@@ -15,6 +16,13 @@ interface ClassCardProps {
 
 export default function ClassCard({ item }: ClassCardProps) {
   const navigate = useNavigate();
+  const {
+    handleEnrollClass,
+    isEnrolling,
+    enrollingClassId,
+    isEnrolled,
+    freeEnrollModal,
+  } = useClassEnrollment();
 
   const {
     id,
@@ -43,8 +51,7 @@ export default function ClassCard({ item }: ClassCardProps) {
 
   const handleRegister = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!canEnroll) return;
-    navigate(`/enrollment/${id}`);
+    handleEnrollClass(item);
   };
 
   const handleViewDetail = () => {
@@ -136,13 +143,12 @@ export default function ClassCard({ item }: ClassCardProps) {
           </div>
 
           <div
-            className={`flex items-center gap-1.5 font-semibold ${
-              isFull
+            className={`flex items-center gap-1.5 font-semibold ${isFull
                 ? "text-rose-600"
                 : nearlyFull
-                ? "text-amber-600"
-                : "text-emerald-700"
-            }`}
+                  ? "text-amber-600"
+                  : "text-emerald-700"
+              }`}
           >
             <TeamOutlined className="shrink-0" />
             {isFull ? (
@@ -185,10 +191,20 @@ export default function ClassCard({ item }: ClassCardProps) {
               Chi tiết
             </Button>
 
-            {canEnroll ? (
+            {isEnrolled(id) ? (
+              <Button
+                size="small"
+                disabled
+                className="flex-1 text-xs font-semibold rounded h-8 bg-emerald-50 text-emerald-700 border-emerald-200"
+              >
+                Đã đăng ký
+              </Button>
+            ) : canEnroll ? (
               <Button
                 type="primary"
                 size="small"
+                loading={isEnrolling && enrollingClassId === id}
+                disabled={isEnrolling}
                 onClick={handleRegister}
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold rounded h-8 shadow-sm border-none inline-flex items-center justify-center gap-1"
               >
@@ -211,6 +227,7 @@ export default function ClassCard({ item }: ClassCardProps) {
           </div>
         </div>
       </div>
+      {freeEnrollModal}
     </div>
   );
 }
