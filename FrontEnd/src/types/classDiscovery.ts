@@ -61,9 +61,28 @@ export interface ClassEntity {
   schedule: ScheduleEntry[];
   ratingAverage: number;
   ratingCount: number;
+  description?: string;
 }
 
 export type TimeOfDay = "MORNING" | "AFTERNOON" | "EVENING";
+
+/**
+ * Backend-aligned Session Entity matching BackEnd/src/models/Session.js
+ */
+export type SessionStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+
+export interface SessionEntity {
+  _id: string;
+  classId: string;
+  className: string;
+  teacherId: string;
+  title: string;
+  startDatetime: string;
+  endDatetime: string;
+  meetingRoomId?: string;
+  status: SessionStatus;
+  createdAt?: string;
+}
 
 /**
  * Frontend View Model for Class Discovery Card & Details
@@ -81,6 +100,7 @@ export interface ClassDiscoveryItem {
   teacherName: string;
   teacherAvatar?: string;
   teacherTitle?: string;
+  teacherBiography?: string;
   gradeLevel: BackendGradeLevel | null;
   gradeLabel: string;
   coverImage: string;
@@ -95,11 +115,16 @@ export interface ClassDiscoveryItem {
   statusLabel: string;
   canEnroll: boolean;
   startDate: string;
+  endDate?: string;
+  formattedEndDate?: string;
   scheduleText: string;
+  scheduleDays?: string;
+  scheduleTime?: string;
   timeOfDay: TimeOfDay;
   ratingAverage: number;
   ratingCount: number;
   totalSessions?: number;
+  description?: string;
 }
 
 export type SortOption =

@@ -35,6 +35,14 @@ export function useClassDetailQuery(classId: string | undefined) {
   });
 }
 
+export function useClassSessionsQuery(classId: string | undefined) {
+  return useQuery({
+    queryKey: ["classSessions", classId],
+    queryFn: () => (classId ? classDiscoveryService.fetchSessionsByClassId(classId) : []),
+    enabled: Boolean(classId),
+  });
+}
+
 const DEFAULT_PAGE_SIZE = 9;
 
 export function useClassDiscoveryFilters() {
