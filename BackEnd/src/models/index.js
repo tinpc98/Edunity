@@ -1,5 +1,6 @@
 module.exports = {
   User: require("./User"),
+  RefreshToken: require("./RefreshToken"),
   Category: require("./Category"),
   Subject: require("./Subject"),
   Course: require("./Course"),
@@ -11,6 +12,7 @@ module.exports = {
   Payment: require("./Payment"),
   Transaction: require("./Transaction"),
   TeacherEarning: require("./TeacherEarning"),
+  Payout: require("./Payout"),
   Review: require("./Review"),
   ScholarshipCampaign: require("./ScholarshipCampaign"),
   SponsorContribution: require("./SponsorContribution"),

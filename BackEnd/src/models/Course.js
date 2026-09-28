@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const { GRADE_LEVELS, COURSE_LEVELS } = require("./constants");
+const { softDeletePlugin, adminManagedPlugin } = require("./plugins");
 
 const courseSchema = new Schema(
   {
@@ -18,9 +19,14 @@ const courseSchema = new Schema(
     gradeLevel: { type: String, enum: GRADE_LEVELS, default: null }, // BR-43, nullable
     prerequisites: String,
     status: { type: String, enum: ["ACTIVE", "INACTIVE"], default: "ACTIVE" },
+
+    sourceProposalId: { type: Schema.Types.ObjectId, ref: "CourseProposal", default: null }, // nếu tạo từ Course Proposal đã duyệt
   },
   { timestamps: true }
 );
+
+courseSchema.plugin(adminManagedPlugin);
+courseSchema.plugin(softDeletePlugin);
 
 courseSchema.index({ subjectId: 1 });
 courseSchema.index({ categoryId: 1, gradeLevel: 1, status: 1 }); // FR-STU-29

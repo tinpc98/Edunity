@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
+const { softDeletePlugin } = require("./plugins");
 
 const scopeSchema = new Schema(
   {
@@ -12,7 +13,8 @@ const scopeSchema = new Schema(
 
 const scholarshipCampaignSchema = new Schema(
   {
-    createdByAdminId: { type: Schema.Types.ObjectId, ref: "User", required: true }, // BR-16
+    createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true }, // BR-16: Admin tạo Campaign
+    updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
 
     title: { type: String, required: true, trim: true },
     description: String,
@@ -32,14 +34,20 @@ const scholarshipCampaignSchema = new Schema(
     applicationStart: Date,
     applicationEnd: Date,
 
+    // OPEN_FOR_FUNDING là trạng thái "đã publish" duy nhất (đúng theo UC-ADM-03: Publish -> status = OPEN_FOR_FUNDING),
+    // bao trùm cả giai đoạn nhận tài trợ lẫn giai đoạn nhận hồ sơ — KHÔNG có state riêng OPEN_FOR_APPLICATION
+    // vì không có FR/UC nào chuyển sang state đó. Đang nhận tài trợ hay đang nhận hồ sơ được suy ra bằng cách so sánh
+    // thời gian hiện tại với fundingStart/fundingEnd và applicationStart/applicationEnd tương ứng (BR-17, BR-19).
     status: {
       type: String,
-      enum: ["DRAFT", "OPEN_FOR_FUNDING", "OPEN_FOR_APPLICATION", "CLOSED"],
+      enum: ["DRAFT", "OPEN_FOR_FUNDING", "CLOSED"],
       default: "DRAFT",
     },
   },
   { timestamps: true }
 );
+
+scholarshipCampaignSchema.plugin(softDeletePlugin); // ẩn Campaign nháp/lỗi khỏi danh sách công khai, vẫn giữ lịch sử tài trợ
 
 scholarshipCampaignSchema.index({ status: 1, applicationStart: 1, applicationEnd: 1 });
 
