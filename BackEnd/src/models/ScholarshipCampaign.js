@@ -34,9 +34,13 @@ const scholarshipCampaignSchema = new Schema(
     applicationStart: Date,
     applicationEnd: Date,
 
+    // OPEN_FOR_FUNDING là trạng thái "đã publish" duy nhất (đúng theo UC-ADM-03: Publish -> status = OPEN_FOR_FUNDING),
+    // bao trùm cả giai đoạn nhận tài trợ lẫn giai đoạn nhận hồ sơ — KHÔNG có state riêng OPEN_FOR_APPLICATION
+    // vì không có FR/UC nào chuyển sang state đó. Đang nhận tài trợ hay đang nhận hồ sơ được suy ra bằng cách so sánh
+    // thời gian hiện tại với fundingStart/fundingEnd và applicationStart/applicationEnd tương ứng (BR-17, BR-19).
     status: {
       type: String,
-      enum: ["DRAFT", "OPEN_FOR_FUNDING", "OPEN_FOR_APPLICATION", "CLOSED"],
+      enum: ["DRAFT", "OPEN_FOR_FUNDING", "CLOSED"],
       default: "DRAFT",
     },
   },

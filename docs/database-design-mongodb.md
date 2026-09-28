@@ -3,6 +3,8 @@
 Nguồn: tài liệu đặc tả dự án (Chương 1–16), chuyển đổi từ thiết kế quan hệ ở Chương 10 sang mô hình document của MongoDB. Tài liệu gốc dùng PostgreSQL; bản thiết kế này giữ nguyên toàn bộ entity, business rule (BR-01..BR-46) và use case, chỉ thay đổi cách tổ chức dữ liệu cho phù hợp MongoDB.
 
 > **Cập nhật (đợt 2)**: bổ sung field audit/lifecycle theo các archetype chuẩn hoá (mục 1.6), sửa cardinality Enrollment↔Payment, thêm entity `Payout`, mở rộng `Session` với nội dung buổi học + recording, mở rộng `VerificationDocument` cho upload CCCD 2 mặt.
+>
+> **Cập nhật (đợt 3 — rà soát lần cuối)**: sửa `scholarshipCampaigns.status` (bỏ state `OPEN_FOR_APPLICATION` không có transition nào dùng tới), thêm idempotency key cho `sponsorContributions` (cùng rủi ro duplicate webhook như `payments`), thêm entity `refreshTokens` để hỗ trợ logout từng thiết bị và Admin force-logout khi suspend/ban tài khoản.
 
 ## 1. Nguyên tắc thiết kế
 
@@ -354,20 +356,23 @@ Chương 10.17.
   awardAmountPerStudent: Decimal128,  // BR-36/37: cố định, Student không tự chọn
   fundingStart: Date, fundingEnd: Date,
   applicationStart: Date, applicationEnd: Date,
-  status: "DRAFT" | "OPEN_FOR_FUNDING" | "OPEN_FOR_APPLICATION" | "CLOSED",
+  status: "DRAFT" | "OPEN_FOR_FUNDING" | "CLOSED",
   isDeleted, deletedAt, deletedBy,  // SOFT-DELETABLE — ẩn Campaign nháp/lỗi, vẫn giữ lịch sử tài trợ
   createdAt, updatedAt
 }
 ```
 `availableFund` (BR-26) được **tính**, không lưu cứng: `fundedAmount - allocatedAmount`; nhưng để tránh tính toán lặp lại và hỗ trợ điều kiện atomic trong transaction, khuyến nghị vẫn lưu `allocatedAmount`/`fundedAmount` và kiểm tra điều kiện `allocatedAmount + awardAmountPerStudent <= fundedAmount` ngay trong lệnh `findOneAndUpdate` (atomic, tránh vượt quỹ khi duyệt đồng thời nhiều hồ sơ).
+
+> **Sửa lỗi thiết kế**: bỏ state `OPEN_FOR_APPLICATION` (không có FR/UC nào transition vào state này — UC-ADM-03 chỉ có "Publish → status = OPEN_FOR_FUNDING" và FR-ADM-14 "Close Campaign"). `OPEN_FOR_FUNDING` là trạng thái "đã publish" duy nhất, bao trùm cả giai đoạn nhận tài trợ lẫn giai đoạn nhận hồ sơ; việc đang ở giai đoạn nào được suy ra bằng cách so sánh thời gian hiện tại với `fundingStart/fundingEnd` và `applicationStart/applicationEnd` tương ứng (BR-17, BR-19), không phải bằng một status riêng.
+
 **Index**: `{ status: 1, applicationStart: 1, applicationEnd: 1 }` · `{ isDeleted: 1 }`.
 
 ### 2.16. `sponsorContributions`
-Chương 10.18.
+Chương 10.18. Cũng đi qua Payment Gateway (mục 9.10: Contribution → Payment → Confirmation) nên có cùng rủi ro duplicate webhook như `payments` — cần idempotency key tương tự.
 ```jsonc
-{ _id, campaignId, sponsorId, amount: Decimal128, contributionStatus: "PENDING" | "COMPLETED" | "FAILED", paymentReference, contributedAt, createdAt, updatedAt }
+{ _id, campaignId, sponsorId, amount: Decimal128, contributionStatus: "PENDING" | "COMPLETED" | "FAILED", paymentReference: String | null, contributedAt, createdAt, updatedAt }
 ```
-**Index**: `{ campaignId: 1 }` · `{ sponsorId: 1, contributedAt: -1 }`.
+**Index**: `{ campaignId: 1 }` · `{ sponsorId: 1, contributedAt: -1 }` · `{ paymentReference: 1 }` unique + sparse (chống duplicate webhook; sparse vì contribution `PENDING` có thể chưa có reference).
 
 ### 2.17. `scholarshipApplications`
 Chương 10.19. BR-29: không được nộp trùng khi hồ sơ cũ còn active. `studentId` đóng vai trò `createdBy`.
@@ -455,6 +460,21 @@ Không có trong Chương 10 gốc nhưng **bắt buộc** theo BR-35 và NFR-15
 { _id, actorAdminId, action: String, targetType: String, targetId: ObjectId, beforeState: Object, afterState: Object, createdAt }
 ```
 **Index**: `{ targetType: 1, targetId: 1, createdAt: -1 }` · `{ actorAdminId: 1, createdAt: -1 }`.
+
+### 2.26. `refreshTokens`
+**Mới** — Chương 11.5 dùng "JWT Access Token + Refresh Token" nhưng Chương 10 gốc không có bảng nào lưu phiên đăng nhập, nên không có cách revoke một refresh token cụ thể (logout 1 thiết bị) hay buộc logout ngay khi Admin suspend/ban tài khoản (access token cũ vẫn dùng được tới khi hết hạn). Thêm collection này để Auth Module kiểm tra trước khi cấp access token mới từ refresh token.
+```jsonc
+{
+  _id, userId,
+  tokenHash: String,           // hash của refresh token, không lưu token thô
+  issuedAt: Date, expiresAt: Date,
+  revokedAt: Date | null,      // set khi logout hoặc Admin suspend/ban User
+  replacedByTokenId: ObjectId | null, // refresh token rotation
+  userAgent: String, ip: String,      // audit thiết bị đăng nhập
+  createdAt, updatedAt
+}
+```
+**Index**: `{ tokenHash: 1 }` unique · `{ userId: 1, revokedAt: 1 }` (liệt kê/thu hồi toàn bộ phiên của 1 User khi suspend/ban) · TTL index trên `expiresAt` (`expireAfterSeconds: 0`) để tự xoá sau khi hết hạn — đây là **ngoại lệ hợp lý** cho nguyên tắc "không dùng TTL để xoá" ở mục 1.4, vì refresh token hết hạn không phải dữ liệu tài chính/lịch sử cần giữ lại.
 
 ---
 
