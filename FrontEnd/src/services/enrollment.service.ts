@@ -170,6 +170,72 @@ class EnrollmentService {
     return newEnrollment;
   }
 
+  async createFreeEnrollment(
+    payload: CreateEnrollmentPayload
+  ): Promise<EnrollmentEntity> {
+    await new Promise((res) => setTimeout(res, 300));
+    const { classId, studentId } = payload;
+
+    const classEntity = RAW_MOCK_CLASSES.find((c) => c._id === classId);
+    if (!classEntity) {
+      throw new Error("Lớp học không tồn tại trong hệ thống.");
+    }
+
+    if (classEntity.classType !== "FREE") {
+      throw new Error("Lớp học này là lớp có học phí, không thể đăng ký theo luồng miễn phí.");
+    }
+
+    const currentEnrolled =
+      getStoredClassEnrolledCountOverride(classId) ?? classEntity.enrolledCount;
+    if (currentEnrolled >= classEntity.capacity) {
+      throw new Error("Lớp học đã đủ số lượng học viên.");
+    }
+
+    if (classEntity.status !== "OPEN") {
+      throw new Error("Lớp học hiện không mở đăng ký.");
+    }
+
+    const all = getStoredEnrollments();
+
+    // Check if student already has a CONFIRMED or COMPLETED enrollment
+    const confirmed = all.find(
+      (e) =>
+        e.classId === classId &&
+        e.studentId === studentId &&
+        (e.enrollmentStatus === "CONFIRMED" || e.enrollmentStatus === "COMPLETED")
+    );
+    if (confirmed) {
+      throw new Error("Bạn đã đăng ký lớp học này trước đó.");
+    }
+
+    const now = new Date();
+
+    const newEnrollment: EnrollmentEntity = {
+      id: `enr_free_${Date.now()}`,
+      classId: classEntity._id,
+      courseId: classEntity.courseId,
+      teacherId: classEntity.teacherId,
+      studentId,
+      enrollmentStatus: "CONFIRMED",
+      paymentSource: "FREE",
+      tuitionAmount: 0,
+      amountPaidViaPayment: 0,
+      amountPaidViaScholarship: 0,
+      enrolledAt: now.toISOString(),
+      holdExpiresAt: null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+
+    all.push(newEnrollment);
+    saveStoredEnrollments(all);
+
+    // Increment seat count for this confirmed enrollment
+    saveClassEnrolledCountIncrement(classId);
+
+    return newEnrollment;
+  }
+
   async updateEnrollmentStatus(
     enrollmentId: string,
     status: EnrollmentEntity["enrollmentStatus"],

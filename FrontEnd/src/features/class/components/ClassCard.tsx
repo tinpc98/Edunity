@@ -16,7 +16,13 @@ interface ClassCardProps {
 
 export default function ClassCard({ item }: ClassCardProps) {
   const navigate = useNavigate();
-  const { handleEnrollClass, isEnrolling, enrollingClassId } = useClassEnrollment();
+  const {
+    handleEnrollClass,
+    isEnrolling,
+    enrollingClassId,
+    isEnrolled,
+    freeEnrollModal,
+  } = useClassEnrollment();
 
   const {
     id,
@@ -137,13 +143,12 @@ export default function ClassCard({ item }: ClassCardProps) {
           </div>
 
           <div
-            className={`flex items-center gap-1.5 font-semibold ${
-              isFull
+            className={`flex items-center gap-1.5 font-semibold ${isFull
                 ? "text-rose-600"
                 : nearlyFull
-                ? "text-amber-600"
-                : "text-emerald-700"
-            }`}
+                  ? "text-amber-600"
+                  : "text-emerald-700"
+              }`}
           >
             <TeamOutlined className="shrink-0" />
             {isFull ? (
@@ -186,7 +191,15 @@ export default function ClassCard({ item }: ClassCardProps) {
               Chi tiết
             </Button>
 
-            {canEnroll ? (
+            {isEnrolled(id) ? (
+              <Button
+                size="small"
+                disabled
+                className="flex-1 text-xs font-semibold rounded h-8 bg-emerald-50 text-emerald-700 border-emerald-200"
+              >
+                Đã đăng ký
+              </Button>
+            ) : canEnroll ? (
               <Button
                 type="primary"
                 size="small"
@@ -214,6 +227,7 @@ export default function ClassCard({ item }: ClassCardProps) {
           </div>
         </div>
       </div>
+      {freeEnrollModal}
     </div>
   );
 }

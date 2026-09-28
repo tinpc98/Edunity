@@ -9,7 +9,7 @@ interface ClassRegistrationCardProps {
 }
 
 export default function ClassRegistrationCard({ item }: ClassRegistrationCardProps) {
-  const { handleEnrollClass, isEnrolling } = useClassEnrollment();
+  const { handleEnrollClass, isEnrolling, isEnrolled, freeEnrollModal } = useClassEnrollment();
 
   const isFree = item.classType === "FREE";
   const capacityPercent = Math.min(
@@ -54,7 +54,15 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
       </div>
 
       {/* Primary CTA Button */}
-      {item.canEnroll ? (
+      {isEnrolled(item.id) ? (
+        <Button
+          size="large"
+          disabled
+          className="font-bold text-sm h-12 rounded-xl w-full bg-emerald-50 text-emerald-700 border-emerald-200"
+        >
+          Đã đăng ký lớp học này
+        </Button>
+      ) : item.canEnroll ? (
         <Button
           type="primary"
           size="large"
@@ -124,6 +132,7 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
           ← Quay lại danh sách lớp học
         </Link>
       </div>
+      {freeEnrollModal}
     </div>
   );
 }
