@@ -11,7 +11,7 @@ const sponsorContributionSchema = new Schema(
     paymentReference: String,
     contributedAt: { type: Date, default: Date.now },
   },
-  { timestamps: { createdAt: false, updatedAt: true } }
+  { timestamps: true }
 );
 
 sponsorContributionSchema.index({ campaignId: 1 });

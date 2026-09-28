@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
+const { softDeletePlugin, adminManagedPlugin } = require("./plugins");
 
 const categorySchema = new Schema(
   {
@@ -10,5 +11,8 @@ const categorySchema = new Schema(
   },
   { timestamps: true }
 );
+
+categorySchema.plugin(adminManagedPlugin);
+categorySchema.plugin(softDeletePlugin);
 
 module.exports = mongoose.model("Category", categorySchema);

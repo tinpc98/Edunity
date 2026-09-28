@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const { GRADE_LEVELS } = require("./constants");
+const { softDeletePlugin, reviewablePlugin } = require("./plugins");
 
 const scheduleEntrySchema = new Schema(
   {
@@ -15,7 +16,7 @@ const classSchema = new Schema(
   {
     courseId: { type: Schema.Types.ObjectId, ref: "Course", required: true },
     courseTitle: { type: String, required: true }, // denormalized
-    teacherId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    teacherId: { type: Schema.Types.ObjectId, ref: "User", required: true }, // = createdBy, không cần field riêng
     teacherName: { type: String, required: true }, // denormalized
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
     subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
@@ -37,6 +38,7 @@ const classSchema = new Schema(
       enum: ["DRAFT", "PENDING_APPROVAL", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
       default: "DRAFT",
     },
+    updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null }, // Teacher hoặc Admin chỉnh sửa gần nhất
 
     schedule: [scheduleEntrySchema],
 
@@ -45,6 +47,9 @@ const classSchema = new Schema(
   },
   { timestamps: true }
 );
+
+classSchema.plugin(reviewablePlugin); // Admin duyệt Class ở trạng thái PENDING_APPROVAL
+classSchema.plugin(softDeletePlugin);
 
 classSchema.index({ courseId: 1 });
 classSchema.index({ teacherId: 1, status: 1 });

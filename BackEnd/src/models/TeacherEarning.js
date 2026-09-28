@@ -11,10 +11,16 @@ const teacherEarningSchema = new Schema(
     commissionAmount: { type: Schema.Types.Decimal128, required: true }, // grossAmount * commissionRate (10%)
     netAmount: { type: Schema.Types.Decimal128, required: true }, // grossAmount - commissionAmount
     status: { type: String, enum: ["PENDING", "AVAILABLE", "PAID_OUT"], default: "PENDING" },
+
+    // Gắn với Payout khi earning được gộp vào một lần rút tiền (status -> PAID_OUT).
+    // Nguồn sự thật duy nhất là field này; Payout không lưu lại danh sách earningIds
+    // để tránh hai nơi cùng giữ quan hệ và có thể lệch nhau.
+    payoutId: { type: Schema.Types.ObjectId, ref: "Payout", default: null },
   },
-  { timestamps: { createdAt: true, updatedAt: false } }
+  { timestamps: true }
 );
 
 teacherEarningSchema.index({ teacherId: 1, createdAt: -1 });
+teacherEarningSchema.index({ teacherId: 1, status: 1 }); // tìm các earning AVAILABLE để gộp vào Payout mới
 
 module.exports = mongoose.model("TeacherEarning", teacherEarningSchema);

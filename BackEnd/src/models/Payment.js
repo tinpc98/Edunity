@@ -1,6 +1,9 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
+// Enrollment 1 — N Payment: một Enrollment có thể có nhiều lần thử thanh toán
+// (FAILED rồi retry) trước khi có một Payment COMPLETED. Vì vậy KHÔNG đặt unique
+// trên enrollmentId — chỉ gatewayReference là unique để đảm bảo idempotency webhook.
 const paymentSchema = new Schema(
   {
     enrollmentId: { type: Schema.Types.ObjectId, ref: "Enrollment", required: true },
@@ -16,9 +19,9 @@ const paymentSchema = new Schema(
     },
     paidAt: Date,
   },
-  { timestamps: { createdAt: true, updatedAt: false } }
+  { timestamps: true }
 );
 
-paymentSchema.index({ enrollmentId: 1 });
+paymentSchema.index({ enrollmentId: 1, createdAt: -1 }); // lịch sử các lần thử thanh toán của 1 Enrollment
 
 module.exports = mongoose.model("Payment", paymentSchema);

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
+const { softDeletePlugin } = require("./plugins");
 
 const reviewSchema = new Schema(
   {
@@ -11,8 +12,10 @@ const reviewSchema = new Schema(
     rating: { type: Number, required: true, min: 1, max: 5 },
     comment: String,
   },
-  { timestamps: { createdAt: true, updatedAt: false } }
+  { timestamps: true }
 );
+
+reviewSchema.plugin(softDeletePlugin); // Admin gỡ review vi phạm mà không mất dữ liệu gốc
 
 reviewSchema.index({ classId: 1 });
 reviewSchema.index({ teacherId: 1 });

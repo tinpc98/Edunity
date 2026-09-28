@@ -12,7 +12,7 @@ const scholarshipUsageSchema = new Schema(
     // PENDING = tạm giữ trong lúc chờ Student thanh toán phần chênh lệch (MIXED, 15 phút)
     status: { type: String, enum: ["PENDING", "CONFIRMED", "RELEASED"], default: "PENDING" },
   },
-  { timestamps: { createdAt: false, updatedAt: true } }
+  { timestamps: true }
 );
 
 scholarshipUsageSchema.index({ enrollmentId: 1 });

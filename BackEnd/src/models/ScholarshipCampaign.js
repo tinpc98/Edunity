@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
+const { softDeletePlugin } = require("./plugins");
 
 const scopeSchema = new Schema(
   {
@@ -12,7 +13,8 @@ const scopeSchema = new Schema(
 
 const scholarshipCampaignSchema = new Schema(
   {
-    createdByAdminId: { type: Schema.Types.ObjectId, ref: "User", required: true }, // BR-16
+    createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true }, // BR-16: Admin tạo Campaign
+    updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
 
     title: { type: String, required: true, trim: true },
     description: String,
@@ -40,6 +42,8 @@ const scholarshipCampaignSchema = new Schema(
   },
   { timestamps: true }
 );
+
+scholarshipCampaignSchema.plugin(softDeletePlugin); // ẩn Campaign nháp/lỗi khỏi danh sách công khai, vẫn giữ lịch sử tài trợ
 
 scholarshipCampaignSchema.index({ status: 1, applicationStart: 1, applicationEnd: 1 });
 

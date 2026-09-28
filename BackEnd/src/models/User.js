@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
+const { softDeletePlugin } = require("./plugins");
 
 const studentProfileSchema = new Schema(
   {
@@ -20,6 +21,11 @@ const teacherProfileSchema = new Schema(
       enum: ["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED"],
       default: "UNVERIFIED",
     },
+    // REVIEWABLE: quyết định của Admin khi verify Teacher (FR-ADM-02, BR-01)
+    reviewedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    reviewedAt: { type: Date, default: null },
+    reviewNote: { type: String, default: null },
+
     qualificationSummary: String,
     ratingAverage: { type: Number, default: 0 },
     ratingCount: { type: Number, default: 0 },
@@ -50,6 +56,8 @@ const userSchema = new Schema(
   },
   { timestamps: true }
 );
+
+userSchema.plugin(softDeletePlugin); // Admin gỡ tài khoản gian lận nhưng vẫn giữ lịch sử Enrollment/Review liên quan
 
 userSchema.index({ role: 1, status: 1 });
 userSchema.index({ "teacherProfile.verificationStatus": 1 });

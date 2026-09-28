@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
+const { softDeletePlugin, adminManagedPlugin } = require("./plugins");
 
 const subjectSchema = new Schema(
   {
@@ -13,6 +14,9 @@ const subjectSchema = new Schema(
   },
   { timestamps: true }
 );
+
+subjectSchema.plugin(adminManagedPlugin);
+subjectSchema.plugin(softDeletePlugin);
 
 subjectSchema.index({ categoryId: 1 });
 

@@ -8,8 +8,9 @@ const notificationSchema = new Schema(
     content: String,
     type: String,
     isRead: { type: Boolean, default: false },
+    readAt: { type: Date, default: null },
   },
-  { timestamps: { createdAt: true, updatedAt: false } }
+  { timestamps: true }
 );
 
 notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
