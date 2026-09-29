@@ -7,8 +7,6 @@ app.use(express.json());
 // Routes
 app.use("/api", enrollmentRoutes);
 
-const { startJob } = require("./jobs/expireEnrollmentsJob");
-
 const { AppError } = require("./utils/errors");
 
 // Global Error Handler
@@ -28,10 +26,5 @@ app.use((err, req, res, next) => {
     message: "An unexpected error occurred"
   });
 });
-
-// Start background jobs if not in test env
-if (process.env.NODE_ENV !== "test") {
-  startJob();
-}
 
 module.exports = app;

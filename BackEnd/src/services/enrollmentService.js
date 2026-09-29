@@ -3,13 +3,17 @@ const Class = require("../models/Class");
 const Enrollment = require("../models/Enrollment");
 const User = require("../models/User");
 const { getSetting } = require("../utils/settings");
-const { 
-  CLASS_FULL, 
-  ENROLLMENT_CLOSED, 
-  CLASS_NOT_OPEN, 
-  CLASS_NOT_FOUND, 
-  DUPLICATE_ENROLLMENT 
+const {
+  CLASS_FULL,
+  ENROLLMENT_CLOSED,
+  CLASS_NOT_OPEN,
+  CLASS_NOT_FOUND,
+  DUPLICATE_ENROLLMENT,
+  FORBIDDEN,
+  ENROLLMENT_NOT_FOUND,
+  ENROLLMENT_NOT_CANCELLABLE
 } = require("../utils/errors");
+const { releaseReservation } = require("./reservationService");
 
 const createEnrollment = async (studentId, classId, retried = false) => {
   if (!mongoose.isValidObjectId(classId) || !mongoose.isValidObjectId(studentId)) {
@@ -18,10 +22,7 @@ const createEnrollment = async (studentId, classId, retried = false) => {
 
   const student = await User.findById(studentId);
   if (!student || student.role !== "STUDENT") {
-    const error = new Error("Only STUDENT can enroll");
-    error.code = "FORBIDDEN";
-    error.statusCode = 403;
-    throw error;
+    throw FORBIDDEN("Only STUDENT can enroll");
   }
 
   // Check active enrollment first
@@ -31,6 +32,18 @@ const createEnrollment = async (studentId, classId, retried = false) => {
     enrollmentStatus: { $in: ["PENDING_PAYMENT", "CONFIRMED", "COMPLETED"] }
   });
   if (activeEnrollment) {
+    // BR-38/39: a PENDING_PAYMENT hold that has already expired must not block
+    // re-registration — release it here and retry once, instead of surfacing
+    // a DUPLICATE_ENROLLMENT for a seat that is no longer actually held.
+    if (
+      !retried &&
+      activeEnrollment.enrollmentStatus === "PENDING_PAYMENT" &&
+      activeEnrollment.holdExpiresAt &&
+      activeEnrollment.holdExpiresAt <= new Date()
+    ) {
+      await releaseReservation(activeEnrollment._id, "EXPIRED");
+      return await createEnrollment(studentId, classId, true);
+    }
     throw DUPLICATE_ENROLLMENT();
   }
 
@@ -86,7 +99,7 @@ const createEnrollment = async (studentId, classId, retried = false) => {
           $expr: { $lt: ["$enrolledCount", "$capacity"] } 
         },
         { $inc: { enrolledCount: 1 } },
-        { session, new: true }
+        { session, returnDocument: "after" }
       );
 
       if (!updatedClass) {
@@ -121,11 +134,12 @@ const createEnrollment = async (studentId, classId, retried = false) => {
 
     return newEnrollment;
   } catch (err) {
-    // If we caught a DUPLICATE_ENROLLMENT, check if the existing enrollment is actually expired but not processed yet
+    // Concurrent request lost the race at the DB unique-index level (both passed the
+    // pre-check above before either had saved yet) — apply the same expired-hold
+    // recovery here as a second line of defense.
     if (err.code === "DUPLICATE_ENROLLMENT" && !retried) {
       const existing = await Enrollment.findOne({ studentId, classId, enrollmentStatus: "PENDING_PAYMENT" });
       if (existing && existing.holdExpiresAt && existing.holdExpiresAt <= new Date()) {
-        const { releaseReservation } = require("./reservationService");
         await releaseReservation(existing._id, "EXPIRED");
         // Try creating again after expiring the old one (only once)
         return await createEnrollment(studentId, classId, true);
@@ -160,20 +174,13 @@ const cancelEnrollment = async (studentId, enrollmentId) => {
   
   const enrollment = await Enrollment.findOne({ _id: enrollmentId, studentId });
   if (!enrollment) {
-    const err = new Error("Enrollment not found");
-    err.code = "ENROLLMENT_NOT_FOUND";
-    err.statusCode = 404;
-    throw err;
+    throw ENROLLMENT_NOT_FOUND();
   }
 
   if (enrollment.enrollmentStatus !== "PENDING_PAYMENT") {
-    const err = new Error("Enrollment is not cancellable");
-    err.code = "ENROLLMENT_NOT_CANCELLABLE";
-    err.statusCode = 409;
-    throw err;
+    throw ENROLLMENT_NOT_CANCELLABLE();
   }
 
-  const { releaseReservation } = require("./reservationService");
   const success = await releaseReservation(enrollmentId, "CANCELLED");
   return success;
 };

@@ -26,18 +26,27 @@ describe("Enrollment API on Real DB", () => {
   let student1, student2, teacher, category, subject, course;
 
   beforeEach(async () => {
-    student1 = await User.create({ name: "S1", email: "s1@test.com", password: "123", role: "STUDENT" });
-    student2 = await User.create({ name: "S2", email: "s2@test.com", password: "123", role: "STUDENT" });
-    teacher = await User.create({ name: "T1", email: "t1@test.com", password: "123", role: "TEACHER" });
-    
-    category = await Category.create({ name: "Cat1" });
-    subject = await Subject.create({ name: "Sub1", categoryId: category._id });
+    const admin = await User.create({ email: "admin@test.com", passwordHash: "hashed", role: "ADMIN" });
+    student1 = await User.create({ email: "s1@test.com", passwordHash: "hashed", role: "STUDENT" });
+    student2 = await User.create({ email: "s2@test.com", passwordHash: "hashed", role: "STUDENT" });
+    teacher = await User.create({ email: "t1@test.com", passwordHash: "hashed", role: "TEACHER" });
+
+    category = await Category.create({ name: "Cat1", slug: "cat-1", createdBy: admin._id });
+    subject = await Subject.create({
+      name: "Sub1",
+      slug: "sub-1",
+      categoryId: category._id,
+      categoryName: category.name,
+      createdBy: admin._id
+    });
     course = await Course.create({
       title: "Course 1",
-      teacherId: teacher._id,
+      slug: "course-1",
       categoryId: category._id,
+      categoryName: category.name,
       subjectId: subject._id,
-      price: 100
+      subjectName: subject.name,
+      createdBy: admin._id
     });
   });
 
@@ -46,7 +55,7 @@ describe("Enrollment API on Real DB", () => {
       courseId: course._id,
       courseTitle: course.title,
       teacherId: teacher._id,
-      teacherName: teacher.name,
+      teacherName: "Teacher One",
       categoryId: category._id,
       subjectId: subject._id,
       className: `Class ${type}`,
@@ -116,9 +125,9 @@ describe("Enrollment API on Real DB", () => {
       const cls = await createClass("PAID", 100, "OPEN", 1);
       
       const students = await User.insertMany([
-        { name: "S3", email: "s3@test.com", password: "123", role: "STUDENT" },
-        { name: "S4", email: "s4@test.com", password: "123", role: "STUDENT" },
-        { name: "S5", email: "s5@test.com", password: "123", role: "STUDENT" },
+        { email: "s3@test.com", passwordHash: "hashed", role: "STUDENT" },
+        { email: "s4@test.com", passwordHash: "hashed", role: "STUDENT" },
+        { email: "s5@test.com", passwordHash: "hashed", role: "STUDENT" },
       ]);
       const allStudents = [student1, student2, ...students];
 
