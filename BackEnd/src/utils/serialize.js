@@ -13,6 +13,16 @@ const serializeDecimal128 = (obj) => {
     return obj.toString();
   }
 
+  // Handle Date
+  if (obj instanceof Date) {
+    return obj.toISOString();
+  }
+
+  // Handle ObjectId
+  if (obj instanceof mongoose.Types.ObjectId) {
+    return obj.toString();
+  }
+
   // Handle objects with $numberDecimal property (from raw lean() result)
   if (obj.$numberDecimal) {
     return obj.$numberDecimal;

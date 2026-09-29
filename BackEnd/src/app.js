@@ -6,6 +6,7 @@ app.use(express.json());
 
 // Routes
 app.use("/api", enrollmentRoutes);
+app.use("/api", require("./routes/paymentRoutes"));
 
 const { AppError } = require("./utils/errors");
 

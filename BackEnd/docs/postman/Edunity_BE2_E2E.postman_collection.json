@@ -1,0 +1,1612 @@
+{
+  "info": {
+    "name": "Edunity BE-2 – E2E Enrollment & Payment",
+    "description": "Trước mỗi lần chạy: `npm run seed`, đặt SEAT_HOLD_MINUTES=1 trong .env, `npm run dev`.\nChạy bằng Collection Runner (theo thứ tự) hoặc: npx newman run <file>.\nFolder 4 và 6 cần PHẦN 2 (payment) đã làm xong.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Kiểm tra server & dữ liệu seed",
+      "item": [
+        {
+          "name": "Availability lớp FREE (seed mới => 0 người)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classFree}}/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classFree}}",
+                "availability"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"capacity = 30\", () => pm.expect(d.capacity).to.eql(30));",
+                  "pm.test(\"enrolledCount = 0 (nếu FAIL: chạy lại npm run seed)\", () => pm.expect(d.enrolledCount).to.eql(0));",
+                  "pm.test(\"enrollmentOpen = true\", () => pm.expect(d.enrollmentOpen).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Availability id sai định dạng -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/abc/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "abc",
+                "availability"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error = CLASS_NOT_FOUND\", () => pm.expect(pm.response.json().error).to.eql(\"CLASS_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Chạy `npm run seed` TRƯỚC mỗi lần Run collection để dữ liệu sạch."
+    },
+    {
+      "name": "1. mockAuth",
+      "item": [
+        {
+          "name": "Không có x-user-id -> 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"error = UNAUTHORIZED\", () => pm.expect(pm.response.json().error).to.eql(\"UNAUTHORIZED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "x-user-id sai định dạng -> 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{badId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"error = UNAUTHORIZED\", () => pm.expect(pm.response.json().error).to.eql(\"UNAUTHORIZED\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. E2E-02 Student FREE",
+      "item": [
+        {
+          "name": "student1 đăng ký lớp FREE -> CONFIRMED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classFree}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classFree}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"_id là chuỗi ObjectId (serialize OK)\", () => pm.expect(d._id).to.be.a(\"string\").and.match(/^[a-f0-9]{24}$/));",
+                  "pm.test(\"CONFIRMED\", () => pm.expect(d.enrollmentStatus).to.eql(\"CONFIRMED\"));",
+                  "pm.test(\"paymentSource FREE\", () => pm.expect(d.paymentSource).to.eql(\"FREE\"));",
+                  "pm.test(\"holdExpiresAt = null\", () => pm.expect(d.holdExpiresAt).to.eql(null));",
+                  "pm.collectionVariables.set(\"freeEnrollmentId\", d._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Đăng ký lại -> DUPLICATE_ENROLLMENT",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classFree}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classFree}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error = DUPLICATE_ENROLLMENT\", () => pm.expect(pm.response.json().error).to.eql(\"DUPLICATE_ENROLLMENT\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Availability FREE -> enrolledCount 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classFree}}/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classFree}}",
+                "availability"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"enrolledCount = 1\", () => pm.expect(d.enrolledCount).to.eql(1));",
+                  "pm.test(\"remaining = 29\", () => pm.expect(d.remaining).to.eql(29));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /me/enrollments có lớp vừa đăng ký",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "const ids = (d.items||[]).map(e => e._id);",
+                  "pm.test(\"chứa freeEnrollmentId\", () => pm.expect(ids).to.include(pm.collectionVariables.get(\"freeEnrollmentId\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /enrollments/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{freeEnrollmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{freeEnrollmentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"CONFIRMED\", () => pm.expect(d.enrollmentStatus).to.eql(\"CONFIRMED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "student2 xem enrollment của student1 -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{freeEnrollmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{freeEnrollmentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error = ENROLLMENT_NOT_FOUND\", () => pm.expect(pm.response.json().error).to.eql(\"ENROLLMENT_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hủy lớp FREE đã CONFIRMED -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{freeEnrollmentId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{freeEnrollmentId}}",
+                "cancel"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error = ENROLLMENT_NOT_CANCELLABLE\", () => pm.expect(pm.response.json().error).to.eql(\"ENROLLMENT_NOT_CANCELLABLE\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /enrollments/abc -> ENROLLMENT_NOT_FOUND",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "abc"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error = ENROLLMENT_NOT_FOUND\", () => pm.expect(pm.response.json().error).to.eql(\"ENROLLMENT_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Các case lỗi đăng ký",
+      "item": [
+        {
+          "name": "Lớp DRAFT -> CLASS_NOT_OPEN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classDraft}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classDraft}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error = CLASS_NOT_OPEN\", () => pm.expect(pm.response.json().error).to.eql(\"CLASS_NOT_OPEN\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lớp không tồn tại -> CLASS_NOT_FOUND",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{missingClass}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{missingClass}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error = CLASS_NOT_FOUND\", () => pm.expect(pm.response.json().error).to.eql(\"CLASS_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Teacher đăng ký -> FORBIDDEN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{teacher}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classFree}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classFree}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"error = FORBIDDEN\", () => pm.expect(pm.response.json().error).to.eql(\"FORBIDDEN\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "student1 lấy chỗ duy nhất lớp 1 chỗ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classFull}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classFull}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "student2 vào lớp đã đầy -> CLASS_FULL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classFull}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classFull}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error = CLASS_FULL\", () => pm.expect(pm.response.json().error).to.eql(\"CLASS_FULL\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. E2E-03 Student PAID + Payment sandbox",
+      "item": [
+        {
+          "name": "student1 đăng ký lớp PAID -> PENDING_PAYMENT",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"_id là chuỗi ObjectId (serialize OK)\", () => pm.expect(d._id).to.be.a(\"string\").and.match(/^[a-f0-9]{24}$/));",
+                  "pm.test(\"PENDING_PAYMENT\", () => pm.expect(d.enrollmentStatus).to.eql(\"PENDING_PAYMENT\"));",
+                  "pm.test(\"tuitionAmount = 200000 (dạng string)\", () => { pm.expect(d.tuitionAmount).to.be.a(\"string\"); pm.expect(parseFloat(d.tuitionAmount)).to.eql(200000); });",
+                  "pm.test(\"holdExpiresAt là ISO string ở tương lai\", () => { pm.expect(d.holdExpiresAt).to.be.a(\"string\"); pm.expect(new Date(d.holdExpiresAt).getTime()).to.be.above(Date.now()); });",
+                  "pm.collectionVariables.set(\"paidEnrollmentId\", d._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{paidEnrollmentId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{paidEnrollmentId}}",
+                "payments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"có gatewayReference\", () => pm.expect(d.gatewayReference).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"amount = 200000\", () => pm.expect(parseFloat(d.amount)).to.eql(200000));",
+                  "pm.collectionVariables.set(\"gatewayRef\", d.gatewayReference);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tạo payment lần 2 -> trả lại payment cũ, không tạo trùng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{paidEnrollmentId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{paidEnrollmentId}}",
+                "payments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200/201\", () => pm.expect(pm.response.code).to.be.oneOf([200,201]));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"cùng gatewayReference\", () => pm.expect(d.gatewayReference).to.eql(pm.collectionVariables.get(\"gatewayRef\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "student2 tạo payment cho enrollment của student1 -> bị chặn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{paidEnrollmentId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{paidEnrollmentId}}",
+                "payments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403 hoặc 404\", () => pm.expect(pm.response.code).to.be.oneOf([403,404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook SUCCESS -> CONFIRMED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/sandbox/webhook",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "sandbox",
+                "webhook"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gatewayReference\": \"{{gatewayRef}}\",\n  \"status\": \"SUCCESS\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"paymentStatus COMPLETED\", () => pm.expect(d.paymentStatus).to.eql(\"COMPLETED\"));",
+                  "pm.test(\"enrollmentStatus CONFIRMED\", () => pm.expect(d.enrollmentStatus).to.eql(\"CONFIRMED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook gọi lại lần 2 -> idempotent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/sandbox/webhook",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "sandbox",
+                "webhook"
+              ]
+            },
+            "description": "Sau khi chạy: vào Atlas kiểm tra chỉ có ĐÚNG 1 Transaction ENROLLMENT_PAYMENT và 1 TeacherEarning (gross 200000, commission 20000, net 180000).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gatewayReference\": \"{{gatewayRef}}\",\n  \"status\": \"SUCCESS\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"vẫn COMPLETED\", () => pm.expect(d.paymentStatus).to.eql(\"COMPLETED\"));",
+                  "pm.test(\"vẫn CONFIRMED\", () => pm.expect(d.enrollmentStatus).to.eql(\"CONFIRMED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook reference không tồn tại -> 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/sandbox/webhook",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "sandbox",
+                "webhook"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gatewayReference\": \"SBX-khong-ton-tai\",\n  \"status\": \"SUCCESS\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error = PAYMENT_NOT_FOUND\", () => pm.expect(pm.response.json().error).to.eql(\"PAYMENT_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET enrollment PAID -> CONFIRMED, đã trả 200000",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{paidEnrollmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{paidEnrollmentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"CONFIRMED\", () => pm.expect(d.enrollmentStatus).to.eql(\"CONFIRMED\"));",
+                  "pm.test(\"amountPaidViaPayment = 200000\", () => pm.expect(parseFloat(d.amountPaidViaPayment)).to.eql(200000));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lịch sử payment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{paidEnrollmentId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{paidEnrollmentId}}",
+                "payments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json().data; const list = Array.isArray(body) ? body : (body.items || []);",
+                  "pm.test(\"đúng 1 payment\", () => pm.expect(list.length).to.eql(1));",
+                  "pm.test(\"COMPLETED\", () => pm.expect(list[0].paymentStatus).to.eql(\"COMPLETED\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Hủy giữ chỗ & đăng ký lại",
+      "item": [
+        {
+          "name": "student2 đăng ký lớp PAID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.collectionVariables.set(\"cancelEnrollmentId\", d._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Availability PAID -> enrolledCount 2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid}}/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid}}",
+                "availability"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"enrolledCount = 2\", () => pm.expect(d.enrolledCount).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "student2 hủy -> 200",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{cancelEnrollmentId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{cancelEnrollmentId}}",
+                "cancel"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Enrollment -> CANCELLED",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{cancelEnrollmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{cancelEnrollmentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"CANCELLED\", () => pm.expect(d.enrollmentStatus).to.eql(\"CANCELLED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Availability PAID -> trả chỗ, còn 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid}}/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid}}",
+                "availability"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"enrolledCount = 1\", () => pm.expect(d.enrolledCount).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hủy lần 2 -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{cancelEnrollmentId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{cancelEnrollmentId}}",
+                "cancel"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error = ENROLLMENT_NOT_CANCELLABLE\", () => pm.expect(pm.response.json().error).to.eql(\"ENROLLMENT_NOT_CANCELLABLE\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Đăng ký lại sau khi hủy -> được phép (BR-31)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"PENDING_PAYMENT\", () => pm.expect(d.enrollmentStatus).to.eql(\"PENDING_PAYMENT\"));",
+                  "pm.collectionVariables.set(\"expiryEnrollmentId\", d._id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. E2E-04 Hết hạn giữ chỗ (chạy cuối, cần SEAT_HOLD_MINUTES=1)",
+      "item": [
+        {
+          "name": "Tạo payment cho enrollment sẽ hết hạn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{expiryEnrollmentId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{expiryEnrollmentId}}",
+                "payments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200/201\", () => pm.expect(pm.response.code).to.be.oneOf([200,201]));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.collectionVariables.set(\"lateGatewayRef\", d.gatewayReference);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[CHỜ ~2.5 phút] Enrollment -> EXPIRED",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{expiryEnrollmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{expiryEnrollmentId}}"
+              ]
+            },
+            "description": "Pre-request script chờ expiryWaitMs (mặc định 150000 ms = hold 1 phút + cron tối đa 1 phút + dư)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"EXPIRED (nếu FAIL: kiểm tra SEAT_HOLD_MINUTES=1 trong .env và job đang chạy)\", () => pm.expect(d.enrollmentStatus).to.eql(\"EXPIRED\"));"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ms = parseInt(pm.collectionVariables.get(\"expiryWaitMs\"), 10) || 150000;",
+                  "console.log(\"Đang chờ \" + ms/1000 + \" giây để giữ chỗ hết hạn...\");",
+                  "setTimeout(() => {}, ms);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Availability PAID -> đã trả chỗ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid}}/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid}}",
+                "availability"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"enrolledCount = 1\", () => pm.expect(d.enrolledCount).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Late webhook -> không confirm, đánh dấu hoàn tiền",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/sandbox/webhook",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "sandbox",
+                "webhook"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gatewayReference\": \"{{lateGatewayRef}}\",\n  \"status\": \"SUCCESS\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"result LATE_PAYMENT_REFUND_REQUIRED\", () => pm.expect(d.result).to.eql(\"LATE_PAYMENT_REFUND_REQUIRED\"));",
+                  "pm.test(\"enrollment vẫn EXPIRED\", () => pm.expect(d.enrollmentStatus).to.eql(\"EXPIRED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Đăng ký lại sau khi hết hạn -> được phép",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{student2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid}}",
+                "enrollments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"PENDING_PAYMENT\", () => pm.expect(d.enrollmentStatus).to.eql(\"PENDING_PAYMENT\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api"
+    },
+    {
+      "key": "student1",
+      "value": "66a000000000000000000003"
+    },
+    {
+      "key": "student2",
+      "value": "66a000000000000000000004"
+    },
+    {
+      "key": "teacher",
+      "value": "66a000000000000000000002"
+    },
+    {
+      "key": "badId",
+      "value": "abc"
+    },
+    {
+      "key": "classFree",
+      "value": "66e000000000000000000001"
+    },
+    {
+      "key": "classPaid",
+      "value": "66e000000000000000000002"
+    },
+    {
+      "key": "classFull",
+      "value": "66e000000000000000000003"
+    },
+    {
+      "key": "classDraft",
+      "value": "66e000000000000000000004"
+    },
+    {
+      "key": "missingClass",
+      "value": "66e000000000000000000999"
+    },
+    {
+      "key": "expiryWaitMs",
+      "value": "150000"
+    },
+    {
+      "key": "freeEnrollmentId",
+      "value": ""
+    },
+    {
+      "key": "paidEnrollmentId",
+      "value": ""
+    },
+    {
+      "key": "gatewayRef",
+      "value": ""
+    },
+    {
+      "key": "cancelEnrollmentId",
+      "value": ""
+    },
+    {
+      "key": "expiryEnrollmentId",
+      "value": ""
+    },
+    {
+      "key": "lateGatewayRef",
+      "value": ""
+    }
+  ]
+}
