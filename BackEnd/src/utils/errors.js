@@ -14,6 +14,9 @@ const errors = {
   DUPLICATE_ENROLLMENT: (msg = "You are already enrolled in this class") => new AppError(msg, "DUPLICATE_ENROLLMENT", 409),
   CLASS_NOT_FOUND: (msg = "Class not found") => new AppError(msg, "CLASS_NOT_FOUND", 404),
   ENROLLMENT_NOT_FOUND: (msg = "Enrollment not found") => new AppError(msg, "ENROLLMENT_NOT_FOUND", 404),
+  FORBIDDEN: (msg = "You are not allowed to perform this action") => new AppError(msg, "FORBIDDEN", 403),
+  ENROLLMENT_NOT_CANCELLABLE: (msg = "Enrollment is not cancellable") =>
+    new AppError(msg, "ENROLLMENT_NOT_CANCELLABLE", 409),
 };
 
 module.exports = {

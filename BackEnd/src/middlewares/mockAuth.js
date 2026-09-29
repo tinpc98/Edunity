@@ -1,9 +1,12 @@
 const mockAuth = (req, res, next) => {
   if (process.env.NODE_ENV === "test") {
-    // In test environment, if req.user is not set by test, set a default mock
+    // In test environment, if req.user is not set by test, derive it from the
+    // "x-user-id" header (tests impersonate different users this way) and
+    // fall back to a default mock id when the header is absent.
     if (!req.user) {
+      const headerUserId = req.headers["x-user-id"];
       req.user = {
-        _id: "507f1f77bcf86cd799439011",
+        id: headerUserId || "507f1f77bcf86cd799439011",
         role: "STUDENT",
       };
     }

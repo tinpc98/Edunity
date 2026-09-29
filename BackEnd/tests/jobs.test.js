@@ -28,22 +28,32 @@ describe("Background Job & Concurrency on Real DB", () => {
   let student, teacher, category, subject, course, cls, scholarship;
 
   beforeEach(async () => {
-    student = await User.create({ name: "S1", email: "s1@test.com", password: "123", role: "STUDENT" });
-    teacher = await User.create({ name: "T1", email: "t1@test.com", password: "123", role: "TEACHER" });
-    category = await Category.create({ name: "Cat1" });
-    subject = await Subject.create({ name: "Sub1", categoryId: category._id });
+    const admin = await User.create({ email: "admin@test.com", passwordHash: "hashed", role: "ADMIN" });
+    student = await User.create({ email: "s1@test.com", passwordHash: "hashed", role: "STUDENT" });
+    teacher = await User.create({ email: "t1@test.com", passwordHash: "hashed", role: "TEACHER" });
+
+    category = await Category.create({ name: "Cat1", slug: "cat-1", createdBy: admin._id });
+    subject = await Subject.create({
+      name: "Sub1",
+      slug: "sub-1",
+      categoryId: category._id,
+      categoryName: category.name,
+      createdBy: admin._id
+    });
     course = await Course.create({
       title: "Course 1",
-      teacherId: teacher._id,
+      slug: "course-1",
       categoryId: category._id,
+      categoryName: category.name,
       subjectId: subject._id,
-      price: 100
+      subjectName: subject.name,
+      createdBy: admin._id
     });
     cls = await Class.create({
       courseId: course._id,
       courseTitle: course.title,
       teacherId: teacher._id,
-      teacherName: teacher.name,
+      teacherName: "Teacher One",
       categoryId: category._id,
       subjectId: subject._id,
       className: `Class 1`,
@@ -53,16 +63,16 @@ describe("Background Job & Concurrency on Real DB", () => {
       enrolledCount: 1, // manually set to 1 for tests
       status: "OPEN"
     });
+    // campaignId/applicationId don't need to resolve to real documents here —
+    // Mongoose doesn't enforce ref existence, and this test only exercises the
+    // expire/release-on-refund path, not the Campaign/Application workflow.
     scholarship = await Scholarship.create({
-      name: "Scholar",
-      code: "SCHOLAR",
-      amountType: "FIXED",
-      amountValue: 50,
-      minPurchase: 0,
-      maxDiscount: 50,
-      validFrom: new Date(Date.now() - 10000),
-      validTo: new Date(Date.now() + 10000),
-      remainingAmount: 0 // Assume fully used initially for testing refund
+      campaignId: new mongoose.Types.ObjectId(),
+      applicationId: new mongoose.Types.ObjectId(),
+      studentId: student._id,
+      allocatedAmount: 50,
+      remainingAmount: 0, // Assume fully used initially for testing refund
+      expiresAt: new Date(Date.now() + 10000)
     });
   });
 
@@ -125,7 +135,7 @@ describe("Background Job & Concurrency on Real DB", () => {
     await ScholarshipUsage.create({
       scholarshipId: scholarship._id,
       enrollmentId: enrollment._id,
-      studentId: student._id,
+      classId: cls._id,
       amount: 50,
       status: "PENDING"
     });
