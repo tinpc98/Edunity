@@ -34,10 +34,13 @@ const serializeDecimal128 = (obj) => {
   }
 
   // If it's a regular object, recurse
-  if (typeof obj === "object") {
+    if (typeof obj === "object") {
     const serialized = {};
     for (const key of Object.keys(obj)) {
       serialized[key] = serializeDecimal128(obj[key]);
+    }
+    if (serialized._id && !serialized.id) {
+      serialized.id = serialized._id.toString();
     }
     return serialized;
   }

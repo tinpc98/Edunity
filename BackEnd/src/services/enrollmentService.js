@@ -44,7 +44,12 @@ const createEnrollment = async (studentId, classId, retried = false) => {
       await releaseReservation(activeEnrollment._id, "EXPIRED");
       return await createEnrollment(studentId, classId, true);
     }
-    throw DUPLICATE_ENROLLMENT();
+    const err = DUPLICATE_ENROLLMENT();
+    err.details = {
+      existingEnrollmentId: activeEnrollment._id.toString(),
+      enrollmentStatus: activeEnrollment.enrollmentStatus
+    };
+    throw err;
   }
 
   const session = await mongoose.startSession();
@@ -144,6 +149,14 @@ const createEnrollment = async (studentId, classId, retried = false) => {
         // Try creating again after expiring the old one (only once)
         return await createEnrollment(studentId, classId, true);
       }
+      if (existing) {
+        const err = DUPLICATE_ENROLLMENT();
+        err.details = {
+          existingEnrollmentId: existing._id.toString(),
+          enrollmentStatus: existing.enrollmentStatus
+        };
+        throw err;
+      }
     }
     throw err;
   } finally {
@@ -151,14 +164,45 @@ const createEnrollment = async (studentId, classId, retried = false) => {
   }
 };
 
-const getMyEnrollments = async (studentId, page = 1, limit = 20) => {
+const getMyEnrollments = async (studentId, page = 1, limit = 20, includeClass = false) => {
   const skip = (page - 1) * limit;
   const total = await Enrollment.countDocuments({ studentId });
   const items = await Enrollment.find({ studentId })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate("classId", "className coverImage classType price startDate endDate status capacity enrolledCount");
+    .populate("classId", "className courseTitle teacherName subjectName coverImage classType price startDate endDate status capacity enrolledCount")
+    .lean();
+  
+  if (includeClass) {
+    const Session = require("../models/Session");
+    const now = new Date();
+    for (const item of items) {
+      if (item.classId) {
+        item.class = {
+          id: item.classId._id.toString(),
+          className: item.classId.className,
+          courseTitle: item.classId.courseTitle,
+          teacherName: item.classId.teacherName,
+          subjectName: item.classId.subjectName,
+          coverImage: item.classId.coverImage,
+          startDate: item.classId.startDate,
+          endDate: item.classId.endDate,
+          status: item.classId.status
+        };
+        const nextSession = await Session.findOne({ 
+          classId: item.classId._id, 
+          status: "SCHEDULED",
+          startDatetime: { $gte: now } 
+        }).sort({ startDatetime: 1 }).lean();
+        
+        item.nextSession = nextSession ? {
+          ...nextSession,
+          id: nextSession._id.toString()
+        } : null;
+      }
+    }
+  }
   
   return { items, page, limit, total };
 };
