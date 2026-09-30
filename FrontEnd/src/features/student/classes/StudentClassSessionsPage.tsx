@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Modal, Skeleton, App as AntdApp } from "antd";
+import { Button, Skeleton } from "antd";
 import {
   UserOutlined,
   CalendarOutlined,
@@ -14,10 +14,7 @@ import { enrollmentService } from "../../../services/enrollment.service";
 import { classDiscoveryService } from "../../../services/classDiscovery.service";
 import { ROUTES } from "../../../routes/routePaths";
 import type { ClassDiscoveryItem, SessionEntity } from "../../../types/classDiscovery";
-
-interface SessionWithNumber extends SessionEntity {
-  sessionNumber: number;
-}
+import SessionDetailModal, { type SessionWithNumber } from "./components/SessionDetailModal";
 
 function formatSessionDate(isoString: string): string {
   try {
@@ -61,7 +58,6 @@ function isDateToday(isoString: string): boolean {
 export default function StudentClassSessionsPage() {
   const { classId } = useParams<{ classId: string }>();
   const { user } = useAuthStore();
-  const { notification } = AntdApp.useApp();
 
   const [selectedSession, setSelectedSession] = useState<SessionWithNumber | null>(null);
 
@@ -131,24 +127,6 @@ export default function StudentClassSessionsPage() {
 
   const isLoading = isLoadingEnrollments || isLoadingClass || isLoadingSessions;
   const isError = isClassError || isSessionsError;
-
-  // Live classroom action handler inside modal
-  const handleJoinLive = (session: SessionWithNumber) => {
-    if (!session.meetingRoomId) {
-      notification.warning({
-        message: "Phòng học trực tuyến",
-        description: "Phòng học hiện chưa sẵn sàng.",
-        placement: "topRight",
-      });
-      return;
-    }
-
-    notification.info({
-      message: "Vào phòng học LIVE",
-      description: `Đang kết nối vào phòng học "${session.title}" (Mã phòng: ${session.meetingRoomId}). Tính năng Live Classroom đang được hoàn thiện.`,
-      placement: "topRight",
-    });
-  };
 
   if (isLoading) {
     return (
@@ -417,109 +395,11 @@ export default function StudentClassSessionsPage() {
       )}
 
       {/* ================= 18. SESSION DETAIL MODAL ================= */}
-      <Modal
+      <SessionDetailModal
         open={Boolean(selectedSession)}
-        onCancel={() => setSelectedSession(null)}
-        footer={null}
-        width={480}
-        centered
-        className="rounded-2xl overflow-hidden"
-      >
-        {selectedSession && (
-          <div className="pt-2 space-y-4">
-            {/* Header: Buổi X + Badge */}
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Buổi {selectedSession.sessionNumber}
-              </span>
-
-              {selectedSession.status === "COMPLETED" && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-md">
-                  <span>✓</span>
-                  <span>HOÀN THÀNH</span>
-                </span>
-              )}
-
-              {selectedSession.status === "IN_PROGRESS" && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200/60 px-2 py-0.5 rounded-md">
-                  <span className="h-1.5 w-1.5 rounded-full bg-rose-600 animate-pulse" />
-                  <span>ĐANG DIỄN RA</span>
-                </span>
-              )}
-
-              {selectedSession.status === "SCHEDULED" && (
-                <span className="inline-flex items-center text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">
-                  SẮP DIỄN RA
-                </span>
-              )}
-
-              {selectedSession.status === "CANCELLED" && (
-                <span className="inline-flex items-center text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200/60 px-2 py-0.5 rounded-md">
-                  ĐÃ HỦY
-                </span>
-              )}
-            </div>
-
-            {/* Session Title (Appears ONLY in Modal) */}
-            <h3 className="text-lg font-bold text-slate-900 leading-snug">
-              {selectedSession.title}
-            </h3>
-
-            <div className="h-px bg-slate-100" />
-
-            {/* Details */}
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <span className="text-slate-400 font-medium block mb-1">Ngày học</span>
-                <span className="font-semibold text-slate-800">
-                  {formatSessionDate(selectedSession.startDatetime)}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-400 font-medium block mb-1">Thời gian</span>
-                <span className="font-semibold text-slate-800">
-                  {formatSessionTime(selectedSession.startDatetime)} –{" "}
-                  {formatSessionTime(selectedSession.endDatetime)}
-                </span>
-              </div>
-
-              <div className="col-span-2">
-                <span className="text-slate-400 font-medium block mb-1">Giảng viên</span>
-                <span className="font-semibold text-slate-800">
-                  {classItem.teacherName}
-                </span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-              {selectedSession.status === "IN_PROGRESS" && (
-                <Button
-                  type="primary"
-                  onClick={() => handleJoinLive(selectedSession)}
-                  className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-semibold px-5 h-9"
-                >
-                  Vào lớp học
-                </Button>
-              )}
-
-              {selectedSession.status === "SCHEDULED" && (
-                <span className="text-xs text-slate-400 italic">
-                  Phòng học chưa mở
-                </span>
-              )}
-
-              <Button
-                onClick={() => setSelectedSession(null)}
-                className="rounded-xl text-xs font-semibold h-9"
-              >
-                Đóng
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+        session={selectedSession}
+        onClose={() => setSelectedSession(null)}
+      />
     </div>
   );
 }
