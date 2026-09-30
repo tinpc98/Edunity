@@ -71,6 +71,17 @@ export type TimeOfDay = "MORNING" | "AFTERNOON" | "EVENING";
  */
 export type SessionStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
+export type RecordingStatus = "PROCESSING" | "AVAILABLE" | "FAILED";
+
+export interface SessionRecording {
+  providerRecordingId?: string | null;
+  storageKey?: string | null;
+  status: RecordingStatus;
+  durationSeconds?: number | null;
+  availableAt?: string | null;
+  failureReason?: string | null;
+}
+
 export interface SessionEntity {
   _id: string;
   classId: string;
@@ -82,6 +93,7 @@ export interface SessionEntity {
   meetingRoomId?: string;
   status: SessionStatus;
   createdAt?: string;
+  recording?: SessionRecording | null;
 }
 
 /**

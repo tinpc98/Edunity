@@ -60,6 +60,7 @@ export default function Header() {
       key: "profile",
       icon: <UserOutlined className="text-xs text-slate-500" />,
       label: <span className="text-xs font-medium">Hồ sơ cá nhân</span>,
+      onClick: () => navigate(ROUTES.STUDENT.PROFILE),
     },
     {
       key: "my-learning",

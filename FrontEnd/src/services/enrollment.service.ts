@@ -10,7 +10,61 @@ const CLASS_OVERRIDES_STORAGE_KEY = "edunity_mock_class_overrides";
 function getStoredEnrollments(): EnrollmentEntity[] {
   try {
     const raw = localStorage.getItem(ENROLLMENTS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (raw) return JSON.parse(raw);
+
+    // Seed default enrollments for demo student to enable out-of-the-box UI testing
+    const defaultEnrollments: EnrollmentEntity[] = [
+      {
+        id: "enr_demo_001",
+        classId: "CLS_001",
+        courseId: "CRS_TOAN_12",
+        teacherId: "TEA_001",
+        studentId: "usr_student_001",
+        enrollmentStatus: "CONFIRMED",
+        paymentSource: "DIRECT_PAYMENT",
+        tuitionAmount: 1680000,
+        amountPaidViaPayment: 1680000,
+        amountPaidViaScholarship: 0,
+        enrolledAt: "2026-09-01T00:00:00Z",
+        holdExpiresAt: null,
+        createdAt: "2026-09-01T00:00:00Z",
+        updatedAt: "2026-09-01T00:00:00Z",
+      },
+      {
+        id: "enr_demo_002",
+        classId: "CLS_016",
+        courseId: "CRS_TOAN_12",
+        teacherId: "TEA_002",
+        studentId: "usr_student_001",
+        enrollmentStatus: "CONFIRMED",
+        paymentSource: "DIRECT_PAYMENT",
+        tuitionAmount: 1800000,
+        amountPaidViaPayment: 1800000,
+        amountPaidViaScholarship: 0,
+        enrolledAt: "2026-09-15T00:00:00Z",
+        holdExpiresAt: null,
+        createdAt: "2026-09-15T00:00:00Z",
+        updatedAt: "2026-09-15T00:00:00Z",
+      },
+      {
+        id: "enr_demo_003",
+        classId: "CLS_004",
+        courseId: "CRS_ANH_10",
+        teacherId: "TEA_004",
+        studentId: "usr_student_001",
+        enrollmentStatus: "CONFIRMED",
+        paymentSource: "DIRECT_PAYMENT",
+        tuitionAmount: 1450000,
+        amountPaidViaPayment: 1450000,
+        amountPaidViaScholarship: 0,
+        enrolledAt: "2026-09-20T00:00:00Z",
+        holdExpiresAt: null,
+        createdAt: "2026-09-20T00:00:00Z",
+        updatedAt: "2026-09-20T00:00:00Z",
+      }
+    ];
+    localStorage.setItem(ENROLLMENTS_STORAGE_KEY, JSON.stringify(defaultEnrollments));
+    return defaultEnrollments;
   } catch (error) {
     console.error("Failed to parse enrollments from localStorage:", error);
     return [];
