@@ -1326,6 +1326,809 @@
       ]
     },
     {
+      "name": "10. Auth register/me",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => { pm.response.to.have.status(201); });",
+                  "pm.test(\"userId exists\", () => { pm.expect(pm.response.json().data.userId).to.be.a('string'); });",
+                  "const d = pm.response.json().data;",
+                  "pm.collectionVariables.set('newStudentId', d.userId);",
+                  "pm.test(\"FullName is correct\", () => { pm.expect(pm.response.json().data.fullName).to.eql(\"New Student\"); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"fullName\":\"New Student\",\"email\":\"newstudent@test.com\",\"password\":\"password123\",\"role\":\"STUDENT\"}"
+            }
+          }
+        },
+        {
+          "name": "Register Duplicate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409\", () => { pm.response.to.have.status(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"fullName\":\"New Student\",\"email\":\"newstudent@test.com\",\"password\":\"password123\",\"role\":\"STUDENT\"}"
+            }
+          }
+        },
+        {
+          "name": "Get Me (Dev token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Matches email\", () => { pm.expect(pm.response.json().data.email).to.eql('newstudent@test.com'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer dev-{{newStudentId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Student learning",
+      "item": [
+        {
+          "name": "Get My Enrollments Include Class",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Has class object\", () => { const items = pm.response.json().data.items; if(items.length > 0) { pm.expect(items[0]).to.have.property('class'); } });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "STUDENT"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/enrollments?include=class",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "enrollments"
+              ],
+              "query": [
+                {
+                  "key": "include",
+                  "value": "class"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Sessions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Returns array\", () => { pm.expect(pm.response.json().data).to.be.an('array'); });",
+                  "if(pm.response.json().data.length > 0) { pm.collectionVariables.set('mySessionId', pm.response.json().data[0].id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "STUDENT"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "sessions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Join Session (CONFIRMED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Returns joinUrl\", () => { pm.expect(pm.response.json().data.joinUrl).to.include('https://meet.edunity.com'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "STUDENT"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sessions/{{mySessionId}}/join",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sessions",
+                "{{mySessionId}}",
+                "join"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Returns array\", () => { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "STUDENT"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Duplicate Enrollment Returns Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409\", () => { pm.response.to.have.status(409); });",
+                  "pm.test(\"Has details\", () => { pm.expect(pm.response.json().details).to.have.property('existingEnrollmentId'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "STUDENT"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid200k20}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid200k20}}",
+                "enrollments"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Public teachers & categories",
+      "item": [
+        {
+          "name": "Get Categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Has ID\", () => { pm.expect(pm.response.json().data[0].id).to.eql('66b000000000000000000001'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/catalog/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalog",
+                "categories"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Featured Teachers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Returns teachers\", () => { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/teachers?featured=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teachers"
+              ],
+              "query": [
+                {
+                  "key": "featured",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Teacher Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Has classes\", () => { pm.expect(pm.response.json().data.classes).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/teachers/{{teacher}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teachers",
+                "{{teacher}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Catalog",
+      "item": [
+        {
+          "name": "List classes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"No draft\", () => { pm.expect(pm.response.json().data.items.some(i => i.status === 'DRAFT')).to.be.false; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/classes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Class details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Has class\", () => { pm.expect(pm.response.json().data.className).to.exist; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid200k20}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid200k20}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Class sessions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Has sessions array\", () => { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classPaid200k20}}/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "classes",
+                "{{classPaid200k20}}",
+                "sessions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filters",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Has filters\", () => { pm.expect(pm.response.json().data.subjects).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/catalog/filters",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalog",
+                "filters"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Dev login",
+      "item": [
+        {
+          "name": "Login success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Has token\", () => { pm.expect(pm.response.json().data.accessToken).to.include('dev-'); });",
+                  "pm.test(\"FullName not empty\", () => { pm.expect(pm.response.json().data.user.fullName).to.not.be.empty; });",
+                  "pm.collectionVariables.set('devToken', pm.response.json().data.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/dev-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "dev-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"student1@test.com\",\"password\":\"password\"}"
+            }
+          }
+        },
+        {
+          "name": "Login fail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401\", () => { pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/dev-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "dev-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"student1@test.com\",\"password\":\"wrong\"}"
+            }
+          }
+        },
+        {
+          "name": "Get me with devToken",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Matches student1\", () => { pm.expect(pm.response.json().data.email).to.eql('student1@test.com'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{devToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Teacher/Admin finance",
+      "item": [
+        {
+          "name": "Teacher earnings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Has summary\", () => { pm.expect(pm.response.json().data.summary).to.exist; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{teacher}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "TEACHER"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teacher/earnings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teacher",
+                "earnings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Has items\", () => { pm.expect(pm.response.json().data.items).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{admin}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "ADMIN"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Student -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403\", () => { pm.response.to.have.status(403); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{student1}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "STUDENT"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fake ID + ADMIN role -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401\", () => { pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "66a000000000000000000999"
+              },
+              {
+                "key": "x-user-role",
+                "value": "ADMIN"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "payments"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "6. E2E-04 Hết hạn giữ chỗ (chạy cuối, cần SEAT_HOLD_MINUTES=1)",
       "item": [
         {
@@ -1607,6 +2410,14 @@
     {
       "key": "lateGatewayRef",
       "value": ""
+    },
+    {
+      "key": "admin",
+      "value": "66a000000000000000000001"
+    },
+    {
+      "key": "classPaid200k20",
+      "value": "66e000000000000000000002"
     }
   ]
 }

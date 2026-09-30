@@ -24,7 +24,7 @@ const getMyEnrollments = async (req, res, next) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
 
-    const { items, total } = await enrollmentService.getMyEnrollments(studentId, page, limit);
+    const { items, total } = await enrollmentService.getMyEnrollments(studentId, page, limit, req.query.include === "class");
     
     res.status(200).json({
       success: true,
