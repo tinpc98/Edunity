@@ -67,6 +67,7 @@ export default function StudentLayout() {
       key: "profile",
       icon: <UserOutlined className="text-xs text-slate-500" />,
       label: <span className="text-xs font-medium">Hồ sơ cá nhân</span>,
+      onClick: () => navigate(ROUTES.STUDENT.PROFILE),
     },
     {
       key: "logout",
@@ -138,20 +139,17 @@ export default function StudentLayout() {
               TÀI KHOẢN
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                notification.info({
-                  message: "Hồ sơ cá nhân",
-                  description: "Tính năng quản lý hồ sơ cá nhân đang được hoàn thiện.",
-                  placement: "topRight",
-                });
-              }}
-              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-indigo-600 hover:bg-slate-50 cursor-pointer transition-all"
+            <Link
+              to={ROUTES.STUDENT.PROFILE}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                location.pathname === ROUTES.STUDENT.PROFILE
+                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+              }`}
             >
               <UserOutlined className="text-sm" />
               <span>Hồ sơ cá nhân</span>
-            </button>
+            </Link>
 
             <button
               type="button"
