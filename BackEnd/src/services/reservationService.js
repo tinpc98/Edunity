@@ -20,8 +20,12 @@ const releaseReservation = async (enrollmentId, targetStatus, options = {}) => {
   const executeLogic = async (sess) => {
     // 1. Mark Enrollment as targetStatus (EXPIRED or CANCELLED)
     // Only update if it is currently PENDING_PAYMENT
+    const query = { _id: enrollmentId, enrollmentStatus: "PENDING_PAYMENT" };
+    if (targetStatus === "EXPIRED") {
+      query.holdExpiresAt = { $lte: new Date() };
+    }
     const updateResult = await Enrollment.updateOne(
-      { _id: enrollmentId, enrollmentStatus: "PENDING_PAYMENT" },
+      query,
       { $set: { enrollmentStatus: targetStatus } },
       { session: sess }
     );

@@ -164,13 +164,13 @@ const getMyEnrollments = async (studentId, page = 1, limit = 20) => {
 };
 
 const getEnrollmentById = async (studentId, enrollmentId) => {
-  if (!mongoose.isValidObjectId(enrollmentId)) throw CLASS_NOT_FOUND(); // Using CLASS_NOT_FOUND as general 404 for now, or ENROLLMENT_NOT_FOUND
+  if (!mongoose.isValidObjectId(enrollmentId)) throw ENROLLMENT_NOT_FOUND();
   const enrollment = await Enrollment.findOne({ _id: enrollmentId, studentId }).populate("classId");
   return enrollment;
 };
 
 const cancelEnrollment = async (studentId, enrollmentId) => {
-  if (!mongoose.isValidObjectId(enrollmentId)) throw CLASS_NOT_FOUND();
+  if (!mongoose.isValidObjectId(enrollmentId)) throw ENROLLMENT_NOT_FOUND();
   
   const enrollment = await Enrollment.findOne({ _id: enrollmentId, studentId });
   if (!enrollment) {
