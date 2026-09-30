@@ -14,6 +14,7 @@ export const ROUTES = {
   },
   STUDENT: {
     HOME: "/student",
+    SCHEDULE: "/student/schedule",
     PROFILE: "/student/profile",
     CLASS_SESSIONS: "/student/classes/:classId",
   },
