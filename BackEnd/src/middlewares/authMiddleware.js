@@ -24,7 +24,7 @@ const authenticateJwt = async (token, req, res, next) => {
   return next();
 };
 
-const mockAuth = async (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   try {
     if (req.user && req.user.id) {
       return next();
@@ -97,4 +97,4 @@ const mockAuth = async (req, res, next) => {
   }
 };
 
-module.exports = mockAuth;
+module.exports = authMiddleware;

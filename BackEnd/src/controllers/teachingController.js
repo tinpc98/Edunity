@@ -23,6 +23,18 @@ exports.getSessionAttendance = handle((req) => sessions.getSessionAttendance(req
 
 // Student / Teacher — embedded classroom
 exports.joinSession = handle((req) => sessions.joinSession(req.user, req.params.id));
+exports.livekitWebhook = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const videoProvider = require("../services/videoProvider");
+    if (!authHeader) return res.status(401).json({ success: false, error: "UNAUTHORIZED" });
+    const event = videoProvider.processWebhook(req.body, authHeader);
+    await sessions.handleLiveKitWebhook(event);
+    res.status(200).send("OK");
+  } catch (err) {
+    res.status(401).json({ success: false, error: "UNAUTHORIZED" });
+  }
+};
 
 // Admin — class approval
 exports.listPendingClasses = handle((req) => adminClasses.listPendingClasses(parsePaging(req.query)));

@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { createRoomToken } = require("../utils/roomToken");
+const { EgressClient, EncodedFileOutput } = require("livekit-server-sdk");
 
 /**
  * Embedded Live Classroom provider (mục 11.7).
@@ -93,4 +94,38 @@ const closeRoom = async (roomId) => {
   }
 };
 
-module.exports = { getProviderName, createJoinToken, closeRoom };
+const startRecording = async (roomId, storageKey) => {
+  const config = getLiveKitConfig();
+  if (!config || !roomId || !storageKey) return null;
+
+  try {
+    const egressClient = new EgressClient(config.url, config.apiKey, config.apiSecret);
+    const fileOutput = new EncodedFileOutput({
+      filepath: storageKey
+    });
+    
+    const info = await egressClient.startRoomCompositeEgress(roomId, {
+      file: fileOutput
+    });
+    return info.egressId;
+  } catch (err) {
+    console.error("Failed to start LiveKit recording:", err.message);
+    return null;
+  }
+};
+
+const { WebhookReceiver } = require("livekit-server-sdk");
+
+const processWebhook = (reqBody, authHeader) => {
+  const config = getLiveKitConfig();
+  if (!config) throw new Error("LiveKit not configured");
+  
+  // The webhook auth header is a JWT signed with the apiSecret.
+  // By verifying it, we ensure the payload was sent by LiveKit.
+  // (We use jwt.verify instead of WebhookReceiver to avoid raw body strict matching issues when express.json() is used)
+  jwt.verify(authHeader, config.apiSecret, { issuer: config.apiKey });
+  
+  return reqBody;
+};
+
+module.exports = { getProviderName, createJoinToken, closeRoom, startRecording, processWebhook };

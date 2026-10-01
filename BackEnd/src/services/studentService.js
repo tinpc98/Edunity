@@ -67,6 +67,41 @@ class StudentService {
       };
     });
   }
+  async getRecording(studentId, sessionId) {
+    const mongoose = require("mongoose");
+    const { AppError, FORBIDDEN } = require("../utils/errors");
+    const storageService = require("./storageService");
+
+    if (!mongoose.isValidObjectId(sessionId)) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
+    const session = await Session.findById(sessionId).lean();
+    if (!session) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
+    
+    const enrollment = await Enrollment.exists({ studentId, classId: session.classId, enrollmentStatus: "CONFIRMED" });
+    if (!enrollment) throw FORBIDDEN("Not enrolled in this class");
+    
+    if (!session.recording) throw new AppError("No recording available", "RECORDING_NOT_FOUND", 404);
+    
+    if (session.recording.status !== "AVAILABLE") {
+      return {
+        sessionId: session._id.toString(),
+        status: session.recording.status,
+        durationSeconds: session.recording.durationSeconds,
+        availableAt: session.recording.availableAt,
+        playbackUrl: null,
+        expiresAt: null
+      };
+    }
+    
+    const signed = storageService.createSignedUrl(session.recording.storageKey);
+    return {
+      sessionId: session._id.toString(),
+      status: session.recording.status,
+      durationSeconds: session.recording.durationSeconds,
+      availableAt: session.recording.availableAt,
+      playbackUrl: signed ? signed.url : null,
+      expiresAt: signed ? signed.expiresAt : null
+    };
+  }
 }
 
 module.exports = new StudentService();

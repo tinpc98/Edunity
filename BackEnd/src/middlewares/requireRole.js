@@ -1,6 +1,6 @@
 const { FORBIDDEN } = require("../utils/errors");
 
-// NFR-03: role-based access control. Must run after mockAuth.
+// NFR-03: role-based access control. Must run after authMiddleware.
 const requireRole = (...roles) => (req, res, next) => {
   if (!req.user || !roles.includes(req.user.role)) {
     return next(FORBIDDEN(`Only ${roles.join("/")} can perform this action`));

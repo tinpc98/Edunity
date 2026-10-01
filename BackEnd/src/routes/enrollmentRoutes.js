@@ -1,6 +1,6 @@
 const express = require("express");
 const enrollmentController = require("../controllers/enrollmentController");
-const mockAuth = require("../middlewares/mockAuth");
+const authMiddleware = require("../middlewares/authMiddleware");
 
 const router = express.Router();
 
@@ -8,15 +8,15 @@ const router = express.Router();
 router.get("/classes/:classId/availability", enrollmentController.getClassAvailability);
 
 // GET /api/me/enrollments
-router.get("/me/enrollments", mockAuth, enrollmentController.getMyEnrollments);
+router.get("/me/enrollments", authMiddleware, enrollmentController.getMyEnrollments);
 
 // GET /api/enrollments/:id
-router.get("/enrollments/:id", mockAuth, enrollmentController.getEnrollmentById);
+router.get("/enrollments/:id", authMiddleware, enrollmentController.getEnrollmentById);
 
 // POST /api/enrollments/:id/cancel
-router.post("/enrollments/:id/cancel", mockAuth, enrollmentController.cancelEnrollment);
+router.post("/enrollments/:id/cancel", authMiddleware, enrollmentController.cancelEnrollment);
 
 // POST /api/classes/:classId/enrollments
-router.post("/classes/:classId/enrollments", mockAuth, enrollmentController.createEnrollment);
+router.post("/classes/:classId/enrollments", authMiddleware, enrollmentController.createEnrollment);
 
 module.exports = router;
