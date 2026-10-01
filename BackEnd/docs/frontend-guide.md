@@ -18,11 +18,18 @@ Các tài khoản có sẵn password là `password`:
 - Học viên 1: `student1@test.com` (Đã đăng ký lớp)
 - Học viên 2: `student2@test.com`
 - Giảng viên: `teacher@test.com`
-- Giảng viên 2: `teacher2@test.com`
+- Giảng viên 2: `teacher2@test.com` (có 1 lớp đang chờ Admin duyệt)
+- Giảng viên 3: `teacher3@test.com` (hồ sơ đang chờ xác minh)
 - Quản trị viên: `admin@test.com`
-- Sponsor: `sponsor@test.com`
+- Sponsor: `sponsor@test.com` (đã tài trợ 2.000.000đ cho chiến dịch mẫu)
 
-*Lưu ý: Header cũ `x-user-id` và `x-user-role` vẫn dùng được ở môi trường test/dev, nhưng BE đã có API login trả về token giả lập.*
+Dữ liệu mẫu cho học bổng:
+- Chiến dịch "Tiếp sức đến trường 2026" đang mở (mức học bổng 150.000đ, áp dụng cho mọi lớp trả phí trong seed) và 1 chiến dịch nháp.
+- Học viên 1 có học bổng 150.000đ còn hiệu lực — dùng cho lớp 200.000đ sẽ ra luồng đồng chi trả (MIXED, trả thêm 50.000đ).
+- Học viên 2 có hồ sơ học bổng đang chờ duyệt.
+- Có sẵn 1 khiếu nại đang mở và 1 cuộc trò chuyện giữa Học viên 1 và Giảng viên.
+
+*Lưu ý: Header cũ `x-user-id` và `x-user-role` vẫn dùng được ở môi trường test/dev. Đăng nhập thật dùng `POST /auth/login` (JWT + refresh token); `POST /auth/dev-login` vẫn trả token giả lập cho dev.*
 
 ## 3. Map FE Service -> BE API
 

@@ -1,5 +1,5 @@
 const { Session, Enrollment, Payment } = require("../models");
-const { AppError } = require("../utils/errors");
+const sessionService = require("./sessionService");
 
 class StudentService {
   async getMySessions(studentId, fromDate, toDate) {
@@ -39,35 +39,9 @@ class StudentService {
     });
   }
 
+  // Kept for the existing student screens; same checks and response as POST /sessions/:id/join
   async joinSession(studentId, sessionId) {
-    const session = await Session.findById(sessionId).lean();
-    if (!session) throw new AppError("SESSION_NOT_FOUND", "Session not found", 404);
-    
-    const enrollment = await Enrollment.findOne({
-      studentId,
-      classId: session.classId,
-      enrollmentStatus: "CONFIRMED"
-    }).lean();
-    
-    if (!enrollment) throw new AppError("NOT_ENROLLED", "Not enrolled in this class", 403);
-    
-    const now = new Date();
-    const start = new Date(session.startDatetime);
-    const end = new Date(session.endDatetime);
-    const windowStart = new Date(start.getTime() - 15 * 60 * 1000);
-    
-    if (now < windowStart || now > end) {
-      throw new AppError("SESSION_NOT_JOINABLE", `Session not joinable yet. Starts at ${session.startDatetime.toISOString()}`, 409);
-    }
-    
-    const roomId = session.meetingRoomId || `room-${session._id}`;
-    
-    return {
-      sessionId: session._id.toString(),
-      roomId,
-      joinUrl: `https://meet.edunity.com/${roomId}`,
-      expiresAt: session.endDatetime
-    };
+    return sessionService.joinSession({ id: studentId, role: "STUDENT" }, sessionId);
   }
 
   async getMyPayments(studentId) {

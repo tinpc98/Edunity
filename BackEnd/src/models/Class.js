@@ -23,6 +23,7 @@ const classSchema = new Schema(
     gradeLevel: { type: String, enum: GRADE_LEVELS, default: null },
 
     className: { type: String, required: true, trim: true },
+    description: String, // BR-52: mô tả tổng quan riêng của Class
     coverImage: String,
     classType: { type: String, enum: ["FREE", "PAID"], required: true }, // BR-08
     price: { type: Schema.Types.Decimal128, required: true, default: 0 }, // BR-09/BR-10
@@ -35,7 +36,7 @@ const classSchema = new Schema(
     endDate: Date,
     status: {
       type: String,
-      enum: ["DRAFT", "PENDING_APPROVAL", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
+      enum: ["DRAFT", "PENDING_APPROVAL", "OPEN", "REJECTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
       default: "DRAFT",
     },
     updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null }, // Teacher hoặc Admin chỉnh sửa gần nhất

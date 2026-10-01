@@ -1,5 +1,28 @@
 const mongoose = require("mongoose");
 const User = require("../models/User");
+const { verifyAccessToken } = require("../utils/jwt");
+
+const BLOCKED_STATUSES = ["SUSPENDED", "BANNED"];
+
+const reject = (res, statusCode, error, message) => res.status(statusCode).json({ success: false, error, message });
+
+/**
+ * Real authentication: `Authorization: Bearer <JWT access token>` issued by /auth/login and /auth/refresh.
+ * The account is re-read on every request so a suspended/banned/removed user loses access immediately
+ * and role changes apply without waiting for the token to expire.
+ */
+const authenticateJwt = async (token, req, res, next) => {
+  const { payload, error } = verifyAccessToken(token);
+  if (error === "TOKEN_EXPIRED") return reject(res, 401, "TOKEN_EXPIRED", "Access token has expired");
+  if (error) return reject(res, 401, "UNAUTHORIZED", "Invalid access token");
+
+  const user = mongoose.isValidObjectId(payload.sub) ? await User.findById(payload.sub).lean() : null;
+  if (!user || user.isDeleted) return reject(res, 401, "UNAUTHORIZED", "User not found");
+  if (BLOCKED_STATUSES.includes(user.status)) return reject(res, 403, "ACCOUNT_BLOCKED", "Account is suspended or banned");
+
+  req.user = { id: user._id.toString(), role: user.role };
+  return next();
+};
 
 const mockAuth = async (req, res, next) => {
   try {
@@ -7,6 +30,12 @@ const mockAuth = async (req, res, next) => {
       return next();
     }
 
+    const bearer = (req.headers["authorization"] || "").match(/^Bearer (.+)$/);
+    if (bearer && !bearer[1].startsWith("dev-")) {
+      return await authenticateJwt(bearer[1], req, res, next);
+    }
+
+    // Everything below is the DEV/TEST shortcut (x-user-id header, "dev-<userId>" token); never in production.
     if (process.env.NODE_ENV === "production" && !req.user) {
       return res.status(401).json({
         success: false,
@@ -40,6 +69,9 @@ const mockAuth = async (req, res, next) => {
 
     const user = await User.findById(extractedUserId).lean();
     if (user) {
+      if (user.isDeleted || BLOCKED_STATUSES.includes(user.status)) {
+        return reject(res, 403, "ACCOUNT_BLOCKED", "Account is suspended or banned");
+      }
       req.user = {
         id: user._id.toString(),
         role: user.role,

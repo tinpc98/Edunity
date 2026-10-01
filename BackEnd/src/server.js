@@ -9,6 +9,11 @@ const { startJob } = require("./jobs/expireEnrollmentsJob");
 const PORT = process.env.PORT || 3000;
 
 const startServer = async () => {
+  if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
+    console.error("JWT_SECRET must be set in production");
+    process.exit(1);
+  }
+
   try {
     await connectDB();
   } catch (error) {

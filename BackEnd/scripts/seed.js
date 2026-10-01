@@ -16,6 +16,7 @@ const Payment = require("../src/models/Payment");
 const Transaction = require("../src/models/Transaction");
 const TeacherEarning = require("../src/models/TeacherEarning");
 const Session = require("../src/models/Session");
+const { platformIds, clearPlatformData, seedPlatformData } = require("./seedPlatform");
 
 const ids = {
   admin: "66a000000000000000000001",
@@ -74,7 +75,8 @@ async function seed() {
     await TeacherEarning.deleteMany({ enrollmentId: { $in: enrollments } });
     await Enrollment.deleteMany({ classId: { $in: classIds } });
     await Session.deleteMany({ classId: { $in: classIds } });
-    
+    await clearPlatformData();
+
     // Clear main models
     await Class.deleteMany({ _id: { $in: classIds } });
     await Course.deleteMany({});
@@ -346,8 +348,10 @@ async function seed() {
 
     await Session.create(sessions);
 
+    await seedPlatformData(ids, passwordHash);
+
     console.log("Seed complete! IDs used:");
-    console.table(ids);
+    console.table({ ...ids, ...platformIds });
 
     process.exit(0);
   } catch (error) {
