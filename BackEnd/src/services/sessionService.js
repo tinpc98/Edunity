@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const crypto = require("crypto");
 const { Class, Session, SessionAttendance, Enrollment, User } = require("../models");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { validationError, parseDate, isBlank } = require("../utils/http");
@@ -140,7 +141,17 @@ const joinSession = async (user, sessionId) => {
   }
 
   if (!session.meetingRoomId) session.meetingRoomId = `room_${session._id}`;
-  if (role === "HOST" && session.status === "SCHEDULED") session.status = "IN_PROGRESS";
+  if (role === "HOST" && session.status === "SCHEDULED") {
+    session.status = "IN_PROGRESS";
+    const storageKey = `private/${user.id}/RECORDING/${crypto.randomUUID()}.mp4`;
+    const egressId = await videoProvider.startRecording(session.meetingRoomId, storageKey);
+    session.recording = {
+      providerRecordingId: egressId || null,
+      storageKey: storageKey,
+      status: egressId ? "PROCESSING" : "FAILED",
+      failureReason: egressId ? null : "Failed to start LiveKit egress"
+    };
+  }
   if (session.isModified()) await session.save();
 
   if (role === "PARTICIPANT") {
@@ -223,4 +234,26 @@ const getSessionAttendance = async (teacherId, sessionId) => {
     .lean();
 };
 
-module.exports = { createSessions, updateSession, deleteSession, joinSession, endSession, getSessionAttendance };
+const handleLiveKitWebhook = async (event) => {
+  if (!event || !event.egressInfo) return;
+  const egressId = event.egressInfo.egressId;
+  const status = event.egressInfo.status;
+  const error = event.egressInfo.error;
+
+  const session = await Session.findOne({ "recording.providerRecordingId": egressId });
+  if (!session || !session.recording) return;
+
+  if (event.event === "egress_ended") {
+    // 3 = EGRESS_COMPLETE
+    if (status === 3) {
+      session.recording.status = "AVAILABLE";
+      session.recording.availableAt = new Date();
+    } else {
+      session.recording.status = "FAILED";
+      session.recording.failureReason = error || "Egress failed";
+    }
+    await session.save();
+  }
+};
+
+module.exports = { createSessions, updateSession, deleteSession, joinSession, endSession, getSessionAttendance, handleLiveKitWebhook };

@@ -15,16 +15,16 @@ const { validationError } = require("../utils/http");
 const getRoot = () => path.resolve(process.env.STORAGE_DIR || path.join(__dirname, "../../storage"));
 const getPublicDir = () => path.join(getRoot(), "public");
 
-const PRIVATE_PURPOSES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF"];
+const PRIVATE_PURPOSES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF", "RECORDING"];
 const PUBLIC_PURPOSES = ["AVATAR", "COVER_IMAGE"];
 const MAX_PRIVATE_SIZE = 10 * 1024 * 1024;
 const MAX_PUBLIC_SIZE = 5 * 1024 * 1024;
 
 const IMAGE_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
-const PRIVATE_TYPES = { ...IMAGE_TYPES, "application/pdf": "pdf" };
-const MIME_BY_EXTENSION = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf" };
+const PRIVATE_TYPES = { ...IMAGE_TYPES, "application/pdf": "pdf", "video/mp4": "mp4" };
+const MIME_BY_EXTENSION = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf", mp4: "video/mp4" };
 
-const PRIVATE_KEY_PATTERN = /^private\/([a-f0-9]{24})\/[A-Z_]+\/[a-f0-9-]{36}\.(jpg|png|webp|pdf)$/;
+const PRIVATE_KEY_PATTERN = /^private\/([a-f0-9]{24})\/[A-Z_]+\/[a-f0-9-]{36}\.(jpg|png|webp|pdf|mp4)$/;
 
 // The declared mimetype comes from the client: check the real content signature too
 const matchesSignature = (buffer, mimeType) => {

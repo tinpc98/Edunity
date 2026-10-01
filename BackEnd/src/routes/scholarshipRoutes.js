@@ -1,12 +1,12 @@
 const express = require("express");
 const controller = require("../controllers/scholarshipController");
-const mockAuth = require("../middlewares/mockAuth");
+const authMiddleware = require("../middlewares/authMiddleware");
 const requireRole = require("../middlewares/requireRole");
 
 const router = express.Router();
-const admin = [mockAuth, requireRole("ADMIN")];
-const sponsor = [mockAuth, requireRole("SPONSOR")];
-const student = [mockAuth, requireRole("STUDENT")];
+const admin = [authMiddleware, requireRole("ADMIN")];
+const sponsor = [authMiddleware, requireRole("SPONSOR")];
+const student = [authMiddleware, requireRole("STUDENT")];
 
 // Scholarship Campaign — public
 router.get("/campaigns", controller.listCampaigns);

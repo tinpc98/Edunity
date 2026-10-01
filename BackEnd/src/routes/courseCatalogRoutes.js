@@ -1,11 +1,11 @@
 const express = require("express");
 const controller = require("../controllers/courseCatalogController");
-const mockAuth = require("../middlewares/mockAuth");
+const authMiddleware = require("../middlewares/authMiddleware");
 const requireRole = require("../middlewares/requireRole");
 
 const router = express.Router();
-const admin = [mockAuth, requireRole("ADMIN")];
-const teacher = [mockAuth, requireRole("TEACHER")];
+const admin = [authMiddleware, requireRole("ADMIN")];
+const teacher = [authMiddleware, requireRole("TEACHER")];
 
 // Categories
 router.get("/categories", controller.listCategories);

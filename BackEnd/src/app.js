@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const enrollmentRoutes = require("./routes/enrollmentRoutes");
 const catalogRoutes = require("./routes/catalogRoutes");
-const devAuthRoutes = require("./routes/devAuthRoutes");
+const authRoutes = require("./routes/authRoutes");
 const financeRoutes = require("./routes/financeRoutes");
 
 const app = express();
@@ -16,7 +16,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Routes
-app.use("/api/auth", devAuthRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api", catalogRoutes);
 app.use("/api", enrollmentRoutes);
 app.use("/api", require("./routes/paymentRoutes"));

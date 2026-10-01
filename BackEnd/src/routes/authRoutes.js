@@ -1,13 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const devAuthController = require("../controllers/devAuthController");
-const mockAuth = require("../middlewares/mockAuth");
+const devAuthController = require("../controllers/authController");
+const authMiddleware = require("../middlewares/authMiddleware");
 
 router.post("/register", devAuthController.register);
 router.post("/login", devAuthController.loginWithRefreshToken);
 router.post("/refresh", devAuthController.refresh);
 router.post("/logout", devAuthController.logout);
-router.get("/me", mockAuth, devAuthController.getMe);
+router.get("/me", authMiddleware, devAuthController.getMe);
 
 // DEV/TEST shortcut only: "dev-<userId>" tokens are not accepted in production
 router.use((req, res, next) => {

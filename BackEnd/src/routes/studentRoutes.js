@@ -1,10 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const studentController = require("../controllers/studentController");
-const mockAuth = require("../middlewares/mockAuth");
+const authMiddleware = require("../middlewares/authMiddleware");
 
-router.get("/me/sessions", mockAuth, studentController.getMySessions);
-router.get("/sessions/:id/join", mockAuth, studentController.joinSession);
-router.get("/me/payments", mockAuth, studentController.getMyPayments);
+router.get("/me/sessions", authMiddleware, studentController.getMySessions);
+router.get("/sessions/:id/join", authMiddleware, studentController.joinSession);
+router.get("/me/payments", authMiddleware, studentController.getMyPayments);
+router.get("/sessions/:id/recording", authMiddleware, studentController.getRecording);
 
 module.exports = router;

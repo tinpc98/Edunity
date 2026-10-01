@@ -1,35 +1,35 @@
 const express = require("express");
 const controller = require("../controllers/communityController");
 const fileController = require("../controllers/fileController");
-const mockAuth = require("../middlewares/mockAuth");
+const authMiddleware = require("../middlewares/authMiddleware");
 const requireRole = require("../middlewares/requireRole");
 const { singleFile } = require("../middlewares/upload");
 
 const router = express.Router();
-const admin = [mockAuth, requireRole("ADMIN")];
+const admin = [authMiddleware, requireRole("ADMIN")];
 
 // Files: private documents (signed URL only) and public images
-router.post("/uploads/private", mockAuth, singleFile, fileController.uploadPrivate);
-router.post("/uploads/public", mockAuth, singleFile, fileController.uploadPublic);
-router.post("/files/signed-url", mockAuth, fileController.createSignedUrl);
+router.post("/uploads/private", authMiddleware, singleFile, fileController.uploadPrivate);
+router.post("/uploads/public", authMiddleware, singleFile, fileController.uploadPublic);
+router.post("/files/signed-url", authMiddleware, fileController.createSignedUrl);
 router.get("/files/download", fileController.download);
 
 // Profile
-router.get("/me/profile", mockAuth, controller.getMyProfile);
-router.patch("/me/profile", mockAuth, controller.updateMyProfile);
-router.post("/me/avatar", mockAuth, singleFile, controller.updateMyAvatar);
-router.post("/me/password", mockAuth, controller.changeMyPassword);
+router.get("/me/profile", authMiddleware, controller.getMyProfile);
+router.patch("/me/profile", authMiddleware, controller.updateMyProfile);
+router.post("/me/avatar", authMiddleware, singleFile, controller.updateMyAvatar);
+router.post("/me/password", authMiddleware, controller.changeMyPassword);
 
 // Messaging (Student <-> Teacher)
-router.get("/conversations", mockAuth, controller.listMyConversations);
-router.post("/conversations", mockAuth, controller.openConversation);
-router.get("/conversations/:id/messages", mockAuth, controller.listMessages);
-router.post("/conversations/:id/messages", mockAuth, controller.sendMessage);
-router.delete("/messages/:id", mockAuth, controller.deleteMessage);
+router.get("/conversations", authMiddleware, controller.listMyConversations);
+router.post("/conversations", authMiddleware, controller.openConversation);
+router.get("/conversations/:id/messages", authMiddleware, controller.listMessages);
+router.post("/conversations/:id/messages", authMiddleware, controller.sendMessage);
+router.delete("/messages/:id", authMiddleware, controller.deleteMessage);
 
 // Complaints
-router.post("/reports", mockAuth, requireRole("STUDENT", "TEACHER", "SPONSOR"), controller.createReport);
-router.get("/me/reports", mockAuth, controller.getMyReports);
+router.post("/reports", authMiddleware, requireRole("STUDENT", "TEACHER", "SPONSOR"), controller.createReport);
+router.get("/me/reports", authMiddleware, controller.getMyReports);
 router.get("/admin/reports", admin, controller.adminListReports);
 router.get("/admin/reports/:id", admin, controller.adminGetReport);
 router.patch("/admin/reports/:id", admin, controller.adminUpdateReport);
