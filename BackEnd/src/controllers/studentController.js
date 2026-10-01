@@ -4,7 +4,7 @@ const { AppError } = require("../utils/errors");
 
 exports.getMySessions = async (req, res, next) => {
   try {
-    if (req.user.role !== "STUDENT") throw new AppError("FORBIDDEN", "Only STUDENT can access", 403);
+    if (req.user.role !== "STUDENT") throw new AppError("Only STUDENT can access", "FORBIDDEN", 403);
     
     const { from, to } = req.query;
     const result = await studentService.getMySessions(req.user.id, from, to);
@@ -16,7 +16,7 @@ exports.getMySessions = async (req, res, next) => {
 
 exports.joinSession = async (req, res, next) => {
   try {
-    if (req.user.role !== "STUDENT") throw new AppError("FORBIDDEN", "Only STUDENT can access", 403);
+    if (req.user.role !== "STUDENT") throw new AppError("Only STUDENT can access", "FORBIDDEN", 403);
     
     const result = await studentService.joinSession(req.user.id, req.params.id);
     res.json({ success: true, data: serializeDecimal128(result) });
@@ -27,7 +27,7 @@ exports.joinSession = async (req, res, next) => {
 
 exports.getMyPayments = async (req, res, next) => {
   try {
-    if (req.user.role !== "STUDENT") throw new AppError("FORBIDDEN", "Only STUDENT can access", 403);
+    if (req.user.role !== "STUDENT") throw new AppError("Only STUDENT can access", "FORBIDDEN", 403);
     
     const result = await studentService.getMyPayments(req.user.id);
     res.json({ success: true, data: serializeDecimal128(result) });

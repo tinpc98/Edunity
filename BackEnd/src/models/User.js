@@ -15,6 +15,7 @@ const studentProfileSchema = new Schema(
 const teacherProfileSchema = new Schema(
   {
     fullName: { type: String, required: true, trim: true },
+    avatarUrl: String,
     biography: String,
     verificationStatus: {
       type: String,
@@ -38,6 +39,7 @@ const sponsorProfileSchema = new Schema(
     sponsorType: { type: String, enum: ["INDIVIDUAL", "ORGANIZATION"], required: true },
     organizationName: String,
     representativeName: String,
+    avatarUrl: String,
     description: String,
   },
   { _id: false }

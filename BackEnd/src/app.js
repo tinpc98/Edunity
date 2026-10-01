@@ -22,6 +22,14 @@ app.use("/api", enrollmentRoutes);
 app.use("/api", require("./routes/paymentRoutes"));
 app.use("/api", financeRoutes);
 app.use("/api", require("./routes/studentRoutes"));
+app.use("/api", require("./routes/courseCatalogRoutes"));
+app.use("/api", require("./routes/teachingRoutes"));
+app.use("/api", require("./routes/scholarshipRoutes"));
+app.use("/api", require("./routes/accountRoutes"));
+app.use("/api", require("./routes/communityRoutes"));
+
+// Public storage only (avatars, cover images). Private documents are never served statically.
+app.use("/uploads", express.static(require("./services/storageService").getPublicDir(), { index: false }));
 
 const { AppError } = require("./utils/errors");
 
@@ -33,6 +41,15 @@ app.use((err, req, res, next) => {
       error: err.code,
       message: err.message,
       ...(err.details ? { details: err.details } : {})
+    });
+  }
+
+  // Malformed input caught by Mongoose (invalid enum/number/ObjectId...) is a client error, not a server fault
+  if (err.name === "ValidationError" || err.name === "CastError") {
+    return res.status(400).json({
+      success: false,
+      error: "VALIDATION_ERROR",
+      message: err.message
     });
   }
 

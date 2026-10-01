@@ -1,6 +1,24 @@
 const { Class, Session, Subject, Course, Category, User } = require("../models");
 const { AppError } = require("../utils/errors");
 
+// Class chưa được Admin duyệt (DRAFT, PENDING_APPROVAL, REJECTED) không được hiển thị công khai
+const PUBLIC_CLASS_STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
+const NOT_DELETED = { isDeleted: { $ne: true } };
+
+// Public view of a Teacher: fields live in the embedded teacherProfile; review notes stay private
+const toPublicTeacher = (teacher) => {
+  const profile = teacher.teacherProfile || {};
+  return {
+    id: teacher._id.toString(),
+    fullName: profile.fullName,
+    avatarUrl: profile.avatarUrl || null,
+    biography: profile.biography,
+    qualificationSummary: profile.qualificationSummary,
+    ratingAverage: profile.ratingAverage || 0,
+    ratingCount: profile.ratingCount || 0
+  };
+};
+
 class CatalogService {
   async getCategories() {
     const categories = await Category.find({ status: "ACTIVE" }).lean();
@@ -36,7 +54,7 @@ class CatalogService {
   }
 
   async getClasses(filters, page, pageSize) {
-    const query = { status: { $ne: "DRAFT" } };
+    const query = { ...NOT_DELETED };
 
     if (filters.search) {
       query.$or = [
@@ -50,7 +68,7 @@ class CatalogService {
     if (filters.teacherId) query.teacherId = filters.teacherId;
     
     if (filters.statuses) {
-      query.status = { $in: filters.statuses.split(",") };
+      query.status = { $in: filters.statuses.split(",").filter(status => PUBLIC_CLASS_STATUSES.includes(status)) };
     } else {
       query.status = { $in: ["OPEN", "IN_PROGRESS"] };
     }
@@ -89,40 +107,37 @@ class CatalogService {
   }
 
   async getClassById(classId) {
-    const cls = await Class.findById(classId).lean();
-    if (!cls) throw new AppError("CLASS_NOT_FOUND", "Class not found", 404);
+    const cls = await Class.findOne({ _id: classId, status: { $in: PUBLIC_CLASS_STATUSES }, ...NOT_DELETED }).lean();
+    if (!cls) throw new AppError("Class not found", "CLASS_NOT_FOUND", 404);
 
-    const teacher = await User.findById(cls.teacherId).select("fullName avatarUrl biography qualificationSummary").lean();
+    const teacher = await User.findById(cls.teacherId).select("teacherProfile").lean();
     return {
       ...cls,
-      teacher: teacher ? {
-        id: teacher._id.toString(),
-        fullName: teacher.fullName,
-        avatarUrl: teacher.avatarUrl,
-        biography: teacher.biography,
-        qualificationSummary: teacher.qualificationSummary
-      } : null
+      teacher: teacher ? toPublicTeacher(teacher) : null
     };
   }
 
   async getClassSessions(classId) {
+    const hidden = await Class.exists({ _id: classId, status: { $nin: PUBLIC_CLASS_STATUSES } });
+    if (hidden) throw new AppError("Class not found", "CLASS_NOT_FOUND", 404);
     return await Session.find({ classId }).sort({ startDatetime: 1 }).lean();
   }
 
   async getTeachers(featured, limit) {
-    const query = { role: "TEACHER", verificationStatus: "VERIFIED" };
-    // Simplified logic, fetching VERIFIED teachers
-    const teachers = await User.find(query).select("-passwordHash -email").limit(limit).lean();
-    return teachers;
+    const query = { role: "TEACHER", status: "ACTIVE", "teacherProfile.verificationStatus": "VERIFIED", ...NOT_DELETED };
+    // Featured = highest rated first
+    const sort = featured ? { "teacherProfile.ratingAverage": -1, "teacherProfile.ratingCount": -1 } : { createdAt: -1 };
+    const teachers = await User.find(query).select("teacherProfile").sort(sort).limit(limit).lean();
+    return teachers.map(toPublicTeacher);
   }
 
   async getTeacherById(teacherId) {
-    const teacher = await User.findOne({ _id: teacherId, role: "TEACHER", verificationStatus: "VERIFIED" }).select("-passwordHash -email").lean();
-    if (!teacher) throw new AppError("TEACHER_NOT_FOUND", "Teacher not found", 404);
+    const teacher = await User.findOne({ _id: teacherId, role: "TEACHER", "teacherProfile.verificationStatus": "VERIFIED", ...NOT_DELETED }).select("teacherProfile").lean();
+    if (!teacher) throw new AppError("Teacher not found", "TEACHER_NOT_FOUND", 404);
 
-    const classes = await Class.find({ teacherId, status: "OPEN" }).lean();
+    const classes = await Class.find({ teacherId, status: "OPEN", ...NOT_DELETED }).lean();
     return {
-      ...teacher,
+      ...toPublicTeacher(teacher),
       classes
     };
   }

@@ -1,6 +1,8 @@
 # API Contract - Auth (DEV)
 
-*LƯU Ý: Các API này là tạm thời để thay thế hệ thống JWT thực trong môi trường DEV/TEST. Không dùng trên production.*
+*LƯU Ý: `POST /api/auth/dev-login` và token `dev-<userId>` chỉ dành cho DEV/TEST (production trả 404 / 401).
+Đăng nhập thật dùng JWT: `POST /api/auth/login`, `/auth/refresh`, `/auth/logout` — xem `api-contract-platform.md` mục 1.
+`/auth/register` và `/auth/me` dùng chung cho cả hai.*
 
 ## 1. POST /api/auth/register
 Đăng ký tài khoản học viên mới.

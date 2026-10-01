@@ -43,8 +43,12 @@ Tìm kiếm, lọc và phân trang danh sách lớp học.
 }
 ```
 
+Chỉ trả về lớp công khai (`OPEN`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`). Mặc định `statuses=OPEN,IN_PROGRESS`.
+Lớp `DRAFT`, `PENDING_APPROVAL`, `REJECTED` không bao giờ xuất hiện ở API công khai.
+
 ## 3. GET /api/classes/:id
-Lấy chi tiết 1 lớp học. (bao gồm thông tin giảng viên)
+Lấy chi tiết 1 lớp học công khai, kèm `teacher`: `{ id, fullName, avatarUrl, biography, qualificationSummary, ratingAverage, ratingCount }`.
+Lớp chưa được duyệt trả `404 CLASS_NOT_FOUND` (Teacher xem lớp của mình qua `GET /api/teacher/classes/:id`).
 
 ## 4. GET /api/teachers/:id
 Lấy hồ sơ công khai của một giảng viên.
@@ -59,6 +63,8 @@ Lấy hồ sơ công khai của một giảng viên.
     "avatarUrl": "...",
     "biography": "...",
     "qualificationSummary": "...",
+    "ratingAverage": 4.5,
+    "ratingCount": 12,
     "classes": [
       // Danh sách các lớp OPEN của giảng viên
     ]
@@ -67,7 +73,7 @@ Lấy hồ sơ công khai của một giảng viên.
 ```
 
 ## 5. GET /api/teachers?featured=true&limit=6
-Lấy danh sách giảng viên tiêu biểu.
+Lấy danh sách giảng viên đã VERIFIED (cùng các trường như mục 4, không có `classes`). `featured=true` sắp xếp theo đánh giá cao nhất.
 
 ## 6. Lỗi phổ biến
 - `404 CLASS_NOT_FOUND`: Không tìm thấy lớp.
