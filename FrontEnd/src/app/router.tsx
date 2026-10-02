@@ -12,6 +12,7 @@ import StudentClassSessionsPage from "../features/student/classes/StudentClassSe
 import StudentSchedulePage from "../features/student/schedule/StudentSchedulePage";
 import StudentProfilePage from "../features/student/profile/StudentProfilePage";
 import StudentPaymentHistoryPage from "../features/student/payment/StudentPaymentHistoryPage";
+import TeacherDiscoveryPage from "../features/teacher/discovery/TeacherDiscoveryPage";
 import TeacherLayout from "../components/layout/TeacherLayout";
 import TeacherHomePage from "../features/teacher/home/TeacherHomePage";
 import TeacherClassesPage from "../features/teacher/classes/TeacherClassesPage";
@@ -47,6 +48,10 @@ const router = createBrowserRouter([
       {
         path: ROUTES.CLASSES,
         element: <ClassDiscoveryPage />,
+      },
+      {
+        path: ROUTES.TEACHERS,
+        element: <TeacherDiscoveryPage />,
       },
       {
         path: ROUTES.CLASS_DETAIL,
