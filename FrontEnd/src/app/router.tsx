@@ -11,6 +11,7 @@ import StudentHomePage from "../features/student/home/StudentHomePage";
 import StudentClassSessionsPage from "../features/student/classes/StudentClassSessionsPage";
 import StudentSchedulePage from "../features/student/schedule/StudentSchedulePage";
 import StudentProfilePage from "../features/student/profile/StudentProfilePage";
+import StudentPaymentHistoryPage from "../features/student/payment/StudentPaymentHistoryPage";
 import TeacherLayout from "../components/layout/TeacherLayout";
 import TeacherHomePage from "../features/teacher/home/TeacherHomePage";
 import TeacherClassesPage from "../features/teacher/classes/TeacherClassesPage";
@@ -104,6 +105,10 @@ const router = createBrowserRouter([
       {
         path: "profile",
         element: <StudentProfilePage />,
+      },
+      {
+        path: "payments",
+        element: <StudentPaymentHistoryPage />,
       },
     ],
   },

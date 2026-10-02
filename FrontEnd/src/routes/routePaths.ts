@@ -16,6 +16,7 @@ export const ROUTES = {
     HOME: "/student",
     SCHEDULE: "/student/schedule",
     PROFILE: "/student/profile",
+    PAYMENTS: "/student/payments",
     CLASS_SESSIONS: "/student/classes/:classId",
   },
   TEACHER: {

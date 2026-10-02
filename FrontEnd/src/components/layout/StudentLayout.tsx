@@ -148,20 +148,17 @@ export default function StudentLayout() {
               <span>Hồ sơ cá nhân</span>
             </Link>
 
-            <button
-              type="button"
-              onClick={() => {
-                notification.info({
-                  message: "Lịch sử thanh toán",
-                  description: "Tính năng lịch sử thanh toán đang được hoàn thiện.",
-                  placement: "topRight",
-                });
-              }}
-              className="w-full text-left flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-indigo-600 hover:bg-slate-50 cursor-pointer transition-all"
+            <Link
+              to={ROUTES.STUDENT.PAYMENTS}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                location.pathname === ROUTES.STUDENT.PAYMENTS
+                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+              }`}
             >
               <WalletOutlined className="text-sm" />
               <span>Lịch sử thanh toán</span>
-            </button>
+            </Link>
           </div>
         </div>
 

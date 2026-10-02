@@ -64,6 +64,49 @@ class PaymentService {
     return all.filter((p) => p.enrollmentId === enrollmentId);
   }
 
+  async getMyPayments(userId: string) {
+    await new Promise((res) => setTimeout(res, 300));
+    const all = getStoredPayments();
+    const myPayments = all.filter((p) => p.payerUserId === userId);
+    
+    // Sort by createdAt desc
+    myPayments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Resolve enrollment and class data
+    const result = await Promise.all(
+      myPayments.map(async (payment) => {
+        let className = "Unknown Class";
+        let enrollmentStatus = "UNKNOWN";
+
+        try {
+          const enrollment = await enrollmentService.getEnrollmentById(payment.enrollmentId);
+          if (enrollment) {
+            enrollmentStatus = enrollment.enrollmentStatus;
+            
+            // In a real app we might have to fetch class details, 
+            // but for now we'll do our best with what we have in enrollment mock data.
+            // Enrollment usually has classId, we can get it from classDiscoveryService
+            const { classDiscoveryService } = await import("./classDiscovery.service");
+            const cls = await classDiscoveryService.fetchClassById(enrollment.classId);
+            if (cls) {
+              className = cls.title;
+            }
+          }
+        } catch (error) {
+          console.error("Error resolving enrollment for payment", error);
+        }
+
+        return {
+          ...payment,
+          className,
+          enrollmentStatus,
+        };
+      })
+    );
+
+    return result;
+  }
+
   async getPaymentById(id: string): Promise<PaymentEntity | null> {
     await new Promise((res) => setTimeout(res, 100));
     const all = getStoredPayments();
