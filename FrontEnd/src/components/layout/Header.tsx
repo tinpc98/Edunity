@@ -29,7 +29,12 @@ export default function Header() {
 
   const navLinks = [
     { label: "Giới thiệu", href: "#", isRoute: false },
-    { label: "Giáo viên", href: "#", isRoute: false },
+    {
+      label: "Giáo viên",
+      href: ROUTES.TEACHERS,
+      isRoute: true,
+      active: location.pathname.startsWith("/teachers"),
+    },
     {
       label: "Khóa học",
       href: ROUTES.CLASSES,
