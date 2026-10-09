@@ -26,7 +26,7 @@ export default function DashboardStatCard({
 
   return (
     <Card 
-      bordered={false} 
+      variant="borderless" 
       className="shadow-sm hover:-translate-y-0.5 transition-all h-full" 
       style={{ borderRadius: 16 }}
       styles={{ body: { padding: '16px' } }}

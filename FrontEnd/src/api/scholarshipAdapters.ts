@@ -45,7 +45,17 @@ export function adaptScholarshipApplication(api: ApiScholarshipApplication): Sch
     studentName: api.studentName || api.student?.fullName || "",
     studentEmail: api.studentEmail || api.student?.email || "",
     student: api.student,
-    documents: api.documents,
+    documents: api.documents?.map((doc) => ({
+      ...doc,
+      files: (doc.files || []).map((file) => {
+        const fileUrl = (file as any).url || file.signedUrl || null;
+        return {
+          ...file,
+          url: fileUrl,
+          signedUrl: fileUrl || undefined,
+        };
+      }),
+    })),
     campaign: api.campaign,
     scholarship: api.scholarship ? adaptScholarship(api.scholarship) : undefined,
   };

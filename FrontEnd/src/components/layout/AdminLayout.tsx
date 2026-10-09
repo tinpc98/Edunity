@@ -3,7 +3,6 @@ import DashboardShell from "../dashboard/DashboardShell";
 import { ROUTES } from "../../routes/routePaths";
 import {
   DashboardOutlined,
-  TeamOutlined,
   IdcardOutlined,
   AppstoreOutlined,
   BookOutlined,
@@ -13,9 +12,6 @@ import {
   FileTextOutlined,
   CustomerServiceOutlined,
   NotificationOutlined,
-  BarChartOutlined,
-  SettingOutlined,
-  HistoryOutlined
 } from "@ant-design/icons";
 
 const adminMenuItems = [
@@ -28,11 +24,6 @@ const adminMenuItems = [
     type: 'group',
     label: 'QUẢN LÝ HỆ THỐNG',
     children: [
-      {
-        key: 'nguoi-dung',
-        icon: <TeamOutlined className="text-[18px]" />,
-        label: 'Người dùng',
-      },
       {
         key: ROUTES.ADMIN.TEACHER_VERIFICATIONS,
         icon: <IdcardOutlined className="text-[18px]" />,
@@ -100,27 +91,6 @@ const adminMenuItems = [
         key: ROUTES.NOTIFICATIONS,
         icon: <NotificationOutlined className="text-[18px]" />,
         label: <Link to={ROUTES.NOTIFICATIONS}>Thông báo</Link>,
-      },
-      {
-        key: 'bao-cao',
-        icon: <BarChartOutlined className="text-[18px]" />,
-        label: 'Báo cáo',
-      },
-    ]
-  },
-  {
-    type: 'group',
-    label: 'HỆ THỐNG',
-    children: [
-      {
-        key: 'cau-hinh',
-        icon: <SettingOutlined className="text-[18px]" />,
-        label: 'Cấu hình',
-      },
-      {
-        key: 'audit-log',
-        icon: <HistoryOutlined className="text-[18px]" />,
-        label: 'Audit Log',
       },
     ]
   }

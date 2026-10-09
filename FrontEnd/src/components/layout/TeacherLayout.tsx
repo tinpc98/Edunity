@@ -6,8 +6,6 @@ import {
   DashboardOutlined,
   BookOutlined,
   CalendarOutlined,
-  VideoCameraOutlined,
-  TeamOutlined,
   MessageOutlined,
   StarOutlined,
   WalletOutlined,
@@ -45,16 +43,6 @@ const teacherMenuItems = [
         key: ROUTES.TEACHER.SCHEDULE,
         icon: <CalendarOutlined className="text-[18px]" />,
         label: <Link to={ROUTES.TEACHER.SCHEDULE}>Lịch giảng dạy</Link>,
-      },
-      {
-        key: 'buoi-hoc',
-        icon: <VideoCameraOutlined className="text-[18px]" />,
-        label: 'Buổi học',
-      },
-      {
-        key: 'hoc-vien',
-        icon: <TeamOutlined className="text-[18px]" />,
-        label: 'Học viên',
       },
     ]
   },

@@ -30,6 +30,8 @@ export interface VerificationDocumentFile {
   side: DocumentSide;
   storageKey: string;
   mimeType?: string;
+  url?: string | null;
+  urlExpiresAt?: string | null;
   signedUrl?: string;
 }
 

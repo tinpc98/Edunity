@@ -23,9 +23,6 @@ import {
   AuditOutlined,
   ClockCircleOutlined,
   ExclamationCircleOutlined,
-  FilePdfOutlined,
-  FileImageOutlined,
-  DownloadOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -39,6 +36,8 @@ import {
   SCHOLARSHIP_APP_STATUS_COLORS,
 } from '../../../types/scholarship';
 import { formatVND } from '../../../types/payment';
+import PrivateDocumentCard from '../../../components/common/PrivateDocumentCard';
+import { getFriendlyErrorMessage } from '../../../utils/apiErrorMap';
 
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
@@ -76,7 +75,7 @@ export default function ScholarshipApplicationReviewPage() {
       queryClient.invalidateQueries({ queryKey: scholarshipApplicationKeys.all });
     },
     onError: (err: any) => {
-      message.error(err.message || 'Phê duyệt thất bại. Vui lòng thử lại.');
+      message.error(getFriendlyErrorMessage(err, 'Phê duyệt thất bại. Vui lòng thử lại.'));
     },
   });
 
@@ -93,7 +92,7 @@ export default function ScholarshipApplicationReviewPage() {
       queryClient.invalidateQueries({ queryKey: scholarshipApplicationKeys.all });
     },
     onError: (err: any) => {
-      message.error(err.message || 'Không thể gửi yêu cầu bổ sung.');
+      message.error(getFriendlyErrorMessage(err, 'Không thể gửi yêu cầu bổ sung.'));
     },
   });
 
@@ -110,7 +109,7 @@ export default function ScholarshipApplicationReviewPage() {
       queryClient.invalidateQueries({ queryKey: scholarshipApplicationKeys.all });
     },
     onError: (err: any) => {
-      message.error(err.message || 'Từ chối hồ sơ thất bại.');
+      message.error(getFriendlyErrorMessage(err, 'Từ chối hồ sơ thất bại.'));
     },
   });
 
@@ -304,49 +303,15 @@ export default function ScholarshipApplicationReviewPage() {
                       Tài liệu #{docIdx + 1}: {doc.documentType || 'SCHOLARSHIP_PROOF'}
                     </div>
                     <Row gutter={[16, 16]}>
-                      {doc.files.map((file, fileIdx) => {
-                        const isPdf = file.mimeType?.includes('pdf') || file.storageKey.endsWith('.pdf');
-                        return (
-                          <Col span={12} sm={8} key={file.storageKey || fileIdx}>
-                            <div className="border border-gray-200 rounded-xl p-3 bg-gray-50 hover:border-indigo-300 transition-all flex flex-col justify-between gap-3 h-full">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 text-base">
-                                  {isPdf ? <FilePdfOutlined /> : <FileImageOutlined />}
-                                </div>
-                                <div className="overflow-hidden">
-                                  <div className="text-xs font-semibold text-gray-800 truncate" title={file.storageKey}>
-                                    {file.side}
-                                  </div>
-                                  <div className="text-[10px] text-gray-400 truncate">
-                                    {file.mimeType || 'Tệp đính kèm'}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {file.signedUrl ? (
-                                <a 
-                                  href={file.signedUrl} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="w-full"
-                                >
-                                  <Button 
-                                    size="small" 
-                                    icon={<DownloadOutlined />} 
-                                    className="w-full rounded-lg text-xs font-semibold text-indigo-600 border-indigo-200 bg-white hover:bg-indigo-50"
-                                  >
-                                    Xem tài liệu
-                                  </Button>
-                                </a>
-                              ) : (
-                                <Button size="small" disabled className="w-full rounded-lg text-xs">
-                                  Chưa có URL xem
-                                </Button>
-                              )}
-                            </div>
-                          </Col>
-                        );
-                      })}
+                      {doc.files.map((file, fileIdx) => (
+                        <Col span={24} sm={12} md={8} key={file.storageKey || fileIdx}>
+                          <PrivateDocumentCard
+                            file={file}
+                            title={`Minh chứng #${fileIdx + 1} (${file.side})`}
+                            documentType={doc.documentType || 'SCHOLARSHIP_PROOF'}
+                          />
+                        </Col>
+                      ))}
                     </Row>
                   </div>
                 ))}

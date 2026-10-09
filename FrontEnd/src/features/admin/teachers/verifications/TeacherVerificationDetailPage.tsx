@@ -2,19 +2,19 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Typography, Breadcrumb, Button, Card, Row, Col, Avatar, Tag, Divider, Form, Input, message, Modal, Skeleton } from 'antd';
 import { 
-  CheckCircleOutlined,
   SafetyCertificateOutlined,
   UserOutlined,
   MailOutlined,
   SolutionOutlined,
   FileSearchOutlined,
-  EyeOutlined,
   CheckSquareFilled
 } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
 import { teacherVerificationService } from '../../../../services/teacherVerification.service';
+import PrivateDocumentCard from '../../../../components/common/PrivateDocumentCard';
+import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 
 const { Title, Paragraph } = Typography;
 
@@ -37,10 +37,11 @@ export default function TeacherVerificationDetailPage() {
     onSuccess: () => {
       message.success('Đã phê duyệt và cấp chứng nhận giáo viên thành công!');
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verification', teacherId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-teacher-verifications'] });
       setIsApproveModalOpen(false);
     },
     onError: (err: any) => {
-      message.error(err.message || 'Phê duyệt thất bại.');
+      message.error(getFriendlyErrorMessage(err, 'Phê duyệt thất bại.'));
     }
   });
 
@@ -49,11 +50,12 @@ export default function TeacherVerificationDetailPage() {
     onSuccess: () => {
       message.success('Đã từ chối hồ sơ xác minh.');
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verification', teacherId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-teacher-verifications'] });
       setIsRejectModalOpen(false);
       form.resetFields();
     },
     onError: (err: any) => {
-      message.error(err.message || 'Từ chối thất bại.');
+      message.error(getFriendlyErrorMessage(err, 'Từ chối thất bại.'));
     }
   });
 
@@ -128,20 +130,15 @@ export default function TeacherVerificationDetailPage() {
           </Card>
 
           <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2"><SafetyCertificateOutlined className="text-indigo-500" /> Xác minh danh tính cá nhân</span>}>
-            {identityDoc ? (
+            {identityDoc && identityDoc.files && identityDoc.files.length > 0 ? (
               <Row gutter={[16, 16]}>
                 {identityDoc.files.map((file) => (
-                  <Col span={12} key={file.storageKey}>
-                    <div className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50 relative group">
-                      <div className="absolute top-2 right-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded font-bold shadow z-10"><CheckCircleOutlined /> Đã tải lên</div>
-                      <img src={file.url} alt={`CCCD ${file.side}`} className="w-full h-[220px] object-cover" />
-                      <div className="p-3 bg-white border-t border-gray-100 flex justify-between items-center">
-                        <span className="font-bold text-gray-800 text-sm">Mặt {file.side === 'FRONT' ? 'Trước' : file.side === 'BACK' ? 'Sau' : 'Đơn'}</span>
-                        <a href={file.url} target="_blank" rel="noreferrer">
-                          <Button type="text" size="small" icon={<EyeOutlined />} className="text-indigo-600">Xem lớn</Button>
-                        </a>
-                      </div>
-                    </div>
+                  <Col span={24} sm={12} key={file.storageKey}>
+                    <PrivateDocumentCard
+                      file={file}
+                      title={`Mặt ${file.side === 'FRONT' ? 'Trước' : file.side === 'BACK' ? 'Sau' : 'Đơn'}`}
+                      documentType="Định danh"
+                    />
                   </Col>
                 ))}
               </Row>
@@ -151,25 +148,18 @@ export default function TeacherVerificationDetailPage() {
           </Card>
 
           <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2"><FileSearchOutlined className="text-indigo-500" /> Bằng cấp & Chứng chỉ Sư phạm</span>}>
-            {qualificationDoc ? (
-              <div className="flex flex-col gap-4">
-                {qualificationDoc.files.map(file => (
-                  <div key={file.storageKey} className="flex items-start gap-4 p-4 border border-gray-200 rounded-xl hover:border-indigo-300 transition-colors bg-white">
-                    <div className="w-24 h-32 bg-gray-100 rounded border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center relative">
-                      <img src={file.url} className="w-full h-full object-cover" alt="" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start mb-1">
-                        <Title level={5} className="!m-0">Chứng chỉ chuyên môn</Title>
-                        <a href={file.url} target="_blank" rel="noreferrer">
-                          <Button type="text" className="text-indigo-600 font-medium" icon={<EyeOutlined />}>Xem chi tiết</Button>
-                        </a>
-                      </div>
-                      <div className="text-sm text-gray-800 font-medium mb-2">Tài liệu đã được tải lên để xác minh.</div>
-                    </div>
-                  </div>
+            {qualificationDoc && qualificationDoc.files && qualificationDoc.files.length > 0 ? (
+              <Row gutter={[16, 16]}>
+                {qualificationDoc.files.map((file) => (
+                  <Col span={24} sm={12} key={file.storageKey}>
+                    <PrivateDocumentCard
+                      file={file}
+                      title="Chứng chỉ chuyên môn"
+                      documentType="Bằng cấp / Chứng chỉ"
+                    />
+                  </Col>
                 ))}
-              </div>
+              </Row>
             ) : (
               <div className="text-gray-500 text-center py-6">Chưa có tài liệu chuyên môn</div>
             )}

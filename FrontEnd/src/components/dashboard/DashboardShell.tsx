@@ -5,7 +5,9 @@ import {
   MessageOutlined,
   UserOutlined,
   ReadOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  MenuUnfoldOutlined,
+  MenuFoldOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/auth.store";
@@ -24,11 +26,24 @@ interface DashboardShellProps {
 }
 
 export default function DashboardShell({ children, menuItems, role, userName, userRole }: DashboardShellProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   const location = useLocation();
   const navigate = useNavigate();
   const { notification } = AntdApp.useApp();
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
+        setCollapsed(true);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -58,12 +73,24 @@ export default function DashboardShell({ children, menuItems, role, userName, us
     } catch {
       // Ignore errors
     } finally {
-      logout();
-      navigate(ROUTES.HOME);
+      useAuthStore.getState().logout();
+      navigate(ROUTES.AUTH.LOGIN);
     }
   };
 
   const userMenuItems = [
+    {
+      key: "profile",
+      icon: <UserOutlined />,
+      label: "Hồ sơ cá nhân",
+      onClick: () => {
+        if (role === "TEACHER") navigate(ROUTES.TEACHER.PROFILE);
+        else if (role === "SPONSOR") navigate("/sponsor/profile");
+      },
+    },
+    {
+      type: "divider" as const,
+    },
     {
       key: "logout",
       danger: true,
@@ -73,10 +100,13 @@ export default function DashboardShell({ children, menuItems, role, userName, us
     },
   ];
 
+  const currentMarginLeft = isMobile ? (collapsed ? 0 : 220) : (collapsed ? 80 : 220);
+
   return (
-    <Layout style={{ minHeight: "100vh", background: "#f7f7fb" }}>
+    <Layout style={{ minHeight: "100vh", background: "#f7f7fb", overflowX: "hidden" }}>
       <Sider 
         width={220} 
+        collapsedWidth={isMobile ? 0 : 80}
         theme="light" 
         collapsible 
         collapsed={collapsed} 
@@ -118,10 +148,10 @@ export default function DashboardShell({ children, menuItems, role, userName, us
         </div>
       </Sider>
       
-      <Layout style={{ marginLeft: collapsed ? 80 : 220, transition: 'all 0.2s', background: 'transparent' }}>
+      <Layout style={{ marginLeft: currentMarginLeft, transition: 'all 0.2s', background: 'transparent', maxWidth: '100%', overflowX: 'hidden' }}>
         <Header 
           style={{ 
-            padding: '0 24px', 
+            padding: isMobile ? '0 12px' : '0 24px', 
             background: 'rgba(255, 255, 255, 0.85)', 
             backdropFilter: 'blur(12px)',
             display: 'flex', 
@@ -135,11 +165,18 @@ export default function DashboardShell({ children, menuItems, role, userName, us
             boxShadow: '0 1px 8px rgba(0,0,0,0.03)'
           }}
         >
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Button
+              type="text"
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setCollapsed(!collapsed)}
+              className="flex items-center justify-center text-[16px] h-8 w-8"
+              title="Đóng / mở thanh điều hướng"
+            />
             <Title level={4} style={{ margin: 0, fontSize: '18px' }}>Tổng quan</Title>
           </div>
           
-          <div className="flex items-center gap-4 sm:gap-6">
+          <div className="flex items-center gap-2 sm:gap-6">
             <Input 
               placeholder="Tìm kiếm..." 
               prefix={<SearchOutlined className="text-gray-400" />} 
@@ -177,7 +214,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
           </div>
         </Header>
         
-        <Content style={{ padding: '20px', minHeight: 280, maxWidth: '1280px', margin: '0 auto', width: '100%' }}>
+        <Content style={{ padding: isMobile ? '12px' : '20px', minHeight: 280, maxWidth: '1280px', margin: '0 auto', width: '100%', overflowX: 'hidden' }}>
           {children}
         </Content>
       </Layout>

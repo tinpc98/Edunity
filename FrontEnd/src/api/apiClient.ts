@@ -7,7 +7,7 @@ export interface ApiError {
   details?: unknown;
 }
 
-class FetchError extends Error {
+export class FetchError extends Error {
   status?: number;
   code?: string;
   details?: unknown;

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AuthUser } from "../types/auth";
+import { queryClient } from "../lib/queryClient";
 
 interface AuthState {
   user: AuthUser | null;
@@ -28,7 +29,10 @@ export const useAuthStore = create<AuthState>()(
         })),
       setTokens: (accessToken, refreshToken) => 
         set({ accessToken, refreshToken }),
-      logout: () => set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false }),
+      logout: () => {
+        queryClient.clear();
+        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+      },
     }),
     { name: "edunity-auth" },
   ),

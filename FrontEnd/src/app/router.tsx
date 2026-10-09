@@ -58,6 +58,7 @@ import { MessagesPage } from "../features/messages/MessagesPage";
 import { MyReportsPage } from "../features/reports/MyReportsPage";
 import { TeacherReviewsPage } from "../features/teacher/reviews/TeacherReviewsPage";
 import { AdminReportsPage } from "../features/admin/reports/AdminReportsPage";
+import NotFoundPage from "../components/common/NotFoundPage";
 
 const router = createBrowserRouter([
   {
@@ -296,6 +297,10 @@ const router = createBrowserRouter([
   {
     path: ROUTES.CLASSROOM,
     element: <ClassroomPage />,
+  },
+  {
+    path: "*",
+    element: <NotFoundPage />,
   },
 ]);
 
