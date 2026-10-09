@@ -63,14 +63,14 @@ const teacherMenuItems = [
     label: 'TƯƠNG TÁC',
     children: [
       {
-        key: 'tin-nhan',
+        key: ROUTES.TEACHER.MESSAGES,
         icon: <MessageOutlined className="text-[18px]" />,
-        label: 'Tin nhắn',
+        label: <Link to={ROUTES.TEACHER.MESSAGES}>Tin nhắn</Link>,
       },
       {
-        key: 'danh-gia',
+        key: ROUTES.TEACHER.REVIEWS,
         icon: <StarOutlined className="text-[18px]" />,
-        label: 'Đánh giá',
+        label: <Link to={ROUTES.TEACHER.REVIEWS}>Đánh giá</Link>,
       },
     ]
   },

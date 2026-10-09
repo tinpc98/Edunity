@@ -92,14 +92,14 @@ const adminMenuItems = [
     label: 'VẬN HÀNH',
     children: [
       {
-        key: 'khieu-nai',
+        key: ROUTES.ADMIN.REPORTS,
         icon: <CustomerServiceOutlined className="text-[18px]" />,
-        label: 'Khiếu nại',
+        label: <Link to={ROUTES.ADMIN.REPORTS}>Khiếu nại</Link>,
       },
       {
-        key: 'thong-bao',
+        key: ROUTES.NOTIFICATIONS,
         icon: <NotificationOutlined className="text-[18px]" />,
-        label: 'Thông báo',
+        label: <Link to={ROUTES.NOTIFICATIONS}>Thông báo</Link>,
       },
       {
         key: 'bao-cao',

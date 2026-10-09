@@ -1,5 +1,6 @@
-import { Modal, App as AntdApp } from "antd";
-import { CloseOutlined, CaretRightOutlined } from "@ant-design/icons";
+import { Modal, Button, App as AntdApp } from "antd";
+import { Link } from "react-router-dom";
+import { CloseOutlined, CaretRightOutlined, VideoCameraOutlined } from "@ant-design/icons";
 import type { SessionEntity, SessionStatus } from "../../../../types/classDiscovery";
 
 export interface SessionWithNumber extends SessionEntity {
@@ -12,6 +13,7 @@ interface SessionDetailModalProps {
   onClose: () => void;
   onWatchRecording?: (session: SessionWithNumber) => void;
 }
+
 
 function formatRecordingDate(isoString: string): string {
   try {
@@ -120,8 +122,32 @@ export default function SessionDetailModal({
         {/* ================= 3. SUBTLE DIVIDER ================= */}
         <div className="h-px bg-slate-100 mb-5" />
 
+        {/* Live Classroom CTA if SCHEDULED or IN_PROGRESS */}
+        {(session.status === "SCHEDULED" || session.status === "IN_PROGRESS") && (
+          <div className="mb-6 p-4 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-between gap-4">
+            <div>
+              <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <VideoCameraOutlined className="text-indigo-600" />
+                <span>Phòng học trực tuyến Live Classroom</span>
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">
+                {session.status === "IN_PROGRESS"
+                  ? "Buổi học đang diễn ra. Bạn có thể tham gia lớp học ngay bây giờ."
+                  : "Phòng học mở trước giờ học 15 phút."}
+              </div>
+            </div>
+            <Link to={`/classroom/${session._id}`}>
+              <Button type="primary" className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-bold">
+                {session.status === "IN_PROGRESS" ? "Vào lớp ngay" : "Vào phòng học"}
+              </Button>
+            </Link>
+
+          </div>
+        )}
+
         {/* ================= 4. RECORDING SECTION ================= */}
         <div>
+
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-3">
             BẢN GHI BUỔI HỌC
           </span>

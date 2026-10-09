@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Layout, Menu, Input, Avatar, Badge, Button, Flex, Typography, Dropdown, App as AntdApp } from "antd";
+import { Layout, Menu, Input, Avatar, Button, Flex, Typography, Dropdown, App as AntdApp } from "antd";
 import { 
   SearchOutlined, 
-  BellOutlined, 
   MessageOutlined,
   UserOutlined,
   ReadOutlined,
@@ -11,6 +10,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
+import { NotificationPopover } from "../../features/notifications/components/NotificationPopover";
 
 const { Header, Sider, Content } = Layout;
 const { Text, Title } = Typography;
@@ -148,12 +148,15 @@ export default function DashboardShell({ children, menuItems, role, userName, us
             />
             
             <div className="flex items-center gap-1 sm:gap-2">
-              <Badge dot color="blue">
-                <Button type="text" shape="circle" icon={<MessageOutlined className="text-[16px] text-gray-600" />} className="bg-gray-50 hover:bg-gray-100 h-9 w-9" />
-              </Badge>
-              <Badge count={role === 'ADMIN' ? 12 : 2} style={{ backgroundColor: '#ef4444' }}>
-                <Button type="text" shape="circle" icon={<BellOutlined className="text-[16px] text-gray-600" />} className="bg-gray-50 hover:bg-gray-100 h-9 w-9" />
-              </Badge>
+              <Button
+                type="text"
+                shape="circle"
+                icon={<MessageOutlined className="text-[16px] text-gray-600" />}
+                className="bg-gray-50 hover:bg-gray-100 h-9 w-9"
+                onClick={() => navigate(ROUTES.MESSAGES)}
+                title="Tin nhắn"
+              />
+              <NotificationPopover />
             </div>
             
             <div className="h-6 w-[1px] bg-gray-200 hidden sm:block"></div>

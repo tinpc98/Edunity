@@ -12,6 +12,7 @@ import { LOGO_URL } from "../../data/homeData";
 import { useHomeStore } from "../../stores/useHomeStore";
 import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
+import { NotificationPopover } from "../../features/notifications/components/NotificationPopover";
 
 export default function Header() {
   const location = useLocation();
@@ -20,7 +21,6 @@ export default function Header() {
   const setSearchKeyword = useHomeStore((state) => state.setSearchKeyword);
 
   const { user, isAuthenticated, logout } = useAuthStore();
-  const isStudent = isAuthenticated && user?.role === "STUDENT";
 
   const handleLogout = async () => {
     try {
@@ -181,8 +181,9 @@ export default function Header() {
             )}
           </nav>
 
-          {isStudent && user ? (
-            <div className="flex items-center pl-2 border-l border-slate-200">
+          {isAuthenticated && user ? (
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+              <NotificationPopover />
               <Dropdown menu={{ items: userMenuItems }} trigger={["hover", "click"]} placement="bottomRight">
                 <button
                   type="button"

@@ -47,9 +47,17 @@ import AdminCourseProposalsPage from "../features/admin/catalog/AdminCoursePropo
 import AdminClassesPage from "../features/admin/classes/AdminClassesPage";
 import AdminClassDetailPage from "../features/admin/classes/AdminClassDetailPage";
 import StudentPaymentsPage from "../features/student/payments/StudentPaymentsPage";
+import StudentScholarshipsPage from "../features/student/scholarships/StudentScholarshipsPage";
+import StudentScholarshipApplicationsPage from "../features/student/scholarships/StudentScholarshipApplicationsPage";
 import TeacherRevenuePage from "../features/teacher/revenue/TeacherRevenuePage";
 import AdminPaymentsPage from "../features/admin/finance/AdminPaymentsPage";
 import AdminTransactionsPage from "../features/admin/finance/AdminTransactionsPage";
+import ClassroomPage from "../features/classroom/ClassroomPage";
+import { NotificationsPage } from "../features/notifications/NotificationsPage";
+import { MessagesPage } from "../features/messages/MessagesPage";
+import { MyReportsPage } from "../features/reports/MyReportsPage";
+import { TeacherReviewsPage } from "../features/teacher/reviews/TeacherReviewsPage";
+import { AdminReportsPage } from "../features/admin/reports/AdminReportsPage";
 
 const router = createBrowserRouter([
   {
@@ -107,6 +115,18 @@ const router = createBrowserRouter([
         path: ROUTES.CAMPAIGN_DETAIL,
         element: <PublicCampaignDetailPage />,
       },
+      {
+        path: ROUTES.NOTIFICATIONS,
+        element: <NotificationsPage />,
+      },
+      {
+        path: ROUTES.MESSAGES,
+        element: <MessagesPage />,
+      },
+      {
+        path: ROUTES.REPORTS,
+        element: <MyReportsPage />,
+      },
     ],
   },
   {
@@ -136,6 +156,14 @@ const router = createBrowserRouter([
       {
         path: "payments",
         element: <StudentPaymentsPage />,
+      },
+      {
+        path: "scholarships",
+        element: <StudentScholarshipsPage />,
+      },
+      {
+        path: "scholarships/applications",
+        element: <StudentScholarshipApplicationsPage />,
       },
     ],
   },
@@ -178,6 +206,10 @@ const router = createBrowserRouter([
       {
         path: "revenue",
         element: <TeacherRevenuePage />,
+      },
+      {
+        path: "reviews",
+        element: <TeacherReviewsPage />,
       },
     ],
   },
@@ -241,6 +273,10 @@ const router = createBrowserRouter([
         path: "transactions",
         element: <AdminTransactionsPage />,
       },
+      {
+        path: "reports",
+        element: <AdminReportsPage />,
+      },
     ],
   },
   {
@@ -257,7 +293,12 @@ const router = createBrowserRouter([
       },
     ],
   },
+  {
+    path: ROUTES.CLASSROOM,
+    element: <ClassroomPage />,
+  },
 ]);
+
 
 export default function Router() {
   return <RouterProvider router={router} />;

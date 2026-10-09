@@ -155,7 +155,8 @@ export default function StudentHomePage() {
 
   // Handler for LIVE card click -> directly to Live Classroom
   const handleLiveClassClick = (item: EnrolledClassItem) => {
-    if (!item.liveSession?.meetingRoomId) {
+    const sessionId = (item.liveSession as any)?.id || (item.liveSession as any)?._id;
+    if (!sessionId) {
       notification.warning({
         message: "Phòng học trực tuyến",
         description: "Phòng học hiện chưa sẵn sàng.",
@@ -164,13 +165,9 @@ export default function StudentHomePage() {
       return;
     }
 
-    // Since Live Classroom route is not yet in the routing table, provide clear feedback:
-    notification.info({
-      message: "Vào phòng học LIVE",
-      description: `Đang kết nối vào phòng học trực tiếp "${item.liveSession.title}" (Phòng: ${item.liveSession.meetingRoomId}). Tính năng phòng học Live Classroom đang được hoàn thiện.`,
-      placement: "topRight",
-    });
+    navigate(`/classroom/${sessionId}`);
   };
+
 
   const handleCardClick = (item: EnrolledClassItem) => {
     if (item.hasLiveSession) {

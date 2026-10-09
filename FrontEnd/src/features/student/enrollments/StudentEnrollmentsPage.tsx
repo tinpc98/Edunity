@@ -21,7 +21,9 @@ import {
   UserOutlined,
   CalendarOutlined,
   ArrowRightOutlined,
+  StarFilled,
 } from "@ant-design/icons";
+import { CreateReviewModal } from "../../reviews/components/CreateReviewModal";
 import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
 import { classKeys } from "../../../services/class.service";
 import { sessionKeys } from "../../../services/session.service";
@@ -90,6 +92,7 @@ export default function StudentEnrollmentsPage() {
 
   const [activeTab, setActiveTab] = useState<StatusTab>("ALL");
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [reviewTarget, setReviewTarget] = useState<{ classId: string; className: string } | null>(null);
   const pageSize = 10;
 
   // 1. Fetch real student enrollments
@@ -207,6 +210,7 @@ export default function StudentEnrollmentsPage() {
             const classInfo = enrollment.class;
             const isPending = enrollment.enrollmentStatus === "PENDING_PAYMENT";
             const isConfirmed = enrollment.enrollmentStatus === "CONFIRMED";
+            const isCompleted = enrollment.enrollmentStatus === "COMPLETED";
             const isFree = enrollment.paymentSource === "FREE";
 
             return (
@@ -240,13 +244,24 @@ export default function StudentEnrollmentsPage() {
                           {ENROLLMENT_STATUS_LABELS[enrollment.enrollmentStatus] || enrollment.enrollmentStatus}
                         </Tag>
 
-                        {isFree ? (
+                        {enrollment.paymentSource === "FREE" && (
                           <Tag color="green" className="text-[10px] font-bold border-none">
                             MIỄN PHÍ
                           </Tag>
-                        ) : (
+                        )}
+                        {enrollment.paymentSource === "DIRECT_PAYMENT" && (
+                          <Tag color="purple" className="text-[10px] font-bold border-none">
+                            THANH TOÁN TRỰC TIẾP
+                          </Tag>
+                        )}
+                        {enrollment.paymentSource === "SCHOLARSHIP" && (
+                          <Tag color="emerald" className="text-[10px] font-bold border-none">
+                            HỌC BỔNG TOÀN PHẦN
+                          </Tag>
+                        )}
+                        {enrollment.paymentSource === "MIXED" && (
                           <Tag color="gold" className="text-[10px] font-bold border-none">
-                            HỌC PHÍ
+                            ĐỒNG CHI TRẢ (MIXED)
                           </Tag>
                         )}
                       </div>
@@ -264,7 +279,17 @@ export default function StudentEnrollmentsPage() {
                         </span>
                         {!isFree && (
                           <span className="font-semibold text-indigo-700">
-                            {enrollment.tuitionAmount.toLocaleString("vi-VN")} đ
+                            Học phí: {enrollment.tuitionAmount.toLocaleString("vi-VN")} đ
+                          </span>
+                        )}
+                        {enrollment.amountPaidViaScholarship > 0 && (
+                          <span className="font-semibold text-emerald-600">
+                            • Học bổng: {enrollment.amountPaidViaScholarship.toLocaleString("vi-VN")} đ
+                          </span>
+                        )}
+                        {enrollment.amountPaidViaPayment > 0 && (
+                          <span className="font-semibold text-amber-600">
+                            • Đã thanh toán: {enrollment.amountPaidViaPayment.toLocaleString("vi-VN")} đ
                           </span>
                         )}
                       </div>
@@ -298,6 +323,21 @@ export default function StudentEnrollmentsPage() {
                       </Link>
                     )}
 
+                    {(isConfirmed || isCompleted) && (
+                      <Button
+                        icon={<StarFilled className="text-amber-500" />}
+                        onClick={() =>
+                          setReviewTarget({
+                            classId: enrollment.classId,
+                            className: classInfo?.className || "Lớp học",
+                          })
+                        }
+                        className="text-xs font-semibold h-9 rounded-xl hover:border-amber-400"
+                      >
+                        Đánh giá
+                      </Button>
+                    )}
+
                     {isPending && (
                       <>
                         <Link to={`/checkout/${enrollment.id}`}>
@@ -305,7 +345,7 @@ export default function StudentEnrollmentsPage() {
                             type="primary"
                             className="bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold h-9 rounded-xl border-none shadow-2xs"
                           >
-                            Thanh toán ngay
+                            {enrollment.paymentSource === "MIXED" ? "Thanh toán phần đồng chi trả" : "Thanh toán ngay"}
                           </Button>
                         </Link>
                         <Popconfirm
@@ -350,6 +390,15 @@ export default function StudentEnrollmentsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {reviewTarget && (
+        <CreateReviewModal
+          open={Boolean(reviewTarget)}
+          onClose={() => setReviewTarget(null)}
+          classId={reviewTarget.classId}
+          className={reviewTarget.className}
+        />
       )}
     </div>
   );

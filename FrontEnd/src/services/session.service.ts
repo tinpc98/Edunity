@@ -7,6 +7,7 @@ import type {
   UpdateSessionPayload,
   PlannedSession,
   SessionAttendanceItem,
+  JoinSessionResponse,
 } from "../types/session";
 import { adaptSession, adaptSessions } from "../api/sessionAdapters";
 
@@ -122,4 +123,15 @@ export const sessionService = {
     const data = await apiClient<ApiSession[]>(endpoint);
     return adaptSessions(data);
   },
+
+  /**
+   * Student or Teacher: Join the embedded classroom for a session.
+   * POST /api/sessions/:id/join
+   */
+  async joinSession(sessionId: string): Promise<JoinSessionResponse> {
+    return apiClient<JoinSessionResponse>(`/sessions/${sessionId}/join`, {
+      method: "POST",
+    });
+  },
 };
+

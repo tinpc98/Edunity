@@ -35,7 +35,9 @@ import {
   CAMPAIGN_STATUS_LABELS,
   CAMPAIGN_STATUS_COLORS,
 } from "../../types/campaign";
+import ApplyScholarshipModal from "./components/ApplyScholarshipModal";
 import { formatVND } from "../../types/payment";
+import { ROUTES } from "../../routes/routePaths";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -56,6 +58,7 @@ export default function PublicCampaignDetailPage() {
   const [contributionAmount, setContributionAmount] = useState<number>(500_000);
   const [pendingContribution, setPendingContribution] = useState<CreateContributionResponse | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isApplyScholarshipModalOpen, setIsApplyScholarshipModalOpen] = useState<boolean>(false);
 
   // Fetch campaign detail
   const {
@@ -336,6 +339,49 @@ export default function PublicCampaignDetailPage() {
                       </Button>
                     </Link>
                   </div>
+                ) : user?.role === "STUDENT" ? (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Tag color="indigo" className="font-bold border-none">DÀNH CHO HỌC SINH</Tag>
+                        <span className="text-xs text-indigo-700 font-semibold">Cơ hội nhận học bổng</span>
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        Chiến dịch hỗ trợ suất học bổng trị giá{" "}
+                        <strong className="text-indigo-700 text-sm">{formatVND(campaign.awardAmountPerStudent)}</strong> để chi trả học phí các lớp học.
+                      </div>
+                      {campaign.isAcceptingApplications ? (
+                        <Button
+                          type="primary"
+                          block
+                          onClick={() => setIsApplyScholarshipModalOpen(true)}
+                          className="h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-bold text-sm shadow-xs"
+                        >
+                          Nộp hồ sơ xin học bổng
+                        </Button>
+                      ) : (
+                        <Alert
+                          type="info"
+                          showIcon
+                          message="Chưa tiếp nhận hồ sơ"
+                          description="Chiến dịch hiện không nằm trong khung thời gian nhận hồ sơ học bổng."
+                          className="rounded-xl text-xs"
+                        />
+                      )}
+                      <div className="text-center pt-1">
+                        <Link
+                          to={ROUTES.STUDENT.HOME + "/scholarships/applications"}
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                        >
+                          Xem các hồ sơ bạn đã nộp →
+                        </Link>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-slate-400 text-center">
+                      * Phần đóng góp tài trợ ở trên chỉ dành cho Nhà tài trợ (SPONSOR).
+                    </div>
+                  </div>
                 ) : user?.role !== "SPONSOR" ? (
                   <Alert
                     type="warning"
@@ -490,6 +536,17 @@ export default function PublicCampaignDetailPage() {
             </div>
           )}
         </Modal>
+
+        {campaign && (
+          <ApplyScholarshipModal
+            open={isApplyScholarshipModalOpen}
+            onClose={() => setIsApplyScholarshipModalOpen(false)}
+            campaign={campaign}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
+            }}
+          />
+        )}
       </div>
     </div>
   );

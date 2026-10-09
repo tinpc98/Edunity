@@ -1,5 +1,20 @@
 import { useState } from 'react';
-import { Typography, Breadcrumb, Button, Card, Row, Col, Avatar, Tag, Form, Input, Checkbox, message, Modal, Select } from 'antd';
+import { 
+  Typography, 
+  Breadcrumb, 
+  Button, 
+  Card, 
+  Row, 
+  Col, 
+  Avatar, 
+  Tag, 
+  Form, 
+  Input, 
+  message, 
+  Modal, 
+  Skeleton, 
+  Alert,
+} from 'antd';
 import { 
   CheckCircleOutlined,
   PhoneOutlined,
@@ -7,49 +22,149 @@ import {
   SafetyCertificateOutlined,
   AuditOutlined,
   ClockCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  FilePdfOutlined,
+  FileImageOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ROUTES } from '../../../routes/routePaths';
-import { mockAdminScholarships } from '../../../data/mockAdminScholarships';
-import type { ApplicationDocument } from '../../../types/admin';
+import {
+  scholarshipApplicationService,
+  scholarshipApplicationKeys,
+} from '../../../services/scholarshipApplication.service';
+import {
+  SCHOLARSHIP_APP_STATUS_LABELS,
+  SCHOLARSHIP_APP_STATUS_COLORS,
+} from '../../../types/scholarship';
+import { formatVND } from '../../../types/payment';
 
-const { Title, Paragraph } = Typography;
+const { Title, Paragraph, Text } = Typography;
+const { TextArea } = Input;
 
 export default function ScholarshipApplicationReviewPage() {
-  const { applicationId } = useParams();
-  const app = mockAdminScholarships.find((a: any) => a.id === (applicationId || "APP-2026-001")) || mockAdminScholarships[0];
-  
-  const [status, setStatus] = useState(app.status);
+  const { applicationId } = useParams<{ applicationId: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const [isRequestInfoModalOpen, setIsRequestInfoModalOpen] = useState(false);
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
 
-  const handleApprove = () => {
-    message.success('Đã phê duyệt hồ sơ học bổng thành công!');
-    setStatus('APPROVED');
-    setIsApproveModalOpen(false);
+  const [approveForm] = Form.useForm();
+  const [requestInfoForm] = Form.useForm();
+  const [rejectForm] = Form.useForm();
+
+  // Fetch application detail from real API
+  const { data: app, isLoading, isError } = useQuery({
+    queryKey: scholarshipApplicationKeys.detail(applicationId || ''),
+    queryFn: () => (applicationId ? scholarshipApplicationService.adminGetApplication(applicationId) : null),
+    enabled: Boolean(applicationId),
+  });
+
+  // Approve Mutation
+  const approveMutation = useMutation({
+    mutationFn: (reviewNote?: string) => {
+      if (!applicationId) throw new Error('ID không hợp lệ');
+      return scholarshipApplicationService.adminApprove(applicationId, { reviewNote });
+    },
+    onSuccess: () => {
+      message.success('Đã phê duyệt hồ sơ học bổng thành công! Học bổng đã được cấp phát.');
+      setIsApproveModalOpen(false);
+      approveForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: scholarshipApplicationKeys.all });
+    },
+    onError: (err: any) => {
+      message.error(err.message || 'Phê duyệt thất bại. Vui lòng thử lại.');
+    },
+  });
+
+  // Request Information Mutation
+  const requestInfoMutation = useMutation({
+    mutationFn: (reviewNote: string) => {
+      if (!applicationId) throw new Error('ID không hợp lệ');
+      return scholarshipApplicationService.adminRequestInformation(applicationId, reviewNote);
+    },
+    onSuccess: () => {
+      message.warning('Đã gửi yêu cầu bổ sung hồ sơ tới học sinh.');
+      setIsRequestInfoModalOpen(false);
+      requestInfoForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: scholarshipApplicationKeys.all });
+    },
+    onError: (err: any) => {
+      message.error(err.message || 'Không thể gửi yêu cầu bổ sung.');
+    },
+  });
+
+  // Reject Mutation
+  const rejectMutation = useMutation({
+    mutationFn: (reviewNote?: string) => {
+      if (!applicationId) throw new Error('ID không hợp lệ');
+      return scholarshipApplicationService.adminReject(applicationId, { reviewNote });
+    },
+    onSuccess: () => {
+      message.error('Đã từ chối hồ sơ học bổng.');
+      setIsRejectModalOpen(false);
+      rejectForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: scholarshipApplicationKeys.all });
+    },
+    onError: (err: any) => {
+      message.error(err.message || 'Từ chối hồ sơ thất bại.');
+    },
+  });
+
+  const handleApproveSubmit = async () => {
+    const values = await approveForm.validateFields();
+    approveMutation.mutate(values.reviewNote);
   };
 
-  const handleRequestInfo = () => {
-    message.warning('Đã gửi yêu cầu bổ sung hồ sơ cho học sinh.');
-    setStatus('NEED_MORE_INFORMATION');
-    setIsRequestInfoModalOpen(false);
+  const handleRequestInfoSubmit = async () => {
+    const values = await requestInfoForm.validateFields();
+    requestInfoMutation.mutate(values.reviewNote);
   };
 
-  const handleReject = () => {
-    message.error('Đã từ chối hồ sơ học bổng.');
-    setStatus('REJECTED');
-    setIsRejectModalOpen(false);
+  const handleRejectSubmit = async () => {
+    const values = await rejectForm.validateFields();
+    rejectMutation.mutate(values.reviewNote);
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-4">
+        <Skeleton active paragraph={{ rows: 8 }} />
+      </div>
+    );
+  }
+
+  if (isError || !app) {
+    return (
+      <div className="p-6">
+        <Alert
+          type="error"
+          showIcon
+          message="Không tìm thấy hồ sơ"
+          description="Hồ sơ không tồn tại hoặc bạn không có quyền truy cập."
+          action={
+            <Button onClick={() => navigate(ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS)}>
+              Quay lại danh sách
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  const isReviewable = app.status === 'SUBMITTED';
+  const studentDisplayName = app.student?.fullName || app.studentName || app.studentEmail || 'Học viên';
 
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
       <Breadcrumb 
         className="mb-2 text-sm font-medium"
         items={[
-          { title: <a href={ROUTES.ADMIN.HOME}>Tổng quan</a> },
-          { title: <a href={ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS}>Hồ sơ học bổng</a> },
+          { title: <Link to={ROUTES.ADMIN.HOME}>Tổng quan</Link> },
+          { title: <Link to={ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS}>Hồ sơ học bổng</Link> },
           { title: app.id },
         ]}
       />
@@ -57,248 +172,394 @@ export default function ScholarshipApplicationReviewPage() {
       {/* Header Info */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div>
-          <Title level={3} className="!m-0 text-gray-900 mb-1">Xét duyệt hồ sơ học bổng – {app.studentName}</Title>
+          <Title level={3} className="!m-0 text-gray-900 mb-1">
+            Xét duyệt hồ sơ học bổng – {studentDisplayName}
+          </Title>
           <div className="flex items-center gap-3 mt-2">
-            {status === 'SUBMITTED' && <Tag color="processing" className="!m-0 rounded font-bold">CHỜ THẨM ĐỊNH (SUBMITTED)</Tag>}
-            {status === 'APPROVED' && <Tag color="success" className="!m-0 rounded font-bold">ĐÃ PHÊ DUYỆT</Tag>}
-            {status === 'NEED_MORE_INFORMATION' && <Tag color="warning" className="!m-0 rounded font-bold">CẦN BỔ SUNG</Tag>}
-            {status === 'REJECTED' && <Tag color="error" className="!m-0 rounded font-bold">TỪ CHỐI</Tag>}
-            <span className="text-gray-500 font-medium text-sm"><ClockCircleOutlined /> Nộp ngày {app.submittedDate}</span>
+            <Tag 
+              color={SCHOLARSHIP_APP_STATUS_COLORS[app.status]} 
+              className="!m-0 rounded font-bold uppercase"
+            >
+              {SCHOLARSHIP_APP_STATUS_LABELS[app.status]}
+            </Tag>
+            <span className="text-gray-500 font-medium text-xs flex items-center gap-1">
+              <ClockCircleOutlined /> Nộp ngày {new Date(app.submittedAt).toLocaleDateString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+              })}
+            </span>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button className="rounded-lg font-medium" href={ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS}>Quay lại danh sách</Button>
+          <Button 
+            className="rounded-lg font-medium" 
+            onClick={() => navigate(ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS)}
+          >
+            Quay lại danh sách
+          </Button>
         </div>
       </div>
 
       <Row gutter={[24, 24]}>
         {/* LEFT COLUMN - CONTENT */}
-        <Col xs={24} lg={17} className="flex flex-col gap-6">
-          
+        <Col xs={24} lg={16} className="flex flex-col gap-6">
+          {/* Student Profile Card */}
           <Card className="rounded-2xl shadow-sm border-gray-100">
             <div className="flex items-start gap-4 mb-6">
-              <Avatar size={72} className="bg-indigo-100 text-indigo-700 text-2xl font-bold shrink-0">{app.studentName.substring(0, 2).toUpperCase()}</Avatar>
+              <Avatar size={64} className="bg-indigo-100 text-indigo-700 text-2xl font-bold shrink-0">
+                {studentDisplayName.substring(0, 2).toUpperCase()}
+              </Avatar>
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <Title level={4} className="!m-0 text-gray-900">{app.studentName}</Title>
-                  <Tag color="success" className="rounded-full border-0 !m-0"><CheckCircleOutlined /></Tag>
+                  <Title level={4} className="!m-0 text-gray-900">{studentDisplayName}</Title>
+                  <Tag color="cyan" className="rounded-full border-0 !m-0 text-xs">Học sinh</Tag>
                 </div>
-                <div className="text-sm font-medium text-gray-500 mb-2">{app.school} • {app.grade}</div>
-                <Tag color="green" className="rounded font-bold border-0 bg-emerald-100 text-emerald-700">{app.grade}</Tag>
+                <div className="text-xs text-gray-500 font-medium">
+                  {app.student?.school ? `${app.student.school} • ` : ''}
+                  {app.student?.grade ? `Khối ${app.student.grade}` : 'Thông tin hồ sơ'}
+                </div>
               </div>
             </div>
 
             <Row gutter={[24, 16]}>
               <Col span={12}>
-                <div className="flex items-center gap-2 text-gray-500 text-xs font-bold uppercase mb-1"><MailOutlined /> Email liên hệ</div>
-                <div className="font-medium text-gray-900">{app.email}</div>
+                <div className="flex items-center gap-2 text-gray-400 text-xs font-bold uppercase mb-1">
+                  <MailOutlined /> Email liên hệ
+                </div>
+                <div className="font-medium text-gray-900 text-sm">{app.student?.email || app.studentEmail || '—'}</div>
               </Col>
               <Col span={12}>
-                <div className="flex items-center gap-2 text-gray-500 text-xs font-bold uppercase mb-1"><PhoneOutlined /> Số điện thoại</div>
-                <div className="font-medium text-gray-900">{app.phone}</div>
+                <div className="flex items-center gap-2 text-gray-400 text-xs font-bold uppercase mb-1">
+                  <PhoneOutlined /> Số điện thoại
+                </div>
+                <div className="font-medium text-gray-900 text-sm">{app.student?.phoneNumber || '—'}</div>
               </Col>
             </Row>
           </Card>
 
-          <Card className="rounded-2xl shadow-sm border-indigo-100 bg-indigo-50/30" title={<span className="font-bold flex items-center gap-2 text-indigo-900"><SafetyCertificateOutlined /> Chính sách & Định mức chiến dịch</span>} extra={<Tag color="indigo" className="font-bold border-0">ADMIN READ-ONLY</Tag>}>
-            <div className="flex items-start gap-3 bg-white p-4 rounded-xl border border-indigo-100 shadow-sm mb-4">
-              <div className="text-indigo-600 mt-1"><ExclamationCircleOutlined /></div>
-              <div>
-                <div className="font-bold text-indigo-900 mb-1">Mức hỗ trợ quy định bởi Campaign (Admin không can thiệp số tiền)</div>
-                <div className="text-sm text-gray-600">Mọi khoản tài trợ được tự động ràng buộc theo điều lệ chiến dịch đã được ban hành và đóng băng kiểm toán.</div>
+          {/* Campaign Policy Card */}
+          <Card 
+            className="rounded-2xl shadow-sm border-indigo-100 bg-indigo-50/20" 
+            title={
+              <span className="font-bold flex items-center gap-2 text-indigo-900">
+                <SafetyCertificateOutlined /> Chính sách & Định mức chiến dịch
+              </span>
+            } 
+            extra={<Tag color="indigo" className="font-bold border-0">ADMIN READ-ONLY (BR-37)</Tag>}
+          >
+            <div className="flex items-start gap-3 bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs mb-4">
+              <div className="text-indigo-600 mt-0.5"><ExclamationCircleOutlined /></div>
+              <div className="text-xs text-gray-600">
+                <strong className="text-indigo-900 block mb-0.5">Mức tài trợ được quy định bởi Campaign</strong>
+                Số tiền học bổng cấp phát được tự động cố định theo quy chuẩn của chiến dịch. Admin chỉ thẩm định tính hợp lệ của hồ sơ, không thể tùy tiện nhập số tiền.
               </div>
             </div>
 
             <Row gutter={[16, 16]}>
-              <Col span={8}>
+              <Col span={12}>
                 <div className="bg-white p-4 rounded-xl border border-gray-100 h-full">
-                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">CHIẾN DỊCH XÉT DUYỆT</div>
-                  <div className="font-bold text-gray-900 text-base">{app.campaignTitle}</div>
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">CHIẾN DỊCH</div>
+                  <div className="font-bold text-gray-900 text-base">{app.campaignTitle || app.campaign?.title}</div>
                 </div>
               </Col>
-              <Col span={8}>
+              <Col span={12}>
                 <div className="bg-indigo-600 p-4 rounded-xl border border-indigo-600 h-full text-white">
-                  <div className="text-xs font-bold text-indigo-200 uppercase tracking-wider mb-2">ĐỊNH MỨC PHÊ DUYỆT</div>
-                  <div className="font-bold text-2xl">{app.awardAmount.toLocaleString('vi-VN')}đ</div>
-                  <div className="text-xs text-indigo-100">/ học kỳ (Khóa 2026 - 2027)</div>
-                </div>
-              </Col>
-              <Col span={8}>
-                <div className="bg-white p-4 rounded-xl border border-gray-100 h-full">
-                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">QUỸ KHẢ DỤNG CHIẾN DỊCH</div>
-                  <div className="font-bold text-emerald-600 text-2xl">120.000.000đ</div>
-                  <div className="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1"><CheckCircleOutlined /> Đủ nguồn quỹ giải ngân</div>
+                  <div className="text-xs font-bold text-indigo-200 uppercase tracking-wider mb-1">ĐỊNH MỨC PHÊ DUYỆT</div>
+                  <div className="font-black text-2xl">{formatVND(app.awardAmountPerStudent)}</div>
+                  <div className="text-xs text-indigo-100 mt-1">Cấp tự động khi duyệt thành công</div>
                 </div>
               </Col>
             </Row>
           </Card>
 
-          <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2"><AuditOutlined className="text-indigo-500" /> Thư xin học bổng & Động lực phấn đấu</span>}>
-            <div className="flex flex-col gap-6">
-              <div>
-                <Title level={5} className="!text-indigo-700 !mb-2 flex items-center gap-2">1. Hoàn cảnh kinh tế gia đình</Title>
-                <Paragraph className="text-gray-800 text-base leading-relaxed bg-gray-50 p-4 rounded-xl">"{app.reason} {app.familySituation}"</Paragraph>
-              </div>
-              <div>
-                <Title level={5} className="!text-indigo-700 !mb-2 flex items-center gap-2">2. Mục tiêu học tập & Cam kết</Title>
-                <Paragraph className="text-gray-800 text-base leading-relaxed bg-gray-50 p-4 rounded-xl">"{app.learningGoal} {app.additionalStatement}"</Paragraph>
-              </div>
+          {/* Statement Card */}
+          <Card 
+            className="rounded-2xl shadow-sm border-gray-100" 
+            title={
+              <span className="font-bold flex items-center gap-2">
+                <AuditOutlined className="text-indigo-600" /> Thư nguyện vọng & Hoàn cảnh học sinh
+              </span>
+            }
+          >
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-gray-800 text-sm whitespace-pre-wrap leading-relaxed">
+              {app.statement || 'Không có nội dung thư nguyện vọng.'}
             </div>
           </Card>
 
-          <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2">Hồ sơ minh chứng đính kèm</span>}>
-            <Row gutter={[16, 16]}>
-              {app.documents.map((doc: ApplicationDocument, index: number) => (
-                <Col span={12} key={doc.id}>
-                  <div className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50 relative group">
-                    {doc.verified && <div className="absolute top-2 right-2 bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded font-bold shadow-sm border border-emerald-200 z-10"><CheckCircleOutlined /> Hợp lệ</div>}
-                    <img src={`https://picsum.photos/400/250?random=${index + 10}`} alt={doc.name} className="w-full h-[180px] object-cover opacity-80" />
-                    <div className="p-3 bg-white border-t border-gray-100 flex flex-col gap-1">
-                      <div className="font-bold text-gray-800 text-sm truncate">{doc.name}</div>
-                      <div className="text-xs text-gray-500 font-medium">{doc.type === 'PROOF_OF_POVERTY' ? 'Giấy xác nhận hộ nghèo' : doc.type === 'TRANSCRIPT' ? 'Học bạ' : doc.type === 'ID_CARD' ? 'CCCD' : 'Tài liệu khác'}</div>
+          {/* Documents Card */}
+          <Card 
+            className="rounded-2xl shadow-sm border-gray-100" 
+            title={<span className="font-bold flex items-center gap-2">Hồ sơ minh chứng đính kèm ({app.documents?.length || 0})</span>}
+          >
+            {!app.documents || app.documents.length === 0 ? (
+              <div className="text-xs text-gray-400 text-center py-4">Không có tệp đính kèm nào.</div>
+            ) : (
+              <div className="space-y-4">
+                {app.documents.map((doc, docIdx) => (
+                  <div key={doc._id || docIdx} className="space-y-2">
+                    <div className="text-xs font-bold text-gray-700 uppercase">
+                      Tài liệu #{docIdx + 1}: {doc.documentType || 'SCHOLARSHIP_PROOF'}
                     </div>
-                  </div>
-                </Col>
-              ))}
-            </Row>
-          </Card>
+                    <Row gutter={[16, 16]}>
+                      {doc.files.map((file, fileIdx) => {
+                        const isPdf = file.mimeType?.includes('pdf') || file.storageKey.endsWith('.pdf');
+                        return (
+                          <Col span={12} sm={8} key={file.storageKey || fileIdx}>
+                            <div className="border border-gray-200 rounded-xl p-3 bg-gray-50 hover:border-indigo-300 transition-all flex flex-col justify-between gap-3 h-full">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 text-base">
+                                  {isPdf ? <FilePdfOutlined /> : <FileImageOutlined />}
+                                </div>
+                                <div className="overflow-hidden">
+                                  <div className="text-xs font-semibold text-gray-800 truncate" title={file.storageKey}>
+                                    {file.side}
+                                  </div>
+                                  <div className="text-[10px] text-gray-400 truncate">
+                                    {file.mimeType || 'Tệp đính kèm'}
+                                  </div>
+                                </div>
+                              </div>
 
+                              {file.signedUrl ? (
+                                <a 
+                                  href={file.signedUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="w-full"
+                                >
+                                  <Button 
+                                    size="small" 
+                                    icon={<DownloadOutlined />} 
+                                    className="w-full rounded-lg text-xs font-semibold text-indigo-600 border-indigo-200 bg-white hover:bg-indigo-50"
+                                  >
+                                    Xem tài liệu
+                                  </Button>
+                                </a>
+                              ) : (
+                                <Button size="small" disabled className="w-full rounded-lg text-xs">
+                                  Chưa có URL xem
+                                </Button>
+                              )}
+                            </div>
+                          </Col>
+                        );
+                      })}
+                    </Row>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </Col>
 
-        {/* RIGHT COLUMN - ACTIONS */}
-        <Col xs={24} lg={7}>
+        {/* RIGHT COLUMN - DECISION PANEL */}
+        <Col xs={24} lg={8}>
           <div className="sticky top-6 flex flex-col gap-6">
             <Card className="rounded-2xl shadow-sm border-gray-100 border-t-4 border-t-indigo-600">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-lg"><CheckCircleOutlined /></div>
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-lg">
+                  <CheckCircleOutlined />
+                </div>
                 <div>
                   <Title level={5} className="!m-0 text-gray-900">Thẩm định & Quyết định</Title>
+                  <Text className="text-xs text-gray-500">Quyết định phê duyệt hồ sơ ứng tuyển</Text>
                 </div>
               </div>
 
-              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">BẢNG ĐỐI CHIẾU TIÊU CHÍ (4/4)</div>
-              <div className="flex flex-col gap-3 bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4">
-                <div className="flex gap-2">
-                  <CheckCircleOutlined className="text-emerald-500 mt-1" />
-                  <span className="text-sm text-gray-700 font-medium">Độ tuổi & Khối lớp hợp lệ ({app.grade})</span>
+              {/* Status info if already processed */}
+              {!isReviewable && (
+                <div className="mb-4">
+                  <Alert
+                    type={app.status === 'APPROVED' ? 'success' : app.status === 'REJECTED' ? 'error' : 'warning'}
+                    showIcon
+                    message={`Hồ sơ ở trạng thái: ${SCHOLARSHIP_APP_STATUS_LABELS[app.status]}`}
+                    description={
+                      app.reviewNote ? (
+                        <div className="mt-1 text-xs">
+                          <strong>Ghi chú:</strong> {app.reviewNote}
+                        </div>
+                      ) : null
+                    }
+                    className="rounded-xl text-xs"
+                  />
                 </div>
-                <div className="flex gap-2">
-                  <CheckCircleOutlined className="text-emerald-500 mt-1" />
-                  <span className="text-sm text-gray-700 font-medium">Thành tích học tập đạt chuẩn</span>
-                </div>
-                <div className="flex gap-2">
-                  <CheckCircleOutlined className="text-emerald-500 mt-1" />
-                  <span className="text-sm text-gray-700 font-medium">Giấy tờ định danh & học bạ đầy đủ, rõ nét</span>
-                </div>
-                <div className="flex gap-2">
-                  <CheckCircleOutlined className="text-emerald-500 mt-1" />
-                  <span className="text-sm text-gray-700 font-medium">Quỹ chiến dịch còn đủ ngân sách</span>
-                </div>
-              </div>
+              )}
 
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="text-emerald-700 text-xs font-bold uppercase">KẾT LUẬN HỆ THỐNG</div>
-                  <CheckCircleOutlined className="text-emerald-600" />
+              {/* Action buttons */}
+              {isReviewable && (
+                <div className="flex flex-col gap-3">
+                  <Button 
+                    type="primary" 
+                    block 
+                    className="rounded-xl h-[48px] font-bold bg-emerald-600 hover:bg-emerald-700 shadow-xs" 
+                    onClick={() => setIsApproveModalOpen(true)}
+                  >
+                    Phê duyệt cấp học bổng
+                  </Button>
+                  <Button 
+                    block 
+                    className="rounded-xl h-[44px] font-semibold bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100" 
+                    onClick={() => setIsRequestInfoModalOpen(true)}
+                  >
+                    Yêu cầu bổ sung hồ sơ
+                  </Button>
+                  <Button 
+                    block 
+                    danger 
+                    className="rounded-xl h-[44px] font-semibold bg-rose-50 hover:bg-rose-100" 
+                    onClick={() => setIsRejectModalOpen(true)}
+                  >
+                    Từ chối hồ sơ
+                  </Button>
                 </div>
-                <div className="font-bold text-emerald-800 text-lg leading-tight mb-2">ĐỦ ĐIỀU KIỆN CẤP HỌC BỔNG</div>
-                <div className="flex justify-between items-center pt-2 border-t border-emerald-200/50">
-                  <span className="text-emerald-700 text-xs font-medium">Mức giải ngân tự động:</span>
-                  <span className="font-bold text-emerald-700">{app.awardAmount.toLocaleString('vi-VN')}đ</span>
+              )}
+
+              {app.status === 'NEED_MORE_INFORMATION' && (
+                <div className="flex flex-col gap-3">
+                  <Text className="text-xs text-gray-500">
+                    Đang chờ học sinh bổ sung tài liệu. Bạn vẫn có thể từ chối hồ sơ nếu cần:
+                  </Text>
+                  <Button 
+                    block 
+                    danger 
+                    className="rounded-xl h-[44px] font-semibold bg-rose-50 hover:bg-rose-100" 
+                    onClick={() => setIsRejectModalOpen(true)}
+                  >
+                    Từ chối hồ sơ
+                  </Button>
                 </div>
-              </div>
+              )}
 
-              <Form layout="vertical">
-                <Form.Item label={<span className="font-bold text-gray-700">Ghi chú của Thẩm định viên</span>}>
-                  <Input.TextArea rows={4} className="rounded-xl bg-gray-50 text-sm" placeholder="Ghi chú nội bộ..." defaultValue="Hồ sơ xác minh đạt chuẩn, hoàn cảnh gia đình đúng thực tế. Đề xuất phê duyệt cấp học bổng." />
-                </Form.Item>
-              </Form>
-
-              <div className="flex flex-col gap-3 mt-2">
-                <Button type="primary" block className="rounded-xl h-[50px] font-bold bg-emerald-600 hover:bg-emerald-700" onClick={() => setIsApproveModalOpen(true)}>
-                  Phê duyệt cấp học bổng
-                </Button>
-                <Button block className="rounded-xl h-[44px] font-semibold bg-indigo-50 text-indigo-600 border-indigo-200" onClick={() => setIsRequestInfoModalOpen(true)}>Yêu cầu bổ sung hồ sơ</Button>
-                <Button block danger className="rounded-xl h-[44px] font-semibold bg-red-50" onClick={() => setIsRejectModalOpen(true)}>Từ chối hồ sơ</Button>
-              </div>
+              {app.status === 'APPROVED' && app.scholarship && (
+                <div className="mt-2 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-xs text-emerald-800 space-y-1">
+                  <div className="font-bold">Đã sinh bản ghi Học bổng:</div>
+                  <div>Mã: {app.scholarship.id}</div>
+                  <div>Hạn dùng: {new Date(app.scholarship.expiresAt).toLocaleDateString('vi-VN')}</div>
+                  <div>Số dư: {formatVND(app.scholarship.remainingAmount)}</div>
+                </div>
+              )}
             </Card>
           </div>
         </Col>
       </Row>
 
-      {/* MODALS */}
+      {/* APPROVE MODAL */}
       <Modal
-        title="Xác nhận phê duyệt hồ sơ"
+        title="Xác nhận phê duyệt cấp học bổng"
         open={isApproveModalOpen}
         onCancel={() => setIsApproveModalOpen(false)}
-        onOk={handleApprove}
-        okText="Phê duyệt"
-        cancelText="Hủy"
-        okButtonProps={{ className: 'bg-emerald-600' }}
+        footer={null}
+        destroyOnClose
       >
-        <div className="py-4">
-          <Paragraph>
-            Bạn xác nhận phê duyệt cấp học bổng cho học sinh <strong>{app.studentName}</strong>?
+        <div className="py-2 space-y-4">
+          <Paragraph className="text-sm text-gray-700">
+            Bạn xác nhận phê duyệt hồ sơ học bổng cho học sinh <strong>{studentDisplayName}</strong>?
           </Paragraph>
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 my-4 flex flex-col gap-2">
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs space-y-2">
             <div className="flex justify-between">
-              <span className="text-gray-600">Chiến dịch:</span>
-              <span className="font-medium text-gray-900">{app.campaignTitle}</span>
+              <span className="text-gray-500">Chiến dịch:</span>
+              <span className="font-semibold text-gray-900">{app.campaignTitle || app.campaign?.title}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Mức hỗ trợ quy định:</span>
-              <span className="font-bold text-emerald-600">{app.awardAmount.toLocaleString('vi-VN')}đ</span>
+              <span className="text-gray-500">Định mức cấp tự động:</span>
+              <span className="font-bold text-emerald-600 text-sm">{formatVND(app.awardAmountPerStudent)}</span>
             </div>
           </div>
-          <Paragraph className="text-gray-500 text-sm">
-            Sau khi duyệt, hệ thống sẽ tự động cập nhật ngân sách chiến dịch và gửi thông báo tới học sinh.
-          </Paragraph>
+
+          <Form form={approveForm} layout="vertical">
+            <Form.Item name="reviewNote" label={<span className="text-xs font-bold text-gray-700">Ghi chú phê duyệt (tùy chọn)</span>}>
+              <TextArea rows={3} placeholder="Nhập ghi chú khen thưởng hoặc nhắn gửi tới học sinh..." className="rounded-xl text-sm" />
+            </Form.Item>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <Button onClick={() => setIsApproveModalOpen(false)}>Hủy</Button>
+              <Button 
+                type="primary" 
+                onClick={handleApproveSubmit} 
+                loading={approveMutation.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 font-semibold"
+              >
+                Xác nhận phê duyệt
+              </Button>
+            </div>
+          </Form>
         </div>
       </Modal>
 
+      {/* REQUEST INFO MODAL */}
       <Modal
-        title="Yêu cầu bổ sung hồ sơ"
+        title="Yêu cầu bổ sung hồ sơ học bổng"
         open={isRequestInfoModalOpen}
         onCancel={() => setIsRequestInfoModalOpen(false)}
-        onOk={handleRequestInfo}
-        okText="Gửi yêu cầu"
-        cancelText="Hủy"
-        okButtonProps={{ className: 'bg-indigo-600' }}
+        footer={null}
+        destroyOnClose
       >
-        <div className="mb-4 text-gray-600">Học sinh cần bổ sung hoặc làm rõ các thông tin sau:</div>
-        <Checkbox.Group className="flex flex-col gap-3 mb-4 w-full">
-          <Checkbox value="cccd">Căn cước công dân bị mờ / không hợp lệ</Checkbox>
-          <Checkbox value="transcript">Học bạ thiếu dấu mộc của nhà trường</Checkbox>
-          <Checkbox value="poverty">Giấy xác nhận hộ nghèo/cận nghèo quá hạn</Checkbox>
-          <Checkbox value="other">Tài liệu khác</Checkbox>
-        </Checkbox.Group>
-        <div className="font-semibold mb-2">Ghi chú gửi học sinh</div>
-        <Input.TextArea rows={4} placeholder="Nhập yêu cầu chi tiết..." />
+        <div className="py-2 space-y-4">
+          <Paragraph className="text-xs text-gray-600">
+            Học sinh sẽ nhận được thông báo kèm ghi chú yêu cầu này để bổ sung tài liệu và gửi lại hồ sơ.
+          </Paragraph>
+
+          <Form form={requestInfoForm} layout="vertical">
+            <Form.Item 
+              name="reviewNote" 
+              label={<span className="text-xs font-bold text-gray-700">Nội dung yêu cầu bổ sung <span className="text-rose-500">*</span></span>}
+              rules={[{ required: true, message: 'Vui lòng nhập chi tiết thông tin hoặc giấy tờ cần bổ sung' }]}
+            >
+              <TextArea rows={4} placeholder="Ví dụ: Căn cước công dân bị mờ; vui lòng bổ sung giấy xác nhận hộ nghèo có dấu mộc mới nhất..." className="rounded-xl text-sm" />
+            </Form.Item>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <Button onClick={() => setIsRequestInfoModalOpen(false)}>Hủy</Button>
+              <Button 
+                type="primary" 
+                onClick={handleRequestInfoSubmit} 
+                loading={requestInfoMutation.isPending}
+                className="bg-indigo-600 hover:bg-indigo-700 font-semibold"
+              >
+                Gửi yêu cầu
+              </Button>
+            </div>
+          </Form>
+        </div>
       </Modal>
 
+      {/* REJECT MODAL */}
       <Modal
-        title="Từ chối hồ sơ"
+        title="Từ chối hồ sơ học bổng"
         open={isRejectModalOpen}
         onCancel={() => setIsRejectModalOpen(false)}
-        onOk={handleReject}
-        okText="Từ chối"
-        cancelText="Hủy"
-        okButtonProps={{ danger: true }}
+        footer={null}
+        destroyOnClose
       >
-        <div className="py-4 text-gray-600">
-          <Paragraph>Vui lòng chọn lý do từ chối hồ sơ này (bắt buộc):</Paragraph>
-          <Select 
-            className="w-full mb-4" 
-            placeholder="Chọn lý do từ chối..."
-            options={[
-              { value: 'NOT_ELIGIBLE', label: 'Không đáp ứng tiêu chí chương trình' },
-              { value: 'FAKE_DOC', label: 'Giấy tờ không hợp lệ / có dấu hiệu giả mạo' },
-              { value: 'FUND_EXHAUSTED', label: 'Quỹ học bổng đã hết suất' },
-              { value: 'OTHER', label: 'Lý do khác' }
-            ]}
-          />
-          <div className="font-semibold mb-2">Chi tiết lý do</div>
-          <Input.TextArea rows={4} placeholder="Nhập lý do chi tiết..." />
+        <div className="py-2 space-y-4">
+          <Paragraph className="text-xs text-gray-600">
+            Vui lòng nhập lý do từ chối để học sinh nắm rõ thông tin.
+          </Paragraph>
+
+          <Form form={rejectForm} layout="vertical">
+            <Form.Item 
+              name="reviewNote" 
+              label={<span className="text-xs font-bold text-gray-700">Lý do từ chối</span>}
+            >
+              <TextArea rows={4} placeholder="Ví dụ: Hồ sơ chưa đạt tiêu chí hoàn cảnh khó khăn của chiến dịch..." className="rounded-xl text-sm" />
+            </Form.Item>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <Button onClick={() => setIsRejectModalOpen(false)}>Hủy</Button>
+              <Button 
+                type="primary" 
+                danger
+                onClick={handleRejectSubmit} 
+                loading={rejectMutation.isPending}
+                className="font-semibold"
+              >
+                Xác nhận từ chối
+              </Button>
+            </div>
+          </Form>
         </div>
       </Modal>
     </div>

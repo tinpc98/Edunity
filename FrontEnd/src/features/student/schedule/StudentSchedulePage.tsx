@@ -331,8 +331,8 @@ export default function StudentSchedulePage() {
                         </h4>
                       </div>
 
-                      {/* BADGE */}
-                      <div>
+                      {/* BADGE & ACTION */}
+                      <div className="flex items-center gap-2">
                         {isInProgress && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200/60 px-2 py-0.5 rounded-md">
                             <span className="h-1.5 w-1.5 rounded-full bg-rose-600 animate-pulse" />
@@ -354,10 +354,21 @@ export default function StudentSchedulePage() {
                             ĐÃ HỦY
                           </span>
                         )}
+
+                        {(isInProgress || isScheduled) && (
+                          <Link 
+                            to={`/classroom/${session.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs"
+                          >
+                            <span>Vào lớp</span>
+                          </Link>
+                        )}
                       </div>
                     </div>
                   );
                 })}
+
               </div>
             </div>
           ))}

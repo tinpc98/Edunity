@@ -5,6 +5,7 @@ export const ROUTES = {
   ENROLLMENT: "/enrollment/:classId",
   CHECKOUT: "/checkout/:enrollmentId",
   PAYMENT_SUCCESS: "/checkout/:enrollmentId/success",
+  CLASSROOM: "/classroom/:sessionId",
   COURSES: {
     LIST: "/courses",
     DETAIL: "/courses/:courseId",
@@ -17,6 +18,9 @@ export const ROUTES = {
     REGISTER: "/register",
     TEACHER_REGISTER: "/register/teacher",
   },
+  NOTIFICATIONS: "/notifications",
+  MESSAGES: "/messages",
+  REPORTS: "/reports",
   STUDENT: {
     HOME: "/student",
     SCHEDULE: "/student/schedule",
@@ -24,6 +28,10 @@ export const ROUTES = {
     ENROLLMENTS: "/student/enrollments",
     PAYMENTS: "/student/payments",
     CLASS_SESSIONS: "/student/classes/:classId",
+    SCHOLARSHIPS: "/student/scholarships",
+    SCHOLARSHIP_APPLICATIONS: "/student/scholarships/applications",
+    MESSAGES: "/messages",
+    REPORTS: "/reports",
   },
   TEACHER: {
     HOME: "/teacher",
@@ -34,6 +42,8 @@ export const ROUTES = {
     COURSE_PROPOSALS: "/teacher/course-proposals",
     SCHEDULE: "/teacher/schedule",
     REVENUE: "/teacher/revenue",
+    REVIEWS: "/teacher/reviews",
+    MESSAGES: "/messages",
   },
   ADMIN: {
     HOME: "/admin",
@@ -50,6 +60,8 @@ export const ROUTES = {
     SCHOLARSHIP_APPLICATION_REVIEW: "/admin/scholarship-applications/:applicationId",
     PAYMENTS: "/admin/payments",
     TRANSACTIONS: "/admin/transactions",
+    REPORTS: "/admin/reports",
+    REPORT_DETAIL: "/admin/reports/:reportId",
   },
   SPONSOR: {
     HOME: "/sponsor",

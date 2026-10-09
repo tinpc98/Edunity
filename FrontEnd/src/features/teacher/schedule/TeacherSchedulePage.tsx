@@ -7,8 +7,10 @@ import {
   CalendarOutlined, 
   ClockCircleOutlined, 
   BookOutlined, 
-  ArrowRightOutlined
+  ArrowRightOutlined,
+  VideoCameraOutlined
 } from '@ant-design/icons';
+
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -310,7 +312,19 @@ export default function TeacherSchedulePage() {
                     </div>
                   </div>
 
-                  <div className="self-end md:self-center shrink-0">
+                  <div className="self-end md:self-center shrink-0 flex items-center gap-2">
+                    {(item.status === 'SCHEDULED' || item.status === 'IN_PROGRESS') && (
+                      <Link to={`/classroom/${item.sessionId}`}>
+                        <Button 
+                          type="primary" 
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-xs flex items-center gap-1.5"
+                        >
+                          <VideoCameraOutlined />
+                          <span>{item.status === 'IN_PROGRESS' ? 'Vào lớp (LIVE)' : 'Vào lớp'}</span>
+                        </Button>
+                      </Link>
+                    )}
+
                     <Button 
                       type="default" 
                       onClick={() => navigate(ROUTES.TEACHER.CLASS_DETAIL.replace(':classId', item.classId))}
@@ -320,6 +334,7 @@ export default function TeacherSchedulePage() {
                       <ArrowRightOutlined />
                     </Button>
                   </div>
+
                 </div>
               </Card>
             );

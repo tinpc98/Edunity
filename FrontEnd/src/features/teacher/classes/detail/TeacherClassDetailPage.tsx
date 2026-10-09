@@ -15,8 +15,10 @@ import {
   DeleteOutlined,
   StopOutlined,
   PoweroffOutlined,
-  UserOutlined
+  UserOutlined,
+  VideoCameraOutlined
 } from '@ant-design/icons';
+
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -580,6 +582,20 @@ export default function TeacherClassDetailPage() {
 
                   {/* Actions per session */}
                   <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                    {/* Join Classroom button if SCHEDULED or IN_PROGRESS */}
+                    {(isScheduled || isInProgress) && (
+                      <Link to={`/classroom/${session.id}`}>
+                        <Button
+                          type="primary"
+                          size="small"
+                          icon={<VideoCameraOutlined />}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold"
+                        >
+                          {isInProgress ? "Vào lớp (LIVE)" : "Vào lớp"}
+                        </Button>
+                      </Link>
+                    )}
+
                     {/* Attendance button if IN_PROGRESS or COMPLETED */}
                     {(isInProgress || isCompleted) && (
                       <Button
@@ -591,6 +607,7 @@ export default function TeacherClassDetailPage() {
                         Điểm danh
                       </Button>
                     )}
+
 
                     {/* End session button if IN_PROGRESS */}
                     {isInProgress && (

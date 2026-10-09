@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Button, Progress, Tag, Alert, Modal, Popconfirm, message } from "antd";
+import { Button, Progress, Tag, Alert, Modal, Popconfirm, message, Radio, Select } from "antd";
 import {
   ClockCircleOutlined,
   CheckCircleOutlined,
@@ -11,11 +11,13 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
 import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
+import { scholarshipService, scholarshipKeys } from "../../../services/scholarship.service";
 import { classKeys } from "../../../services/class.service";
 import { sessionKeys } from "../../../services/session.service";
 import { useAuthStore } from "../../../stores/auth.store";
 import { ROUTES } from "../../../routes/routePaths";
 import type { Enrollment } from "../../../types/enrollment";
+import { formatVND } from "../../../types/payment";
 
 interface ClassRegistrationCardProps {
   item: ClassDiscoveryItem;
@@ -92,36 +94,94 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
     }
   );
 
-  // 4. Create Enrollment Mutation
-  const createEnrollMutation = useMutation({
-    mutationFn: () => enrollmentService.createEnrollment(item.id),
-    onSuccess: (newEnrollment) => {
-      setConfirmModalOpen(false);
-      // Invalidate all affected queries
+  // 4. Query student's active scholarships
+  const { data: myScholarships = [] } = useQuery({
+    queryKey: scholarshipKeys.myList(),
+    queryFn: () => scholarshipService.getMyScholarships(),
+    enabled: isStudent,
+  });
+
+  const usableScholarships = myScholarships.filter((s) => s.isUsable);
+  const [paymentChoice, setPaymentChoice] = useState<"SCHOLARSHIP" | "DIRECT">("DIRECT");
+  const [selectedScholarshipId, setSelectedScholarshipId] = useState<string>("");
+  const [isProcessingEnrollment, setIsProcessingEnrollment] = useState(false);
+
+  useEffect(() => {
+    if (usableScholarships.length > 0) {
+      setPaymentChoice("SCHOLARSHIP");
+      if (!selectedScholarshipId) {
+        setSelectedScholarshipId(usableScholarships[0].id);
+      }
+    } else {
+      setPaymentChoice("DIRECT");
+    }
+  }, [usableScholarships.length]);
+
+  const selectedScholarship = usableScholarships.find((s) => s.id === selectedScholarshipId) || usableScholarships[0];
+  const appliedScholarshipAmount = selectedScholarship ? Math.min(selectedScholarship.remainingAmount, item.price) : 0;
+  const copayAmount = Math.max(0, item.price - appliedScholarshipAmount);
+
+  // 5. Unified enrollment handler
+  const handleConfirmEnrollment = async () => {
+    try {
+      setIsProcessingEnrollment(true);
+      const newEnrollment = await enrollmentService.createEnrollment(item.id);
+
       queryClient.invalidateQueries({ queryKey: enrollmentKeys.availability(item.id) });
       queryClient.invalidateQueries({ queryKey: classKeys.availability(item.id) });
       queryClient.invalidateQueries({ queryKey: enrollmentKeys.myList(1, 100) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.all });
 
-      setSuccessModalData(newEnrollment);
-
-      if (newEnrollment.enrollmentStatus === "CONFIRMED") {
+      // If free class: confirmed immediately
+      if (isFree || newEnrollment.enrollmentStatus === "CONFIRMED") {
+        setConfirmModalOpen(false);
+        setSuccessModalData(newEnrollment);
         message.success("Đăng ký lớp học thành công! Bạn có thể vào học ngay.");
-      } else {
-        message.success("Giữ chỗ thành công! Chỗ ngồi được giữ trong 15 phút.");
+        return;
       }
-    },
-    onError: (err: any) => {
+
+      // If user chose scholarship
+      if (paymentChoice === "SCHOLARSHIP" && selectedScholarship) {
+        const payRes = await scholarshipService.payWithScholarship(
+          newEnrollment.id,
+          selectedScholarship.id
+        );
+
+        setConfirmModalOpen(false);
+        queryClient.invalidateQueries({ queryKey: scholarshipKeys.all });
+        queryClient.invalidateQueries({ queryKey: enrollmentKeys.all });
+
+        if (payRes.enrollmentStatus === "CONFIRMED") {
+          message.success("Học bổng đã chi trả toàn bộ học phí! Đăng ký hoàn tất.");
+          setSuccessModalData({
+            ...newEnrollment,
+            enrollmentStatus: "CONFIRMED",
+            paymentSource: "SCHOLARSHIP",
+          });
+        } else if (payRes.paymentSource === "MIXED") {
+          message.info(
+            `Đã áp dụng học bổng ${formatVND(payRes.scholarshipAmount)}. Vui lòng thanh toán phần đồng chi trả.`
+          );
+          navigate(`/checkout/${newEnrollment.id}`);
+        }
+        return;
+      }
+
+      // Direct payment
       setConfirmModalOpen(false);
-      const msg = err.message || "Không thể thực hiện đăng ký.";
-      message.error(msg);
-      // Refetch availability in case class was filled by another student
+      message.success("Giữ chỗ thành công! Chỗ ngồi được giữ trong 15 phút.");
+      navigate(`/checkout/${newEnrollment.id}`);
+    } catch (err: any) {
+      setConfirmModalOpen(false);
+      message.error(err.message || "Không thể thực hiện đăng ký.");
       refetchAvailability();
       refetchEnrollments();
-    },
-  });
+    } finally {
+      setIsProcessingEnrollment(false);
+    }
+  };
 
-  // 5. Cancel Enrollment Mutation
+  // 6. Cancel Enrollment Mutation
   const cancelEnrollMutation = useMutation({
     mutationFn: (enrollmentId: string) => enrollmentService.cancelEnrollment(enrollmentId),
     onSuccess: () => {
@@ -299,8 +359,8 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
         <Button
           type="primary"
           size="large"
-          loading={createEnrollMutation.isPending}
-          disabled={createEnrollMutation.isPending}
+          loading={isProcessingEnrollment}
+          disabled={isProcessingEnrollment}
           onClick={() => setConfirmModalOpen(true)}
           className={`font-bold text-sm h-12 rounded-xl w-full border-none shadow-xs ${
             isFree
@@ -360,7 +420,7 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
       {/* Confirm Enrollment Modal */}
       <Modal
         open={confirmModalOpen}
-        onCancel={() => !createEnrollMutation.isPending && setConfirmModalOpen(false)}
+        onCancel={() => !isProcessingEnrollment && setConfirmModalOpen(false)}
         footer={null}
         centered
         width={460}
@@ -398,12 +458,104 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
             <p className="text-xs text-slate-600 text-center">
               Lớp học này hoàn toàn miễn phí. Khi xác nhận, bạn sẽ được ghi danh chính thức ngay lập tức.
             </p>
+          ) : usableScholarships.length > 0 ? (
+            <div className="space-y-3 pt-1">
+              <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Phương thức đăng ký & thanh toán:
+              </div>
+              <Radio.Group
+                value={paymentChoice}
+                onChange={(e) => setPaymentChoice(e.target.value)}
+                className="w-full flex flex-col gap-2"
+              >
+                <div
+                  className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                    paymentChoice === "SCHOLARSHIP"
+                      ? "border-indigo-500 bg-indigo-50/40"
+                      : "border-slate-200 bg-white"
+                  }`}
+                  onClick={() => setPaymentChoice("SCHOLARSHIP")}
+                >
+                  <Radio value="SCHOLARSHIP" className="font-semibold text-xs text-indigo-900">
+                    Sử dụng học bổng ({usableScholarships.length} học bổng khả dụng)
+                  </Radio>
+
+                  {paymentChoice === "SCHOLARSHIP" && (
+                    <div className="mt-3 pl-6 space-y-2 text-xs">
+                      {usableScholarships.length > 1 && (
+                        <div>
+                          <label className="text-[11px] text-slate-500 block mb-1">
+                            Chọn học bổng áp dụng:
+                          </label>
+                          <Select
+                            className="w-full"
+                            value={selectedScholarshipId}
+                            onChange={(val) => setSelectedScholarshipId(val)}
+                            options={usableScholarships.map((s) => ({
+                              value: s.id,
+                              label: `${s.campaignTitle} (Dư: ${formatVND(s.remainingAmount)})`,
+                            }))}
+                          />
+                        </div>
+                      )}
+
+                      {selectedScholarship && (
+                        <div className="p-3 bg-white rounded-lg border border-indigo-100 space-y-1.5">
+                          <div className="flex justify-between text-slate-600">
+                            <span>Số dư học bổng:</span>
+                            <span className="font-semibold text-slate-800">
+                              {formatVND(selectedScholarship.remainingAmount)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-emerald-600">
+                            <span>Học bổng khấu trừ:</span>
+                            <span className="font-bold">
+                              - {formatVND(appliedScholarshipAmount)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between pt-1 border-t border-slate-100">
+                            <span className="font-bold text-slate-800">Cần thanh toán (Co-pay):</span>
+                            <span className={`font-black text-sm ${copayAmount > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                              {formatVND(copayAmount)}
+                            </span>
+                          </div>
+                          <div className="pt-1">
+                            {copayAmount === 0 ? (
+                              <Tag color="success" className="font-bold border-none text-[10px]">
+                                TÀI TRỢ 100% (FULL SCHOLARSHIP) - MIỄN HỌC PHÍ
+                              </Tag>
+                            ) : (
+                              <Tag color="warning" className="font-bold border-none text-[10px]">
+                                ĐỒNG CHI TRẢ (MIXED CO-PAY) - THANH TOÁN {formatVND(copayAmount)}
+                              </Tag>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                    paymentChoice === "DIRECT"
+                      ? "border-indigo-500 bg-indigo-50/40"
+                      : "border-slate-200 bg-white"
+                  }`}
+                  onClick={() => setPaymentChoice("DIRECT")}
+                >
+                  <Radio value="DIRECT" className="font-semibold text-xs text-slate-800">
+                    Thanh toán trực tiếp toàn bộ học phí ({item.formattedPrice})
+                  </Radio>
+                </div>
+              </Radio.Group>
+            </div>
           ) : (
             <Alert
               type="info"
               showIcon
               message="Chính sách giữ chỗ (Seat Hold)"
-              description="Sau khi xác nhận, hệ thống sẽ tạm giữ chỗ cho bạn trong 15 phút. Luồng thanh toán chính thức sẽ được kích hoạt tại Phase 7."
+              description="Sau khi xác nhận, hệ thống sẽ tạm giữ chỗ cho bạn trong 15 phút để bạn tiến hành thanh toán học phí."
               className="text-xs rounded-xl"
             />
           )}
@@ -411,21 +563,29 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
           <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
             <Button
               onClick={() => setConfirmModalOpen(false)}
-              disabled={createEnrollMutation.isPending}
+              disabled={isProcessingEnrollment}
               className="text-xs font-semibold h-9 px-4 rounded-lg"
             >
               Hủy
             </Button>
             <Button
               type="primary"
-              loading={createEnrollMutation.isPending}
-              disabled={createEnrollMutation.isPending}
-              onClick={() => createEnrollMutation.mutate()}
+              loading={isProcessingEnrollment}
+              disabled={isProcessingEnrollment}
+              onClick={handleConfirmEnrollment}
               className={`text-xs font-semibold h-9 px-5 rounded-lg border-none ${
-                isFree ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"
+                isFree || (paymentChoice === "SCHOLARSHIP" && copayAmount === 0)
+                  ? "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-indigo-600 hover:bg-indigo-700"
               }`}
             >
-              {isFree ? "Xác nhận đăng ký ngay" : "Xác nhận giữ chỗ"}
+              {isFree
+                ? "Xác nhận đăng ký ngay"
+                : paymentChoice === "SCHOLARSHIP"
+                ? copayAmount === 0
+                  ? "Xác nhận & Dùng học bổng 100%"
+                  : "Xác nhận & Thanh toán phần thiếu"
+                : "Xác nhận giữ chỗ"}
             </Button>
           </div>
         </div>

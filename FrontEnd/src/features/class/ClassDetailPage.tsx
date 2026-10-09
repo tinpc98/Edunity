@@ -6,6 +6,7 @@ import ClassDetailHeader from "./components/ClassDetailHeader";
 import ClassSessionsTab from "./components/ClassSessionsTab";
 import ClassTeacherTab from "./components/ClassTeacherTab";
 import ClassRegistrationCard from "./components/ClassRegistrationCard";
+import { ClassReviewsTab } from "./components/ClassReviewsTab";
 
 export default function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -62,6 +63,21 @@ export default function ClassDetailPage() {
         </span>
       ),
       children: <ClassTeacherTab item={item} />,
+    },
+    {
+      key: "reviews",
+      label: (
+        <span className="text-sm font-semibold px-1">
+          Đánh giá ({item.ratingCount || 0})
+        </span>
+      ),
+      children: (
+        <ClassReviewsTab
+          classId={item.id}
+          className={item.className}
+          teacherId={item.teacherId}
+        />
+      ),
     },
   ];
 

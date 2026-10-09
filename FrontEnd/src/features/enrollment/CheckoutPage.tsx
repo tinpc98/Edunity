@@ -13,6 +13,7 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   BarcodeOutlined,
+  GiftOutlined,
 } from "@ant-design/icons";
 import { enrollmentService, enrollmentKeys } from "../../services/enrollment.service";
 import { paymentService, paymentKeys } from "../../services/payment.service";
@@ -351,12 +352,37 @@ export default function CheckoutPage() {
               <span className="font-semibold text-slate-800">{formattedTuition}</span>
             </div>
 
+            {paymentData && paymentData.amount < enrollment.tuitionAmount && (
+              <div className="flex items-center justify-between text-emerald-600">
+                <span className="flex items-center gap-1.5 font-medium text-xs">
+                  <GiftOutlined /> Học bổng tài trợ:
+                </span>
+                <span className="font-bold">
+                  - {(enrollment.tuitionAmount - paymentData.amount).toLocaleString("vi-VN")} đ
+                </span>
+              </div>
+            )}
+
             <div className="h-px bg-slate-100 my-2" />
 
             <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-900 text-base">Tổng cần thanh toán</span>
-              <span className="font-black text-2xl text-indigo-600">{formattedTuition}</span>
+              <span className="font-bold text-slate-900 text-base">
+                {paymentData && paymentData.amount < enrollment.tuitionAmount
+                  ? "Học viên đồng chi trả (Co-pay):"
+                  : "Tổng cần thanh toán:"}
+              </span>
+              <span className="font-black text-2xl text-indigo-600">
+                {(paymentData ? paymentData.amount : enrollment.tuitionAmount).toLocaleString("vi-VN")} đ
+              </span>
             </div>
+
+            {paymentData && paymentData.amount < enrollment.tuitionAmount && (
+              <div className="text-right">
+                <Tag color="warning" className="text-[10px] font-bold border-none">
+                  ĐỒNG CHI TRẢ (MIXED PAYMENT)
+                </Tag>
+              </div>
+            )}
           </div>
 
           {/* Seat Hold Countdown */}

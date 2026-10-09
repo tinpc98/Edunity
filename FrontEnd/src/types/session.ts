@@ -113,6 +113,19 @@ export interface SessionAttendanceItem {
   leftAt?: string;
 }
 
+export type VideoProviderType = 'LIVEKIT' | 'EDUNITY_DEV';
+export type ClassroomRole = 'HOST' | 'PARTICIPANT';
+
+export interface JoinSessionResponse {
+  sessionId: string;
+  roomId: string;
+  provider: VideoProviderType;
+  serverUrl: string | null;
+  accessToken: string;
+  role: ClassroomRole;
+  expiresAt: string;
+}
+
 /**
  * Derived FE-only read model for Schedule presentation.
  * Notice: This is NOT a persisted entity in Backend.
@@ -143,3 +156,4 @@ export const SESSION_STATUS_COLORS: Record<SessionStatus, string> = {
   COMPLETED: 'green',
   CANCELLED: 'default',
 };
+
