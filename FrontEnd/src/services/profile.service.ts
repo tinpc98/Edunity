@@ -1,85 +1,43 @@
-import type { StudentProfile, UpdateStudentProfilePayload } from "../types/profile";
-import type { AuthUser } from "../types/auth";
-
-const PROFILE_STORAGE_KEY = "edunity_mock_profile";
-
-function getStoredProfile(): StudentProfile | null {
-  try {
-    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveStoredProfile(profile: StudentProfile): void {
-  try {
-    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-  } catch (error) {
-    console.error("Failed to save profile to localStorage:", error);
-  }
-}
+import { apiClient } from "../api/apiClient";
+import type { 
+  Profile, 
+  UpdateProfilePayload,
+  ChangePasswordPayload 
+} from "../types/profile";
 
 export class ProfileService {
-  async getStudentProfile(user: AuthUser): Promise<StudentProfile> {
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const stored = getStoredProfile();
-    if (stored && stored.id === user.userId) {
-      return stored;
-    }
-
-    // Default mock profile based on current auth user
-    const defaultProfile: StudentProfile = {
-      id: user.userId,
-      fullName: user.fullName,
-      email: user.email,
-      avatarUrl: user.avatarUrl,
-      updatedAt: new Date().toISOString(),
-    };
-    saveStoredProfile(defaultProfile);
-    return defaultProfile;
+  async getMyProfile(): Promise<Profile> {
+    return apiClient<Profile>("/me/profile", { method: "GET" });
   }
 
-  async updateStudentProfile(
-    userId: string,
-    payload: UpdateStudentProfilePayload
-  ): Promise<StudentProfile> {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    const stored = getStoredProfile();
-    if (!stored || stored.id !== userId) {
-      throw new Error("Profile not found");
-    }
-
-    const updatedProfile: StudentProfile = {
-      ...stored,
-      ...payload,
-      updatedAt: new Date().toISOString(),
-    };
-    saveStoredProfile(updatedProfile);
-    return updatedProfile;
+  async updateMyProfile(payload: UpdateProfilePayload): Promise<Profile> {
+    return apiClient<Profile>("/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
   }
 
-  async updateAvatar(userId: string, file: File): Promise<{ avatarUrl: string }> {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    const stored = getStoredProfile();
-    if (!stored || stored.id !== userId) {
-      throw new Error("Profile not found");
-    }
-
-    // Convert file to object URL to mock upload behavior
-    const avatarUrl = URL.createObjectURL(file);
+  async updateAvatar(file: File): Promise<{ avatarUrl: string }> {
+    const formData = new FormData();
+    formData.append("file", file);
     
-    const updatedProfile: StudentProfile = {
-      ...stored,
-      avatarUrl,
-      updatedAt: new Date().toISOString(),
-    };
-    saveStoredProfile(updatedProfile);
-    return { avatarUrl };
+    // Note: apiClient uses Content-Type application/json by default.
+    // We need to override it for multipart/form-data. Axios usually handles this if we pass FormData,
+    // but let's be explicit and let Axios remove Content-Type to set boundary correctly.
+    return apiClient<{ avatarUrl: string }>("/me/avatar", {
+      method: "POST",
+      body: formData,
+      headers: {
+        // Omitting Content-Type allows fetch to set it with the boundary for FormData
+      }
+    });
+  }
+
+  async changePassword(payload: ChangePasswordPayload): Promise<{ changed: boolean }> {
+    return apiClient<{ changed: boolean }>("/me/password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   }
 }
 

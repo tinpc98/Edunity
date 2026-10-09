@@ -10,7 +10,7 @@ import {
   ArrowRightOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "../../../stores/auth.store";
-import { enrollmentService } from "../../../services/enrollment.service";
+import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
 import { classDiscoveryService } from "../../../services/classDiscovery.service";
 import { ROUTES } from "../../../routes/routePaths";
 import type { ClassDiscoveryItem, SessionEntity } from "../../../types/classDiscovery";
@@ -62,15 +62,16 @@ export default function StudentClassSessionsPage() {
   const [selectedSession, setSelectedSession] = useState<SessionWithNumber | null>(null);
 
   // 1. Fetch authenticated student enrollments to verify access
-  const { data: enrollments, isLoading: isLoadingEnrollments } = useQuery({
-    queryKey: ["studentEnrollments", user?.userId],
-    queryFn: () => (user?.userId ? enrollmentService.getEnrollmentsByStudent(user.userId) : []),
-    enabled: Boolean(user?.userId),
+  const { data: enrollmentsData, isLoading: isLoadingEnrollments } = useQuery({
+    queryKey: enrollmentKeys.myList(1, 100),
+    queryFn: () => enrollmentService.getMyEnrollments(1, 100, "class"),
+    enabled: Boolean(user?.userId && user?.role === "STUDENT"),
   });
+  const enrollments = enrollmentsData?.items || [];
 
   // Check valid confirmed learning enrollment
   const hasAccess = useMemo(() => {
-    if (!enrollments || !classId) return false;
+    if (!enrollments.length || !classId) return false;
     return enrollments.some(
       (e) =>
         e.classId === classId &&
@@ -166,28 +167,26 @@ export default function StudentClassSessionsPage() {
     );
   }
 
-  // Access validation: Student must have confirmed enrollment
-  if (!hasAccess) {
-    return (
-      <div className="max-w-md mx-auto my-12 bg-white rounded-2xl border border-amber-200 p-8 text-center shadow-2xs">
-        <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3 text-xl">
-          <BookOutlined />
-        </div>
-        <p className="text-base font-bold text-slate-900 mb-1">Chưa có quyền truy cập</p>
-        <p className="text-xs text-slate-500 mb-6">
-          Bạn chưa đăng ký hoặc chưa hoàn tất thanh toán cho lớp học này.
-        </p>
-        <Link to={ROUTES.STUDENT.HOME}>
-          <Button type="primary" className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-semibold">
-            Về trang Lớp học của tôi
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {!hasAccess && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <BookOutlined className="text-amber-600 text-lg" />
+            <div>
+              <div className="font-semibold text-amber-900 text-sm">Chưa đăng ký lớp học</div>
+              <div className="text-xs text-amber-700">
+                Bạn đang xem đề cương các buổi học của lớp. Để tham gia các ca học trực tuyến, bạn cần đăng ký lớp học.
+              </div>
+            </div>
+          </div>
+          <Link to={ROUTES.CLASS_DETAIL.replace(':classId', classId!)}>
+            <Button size="small" type="primary" className="bg-amber-600 hover:bg-amber-700 rounded-lg text-xs font-semibold">
+              Xem lớp học
+            </Button>
+          </Link>
+        </div>
+      )}
       {/* ================= 6. BREADCRUMB ================= */}
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <Link

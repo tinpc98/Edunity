@@ -10,19 +10,24 @@ import StudentLayout from "../components/layout/StudentLayout";
 import StudentHomePage from "../features/student/home/StudentHomePage";
 import StudentClassSessionsPage from "../features/student/classes/StudentClassSessionsPage";
 import StudentSchedulePage from "../features/student/schedule/StudentSchedulePage";
+import StudentEnrollmentsPage from "../features/student/enrollments/StudentEnrollmentsPage";
 import StudentProfilePage from "../features/student/profile/StudentProfilePage";
 import TeacherLayout from "../components/layout/TeacherLayout";
 import TeacherHomePage from "../features/teacher/home/TeacherHomePage";
 import TeacherClassesPage from "../features/teacher/classes/TeacherClassesPage";
 import CreateTeacherClassPage from "../features/teacher/classes/create/CreateTeacherClassPage";
 import TeacherClassDetailPage from "../features/teacher/classes/detail/TeacherClassDetailPage";
+import TeacherProfilePage from "../features/teacher/profile/TeacherProfilePage";
 import AdminLayout from "../components/layout/AdminLayout";
 import AdminHomePage from "../features/admin/home/AdminHomePage";
 import TeacherVerificationPage from "../features/admin/teachers/verifications/TeacherVerificationPage";
 import TeacherVerificationDetailPage from "../features/admin/teachers/verifications/TeacherVerificationDetailPage";
 import AdminCampaignsPage from "../features/admin/campaigns/AdminCampaignsPage";
 import CreateCampaignPage from "../features/admin/campaigns/CreateCampaignPage";
-import CampaignDetailPage from "../features/admin/campaigns/CampaignDetailPage";
+import AdminCampaignDetailPage from "../features/admin/campaigns/CampaignDetailPage";
+import CampaignsPage from "../features/campaign/CampaignsPage";
+import PublicCampaignDetailPage from "../features/campaign/CampaignDetailPage";
+import SponsorContributionsPage from "../features/sponsor/contributions/SponsorContributionsPage";
 import ScholarshipApplicationsPage from "../features/admin/scholarships/ScholarshipApplicationsPage";
 import ScholarshipApplicationReviewPage from "../features/admin/scholarships/ScholarshipApplicationReviewPage";
 import SponsorLayout from "../components/layout/SponsorLayout";
@@ -30,10 +35,21 @@ import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
 import LoginPage from "../features/auth/LoginPage";
 import RegisterPage from "../features/auth/RegisterPage";
 import TeacherRegisterPage from "../features/auth/TeacherRegisterPage";
-import TeacherQualificationPage from "../features/auth/TeacherQualificationPage";
-import TeacherPendingPage from "../features/auth/TeacherPendingPage";
 import { ROUTES } from "../routes/routePaths";
 import ClassDetailPage from "../features/class/ClassDetailPage";
+import CoursesPage from "../features/course/CoursesPage";
+import CourseDetailPage from "../features/course/CourseDetailPage";
+import TeacherCourseCatalogPage from "../features/teacher/courses/TeacherCourseCatalogPage";
+import TeacherCourseProposalsPage from "../features/teacher/courses/TeacherCourseProposalsPage";
+import TeacherSchedulePage from "../features/teacher/schedule/TeacherSchedulePage";
+import AdminCatalogPage from "../features/admin/catalog/AdminCatalogPage";
+import AdminCourseProposalsPage from "../features/admin/catalog/AdminCourseProposalsPage";
+import AdminClassesPage from "../features/admin/classes/AdminClassesPage";
+import AdminClassDetailPage from "../features/admin/classes/AdminClassDetailPage";
+import StudentPaymentsPage from "../features/student/payments/StudentPaymentsPage";
+import TeacherRevenuePage from "../features/teacher/revenue/TeacherRevenuePage";
+import AdminPaymentsPage from "../features/admin/finance/AdminPaymentsPage";
+import AdminTransactionsPage from "../features/admin/finance/AdminTransactionsPage";
 
 const router = createBrowserRouter([
   {
@@ -50,6 +66,14 @@ const router = createBrowserRouter([
       {
         path: ROUTES.CLASS_DETAIL,
         element: <ClassDetailPage />,
+      },
+      {
+        path: ROUTES.COURSES.LIST,
+        element: <CoursesPage />,
+      },
+      {
+        path: ROUTES.COURSE_DETAIL,
+        element: <CourseDetailPage />,
       },
       {
         path: ROUTES.ENROLLMENT,
@@ -76,12 +100,12 @@ const router = createBrowserRouter([
         element: <TeacherRegisterPage />,
       },
       {
-        path: ROUTES.AUTH.TEACHER_QUALIFICATION,
-        element: <TeacherQualificationPage />,
+        path: ROUTES.CAMPAIGNS,
+        element: <CampaignsPage />,
       },
       {
-        path: ROUTES.AUTH.TEACHER_PENDING,
-        element: <TeacherPendingPage />,
+        path: ROUTES.CAMPAIGN_DETAIL,
+        element: <PublicCampaignDetailPage />,
       },
     ],
   },
@@ -102,8 +126,16 @@ const router = createBrowserRouter([
         element: <StudentSchedulePage />,
       },
       {
+        path: "enrollments",
+        element: <StudentEnrollmentsPage />,
+      },
+      {
         path: "profile",
         element: <StudentProfilePage />,
+      },
+      {
+        path: "payments",
+        element: <StudentPaymentsPage />,
       },
     ],
   },
@@ -127,6 +159,26 @@ const router = createBrowserRouter([
         path: "classes/:classId",
         element: <TeacherClassDetailPage />,
       },
+      {
+        path: "courses",
+        element: <TeacherCourseCatalogPage />,
+      },
+      {
+        path: "course-proposals",
+        element: <TeacherCourseProposalsPage />,
+      },
+      {
+        path: "schedule",
+        element: <TeacherSchedulePage />,
+      },
+      {
+        path: "profile",
+        element: <TeacherProfilePage />,
+      },
+      {
+        path: "revenue",
+        element: <TeacherRevenuePage />,
+      },
     ],
   },
   {
@@ -136,6 +188,22 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <AdminHomePage />,
+      },
+      {
+        path: "classes",
+        element: <AdminClassesPage />,
+      },
+      {
+        path: "classes/:classId",
+        element: <AdminClassDetailPage />,
+      },
+      {
+        path: "catalog",
+        element: <AdminCatalogPage />,
+      },
+      {
+        path: "course-proposals",
+        element: <AdminCourseProposalsPage />,
       },
       {
         path: "teachers/verifications",
@@ -155,7 +223,7 @@ const router = createBrowserRouter([
       },
       {
         path: "campaigns/:campaignId",
-        element: <CampaignDetailPage />,
+        element: <AdminCampaignDetailPage />,
       },
       {
         path: "scholarship-applications",
@@ -164,6 +232,14 @@ const router = createBrowserRouter([
       {
         path: "scholarship-applications/:applicationId",
         element: <ScholarshipApplicationReviewPage />,
+      },
+      {
+        path: "payments",
+        element: <AdminPaymentsPage />,
+      },
+      {
+        path: "transactions",
+        element: <AdminTransactionsPage />,
       },
     ],
   },
@@ -174,6 +250,10 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <SponsorHomePage />,
+      },
+      {
+        path: "contributions",
+        element: <SponsorContributionsPage />,
       },
     ],
   },

@@ -1,87 +1,339 @@
 import { useState } from 'react';
-import { Typography, Tabs, Breadcrumb, Tag, Button, Row, Col, Card, Avatar, Table, Progress, Modal, Form, Input, DatePicker, TimePicker, List, message } from 'antd';
 import { 
-  VideoCameraOutlined, 
+  Typography, Tabs, Breadcrumb, Tag, Button, Row, Col, Card, 
+  Modal, Form, Input, InputNumber, DatePicker, Skeleton, Alert, message, List, Popconfirm, Table
+} from 'antd';
+import { 
   CalendarOutlined, 
-  UserOutlined, 
   TeamOutlined, 
   ClockCircleOutlined, 
-  CheckCircleOutlined,
-  PlayCircleOutlined,
-  EditOutlined,
-  StarFilled,
-  DownloadOutlined,
+  EditOutlined, 
+  StarFilled, 
+  SendOutlined,
+  BookOutlined,
   PlusOutlined,
-  MessageOutlined
+  DeleteOutlined,
+  StopOutlined,
+  PoweroffOutlined,
+  UserOutlined
 } from '@ant-design/icons';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
-import { teacherClasses, classStudents, classSessions, classReviews } from '../../../../data/mockTeacherClasses';
+import { classService, classKeys } from '../../../../services/class.service';
+import { sessionService, sessionKeys } from '../../../../services/session.service';
+import type { UpdateClassPayload } from '../../../../types/class';
+import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../../types/class';
+import { deriveScheduleText } from '../../../../api/classAdapters';
+import type { 
+  CreateSessionPayload, 
+  UpdateSessionPayload, 
+  Session, 
+  SessionAttendanceItem 
+} from '../../../../types/session';
+import { 
+  SESSION_STATUS_LABELS, 
+  SESSION_STATUS_COLORS 
+} from '../../../../types/session';
+import { formatSessionTimeRange } from '../../../../api/sessionAdapters';
 
 const { Title, Text, Paragraph } = Typography;
 
 export default function TeacherClassDetailPage() {
-  const { classId } = useParams();
-  const cls = teacherClasses.find((c: any) => c.id === (classId || "CLASS_001")) || teacherClasses[0];
-  
+  const { classId } = useParams<{ classId: string }>();
+  const queryClient = useQueryClient();
+
   const [activeTab, setActiveTab] = useState('overview');
-  const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editForm] = Form.useForm();
 
-  const studentColumns = [
-    {
-      title: 'Học viên',
-      dataIndex: 'name',
-      key: 'name',
-      render: (text: string, record: any) => (
-        <div className="flex items-center gap-3">
-          <Avatar className="bg-indigo-100 text-indigo-700 font-bold">{text.substring(0, 2).toUpperCase()}</Avatar>
-          <div>
-            <div className="font-semibold text-gray-900">{text}</div>
-            <div className="text-xs text-gray-500">{record.email}</div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: 'Ngày tham gia',
-      dataIndex: 'joinDate',
-      key: 'joinDate',
-    },
-    {
-      title: 'Chuyên cần',
-      dataIndex: 'attendanceRate',
-      key: 'attendanceRate',
-      render: (rate: number) => (
-        <div className="flex items-center gap-2">
-          <Tag color={rate >= 90 ? 'success' : rate >= 70 ? 'warning' : 'error'} className="font-bold">
-            {rate}%
-          </Tag>
-        </div>
-      )
-    },
-    {
-      title: 'Điểm bài tập',
-      dataIndex: 'averageScore',
-      key: 'averageScore',
-      render: (score: number) => (
-        <span className="font-bold text-gray-800">{score ? `${score}/10` : '-'}</span>
-      )
-    },
-    {
-      title: 'Trạng thái',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => (
-        <Tag color={status === 'CONFIRMED' ? 'blue' : 'default'}>{status}</Tag>
-      )
-    },
-    {
-      title: 'Hành động',
-      key: 'action',
-      render: () => <a className="text-indigo-600 font-medium hover:underline">Chi tiết</a>,
-    },
-  ];
+  // Session management state
+  const [isCreateSessionModalOpen, setIsCreateSessionModalOpen] = useState(false);
+  const [isEditSessionModalOpen, setIsEditSessionModalOpen] = useState(false);
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [createSessionForm] = Form.useForm();
+  const [editSessionForm] = Form.useForm();
 
+  // Attendance state
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [attendanceData, setAttendanceData] = useState<SessionAttendanceItem[]>([]);
+  const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
+  const [attendanceSessionTitle, setAttendanceSessionTitle] = useState('');
+
+  // 1. Fetch Class Detail via React Query
+  const { 
+    data: cls, 
+    isLoading, 
+    isError, 
+    error
+  } = useQuery({
+    queryKey: classKeys.teacherDetail(classId!),
+    queryFn: () => classService.getMyClass(classId!),
+    enabled: Boolean(classId),
+    staleTime: 1000 * 30,
+  });
+
+  // 2. Mutation: Update Class
+  const updateMutation = useMutation({
+    mutationFn: (payload: UpdateClassPayload) => classService.updateClass(classId!, payload),
+    onSuccess: () => {
+      message.success("Cập nhật thông tin lớp học thành công!");
+      setIsEditModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherList() });
+    },
+    onError: (err: any) => {
+      message.error(err?.message || "Không thể cập nhật lớp học.");
+    },
+  });
+
+  // 3. Mutation: Submit Class for Approval
+  const submitMutation = useMutation({
+    mutationFn: () => classService.submitClass(classId!),
+    onSuccess: () => {
+      message.success("Đã gửi lớp học cho Quản trị viên duyệt!");
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherList() });
+    },
+    onError: (err: any) => {
+      message.error(err?.message || "Không thể gửi duyệt lớp học.");
+    },
+  });
+
+  // 4. Mutation: Create Session
+  const createSessionMutation = useMutation({
+    mutationFn: (payload: CreateSessionPayload) => sessionService.createSession(classId!, payload),
+    onSuccess: () => {
+      message.success("Tạo buổi học thành công!");
+      setIsCreateSessionModalOpen(false);
+      createSessionForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
+    },
+    onError: (err: any) => {
+      message.error(err?.message || "Không thể tạo buổi học.");
+    },
+  });
+
+  // 5. Mutation: Auto-plan Sessions from schedule
+  const autoPlanMutation = useMutation({
+    mutationFn: async () => {
+      const planned = await sessionService.getPlannedSessions(classId!);
+      if (!planned || planned.length === 0) {
+        throw new Error("Không có buổi học nào được tính toán từ lịch khai giảng và ca học.");
+      }
+      const bulkPayload = {
+        sessions: planned.map((p) => ({
+          title: `Buổi ${p.index}: ${cls?.className || 'Buổi học'}`,
+          startDatetime: p.startDatetime,
+          endDatetime: p.endDatetime,
+        })),
+      };
+      return await sessionService.createSessionsBulk(classId!, bulkPayload);
+    },
+    onSuccess: (res) => {
+      message.success(`Đã tự động khởi tạo ${res.length} buổi học theo lịch cố định!`);
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
+    },
+    onError: (err: any) => {
+      message.error(err?.message || "Không thể lập lịch tự động.");
+    },
+  });
+
+  // 6. Mutation: Update Session
+  const updateSessionMutation = useMutation({
+    mutationFn: ({ sessionId, payload }: { sessionId: string; payload: UpdateSessionPayload }) => 
+      sessionService.updateSession(sessionId, payload),
+    onSuccess: () => {
+      message.success("Cập nhật buổi học thành công!");
+      setIsEditSessionModalOpen(false);
+      setEditingSession(null);
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
+    },
+    onError: (err: any) => {
+      message.error(err?.message || "Không thể cập nhật buổi học.");
+    },
+  });
+
+  // 7. Mutation: Cancel Session
+  const cancelSessionMutation = useMutation({
+    mutationFn: (sessionId: string) => sessionService.cancelSession(sessionId),
+    onSuccess: () => {
+      message.success("Đã hủy buổi học!");
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
+    },
+    onError: (err: any) => {
+      message.error(err?.message || "Không thể hủy buổi học.");
+    },
+  });
+
+  // 8. Mutation: Delete Session (DRAFT/REJECTED only)
+  const deleteSessionMutation = useMutation({
+    mutationFn: (sessionId: string) => sessionService.deleteSession(sessionId),
+    onSuccess: () => {
+      message.success("Đã xóa buổi học!");
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
+    },
+    onError: (err: any) => {
+      message.error(err?.message || "Không thể xóa buổi học.");
+    },
+  });
+
+  // 9. Mutation: End Session (IN_PROGRESS only)
+  const endSessionMutation = useMutation({
+    mutationFn: (sessionId: string) => sessionService.endSession(sessionId),
+    onSuccess: () => {
+      message.success("Đã kết thúc buổi học và hoàn tất điểm danh!");
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
+    },
+    onError: (err: any) => {
+      message.error(err?.message || "Không thể kết thúc buổi học.");
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="site-container py-10 min-h-screen">
+        <Skeleton active paragraph={{ rows: 10 }} />
+      </div>
+    );
+  }
+
+  if (isError || !cls) {
+    return (
+      <div className="site-container py-10 min-h-screen">
+        <Alert
+          type="error"
+          showIcon
+          message="Không tìm thấy lớp học"
+          description={(error as any)?.message || "Lớp học không tồn tại hoặc bạn không có quyền truy cập."}
+          action={
+            <Link to={ROUTES.TEACHER.CLASSES}>
+              <Button type="primary">Quay lại danh sách lớp</Button>
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
+  const isEditable = cls.status === 'DRAFT' || cls.status === 'REJECTED';
+  const isClassClosed = cls.status === 'COMPLETED' || cls.status === 'CANCELLED';
+  const scheduleDisplay = deriveScheduleText(cls.schedule);
+  const progressPercent = cls.capacity > 0 
+    ? Math.min(100, Math.round((cls.enrolledCount / cls.capacity) * 100))
+    : 0;
+
+  const handleOpenEdit = () => {
+    editForm.setFieldsValue({
+      className: cls.className,
+      description: cls.description,
+      capacity: cls.capacity,
+      price: cls.price,
+      startDate: cls.startDate ? dayjs(cls.startDate) : null,
+      endDate: cls.endDate ? dayjs(cls.endDate) : null,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      const values = await editForm.validateFields();
+      const payload: UpdateClassPayload = {
+        className: values.className,
+        description: values.description,
+        capacity: Number(values.capacity),
+        price: cls.classType === 'FREE' ? 0 : Number(values.price || 0),
+        startDate: values.startDate ? values.startDate.toISOString() : null,
+        endDate: values.endDate ? values.endDate.toISOString() : null,
+      };
+      updateMutation.mutate(payload);
+    } catch {
+      // Form validation error
+    }
+  };
+
+  // Handle open create session
+  const handleOpenCreateSession = () => {
+    createSessionForm.resetFields();
+    // Pre-fill default times if class has startDate
+    if (cls.startDate) {
+      const defaultStart = dayjs(cls.startDate).hour(19).minute(0);
+      const defaultEnd = dayjs(cls.startDate).hour(20).minute(30);
+      createSessionForm.setFieldsValue({
+        title: `Buổi ${((cls.sessions || []).length) + 1}`,
+        startDatetime: defaultStart,
+        endDatetime: defaultEnd,
+      });
+    }
+    setIsCreateSessionModalOpen(true);
+  };
+
+  const handleSaveCreateSession = async () => {
+    try {
+      const values = await createSessionForm.validateFields();
+      const payload: CreateSessionPayload = {
+        title: values.title,
+        description: values.description || undefined,
+        startDatetime: values.startDatetime.toISOString(),
+        endDatetime: values.endDatetime.toISOString(),
+      };
+      createSessionMutation.mutate(payload);
+    } catch {
+      // Form validation error
+    }
+  };
+
+  // Handle open edit session
+  const handleOpenEditSession = (session: Session) => {
+    setEditingSession(session);
+    editSessionForm.setFieldsValue({
+      title: session.title,
+      description: session.description,
+      startDatetime: dayjs(session.startDatetime),
+      endDatetime: dayjs(session.endDatetime),
+    });
+    setIsEditSessionModalOpen(true);
+  };
+
+  const handleSaveEditSession = async () => {
+    if (!editingSession) return;
+    try {
+      const values = await editSessionForm.validateFields();
+      const payload: UpdateSessionPayload = {
+        title: values.title,
+        description: values.description || undefined,
+        startDatetime: values.startDatetime.toISOString(),
+        endDatetime: values.endDatetime.toISOString(),
+      };
+      updateSessionMutation.mutate({ sessionId: editingSession.id, payload });
+    } catch {
+      // Form validation error
+    }
+  };
+
+  // Handle view attendance
+  const handleViewAttendance = async (session: Session) => {
+    setAttendanceSessionTitle(session.title);
+    setIsAttendanceModalOpen(true);
+    setIsLoadingAttendance(true);
+    try {
+      const list = await sessionService.getSessionAttendance(session.id);
+      setAttendanceData(list);
+    } catch (err: any) {
+      message.error(err?.message || "Không thể tải danh sách điểm danh");
+    } finally {
+      setIsLoadingAttendance(false);
+    }
+  };
+
+  // ---------------- Tab 1: Overview ----------------
   const renderOverview = () => (
     <div className="flex flex-col gap-6 mt-6">
       {/* Overview Stats */}
@@ -90,414 +342,447 @@ export default function TeacherClassDetailPage() {
           <Card className="rounded-2xl shadow-sm border-gray-100 bg-white">
             <div className="flex justify-between items-start mb-2">
               <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Sĩ số lớp</Text>
-              <div className="w-8 h-8 rounded bg-indigo-50 flex items-center justify-center text-indigo-500"><TeamOutlined /></div>
+              <div className="w-8 h-8 rounded bg-indigo-50 flex items-center justify-center text-indigo-500">
+                <TeamOutlined />
+              </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{cls.enrolled}</Title>
+              <Title level={2} className="!m-0 text-gray-900">{cls.enrolledCount}</Title>
               <span className="text-gray-500 text-lg mb-1">/ {cls.capacity}</span>
             </div>
             <div className="flex items-center justify-between text-xs font-medium">
-              <span className="text-emerald-500">↗ {(cls.enrolled / cls.capacity * 100).toFixed(0)}% Đầy chỗ</span>
-              <span className="text-gray-500">Còn {cls.capacity - cls.enrolled} chỗ</span>
+              <span className="text-indigo-600 font-semibold">{progressPercent}% Đầy chỗ</span>
+              <span className="text-gray-500">Còn {cls.seatsLeft} chỗ</span>
             </div>
           </Card>
         </Col>
+
         <Col xs={12} md={6}>
           <Card className="rounded-2xl shadow-sm border-gray-100 bg-white">
             <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Tiến độ khóa</Text>
-              <div className="w-8 h-8 rounded bg-emerald-50 flex items-center justify-center text-emerald-500"><CheckCircleOutlined /></div>
+              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Loại hình</Text>
+              <div className="w-8 h-8 rounded bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-xs">
+                {cls.classType}
+              </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{cls.completedSessions}</Title>
-              <span className="text-gray-500 text-lg mb-1">/ {cls.totalSessions} buổi</span>
+              <Title level={3} className={`!m-0 ${cls.classType === 'FREE' ? 'text-emerald-600' : 'text-indigo-700'}`}>
+                {cls.formattedPrice}
+              </Title>
             </div>
-            <div className="flex items-center justify-between text-xs font-medium">
-              <span className="text-gray-500">Đã hoàn thành {((cls.completedSessions / cls.totalSessions) * 100).toFixed(0)}%</span>
-              <span className="text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded">Đúng lộ trình</span>
+            <div className="text-xs text-gray-500 font-medium">
+              {cls.classType === 'FREE' ? 'Lớp học cộng đồng miễn phí' : 'Học phí trọn khóa'}
             </div>
           </Card>
         </Col>
+
         <Col xs={12} md={6}>
           <Card className="rounded-2xl shadow-sm border-gray-100 bg-white">
             <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Buổi còn lại</Text>
-              <div className="w-8 h-8 rounded bg-amber-50 flex items-center justify-center text-amber-500"><ClockCircleOutlined /></div>
+              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Số buổi học</Text>
+              <div className="w-8 h-8 rounded bg-amber-50 flex items-center justify-center text-amber-500">
+                <ClockCircleOutlined />
+              </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{cls.totalSessions - cls.completedSessions}</Title>
-              <span className="text-gray-500 text-lg mb-1">buổi còn lại</span>
+              <Title level={2} className="!m-0 text-gray-900">{(cls.sessions || []).length}</Title>
+              <span className="text-gray-500 text-lg mb-1">buổi</span>
             </div>
-            <div className="flex items-center text-xs font-medium text-gray-500">
-              <CalendarOutlined className="mr-1" /> Kết thúc dự kiến: 15/12/2026
+            <div className="text-xs text-gray-500 font-medium">
+              Đã lên lịch trong hệ thống
             </div>
           </Card>
         </Col>
+
         <Col xs={12} md={6}>
           <Card className="rounded-2xl shadow-sm border-gray-100 bg-white">
             <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Đánh giá chung</Text>
-              <div className="w-8 h-8 rounded bg-rose-50 flex items-center justify-center text-rose-500"><StarFilled /></div>
+              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Đánh giá trung bình</Text>
+              <div className="w-8 h-8 rounded bg-rose-50 flex items-center justify-center text-rose-500">
+                <StarFilled />
+              </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{cls.rating}</Title>
-              <StarFilled className="text-emerald-500 text-lg mb-1" />
+              <Title level={2} className="!m-0 text-gray-900">{cls.ratingAverage?.toFixed(1) || '0.0'}</Title>
+              <StarFilled className="text-amber-400 text-lg mb-1" />
             </div>
-            <div className="flex items-center justify-between text-xs font-medium">
-              <span className="text-gray-500">Dựa trên {cls.reviewCount} nhận xét</span>
-              <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Rất tốt</span>
+            <div className="text-xs text-gray-500 font-medium">
+              {cls.ratingCount || 0} lượt đánh giá từ học viên
             </div>
           </Card>
         </Col>
       </Row>
 
-      <Row gutter={[24, 24]}>
-        {/* Main Content Column */}
-        <Col xs={24} lg={16} className="flex flex-col gap-6">
-          {/* Next Session Card */}
-          <Card className="rounded-2xl shadow-sm border border-indigo-100 overflow-hidden" bodyStyle={{ padding: 0 }}>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
-                  <Tag color="error" className="!m-0 border-0 font-bold tracking-wider">SẮP DIỄN RA</Tag>
-                  <Text className="font-semibold text-gray-700 ml-2">20:00 Thứ 5, 17/09/2026</Text>
-                </div>
-                <Tag color="success" className="rounded-full !m-0 font-medium">18/18 học viên xác nhận</Tag>
-              </div>
-              
-              <Text className="text-indigo-600 font-bold uppercase tracking-wider text-xs mb-1 block">KẾ HOẠCH BÀI GIẢNG TIẾP THEO</Text>
-              <Title level={3} className="!mt-1 mb-3 !text-2xl">Buổi 13: Ứng dụng đạo hàm để khảo sát và vẽ đồ thị hàm số (Dạng bài vận dụng 8.5+)</Title>
-              
-              <Paragraph className="text-gray-600">
-                Trọng tâm: Phương pháp phân tích đồ thị chứa giá trị tuyệt đối, kỹ thuật ghép trục nhanh giải bài toán cực trị tham số trong đề thi chuẩn bộ GD&ĐT.
-              </Paragraph>
-
-              <div className="bg-gray-50 rounded-xl p-4 flex gap-4 mt-4 items-center">
-                <div className="text-xs font-bold text-gray-500 w-20">TÀI LIỆU BUỔI:</div>
-                <div className="flex gap-2">
-                  <Button size="small" className="rounded bg-white text-indigo-600 border-indigo-200">Slides_Bai13_HamSo.pdf</Button>
-                  <Button size="small" className="rounded bg-white text-indigo-600 border-indigo-200">BaiTap_RenLuyen_13.pdf</Button>
-                </div>
-                <Button type="text" className="text-indigo-600 ml-auto">+ Đính kèm thêm</Button>
-              </div>
+      {/* Main Details Card */}
+      <Card className="rounded-2xl shadow-sm border-gray-100">
+        <Title level={4} className="!mb-4">Thông tin khóa học & Giảng dạy</Title>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+          <div>
+            <Text className="text-gray-400 block mb-1">Khóa học chuẩn:</Text>
+            <div className="font-semibold text-indigo-700 text-base">{cls.courseTitle}</div>
+          </div>
+          <div>
+            <Text className="text-gray-400 block mb-1">Lịch học cố định:</Text>
+            <div className="font-semibold text-gray-800">{scheduleDisplay}</div>
+          </div>
+          <div>
+            <Text className="text-gray-400 block mb-1">Thời gian khai giảng:</Text>
+            <div className="font-semibold text-gray-800">
+              {cls.startDate ? new Date(cls.startDate).toLocaleDateString('vi-VN') : 'Chưa đặt'}
             </div>
-            
-            <div className="bg-indigo-50/50 p-4 px-6 border-t border-indigo-50 flex gap-4">
-              <Button type="primary" size="large" icon={<PlayCircleOutlined />} className="bg-indigo-600 rounded-xl font-bold px-8 shadow-md">
-                Vào phòng học ảo Live Studio
+          </div>
+          <div>
+            <Text className="text-gray-400 block mb-1">Thời gian kết thúc:</Text>
+            <div className="font-semibold text-gray-800">
+              {cls.endDate ? new Date(cls.endDate).toLocaleDateString('vi-VN') : 'Chưa đặt'}
+            </div>
+          </div>
+        </div>
+
+        {cls.description && (
+          <div className="mt-6 pt-6 border-t border-gray-100">
+            <Text className="text-gray-400 block mb-2 font-medium">Mô tả chi tiết lớp học:</Text>
+            <Paragraph className="text-gray-700 leading-relaxed whitespace-pre-line !m-0">
+              {cls.description}
+            </Paragraph>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+
+  // ---------------- Tab 2: Sessions List ----------------
+  const sessionsList = (cls.sessions || []) as Session[];
+
+  const renderSessions = () => (
+    <div className="mt-6 flex flex-col gap-6">
+      {/* Session Header Actions */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-gray-100 shadow-2xs">
+        <div>
+          <Title level={4} className="!m-0">Danh sách buổi học ({sessionsList.length})</Title>
+          <Text className="text-gray-500 text-xs">
+            Quản lý kế hoạch buổi học, ca học trực tuyến và theo dõi trạng thái điểm danh
+          </Text>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Auto Plan Button */}
+          {cls.schedule && cls.schedule.length > 0 && cls.startDate && cls.endDate && !isClassClosed && (
+            <Popconfirm
+              title="Lập lịch tự động"
+              description="Hệ thống sẽ tạo danh sách buổi học tự động dựa trên ngày khai giảng, ngày kết thúc và các ca học cố định. Bạn có muốn tiếp tục?"
+              onConfirm={() => autoPlanMutation.mutate()}
+              okText="Đồng ý tạo"
+              cancelText="Hủy"
+              okButtonProps={{ loading: autoPlanMutation.isPending, className: 'bg-indigo-600' }}
+            >
+              <Button 
+                icon={<CalendarOutlined />}
+                loading={autoPlanMutation.isPending}
+                className="rounded-xl font-medium"
+              >
+                Lập lịch tự động
               </Button>
-              <Button size="large" className="rounded-xl font-medium bg-white text-gray-700">Kiểm tra bảng vẽ & Micro</Button>
-              <Button size="large" className="rounded-xl font-medium bg-white text-gray-700 ml-auto"><TeamOutlined /> Điểm danh trước giờ</Button>
-            </div>
-          </Card>
+            </Popconfirm>
+          )}
 
-          {/* Recent Sessions List */}
-          <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2"><VideoCameraOutlined className="text-indigo-500" /> Danh sách buổi học gần đây</span>} extra={<span className="text-gray-500 text-sm">12 buổi đã xong</span>}>
-            <List
-              itemLayout="horizontal"
-              dataSource={classSessions.filter((s: any) => s.status === 'COMPLETED')}
-              renderItem={(item: any) => (
-                <List.Item className="border-b last:border-0 py-4"
-                  actions={[
-                    <Button type="link" icon={<PlayCircleOutlined />}>Xem video Recording</Button>,
-                    <Button type="text" icon={<DownloadOutlined />} className="text-gray-400" />
-                  ]}
-                >
-                  <div className="flex gap-4 items-start w-full">
-                    <div className="w-12 h-12 shrink-0 bg-gray-50 rounded-lg border border-gray-200 flex flex-col items-center justify-center">
-                      <span className="text-[10px] text-gray-500 font-bold uppercase">{item.title.split(':')[0] || 'BUỔI'}</span>
-                      <span className="font-bold text-gray-800 text-sm">{item.date.split('/')[0]}</span>
+          {/* Add Session Button */}
+          {!isClassClosed && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleOpenCreateSession}
+              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold px-5"
+            >
+              Thêm buổi học
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {sessionsList.length === 0 ? (
+        <Card className="rounded-2xl text-center py-16 border-dashed border-gray-300">
+          <ClockCircleOutlined className="text-5xl text-gray-300 mb-4" />
+          <Title level={4} className="text-gray-700 !mb-2">Chưa có buổi học nào được tạo</Title>
+          <Paragraph className="text-gray-400 text-sm max-w-md mx-auto mb-6">
+            Lớp học cần có ít nhất một buổi học hợp lệ trước khi gửi phê duyệt tới Quản trị viên.
+          </Paragraph>
+          {!isClassClosed && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              size="large"
+              onClick={handleOpenCreateSession}
+              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-medium"
+            >
+              Tạo buổi học đầu tiên
+            </Button>
+          )}
+        </Card>
+      ) : (
+        <List
+          dataSource={sessionsList}
+          renderItem={(session: Session, index: number) => {
+            const isScheduled = session.status === 'SCHEDULED';
+            const isInProgress = session.status === 'IN_PROGRESS';
+            const isCompleted = session.status === 'COMPLETED';
+            const isCancelled = session.status === 'CANCELLED';
+
+            return (
+              <Card 
+                key={session.id || index} 
+                className={`rounded-2xl border transition-all mb-3.5 shadow-2xs hover:shadow-xs ${
+                  isInProgress ? 'border-amber-300 bg-amber-50/20' : 'border-gray-200 bg-white'
+                }`}
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-base shrink-0 ${
+                      isInProgress 
+                        ? 'bg-amber-100 text-amber-700' 
+                        : isCompleted 
+                        ? 'bg-emerald-100 text-emerald-700' 
+                        : isCancelled 
+                        ? 'bg-gray-100 text-gray-400' 
+                        : 'bg-indigo-50 text-indigo-600'
+                    }`}>
+                      {index + 1}
                     </div>
-                    <div className="flex-1">
-                      <div className="font-semibold text-gray-800 text-base mb-1">{item.title}</div>
-                      <div className="flex gap-6 text-sm text-gray-500">
-                        <span><CheckCircleOutlined className="text-emerald-500" /> Điểm danh: <strong className="text-gray-700">{item.attendanceCount}/{item.totalStudents} ({(item.attendanceCount! / item.totalStudents * 100).toFixed(0)}%)</strong></span>
-                        <span><ClockCircleOutlined /> Thời lượng: {item.duration} phút</span>
+
+                    <div>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <Title level={5} className="!m-0 text-gray-900 font-semibold">
+                          {session.title || `Buổi học ${index + 1}`}
+                        </Title>
+                        <Tag color={SESSION_STATUS_COLORS[session.status]} className="font-bold rounded-md">
+                          {SESSION_STATUS_LABELS[session.status] || session.status}
+                        </Tag>
+                      </div>
+
+                      {session.description && (
+                        <Text className="text-gray-500 text-xs block mt-1 line-clamp-2">
+                          {session.description}
+                        </Text>
+                      )}
+
+                      <div className="flex items-center gap-4 text-xs text-gray-500 mt-2 flex-wrap">
+                        <span className="flex items-center gap-1 font-medium text-gray-700">
+                          <CalendarOutlined className="text-indigo-500" />
+                          {session.startDatetime ? new Date(session.startDatetime).toLocaleDateString('vi-VN') : '-'}
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1 font-medium text-gray-700">
+                          <ClockCircleOutlined className="text-indigo-500" />
+                          {formatSessionTimeRange(session.startDatetime, session.endDatetime)}
+                        </span>
                       </div>
                     </div>
                   </div>
-                </List.Item>
-              )}
-            />
-            <div className="mt-4 text-center">
-              <Button type="link" onClick={() => setActiveTab('sessions')}>Xem toàn bộ {cls.totalSessions} buổi học trong tab Sessions →</Button>
-            </div>
-          </Card>
-        </Col>
 
-        {/* Right Sidebar */}
-        <Col xs={24} lg={8} className="flex flex-col gap-6">
-          <Card className="rounded-2xl shadow-sm border-gray-100 bg-white" 
-            title={<span className="font-bold flex items-center gap-2 text-base"><MessageOutlined className="text-indigo-500" /> Trao đổi gần đây</span>}
-            extra={<div className="w-2 h-2 rounded-full bg-rose-500"></div>}
-          >
-            <div className="flex flex-col gap-4">
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <div className="flex justify-between items-center mb-2 text-xs">
-                  <div className="font-bold text-gray-800 flex items-center gap-2">
-                    <Avatar size="small" className="bg-indigo-600">PL</Avatar> Phương Linh
-                  </div>
-                  <span className="text-gray-400">10 phút trước</span>
-                </div>
-                <Paragraph className="text-sm text-gray-700 m-0">"Thầy ơi bài tập số 4 dạng đồ thị hàm phân thức thầy có thể chữa thêm vào đầu giờ thứ 5 không ạ?"</Paragraph>
-                <div className="mt-2 flex gap-2">
-                  <span className="text-xs text-indigo-600 font-medium cursor-pointer flex items-center gap-1">↳ Trả lời</span>
-                  <span className="text-xs text-gray-400">• Bài tập buổi 12</span>
-                </div>
-              </div>
+                  {/* Actions per session */}
+                  <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                    {/* Attendance button if IN_PROGRESS or COMPLETED */}
+                    {(isInProgress || isCompleted) && (
+                      <Button
+                        size="small"
+                        icon={<TeamOutlined />}
+                        onClick={() => handleViewAttendance(session)}
+                        className="rounded-lg text-xs"
+                      >
+                        Điểm danh
+                      </Button>
+                    )}
 
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <div className="flex justify-between items-center mb-2 text-xs">
-                  <div className="font-bold text-gray-800 flex items-center gap-2">
-                    <Avatar size="small" className="bg-emerald-600">QH</Avatar> Quốc Huy
-                  </div>
-                  <span className="text-gray-400">1 giờ trước</span>
-                </div>
-                <Paragraph className="text-sm text-gray-700 m-0">"Em đã nộp file giải bài tập tự luyện buổi 12 rồi ạ! Em có ghi chú thêm 1 cách giải bằng phương pháp tọa độ hóa."</Paragraph>
-                <div className="mt-2 flex justify-between items-center">
-                  <span className="text-xs text-indigo-600 font-medium cursor-pointer flex items-center gap-1"><UserOutlined /> Xem bài nộp</span>
-                  <Tag color="success" className="!m-0 rounded border-0 text-[10px]">Đã chấm điểm</Tag>
-                </div>
-              </div>
-            </div>
-            <Button type="primary" block className="mt-4 bg-indigo-600 rounded-lg">Mở kênh chat nhóm của lớp</Button>
-          </Card>
-          
-          <Card className="rounded-2xl shadow-sm border-gray-100 bg-white" title={<span className="font-bold flex items-center gap-2 text-base"><StarFilled className="text-emerald-500" /> Đánh giá mới nhất</span>}>
-            <div className="mb-4">
-              <div className="flex gap-1 mb-2">
-                <StarFilled className="text-emerald-500" />
-                <StarFilled className="text-emerald-500" />
-                <StarFilled className="text-emerald-500" />
-                <StarFilled className="text-emerald-500" />
-                <StarFilled className="text-emerald-500" />
-              </div>
-              <Paragraph className="text-sm text-gray-600 italic">"{classReviews[0]?.comment}"</Paragraph>
-              <div className="flex justify-between items-center mt-2">
-                <span className="text-xs font-semibold">{classReviews[0]?.studentName}</span>
-                <span className="text-xs text-gray-400">{classReviews[0]?.date}</span>
-              </div>
-            </div>
-            <Button type="link" className="px-0">Xem tất cả {cls.reviewCount} đánh giá của lớp</Button>
-          </Card>
-        </Col>
-      </Row>
-    </div>
-  );
+                    {/* End session button if IN_PROGRESS */}
+                    {isInProgress && (
+                      <Popconfirm
+                        title="Kết thúc buổi học"
+                        description="Hệ thống sẽ chuyển trạng thái buổi học sang Hoàn thành (COMPLETED) và chốt danh sách điểm danh. Bạn có chắc chắn?"
+                        onConfirm={() => endSessionMutation.mutate(session.id)}
+                        okText="Kết thúc"
+                        cancelText="Hủy"
+                        okButtonProps={{ loading: endSessionMutation.isPending, danger: true }}
+                      >
+                        <Button
+                          size="small"
+                          danger
+                          icon={<PoweroffOutlined />}
+                          loading={endSessionMutation.isPending}
+                          className="rounded-lg text-xs font-semibold"
+                        >
+                          Kết thúc buổi
+                        </Button>
+                      </Popconfirm>
+                    )}
 
-  const renderStudents = () => (
-    <div className="mt-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-      <div className="flex justify-between items-center mb-6">
-        <Title level={4} className="!m-0">Danh sách học viên ({cls.enrolled})</Title>
-        <div className="flex gap-3">
-          <Input placeholder="Tìm học viên..." className="rounded-lg w-[250px]" />
-          <Button type="primary" className="rounded-lg bg-indigo-600">Thêm học viên</Button>
-        </div>
-      </div>
-      <Table 
-        columns={studentColumns} 
-        dataSource={classStudents} 
-        rowKey="id" 
-        pagination={false}
-      />
-    </div>
-  );
+                    {/* Edit button if SCHEDULED */}
+                    {isScheduled && (
+                      <Button
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => handleOpenEditSession(session)}
+                        className="rounded-lg text-xs"
+                      >
+                        Sửa
+                      </Button>
+                    )}
 
-  const renderSessions = () => (
-    <div className="mt-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <Title level={4} className="!m-0">Lộ trình buổi học ({cls.totalSessions} buổi)</Title>
-          <Text className="text-gray-500">Quản lý nội dung, điểm danh và bài tập từng buổi</Text>
-        </div>
-        <Button 
-          type="primary" 
-          icon={<PlusOutlined />} 
-          className="rounded-lg bg-indigo-600"
-          onClick={() => setIsSessionModalOpen(true)}
-        >
-          Tạo buổi học
-        </Button>
-      </div>
+                    {/* Cancel session if SCHEDULED */}
+                    {isScheduled && (
+                      <Popconfirm
+                        title="Hủy buổi học"
+                        description="Bạn có chắc chắn muốn hủy buổi học này không? Học viên sẽ thấy trạng thái Đã hủy."
+                        onConfirm={() => cancelSessionMutation.mutate(session.id)}
+                        okText="Hủy buổi"
+                        cancelText="Đóng"
+                        okButtonProps={{ loading: cancelSessionMutation.isPending, danger: true }}
+                      >
+                        <Button
+                          size="small"
+                          danger
+                          icon={<StopOutlined />}
+                          loading={cancelSessionMutation.isPending}
+                          className="rounded-lg text-xs"
+                        >
+                          Hủy
+                        </Button>
+                      </Popconfirm>
+                    )}
 
-      <Table 
-        columns={[
-          { title: 'Tên buổi học', dataIndex: 'title', key: 'title', width: '40%', render: (t) => <div className="font-medium text-gray-800">{t}</div> },
-          { title: 'Ngày học', dataIndex: 'date', key: 'date' },
-          { title: 'Thời gian', key: 'time', render: (_, r: any) => `${r.startTime} - ${r.endTime}` },
-          { title: 'Trạng thái', dataIndex: 'status', key: 'status', render: (s) => (
-            <Tag color={s === 'COMPLETED' ? 'success' : s === 'IN_PROGRESS' ? 'processing' : 'default'}>
-              {s === 'COMPLETED' ? 'Đã hoàn thành' : s === 'IN_PROGRESS' ? 'Đang diễn ra' : 'Sắp tới'}
-            </Tag>
-          )},
-          { title: 'Điểm danh', key: 'attendance', render: (_, r: any) => r.attendanceCount ? `${r.attendanceCount}/${r.totalStudents}` : '-' },
-          { title: 'Thao tác', key: 'action', render: () => <Button type="link">Chi tiết</Button> }
-        ]} 
-        dataSource={classSessions} 
-        rowKey="id" 
-        pagination={false}
-      />
-    </div>
-  );
-
-  const renderSchedule = () => (
-    <div className="mt-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 max-w-[800px]">
-      <div className="flex justify-between items-center mb-6">
-        <Title level={4} className="!m-0">Lịch giảng dạy & Ca học cố định</Title>
-        <Button icon={<EditOutlined />}>Chỉnh sửa</Button>
-      </div>
-      <div className="flex flex-col gap-4">
-        <div className="border border-gray-200 rounded-xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-lg">T3</div>
-            <div>
-              <div className="font-semibold text-gray-800 text-base">Thứ Ba</div>
-              <div className="text-gray-500 text-sm mt-1 flex items-center gap-2">
-                <ClockCircleOutlined /> 20:00 - 21:30
-              </div>
-            </div>
-          </div>
-          <Tag color="processing">Đang áp dụng</Tag>
-        </div>
-        <div className="border border-gray-200 rounded-xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-lg">T5</div>
-            <div>
-              <div className="font-semibold text-gray-800 text-base">Thứ Năm</div>
-              <div className="text-gray-500 text-sm mt-1 flex items-center gap-2">
-                <ClockCircleOutlined /> 20:00 - 21:30
-              </div>
-            </div>
-          </div>
-          <Tag color="processing">Đang áp dụng</Tag>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderReviews = () => (
-    <div className="mt-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 max-w-[800px]">
-      <Title level={4} className="mb-6">Đánh giá từ học viên</Title>
-      
-      <div className="flex items-center gap-8 mb-8 bg-gray-50 p-6 rounded-xl border border-gray-100">
-        <div className="text-center">
-          <div className="text-5xl font-bold text-gray-900 mb-2">{cls.rating}</div>
-          <div className="flex gap-1 justify-center mb-1">
-            <StarFilled className="text-yellow-400 text-lg" />
-            <StarFilled className="text-yellow-400 text-lg" />
-            <StarFilled className="text-yellow-400 text-lg" />
-            <StarFilled className="text-yellow-400 text-lg" />
-            <StarFilled className="text-yellow-400 text-lg" />
-          </div>
-          <div className="text-sm text-gray-500">{cls.reviewCount} đánh giá</div>
-        </div>
-        <div className="flex-1 flex flex-col gap-2">
-          {[5,4,3,2,1].map(star => (
-            <div key={star} className="flex items-center gap-3">
-              <span className="w-4 font-medium text-gray-600 text-sm">{star}</span>
-              <StarFilled className="text-gray-300 text-xs" />
-              <Progress percent={star === 5 ? 85 : star === 4 ? 10 : 0} showInfo={false} strokeColor="#FBBF24" className="!m-0 max-w-[200px]" size="small" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <List
-        dataSource={classReviews}
-        renderItem={(review: any) => (
-          <List.Item className="border-b last:border-0 py-6">
-            <div className="w-full">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex gap-3">
-                  <Avatar className="bg-indigo-600">{review.studentName.charAt(0)}</Avatar>
-                  <div>
-                    <div className="font-semibold">{review.studentName}</div>
-                    <div className="text-xs text-gray-400">{review.date}</div>
+                    {/* Delete session if DRAFT or REJECTED */}
+                    {isScheduled && isEditable && (
+                      <Popconfirm
+                        title="Xóa buổi học"
+                        description="Buổi học sẽ bị xóa hoàn toàn khỏi kế hoạch giảng dạy. Thao tác này không thể hoàn tác."
+                        onConfirm={() => deleteSessionMutation.mutate(session.id)}
+                        okText="Xóa"
+                        cancelText="Đóng"
+                        okButtonProps={{ loading: deleteSessionMutation.isPending, danger: true }}
+                      >
+                        <Button
+                          size="small"
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          loading={deleteSessionMutation.isPending}
+                          className="rounded-lg text-xs"
+                        />
+                      </Popconfirm>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  {[...Array(5)].map((_, i) => <StarFilled key={i} className={i < review.rating ? "text-yellow-400" : "text-gray-200"} />)}
-                </div>
-              </div>
-              <Paragraph className="mt-3 text-gray-700 bg-gray-50 p-4 rounded-lg italic">"{review.comment}"</Paragraph>
-            </div>
-          </List.Item>
-        )}
-      />
-    </div>
-  );
-
-  const renderSettings = () => (
-    <div className="mt-6 max-w-[600px] flex flex-col gap-6">
-      <Card className="rounded-2xl shadow-sm border-gray-100" title="Cài đặt cơ bản">
-        <Form layout="vertical">
-          <Form.Item label="Sĩ số tối đa">
-            <Input defaultValue={cls.capacity} type="number" />
-          </Form.Item>
-          <Form.Item label="Mô tả lớp">
-            <Input.TextArea rows={4} defaultValue="Lớp học trực tiếp qua phòng học ảo Edunity Live..." />
-          </Form.Item>
-          <Button type="primary">Lưu thay đổi</Button>
-        </Form>
-      </Card>
-      
-      <Card className="rounded-2xl shadow-sm border-red-100 bg-red-50/30" title={<span className="text-red-600">Danger Zone</span>}>
-        <div className="flex items-center justify-between py-2 border-b border-red-100 mb-2">
-          <div>
-            <div className="font-medium text-gray-900">Đóng tuyển sinh</div>
-            <div className="text-sm text-gray-500">Học viên sẽ không thể đăng ký thêm vào lớp này</div>
-          </div>
-          <Button danger>Đóng tuyển sinh</Button>
-        </div>
-        <div className="flex items-center justify-between py-2">
-          <div>
-            <div className="font-medium text-gray-900">Kết thúc lớp học</div>
-            <div className="text-sm text-gray-500">Đóng gói tài liệu, ghi sổ điểm và kết thúc khóa học</div>
-          </div>
-          <Button type="primary" danger>Kết thúc lớp</Button>
-        </div>
-      </Card>
+              </Card>
+            );
+          }}
+        />
+      )}
     </div>
   );
 
   return (
-    <div className="flex flex-col w-full pb-10">
+    <div className="flex flex-col w-full pb-10 max-w-[1200px] mx-auto">
       <Breadcrumb 
         className="mb-4 text-sm font-medium"
         items={[
-          { title: <a href={ROUTES.TEACHER.HOME}>Tổng quan</a> },
-          { title: <a href={ROUTES.TEACHER.CLASSES}>Lớp của tôi</a> },
-          { title: cls.courseName },
+          { title: <Link to={ROUTES.TEACHER.HOME}>Tổng quan</Link> },
+          { title: <Link to={ROUTES.TEACHER.CLASSES}>Lớp của tôi</Link> },
+          { title: cls.className },
         ]}
       />
 
+      {/* Top Banner Alert if REJECTED */}
+      {cls.status === 'REJECTED' && (
+        <Alert
+          type="error"
+          showIcon
+          className="mb-6 rounded-xl border-rose-300 bg-rose-50"
+          message={<span className="font-bold text-rose-900">Lớp học bị từ chối xét duyệt</span>}
+          description={
+            <div className="text-rose-800 text-sm mt-1">
+              <div><strong>Lý do từ chối:</strong> {cls.reviewNote || "Cần bổ sung thêm thông tin theo yêu cầu của Quản trị viên."}</div>
+              <div className="mt-2">Bạn có thể chỉnh sửa lại thông tin và gửi duyệt lại cho Quản trị viên.</div>
+            </div>
+          }
+        />
+      )}
+
+      {/* Top Banner Alert if PENDING_APPROVAL */}
+      {cls.status === 'PENDING_APPROVAL' && (
+        <Alert
+          type="warning"
+          showIcon
+          className="mb-6 rounded-xl border-amber-300 bg-amber-50"
+          message={<span className="font-bold text-amber-900">Lớp học đang chờ Ban quản trị duyệt</span>}
+          description="Hồ sơ lớp học đã được gửi tới Ban quản trị. Sau khi được duyệt, lớp sẽ tự động mở tuyển sinh công khai."
+        />
+      )}
+
+      {/* Header Info & Actions */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
         <div>
-          <Title level={2} className="!m-0 mb-3 text-gray-900">{cls.name}</Title>
+          <Title level={2} className="!m-0 mb-3 text-gray-900">{cls.className}</Title>
           <div className="flex flex-wrap items-center gap-3">
-            <Tag color={cls.type === 'PAID' ? 'indigo' : 'green'} className="!m-0 px-2 py-0.5 rounded font-bold">{cls.type}</Tag>
-            <Tag color="success" className="!m-0 px-2 py-0.5 rounded font-medium">Đang học</Tag>
-            <Tag className="!m-0 px-2 py-0.5 border-0 bg-gray-100 text-gray-600 font-medium">Khai giảng: {cls.startDate}</Tag>
+            <Tag color={cls.classType === 'PAID' ? 'indigo' : 'green'} className="!m-0 px-2.5 py-0.5 rounded font-bold">
+              {cls.classType}
+            </Tag>
+            <Tag color={CLASS_STATUS_COLORS[cls.status]} className="!m-0 px-2.5 py-0.5 rounded font-bold">
+              {CLASS_STATUS_LABELS[cls.status] || cls.status}
+            </Tag>
+            {cls.startDate && (
+              <Tag className="!m-0 px-2.5 py-0.5 border-0 bg-gray-100 text-gray-600 font-medium">
+                Khai giảng: {new Date(cls.startDate).toLocaleDateString('vi-VN')}
+              </Tag>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-6 mt-4 text-sm text-gray-600 font-medium">
-            <span className="flex items-center gap-1.5"><TeamOutlined /> Sĩ số: <strong className="text-gray-900">{cls.enrolled}/{cls.capacity}</strong> học viên</span>
+            <span className="flex items-center gap-1.5">
+              <TeamOutlined /> Sĩ số: <strong className="text-gray-900">{cls.enrolledCount}/{cls.capacity}</strong> học viên
+            </span>
             <span className="text-gray-300">•</span>
-            <span className="flex items-center gap-1.5"><CalendarOutlined /> Lịch học: <strong className="text-gray-900">{cls.schedule}</strong></span>
+            <span className="flex items-center gap-1.5">
+              <CalendarOutlined /> Lịch học: <strong className="text-gray-900">{scheduleDisplay}</strong>
+            </span>
             <span className="text-gray-300">•</span>
-            <span className="flex items-center gap-1.5"><VideoCameraOutlined className="text-indigo-500" /> Phòng học: <strong className="text-indigo-600 underline">Live Virtual Room #ED-102</strong></span>
+            <span className="flex items-center gap-1.5">
+              <BookOutlined /> Khóa học: <strong className="text-indigo-600">{cls.courseTitle}</strong>
+            </span>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 shrink-0">
-          <Button type="primary" size="large" icon={<PlayCircleOutlined />} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold px-6 shadow-md shadow-indigo-200">
-            Bắt đầu buổi học (Vào lớp Live)
-          </Button>
-          <div className="flex gap-2">
-            <Button className="flex-1 rounded-xl bg-white font-medium" icon={<EditOutlined />}>Chỉnh sửa lớp</Button>
-            <Button className="rounded-xl bg-white" icon={<CalendarOutlined />} />
-            <Button className="rounded-xl bg-white" icon={<TeamOutlined />} />
-          </div>
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          {/* Submit for approval if DRAFT or REJECTED */}
+          {isEditable && (
+            <Popconfirm
+              title="Gửi duyệt lớp học"
+              description="Bạn có chắc chắn muốn gửi lớp học này để Quản trị viên phê duyệt không?"
+              onConfirm={() => submitMutation.mutate()}
+              okText="Gửi duyệt"
+              cancelText="Hủy"
+              okButtonProps={{ loading: submitMutation.isPending, className: 'bg-indigo-600' }}
+            >
+              <Button 
+                type="primary" 
+                size="large" 
+                icon={<SendOutlined />}
+                loading={submitMutation.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold px-6 shadow-sm border-none"
+              >
+                Gửi duyệt lớp
+              </Button>
+            </Popconfirm>
+          )}
+
+          {/* Edit class if DRAFT or REJECTED */}
+          {isEditable && (
+            <Button 
+              size="large"
+              icon={<EditOutlined />} 
+              onClick={handleOpenEdit}
+              className="rounded-xl font-medium"
+            >
+              Chỉnh sửa lớp
+            </Button>
+          )}
         </div>
       </div>
 
@@ -505,46 +790,284 @@ export default function TeacherClassDetailPage() {
         activeKey={activeTab}
         onChange={setActiveTab}
         size="large"
-        className="font-medium custom-tabs"
+        className="font-medium"
         items={[
           { key: 'overview', label: `Tổng quan`, children: renderOverview() },
-          { key: 'students', label: `Học viên (${cls.enrolled})`, children: renderStudents() },
-          { key: 'sessions', label: `Buổi học / Sessions (${cls.totalSessions})`, children: renderSessions() },
-          { key: 'schedule', label: `Lịch học & Phòng`, children: renderSchedule() },
-          { key: 'documents', label: `Tài liệu & Bài tập` },
-          { key: 'reviews', label: `Đánh giá (${cls.reviewCount})`, children: renderReviews() },
-          { key: 'settings', label: `Cài đặt lớp`, children: renderSettings() },
+          { key: 'sessions', label: `Buổi học (${sessionsList.length})`, children: renderSessions() },
         ]}
       />
 
+      {/* Edit Class Modal */}
       <Modal
-        title="Tạo buổi học mới"
-        open={isSessionModalOpen}
-        onCancel={() => setIsSessionModalOpen(false)}
-        onOk={() => {
-          message.success('Tạo buổi học thành công!');
-          setIsSessionModalOpen(false);
-        }}
-        okText="Lưu"
+        title="Chỉnh sửa thông tin lớp học"
+        open={isEditModalOpen}
+        onCancel={() => setIsEditModalOpen(false)}
+        onOk={handleSaveEdit}
+        confirmLoading={updateMutation.isPending}
+        okText="Lưu thay đổi"
         cancelText="Hủy"
         okButtonProps={{ className: 'bg-indigo-600' }}
+        width={600}
       >
-        <Form layout="vertical" className="mt-4">
-          <Form.Item label="Tên buổi học" required>
-            <Input placeholder="VD: Buổi 14: Luyện đề tổng hợp" />
+        <Form layout="vertical" form={editForm} className="mt-4">
+          <Form.Item 
+            label="Tên lớp học" 
+            name="className" 
+            rules={[{ required: true, message: 'Vui lòng nhập tên lớp học' }]}
+          >
+            <Input size="large" />
           </Form.Item>
-          <Form.Item label="Ngày học" required>
-            <DatePicker className="w-full" format="DD/MM/YYYY" />
+
+          <Row gutter={16}>
+            {cls.classType === 'PAID' && (
+              <Col span={12}>
+                <Form.Item 
+                  label="Học phí (VNĐ)" 
+                  name="price" 
+                  rules={[
+                    { required: true, message: 'Vui lòng nhập học phí' },
+                    { type: 'number', min: 1000, message: 'Học phí phải > 0' }
+                  ]}
+                >
+                  <InputNumber 
+                    size="large" 
+                    className="w-full" 
+                    formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={value => Number(value!.replace(/\$\s?|(,*)/g, ''))}
+                  />
+                </Form.Item>
+              </Col>
+            )}
+            <Col span={cls.classType === 'PAID' ? 12 : 24}>
+              <Form.Item 
+                label="Sĩ số tối đa" 
+                name="capacity" 
+                rules={[
+                  { required: true, message: 'Vui lòng nhập sĩ số' },
+                  { type: 'number', min: 1, message: 'Sĩ số phải >= 1' }
+                ]}
+              >
+                <InputNumber size="large" className="w-full" min={1} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="Ngày khai giảng" name="startDate">
+                <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Ngày kết thúc" name="endDate">
+                <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item label="Mô tả lớp học" name="description">
+            <Input.TextArea rows={4} />
           </Form.Item>
-          <div className="flex gap-4">
-            <Form.Item label="Giờ bắt đầu" className="flex-1" required>
-              <TimePicker format="HH:mm" className="w-full" />
-            </Form.Item>
-            <Form.Item label="Giờ kết thúc" className="flex-1" required>
-              <TimePicker format="HH:mm" className="w-full" />
-            </Form.Item>
-          </div>
         </Form>
+      </Modal>
+
+      {/* Create Session Modal */}
+      <Modal
+        title="Thêm buổi học mới"
+        open={isCreateSessionModalOpen}
+        onCancel={() => setIsCreateSessionModalOpen(false)}
+        onOk={handleSaveCreateSession}
+        confirmLoading={createSessionMutation.isPending}
+        okText="Tạo buổi học"
+        cancelText="Hủy"
+        okButtonProps={{ className: 'bg-indigo-600' }}
+        width={560}
+      >
+        <Form layout="vertical" form={createSessionForm} className="mt-4">
+          <Form.Item
+            label="Tiêu đề buổi học"
+            name="title"
+            rules={[{ required: true, message: 'Vui lòng nhập tiêu đề buổi học' }]}
+          >
+            <Input size="large" placeholder="VD: Buổi 1: Giới thiệu nhập môn" />
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="Bắt đầu lúc"
+                name="startDatetime"
+                rules={[{ required: true, message: 'Vui lòng chọn thời gian bắt đầu' }]}
+              >
+                <DatePicker 
+                  showTime 
+                  format="DD/MM/YYYY HH:mm" 
+                  size="large" 
+                  className="w-full"
+                  placeholder="Chọn thời điểm"
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="Kết thúc lúc"
+                name="endDatetime"
+                rules={[
+                  { required: true, message: 'Vui lòng chọn thời gian kết thúc' },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      const start = getFieldValue('startDatetime');
+                      if (!value || !start || value.isAfter(start)) {
+                        return Promise.resolve();
+                      }
+                      return Promise.reject(new Error('Thời gian kết thúc phải sau thời gian bắt đầu'));
+                    },
+                  }),
+                ]}
+              >
+                <DatePicker 
+                  showTime 
+                  format="DD/MM/YYYY HH:mm" 
+                  size="large" 
+                  className="w-full"
+                  placeholder="Chọn thời điểm"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item label="Mô tả nội dung buổi học" name="description">
+            <Input.TextArea rows={3} placeholder="Nội dung chính hoặc yêu cầu chuẩn bị cho học viên..." />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Edit Session Modal */}
+      <Modal
+        title="Chỉnh sửa buổi học"
+        open={isEditSessionModalOpen}
+        onCancel={() => {
+          setIsEditSessionModalOpen(false);
+          setEditingSession(null);
+        }}
+        onOk={handleSaveEditSession}
+        confirmLoading={updateSessionMutation.isPending}
+        okText="Lưu thay đổi"
+        cancelText="Hủy"
+        okButtonProps={{ className: 'bg-indigo-600' }}
+        width={560}
+      >
+        <Form layout="vertical" form={editSessionForm} className="mt-4">
+          <Form.Item
+            label="Tiêu đề buổi học"
+            name="title"
+            rules={[{ required: true, message: 'Vui lòng nhập tiêu đề buổi học' }]}
+          >
+            <Input size="large" />
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="Bắt đầu lúc"
+                name="startDatetime"
+                rules={[{ required: true, message: 'Vui lòng chọn thời gian bắt đầu' }]}
+              >
+                <DatePicker showTime format="DD/MM/YYYY HH:mm" size="large" className="w-full" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="Kết thúc lúc"
+                name="endDatetime"
+                rules={[
+                  { required: true, message: 'Vui lòng chọn thời gian kết thúc' },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      const start = getFieldValue('startDatetime');
+                      if (!value || !start || value.isAfter(start)) {
+                        return Promise.resolve();
+                      }
+                      return Promise.reject(new Error('Thời gian kết thúc phải sau thời gian bắt đầu'));
+                    },
+                  }),
+                ]}
+              >
+                <DatePicker showTime format="DD/MM/YYYY HH:mm" size="large" className="w-full" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item label="Mô tả nội dung buổi học" name="description">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Attendance List Modal */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <TeamOutlined className="text-indigo-600" />
+            <span>Danh sách điểm danh: {attendanceSessionTitle}</span>
+          </div>
+        }
+        open={isAttendanceModalOpen}
+        onCancel={() => setIsAttendanceModalOpen(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setIsAttendanceModalOpen(false)} className="bg-indigo-600">
+            Đóng
+          </Button>
+        ]}
+        width={650}
+      >
+        <div className="py-2">
+          {isLoadingAttendance ? (
+            <Skeleton active paragraph={{ rows: 4 }} />
+          ) : attendanceData.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <UserOutlined className="text-3xl text-gray-300 mb-2 block" />
+              Chưa có dữ liệu điểm danh cho buổi học này.
+            </div>
+          ) : (
+            <Table
+              dataSource={attendanceData}
+              rowKey="_id"
+              pagination={false}
+              size="small"
+              columns={[
+                {
+                  title: 'Học viên',
+                  key: 'student',
+                  render: (_, record) => (
+                    <div>
+                      <div className="font-semibold text-gray-900">
+                        {record.studentId?.studentProfile?.fullName || 'Học viên'}
+                      </div>
+                      <div className="text-xs text-gray-400">{record.studentId?.email}</div>
+                    </div>
+                  ),
+                },
+                {
+                  title: 'Trạng thái',
+                  dataIndex: 'attendanceStatus',
+                  key: 'status',
+                  render: (st: string) => {
+                    const color = st === 'PRESENT' ? 'green' : st === 'LATE' ? 'gold' : 'red';
+                    const text = st === 'PRESENT' ? 'Có mặt' : st === 'LATE' ? 'Đi muộn' : 'Vắng mặt';
+                    return <Tag color={color} className="font-bold">{text}</Tag>;
+                  },
+                },
+                {
+                  title: 'Thời gian tham gia',
+                  dataIndex: 'joinedAt',
+                  key: 'joinedAt',
+                  render: (d: string) => d ? new Date(d).toLocaleTimeString('vi-VN') : '-',
+                },
+              ]}
+            />
+          )}
+        </div>
       </Modal>
     </div>
   );

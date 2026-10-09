@@ -1,4 +1,5 @@
 import { Outlet, Link } from "react-router-dom";
+import { useAuthStore } from "../../stores/auth.store";
 import DashboardShell from "../dashboard/DashboardShell";
 import { ROUTES } from "../../routes/routePaths";
 import {
@@ -10,7 +11,9 @@ import {
   MessageOutlined,
   StarOutlined,
   WalletOutlined,
-  IdcardOutlined
+  IdcardOutlined,
+  AppstoreOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 
 const teacherMenuItems = [
@@ -29,9 +32,19 @@ const teacherMenuItems = [
         label: <Link to={ROUTES.TEACHER.CLASSES}>Lớp của tôi</Link>,
       },
       {
-        key: 'lich-giang-day',
+        key: ROUTES.TEACHER.COURSES,
+        icon: <AppstoreOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.TEACHER.COURSES}>Danh mục khóa học</Link>,
+      },
+      {
+        key: ROUTES.TEACHER.COURSE_PROPOSALS,
+        icon: <FileTextOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.TEACHER.COURSE_PROPOSALS}>Đề xuất khóa học</Link>,
+      },
+      {
+        key: ROUTES.TEACHER.SCHEDULE,
         icon: <CalendarOutlined className="text-[18px]" />,
-        label: 'Lịch giảng dạy',
+        label: <Link to={ROUTES.TEACHER.SCHEDULE}>Lịch giảng dạy</Link>,
       },
       {
         key: 'buoi-hoc',
@@ -66,9 +79,9 @@ const teacherMenuItems = [
     label: 'TÀI CHÍNH',
     children: [
       {
-        key: 'doanh-thu',
+        key: ROUTES.TEACHER.REVENUE,
         icon: <WalletOutlined className="text-[18px]" />,
-        label: 'Doanh thu',
+        label: <Link to={ROUTES.TEACHER.REVENUE}>Doanh thu</Link>,
       },
     ]
   },
@@ -79,19 +92,21 @@ const teacherMenuItems = [
       {
         key: 'ho-so-giao-vien',
         icon: <IdcardOutlined className="text-[18px]" />,
-        label: 'Hồ sơ giáo viên',
+        label: <Link to="/teacher/profile">Hồ sơ giáo viên</Link>,
       },
     ]
   }
 ];
 
 export default function TeacherLayout() {
+  const { user } = useAuthStore();
+
   return (
     <DashboardShell 
       menuItems={teacherMenuItems} 
       role="TEACHER"
-      userName="Thầy Nguyễn Minh Đức"
-      userRole="Giáo viên Toán học"
+      userName={user?.fullName || "Giáo viên"}
+      userRole={user?.email || ""}
     >
       <Outlet />
     </DashboardShell>

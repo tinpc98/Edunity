@@ -5,191 +5,166 @@ import type {
   PaginatedResult,
   SessionEntity,
 } from "../types/classDiscovery";
-import {
-  COMMON_DISCOVERY_GRADES,
-  GRADE_LEVEL_LABELS,
-  MOCK_COURSES,
-  MOCK_SUBJECTS,
-  MOCK_TEACHERS,
-  RAW_MOCK_CLASSES,
-  RAW_MOCK_SESSIONS,
-  transformToDiscoveryItem,
-} from "../data/mockClassDiscovery";
+import { classService } from "./class.service";
+import { adaptClassModelToDiscoveryItem } from "../api/classAdapters";
+import { apiClient } from "../api/apiClient";
+import { COMMON_DISCOVERY_GRADES, GRADE_LEVEL_LABELS } from "../data/mockClassDiscovery";
+import type { ClassListFilters } from "../types/class";
 
 /**
- * Service simulating public/student Class Discovery API
- * Applies AND across filter groups, OR within multi-select groups,
- * text search across class, course, subject, teacher, sorting, and pagination.
+ * Service providing public Class Discovery backed by real Backend API.
+ * Uses real endpoints:
+ * - GET /api/classes
+ * - GET /api/classes/:id
+ * - GET /api/classes/:id/sessions
+ * - GET /api/catalog/filters
  */
 class ClassDiscoveryService {
   async fetchClasses(filters: FilterState): Promise<PaginatedResult<ClassDiscoveryItem>> {
-    // Simulate real network latency
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    const apiFilters: ClassListFilters = {
+      page: filters.page,
+      pageSize: filters.pageSize,
+    };
 
-    let items = RAW_MOCK_CLASSES.map(transformToDiscoveryItem);
-
-    // 1. Text Search across Class name, Course name, Subject, Teacher
     if (filters.search && filters.search.trim() !== "") {
-      const q = filters.search.trim().toLowerCase();
-      items = items.filter(
-        (c) =>
-          c.title.toLowerCase().includes(q) ||
-          c.courseTitle.toLowerCase().includes(q) ||
-          c.subjectName.toLowerCase().includes(q) ||
-          c.teacherName.toLowerCase().includes(q) ||
-          c.gradeLabel.toLowerCase().includes(q)
-      );
+      apiFilters.search = filters.search.trim();
     }
-
-    // 2. Subject Filter (Single select or 'All')
     if (filters.subjectId && filters.subjectId !== "ALL") {
-      items = items.filter((c) => c.subjectId === filters.subjectId);
+      apiFilters.subjectId = filters.subjectId;
+    }
+    if (filters.courseId && filters.courseId !== "ALL") {
+      apiFilters.courseId = filters.courseId;
+    }
+    if (filters.teacherId && filters.teacherId !== "ALL") {
+      apiFilters.teacherId = filters.teacherId;
+    }
+    if (filters.classTypes && filters.classTypes.length > 0) {
+      apiFilters.classTypes = filters.classTypes.join(",");
+    }
+    if (filters.statuses && filters.statuses.length > 0) {
+      apiFilters.statuses = filters.statuses.join(",");
+    }
+    if (filters.minPrice !== undefined) {
+      apiFilters.minPrice = filters.minPrice;
+    }
+    if (filters.maxPrice !== undefined) {
+      apiFilters.maxPrice = filters.maxPrice;
     }
 
-    // 3. Grade Level Filter (Multi-select: OR within group)
+    if (filters.sort === "upcoming") {
+      apiFilters.sort = "upcoming";
+    } else if (filters.sort === "price_asc") {
+      apiFilters.sort = "price_asc";
+    } else if (filters.sort === "price_desc") {
+      apiFilters.sort = "price_desc";
+    } else {
+      apiFilters.sort = "createdAt";
+    }
+
+    const result = await classService.getClasses(apiFilters);
+
+    let items = result.items.map(adaptClassModelToDiscoveryItem);
+
+    // If gradeLevels filter is provided in frontend UI, filter client-side if backend does not filter
     if (filters.gradeLevels && filters.gradeLevels.length > 0) {
       items = items.filter(
         (c) => c.gradeLevel !== null && filters.gradeLevels.includes(c.gradeLevel)
       );
     }
 
-    // 4. Course Filter
-    if (filters.courseId && filters.courseId !== "ALL") {
-      items = items.filter((c) => c.courseId === filters.courseId);
-    }
-
-    // 5. Class Type Filter (FREE / PAID) (OR within group)
-    if (filters.classTypes && filters.classTypes.length > 0) {
-      items = items.filter((c) => filters.classTypes.includes(c.classType));
-    }
-
-    // 6. Price Range Filter
-    if (filters.minPrice !== undefined) {
-      items = items.filter((c) => c.price >= (filters.minPrice ?? 0));
-    }
-    if (filters.maxPrice !== undefined) {
-      items = items.filter((c) => c.price <= (filters.maxPrice ?? Infinity));
-    }
-
-    // 7. Schedule / Time of Day Filter (MORNING / AFTERNOON / EVENING) (OR within group)
+    // If timeOfDay filter is provided in frontend UI, filter client-side
     if (filters.timeOfDay && filters.timeOfDay.length > 0) {
       items = items.filter((c) => filters.timeOfDay.includes(c.timeOfDay));
     }
 
-    // 8. Status Filter (OR within group)
-    if (filters.statuses && filters.statuses.length > 0) {
-      items = items.filter((c) => filters.statuses.includes(c.status));
-    }
-
-    // 9. Teacher Filter
-    if (filters.teacherId && filters.teacherId !== "ALL") {
-      items = items.filter((c) => c.teacherId === filters.teacherId);
-    }
-
-    // 10. Sorting
-    switch (filters.sort) {
-      case "upcoming":
-        items.sort((a, b) => a.startDate.localeCompare(b.startDate));
-        break;
-      case "price_asc":
-        items.sort((a, b) => a.price - b.price);
-        break;
-      case "price_desc":
-        items.sort((a, b) => b.price - a.price);
-        break;
-      case "rating":
-        items.sort((a, b) => b.ratingAverage - a.ratingAverage);
-        break;
-      case "relevance":
-      default:
-        // Balanced relevance: rating + popularity (enrolled count)
-        items.sort((a, b) => {
-          const scoreA = a.ratingAverage * 10 + a.enrolledCount;
-          const scoreB = b.ratingAverage * 10 + b.enrolledCount;
-          return scoreB - scoreA;
-        });
-        break;
-    }
-
-    // 11. Pagination
-    const total = items.length;
-    const page = Math.max(1, filters.page);
-    const pageSize = Math.max(1, filters.pageSize);
-    const totalPages = Math.ceil(total / pageSize) || 1;
-    const startIndex = (page - 1) * pageSize;
-    const paginatedItems = items.slice(startIndex, startIndex + pageSize);
-
     return {
-      items: paginatedItems,
-      total,
-      page,
-      pageSize,
-      totalPages,
+      items,
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize,
+      totalPages: result.totalPages,
     };
   }
 
   async fetchFilterMetadata(): Promise<FilterMetadata> {
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    try {
+      const data = await apiClient<{
+        subjects?: Array<{ id: string; name: string; count?: number }>;
+        courses?: Array<{ id: string; name?: string; title?: string; count?: number }>;
+        teachers?: Array<{ id: string; name: string; count?: number }>;
+        minPrice?: number;
+        maxPrice?: number;
+      }>("/catalog/filters");
 
-    const allItems = RAW_MOCK_CLASSES.map(transformToDiscoveryItem);
+      const subjects = (data?.subjects || []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        count: s.count || 0,
+      }));
 
-    // Subject counts
-    const subjects = MOCK_SUBJECTS.map((s) => ({
-      id: s.id,
-      name: s.name,
-      count: allItems.filter((c) => c.subjectId === s.id).length,
-    }));
+      const courses = (data?.courses || []).map((c) => ({
+        id: c.id,
+        title: c.title || c.name || "",
+        count: c.count || 0,
+      }));
 
-    // Grade counts
-    const grades = COMMON_DISCOVERY_GRADES.map((level) => ({
-      level,
-      label: GRADE_LEVEL_LABELS[level] || level,
-      count: allItems.filter((c) => c.gradeLevel === level).length,
-    }));
+      const teachers = (data?.teachers || []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        count: t.count || 0,
+      }));
 
-    // Courses
-    const courses = MOCK_COURSES.map((crs) => ({
-      id: crs.id,
-      title: crs.title,
-      count: allItems.filter((c) => c.courseId === crs.id).length,
-    }));
+      const grades = COMMON_DISCOVERY_GRADES.map((level) => ({
+        level,
+        label: GRADE_LEVEL_LABELS[level] || level,
+        count: 0,
+      }));
 
-    // Teachers
-    const teachers = MOCK_TEACHERS.map((t) => ({
-      id: t.id,
-      name: t.name,
-      count: allItems.filter((c) => c.teacherId === t.id).length,
-    }));
-
-    // Price bounds
-    const prices = allItems.map((c) => c.price);
-    const minPrice = 0;
-    const maxPrice = Math.max(...prices, 2000000);
-
-    return {
-      subjects,
-      grades,
-      courses,
-      teachers,
-      minPrice,
-      maxPrice,
-    };
+      return {
+        subjects,
+        grades,
+        courses,
+        teachers,
+        minPrice: data?.minPrice ?? 0,
+        maxPrice: data?.maxPrice ?? 5000000,
+      };
+    } catch {
+      // Fallback empty structure
+      return {
+        subjects: [],
+        grades: COMMON_DISCOVERY_GRADES.map((level) => ({
+          level,
+          label: GRADE_LEVEL_LABELS[level] || level,
+          count: 0,
+        })),
+        courses: [],
+        teachers: [],
+        minPrice: 0,
+        maxPrice: 5000000,
+      };
+    }
   }
 
   async fetchClassById(classId: string): Promise<ClassDiscoveryItem | null> {
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    const found = RAW_MOCK_CLASSES.find((c) => c._id === classId);
-    if (!found) return null;
-    return transformToDiscoveryItem(found);
+    try {
+      const cls = await classService.getClassById(classId);
+      return adaptClassModelToDiscoveryItem(cls);
+    } catch (err: any) {
+      if (err?.status === 404) return null;
+      throw err;
+    }
   }
 
   async fetchSessionsByClassId(classId: string): Promise<SessionEntity[]> {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const sessions = RAW_MOCK_SESSIONS.filter((s) => s.classId === classId);
-    // Sort chronologically by startDatetime
-    return [...sessions].sort(
-      (a, b) => new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime()
-    );
+    try {
+      const sessions = await apiClient<SessionEntity[]>(`/classes/${classId}/sessions`);
+      if (!Array.isArray(sessions)) return [];
+      return [...sessions].sort(
+        (a, b) => new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime()
+      );
+    } catch {
+      return [];
+    }
   }
 }
 

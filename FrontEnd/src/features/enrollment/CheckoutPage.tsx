@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Breadcrumb, Button, Alert, Tag, Skeleton, App as AntdApp, Radio } from "antd";
+import { Breadcrumb, Button, Alert, Tag, Skeleton, message, Popconfirm } from "antd";
 import {
   HomeOutlined,
   ClockCircleOutlined,
@@ -10,29 +10,35 @@ import {
   BookOutlined,
   WarningOutlined,
   ArrowLeftOutlined,
-  ReloadOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  BarcodeOutlined,
 } from "@ant-design/icons";
-import { enrollmentService } from "../../services/enrollment.service";
-import { paymentService, PaymentError, type MockPaymentScenario } from "../../services/payment.service";
+import { enrollmentService, enrollmentKeys } from "../../services/enrollment.service";
+import { paymentService, paymentKeys } from "../../services/payment.service";
+import { classKeys } from "../../services/class.service";
+import { sessionKeys } from "../../services/session.service";
+import { financeKeys } from "../../services/finance.service";
 import { useClassDetailQuery } from "../class/hooks/useClassDiscovery";
 import { useAuthStore } from "../../stores/auth.store";
+import { ROUTES } from "../../routes/routePaths";
+import type { CreatePaymentResponse } from "../../types/payment";
 
 export default function CheckoutPage() {
   const { enrollmentId } = useParams<{ enrollmentId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { notification } = AntdApp.useApp();
   const { user } = useAuthStore();
 
-  const [scenario, setScenario] = useState<MockPaymentScenario>(() => paymentService.getMockScenario());
+  const [paymentData, setPaymentData] = useState<CreatePaymentResponse | null>(null);
 
-  // 1. Fetch Enrollment
+  // 1. Fetch Enrollment from real backend
   const {
     data: enrollment,
     isLoading: isLoadingEnrollment,
     refetch: refetchEnrollment,
   } = useQuery({
-    queryKey: ["enrollment", enrollmentId],
+    queryKey: enrollmentKeys.detail(enrollmentId || ""),
     queryFn: () => (enrollmentId ? enrollmentService.getEnrollmentById(enrollmentId) : null),
     enabled: Boolean(enrollmentId),
   });
@@ -42,13 +48,31 @@ export default function CheckoutPage() {
     enrollment?.classId
   );
 
-  // 3. Countdown timer derived strictly from persisted holdExpiresAt
-  const [now, setNow] = useState(() => Date.now());
+  // 3. Create or retrieve existing PENDING payment from real backend
+  const createPaymentMutation = useMutation({
+    mutationFn: (id: string) => paymentService.createPayment(id),
+    onSuccess: (data) => {
+      setPaymentData(data);
+    },
+    onError: (err: any) => {
+      message.error(err.message || "Không thể khởi tạo phiên thanh toán.");
+    },
+  });
 
   useEffect(() => {
-    if (!enrollment?.holdExpiresAt) return;
+    if (enrollment && enrollment.enrollmentStatus === "PENDING_PAYMENT" && !paymentData) {
+      createPaymentMutation.mutate(enrollment.id);
+    }
+  }, [enrollment?.id, enrollment?.enrollmentStatus]);
 
-    const targetTime = new Date(enrollment.holdExpiresAt).getTime();
+  // 4. Countdown timer derived strictly from persisted holdExpiresAt
+  const [now, setNow] = useState(() => Date.now());
+  const effectiveHoldExpiresAt = paymentData?.holdExpiresAt || enrollment?.holdExpiresAt;
+
+  useEffect(() => {
+    if (!effectiveHoldExpiresAt) return;
+
+    const targetTime = new Date(effectiveHoldExpiresAt).getTime();
     const interval = setInterval(() => {
       const current = Date.now();
       setNow(current);
@@ -59,53 +83,70 @@ export default function CheckoutPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [enrollment?.holdExpiresAt, refetchEnrollment]);
+  }, [effectiveHoldExpiresAt, refetchEnrollment]);
 
-  const secondsRemaining = enrollment?.holdExpiresAt
-    ? Math.max(0, Math.floor((new Date(enrollment.holdExpiresAt).getTime() - now) / 1000))
+  const secondsRemaining = effectiveHoldExpiresAt
+    ? Math.max(0, Math.floor((new Date(effectiveHoldExpiresAt).getTime() - now) / 1000))
     : null;
 
   // Handle redirect if enrollment is already confirmed
   useEffect(() => {
-    if (enrollment && (enrollment.enrollmentStatus === "CONFIRMED" || enrollment.enrollmentStatus === "COMPLETED")) {
+    if (
+      enrollment &&
+      (enrollment.enrollmentStatus === "CONFIRMED" || enrollment.enrollmentStatus === "COMPLETED")
+    ) {
       navigate(`/checkout/${enrollment.id}/success`, { replace: true });
     }
-  }, [enrollment, navigate]);
+  }, [enrollment?.enrollmentStatus, enrollment?.id, navigate]);
 
-  // Payment mutation
-  const paymentMutation = useMutation({
+  // 5. Trigger Sandbox Webhook (SUCCESS simulation)
+  const successWebhookMutation = useMutation({
     mutationFn: () => {
-      if (!enrollmentId || !user) {
-        throw new Error("Thông tin người dùng hoặc đơn đăng ký không hợp lệ.");
+      if (!paymentData?.gatewayReference) {
+        throw new Error("Không tìm thấy mã tham chiếu thanh toán.");
       }
-      return paymentService.createPaymentAttempt({
-        enrollmentId,
-        payerUserId: user.userId,
-      });
+      return paymentService.triggerSandboxWebhook(paymentData.gatewayReference, "SUCCESS");
     },
-    onSuccess: (result) => {
-      notification.success({
-        message: "Thanh toán thành công",
-        description: "Bạn đã đăng ký lớp học thành công.",
-        placement: "topRight",
-      });
-      queryClient.invalidateQueries({ queryKey: ["enrollment", enrollmentId] });
-      queryClient.invalidateQueries({ queryKey: ["classDetail", enrollment?.classId] });
-      navigate(`/checkout/${result.enrollment.id}/success`);
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: enrollmentKeys.all });
+      queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      queryClient.invalidateQueries({ queryKey: classKeys.all });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+      queryClient.invalidateQueries({ queryKey: financeKeys.all });
+
+      if (res.result === "PAYMENT_SUCCESS" || res.paymentStatus === "COMPLETED") {
+        message.success("Thanh toán thành công! Ghi danh đã được xác nhận.");
+        navigate(`/checkout/${enrollmentId}/success`);
+      } else if (res.result === "LATE_PAYMENT_REFUND_REQUIRED") {
+        message.warning("Đơn giữ chỗ đã hết hạn trước khi thanh toán. Hệ thống đã tạo yêu cầu hoàn tiền (REFUND).");
+        refetchEnrollment();
+      } else {
+        message.info(`Kết quả thanh toán: ${res.result}`);
+        refetchEnrollment();
+      }
     },
-    onError: (error: Error | PaymentError) => {
-      notification.error({
-        message: "Thanh toán không thành công",
-        description: error.message || "Thanh toán chưa thành công. Vui lòng thử lại.",
-        placement: "topRight",
-      });
+    onError: (err: any) => {
+      message.error(err.message || "Xử lý thanh toán thất bại.");
     },
   });
 
-  const handleScenarioChange = (newScenario: MockPaymentScenario) => {
-    setScenario(newScenario);
-    paymentService.setMockScenario(newScenario);
-  };
+  // 6. Trigger Sandbox Webhook (FAILED simulation)
+  const failWebhookMutation = useMutation({
+    mutationFn: () => {
+      if (!paymentData?.gatewayReference) {
+        throw new Error("Không tìm thấy mã tham chiếu thanh toán.");
+      }
+      return paymentService.triggerSandboxWebhook(paymentData.gatewayReference, "FAILED");
+    },
+    onSuccess: () => {
+      message.error("Mô phỏng thanh toán thất bại.");
+      queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      refetchEnrollment();
+    },
+    onError: (err: any) => {
+      message.error(err.message || "Lỗi mô phỏng thanh toán.");
+    },
+  });
 
   const isExpired =
     secondsRemaining !== null &&
@@ -118,7 +159,7 @@ export default function CheckoutPage() {
         ).padStart(2, "0")}`
       : "00:00";
 
-  if (isLoadingEnrollment || isLoadingClass) {
+  if (isLoadingEnrollment || isLoadingClass || createPaymentMutation.isPending) {
     return (
       <div className="site-container py-12 min-h-screen">
         <Skeleton active paragraph={{ rows: 8 }} />
@@ -135,7 +176,7 @@ export default function CheckoutPage() {
           message="Không tìm thấy thông tin đơn đăng ký"
           description="Đơn đăng ký không tồn tại hoặc đã bị xóa."
           action={
-            <Link to="/classes">
+            <Link to={ROUTES.CLASSES}>
               <Button type="primary" size="small">
                 Khám phá lớp học
               </Button>
@@ -146,7 +187,7 @@ export default function CheckoutPage() {
     );
   }
 
-  const formattedTuition = `${enrollment.tuitionAmount.toLocaleString("vi-VN")}đ`;
+  const formattedTuition = `${enrollment.tuitionAmount.toLocaleString("vi-VN")} đ`;
 
   return (
     <div className="site-container py-8 min-h-[calc(100vh-140px)] max-w-5xl">
@@ -156,7 +197,7 @@ export default function CheckoutPage() {
           items={[
             {
               title: (
-                <Link to="/" className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 text-xs">
+                <Link to={ROUTES.HOME} className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 text-xs">
                   <HomeOutlined />
                   <span>Trang chủ</span>
                 </Link>
@@ -164,7 +205,7 @@ export default function CheckoutPage() {
             },
             {
               title: (
-                <Link to="/classes" className="text-slate-500 hover:text-indigo-600 text-xs">
+                <Link to={ROUTES.CLASSES} className="text-slate-500 hover:text-indigo-600 text-xs">
                   Khám phá lớp học
                 </Link>
               ),
@@ -191,68 +232,112 @@ export default function CheckoutPage() {
           Hoàn tất đơn đăng ký
         </p>
         <h1 className="text-2xl sm:text-3xl font-black text-slate-900">
-          THANH TOÁN
+          THANH TOÁN HỌC PHÍ
         </h1>
       </div>
 
       {/* Main 2-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* LEFT COLUMN: Class information */}
-        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-7 shadow-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
-            <h2 className="text-base font-bold text-slate-900 uppercase tracking-wide">
-              THÔNG TIN LỚP HỌC
-            </h2>
-            <Tag color="indigo" className="font-semibold text-xs border-none px-2.5 py-0.5">
-              {classItem.gradeLabel}
-            </Tag>
-          </div>
-
-          <div className="space-y-5">
-            <div>
-              <div className="text-xs font-semibold text-slate-400 mb-1">Tên lớp học</div>
-              <div className="text-lg font-bold text-slate-900 leading-snug">
-                {classItem.title}
-              </div>
+        {/* LEFT COLUMN: Class information & Payment details */}
+        <div className="lg:col-span-7 space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-7 shadow-xs">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+              <h2 className="text-base font-bold text-slate-900 uppercase tracking-wide">
+                THÔNG TIN LỚP HỌC
+              </h2>
+              <Tag color="indigo" className="font-semibold text-xs border-none px-2.5 py-0.5">
+                {classItem.gradeLabel}
+              </Tag>
             </div>
 
-            <div>
-              <div className="text-xs font-semibold text-slate-400 mb-1">Khóa học liên kết</div>
-              <div className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                <BookOutlined className="text-indigo-600" />
-                <span>{classItem.courseTitle}</span>
+            <div className="space-y-4">
+              <div>
+                <div className="text-xs font-semibold text-slate-400 mb-1">Tên lớp học</div>
+                <div className="text-lg font-bold text-slate-900 leading-snug">
+                  {classItem.title}
+                </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="text-xs text-slate-400 font-medium mb-1">Giảng viên</div>
-                <div className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                  <UserOutlined className="text-indigo-600" />
-                  <span>{classItem.teacherName}</span>
+              <div>
+                <div className="text-xs font-semibold text-slate-400 mb-1">Khóa học liên kết</div>
+                <div className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                  <BookOutlined className="text-indigo-600" />
+                  <span>{classItem.courseTitle}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="text-xs text-slate-400 font-medium mb-1">Giảng viên</div>
+                  <div className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                    <UserOutlined className="text-indigo-600" />
+                    <span>{classItem.teacherName}</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="text-xs text-slate-400 font-medium mb-1">Ngày khai giảng</div>
+                  <div className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                    <CalendarOutlined className="text-indigo-600" />
+                    <span>{classItem.startDate}</span>
+                  </div>
                 </div>
               </div>
 
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="text-xs text-slate-400 font-medium mb-1">Ngày khai giảng</div>
+                <div className="text-xs text-slate-400 font-medium mb-1">Lịch học hàng tuần</div>
                 <div className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                  <CalendarOutlined className="text-indigo-600" />
-                  <span>{classItem.startDate}</span>
+                  <ClockCircleOutlined className="text-indigo-600" />
+                  <span>{classItem.scheduleText}</span>
                 </div>
               </div>
             </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="text-xs text-slate-400 font-medium mb-1">Lịch học hàng tuần</div>
-              <div className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <ClockCircleOutlined className="text-indigo-600" />
-                <span>{classItem.scheduleText}</span>
-              </div>
-            </div>
           </div>
+
+          {/* Payment Gateway Box */}
+          {paymentData && !isExpired && (
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 className="text-sm font-bold text-slate-900">
+                  CỔNG THANH TOÁN (GATEWAY)
+                </h3>
+                <Tag color="cyan" className="font-semibold text-xs border-none">
+                  SANDBOX
+                </Tag>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Mã tham chiếu thanh toán:</span>
+                  <span className="font-mono font-bold text-slate-800 text-sm">
+                    {paymentData.gatewayReference}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Phương thức:</span>
+                  <span className="font-semibold text-slate-700">Mô phỏng Chuyển khoản / PayOS</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Người nộp:</span>
+                  <span className="font-semibold text-slate-700">{user?.fullName || "Học viên"}</span>
+                </div>
+              </div>
+
+              <Alert
+                type="info"
+                showIcon
+                icon={<BarcodeOutlined />}
+                message="Môi trường Sandbox tích hợp"
+                description="Trong môi trường thử nghiệm, bạn có thể sử dụng các nút bên dưới để mô phỏng sự kiện Webhook từ cổng thanh toán gửi về Backend Edunity."
+                className="rounded-xl text-xs"
+              />
+            </div>
+          )}
         </div>
 
-        {/* RIGHT COLUMN: Payment summary */}
+        {/* RIGHT COLUMN: Payment summary & Actions */}
         <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-7 shadow-xs flex flex-col gap-6">
           <div className="pb-4 border-b border-slate-100">
             <h2 className="text-base font-bold text-slate-900 uppercase tracking-wide">
@@ -262,14 +347,14 @@ export default function CheckoutPage() {
 
           <div className="space-y-3 text-sm">
             <div className="flex items-center justify-between text-slate-600">
-              <span>Học phí</span>
+              <span>Học phí khóa học</span>
               <span className="font-semibold text-slate-800">{formattedTuition}</span>
             </div>
 
             <div className="h-px bg-slate-100 my-2" />
 
             <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-900 text-base">Tổng cộng</span>
+              <span className="font-bold text-slate-900 text-base">Tổng cần thanh toán</span>
               <span className="font-black text-2xl text-indigo-600">{formattedTuition}</span>
             </div>
           </div>
@@ -291,21 +376,10 @@ export default function CheckoutPage() {
                 <div className="text-xs text-slate-600">
                   Còn <strong className="text-base font-extrabold text-amber-600 font-mono">{formattedCountdown}</strong>
                 </div>
-                <div className="text-xs text-slate-500 font-medium">để hoàn tất đăng ký</div>
+                <div className="text-xs text-slate-500 font-medium">để hoàn tất giao dịch</div>
               </div>
             )}
           </div>
-
-          {/* Error Banner when mutation fails */}
-          {paymentMutation.isError && !isExpired && (
-            <Alert
-              type="error"
-              showIcon
-              message="Thanh toán chưa thành công"
-              description="Hệ thống chưa thể xử lý giao dịch. Bạn có thể nhấn 'Thử thanh toán lại' để thực hiện lại giao dịch cho đơn đăng ký này."
-              className="rounded-xl text-xs"
-            />
-          )}
 
           {/* Action CTA Buttons */}
           <div className="space-y-3">
@@ -319,60 +393,50 @@ export default function CheckoutPage() {
                   Quay lại thông tin lớp học
                 </Button>
               </Link>
-            ) : paymentMutation.isError ? (
-              <Button
-                type="primary"
-                size="large"
-                danger
-                loading={paymentMutation.isPending}
-                disabled={paymentMutation.isPending}
-                onClick={() => paymentMutation.mutate()}
-                icon={<ReloadOutlined />}
-                className="w-full h-12 rounded-xl font-bold text-sm shadow-xs"
-              >
-                Thử thanh toán lại
-              </Button>
             ) : (
-              <Button
-                type="primary"
-                size="large"
-                loading={paymentMutation.isPending}
-                disabled={paymentMutation.isPending}
-                onClick={() => paymentMutation.mutate()}
-                className="w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-bold text-sm shadow-xs"
-              >
-                Thanh toán ngay
-              </Button>
+              <>
+                <Button
+                  type="primary"
+                  size="large"
+                  loading={successWebhookMutation.isPending}
+                  disabled={successWebhookMutation.isPending || !paymentData}
+                  onClick={() => successWebhookMutation.mutate()}
+                  icon={<CheckCircleOutlined />}
+                  className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-sm shadow-xs border-none"
+                >
+                  Xác nhận thanh toán thành công (Sandbox)
+                </Button>
+
+                <Popconfirm
+                  title="Mô phỏng thanh toán thất bại?"
+                  description="Bạn có muốn mô phỏng trường hợp giao dịch bị từ chối/hủy?"
+                  okText="Mô phỏng thất bại"
+                  cancelText="Hủy"
+                  okButtonProps={{ danger: true, loading: failWebhookMutation.isPending }}
+                  onConfirm={() => failWebhookMutation.mutate()}
+                >
+                  <Button
+                    size="large"
+                    danger
+                    loading={failWebhookMutation.isPending}
+                    disabled={failWebhookMutation.isPending || !paymentData}
+                    icon={<CloseCircleOutlined />}
+                    className="w-full h-11 rounded-xl font-semibold text-xs"
+                  >
+                    Mô phỏng thanh toán thất bại
+                  </Button>
+                </Popconfirm>
+              </>
             )}
 
             <div className="text-center pt-2">
               <Link
-                to={`/classes/${classItem.id}`}
+                to={ROUTES.STUDENT.ENROLLMENTS}
                 className="text-xs font-semibold text-slate-400 hover:text-slate-600"
               >
-                Hủy và quay lại lớp học
+                ← Quay lại danh sách đơn đăng ký
               </Link>
             </div>
-          </div>
-
-          {/* Deterministic Dev Scenario Toggle */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2">
-              <span className="font-semibold uppercase tracking-wider">Kịch bản Test (Mock)</span>
-            </div>
-            <Radio.Group
-              size="small"
-              value={scenario}
-              onChange={(e) => handleScenarioChange(e.target.value)}
-              className="w-full grid grid-cols-2 text-center"
-            >
-              <Radio.Button value="SUCCESS" className="text-xs">
-                ✓ Thành công
-              </Radio.Button>
-              <Radio.Button value="FAILED" className="text-xs">
-                ✗ Thất bại
-              </Radio.Button>
-            </Radio.Group>
           </div>
         </div>
       </div>

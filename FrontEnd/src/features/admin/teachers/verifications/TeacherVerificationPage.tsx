@@ -1,47 +1,46 @@
 import { useState } from 'react';
-import { Typography, Input, Button, Card, Tag, Table, Select, Row, Col, Avatar } from 'antd';
+import { useQuery } from '@tanstack/react-query';
+import { Typography, Button, Tag, Table, Avatar, Alert } from 'antd';
 import { 
-  SearchOutlined, 
   SafetyCertificateOutlined,
   ClockCircleOutlined,
-  ExclamationCircleOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  FileTextOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
-import { mockAdminTeacherVerifications } from '../../../../data/mockAdminTeacherVerification';
+import { teacherVerificationService } from '../../../../services/teacherVerification.service';
 
 const { Title, Text } = Typography;
 
 export default function TeacherVerificationPage() {
   const navigate = useNavigate();
-  const [activeFilter, setActiveFilter] = useState('ALL');
+  const [activeFilter, setActiveFilter] = useState('PENDING');
 
-  const filteredTeachers = mockAdminTeacherVerifications.filter(t => {
-    if (activeFilter === 'ALL') return true;
-    return t.status === activeFilter;
+  const { data: pagedVerifications, isLoading, isError, refetch } = useQuery({
+    queryKey: ['admin-teacher-verifications', activeFilter],
+    queryFn: () => teacherVerificationService.adminListVerifications(activeFilter, 1, 100),
   });
 
   const getStatusTag = (status: string) => {
     switch (status) {
       case 'VERIFIED': return <Tag color="success" icon={<CheckCircleOutlined />}>Đã xác minh</Tag>;
       case 'PENDING': return <Tag color="processing" icon={<ClockCircleOutlined />}>Chờ duyệt</Tag>;
-      case 'NEEDS_INFO': return <Tag color="warning" icon={<ExclamationCircleOutlined />}>Cần bổ sung</Tag>;
+      case 'UNVERIFIED': return <Tag color="default">Chưa gửi</Tag>;
       case 'REJECTED': return <Tag color="error" icon={<CloseCircleOutlined />}>Từ chối</Tag>;
-      default: return null;
+      default: return <Tag>{status}</Tag>;
     }
   };
 
   const columns = [
     {
       title: 'Giáo viên',
-      dataIndex: 'name',
-      key: 'name',
+      dataIndex: 'fullName',
+      key: 'fullName',
       render: (text: string, record: any) => (
         <div className="flex items-center gap-3">
-          <Avatar className="bg-indigo-100 text-indigo-700 font-bold">{text.substring(0, 2).toUpperCase()}</Avatar>
+          <Avatar className="bg-indigo-100 text-indigo-700 font-bold">{text?.substring(0, 2).toUpperCase()}</Avatar>
           <div>
             <div className="font-semibold text-gray-900">{text}</div>
             <div className="text-xs text-gray-500">{record.email}</div>
@@ -51,26 +50,20 @@ export default function TeacherVerificationPage() {
     },
     {
       title: 'Chuyên môn',
-      dataIndex: 'specialization',
-      key: 'specialization',
-      render: (text: string) => <Tag className="border-0 bg-gray-100 font-medium text-gray-700">{text}</Tag>
+      dataIndex: 'qualificationSummary',
+      key: 'qualificationSummary',
+      render: (text: string) => text ? <Tag className="border-0 bg-gray-100 font-medium text-gray-700">{text}</Tag> : <span className="text-gray-400">Không có</span>
     },
     {
-      title: 'Ngày gửi',
-      dataIndex: 'dateSubmitted',
-      key: 'dateSubmitted',
-    },
-    {
-      title: 'Tài liệu',
-      key: 'documents',
-      render: (_: any, record: any) => (
-        <span className="text-gray-600 flex items-center gap-1.5"><FileTextOutlined /> {record.documents.length} tài liệu</span>
-      )
+      title: 'Ngày cập nhật',
+      dataIndex: 'updatedAt',
+      key: 'updatedAt',
+      render: (date: string) => dayjs(date).format('DD/MM/YYYY HH:mm')
     },
     {
       title: 'Trạng thái',
-      dataIndex: 'status',
-      key: 'status',
+      dataIndex: 'verificationStatus',
+      key: 'verificationStatus',
       render: (status: string) => getStatusTag(status)
     },
     {
@@ -81,18 +74,13 @@ export default function TeacherVerificationPage() {
           type="primary" 
           ghost 
           className="rounded-lg font-medium"
-          onClick={() => navigate(ROUTES.ADMIN.TEACHER_VERIFICATION_DETAIL.replace(':teacherId', record.id))}
+          onClick={() => navigate(ROUTES.ADMIN.TEACHER_VERIFICATION_DETAIL.replace(':teacherId', record.teacherId))}
         >
           Xem hồ sơ
         </Button>
       ),
     },
   ];
-
-  const pendingCount = mockAdminTeacherVerifications.filter(t => t.status === 'PENDING').length;
-  const needsInfoCount = mockAdminTeacherVerifications.filter(t => t.status === 'NEEDS_INFO').length;
-  const verifiedCount = mockAdminTeacherVerifications.filter(t => t.status === 'VERIFIED').length;
-  const rejectedCount = mockAdminTeacherVerifications.filter(t => t.status === 'REJECTED').length;
 
   return (
     <div className="flex flex-col gap-6 w-full">
@@ -107,105 +95,36 @@ export default function TeacherVerificationPage() {
         </div>
       </div>
 
-      <Row gutter={[16, 16]}>
-        <Col xs={12} sm={12} md={6}>
-          <Card className="rounded-2xl shadow-sm border-indigo-100 bg-white hover:border-indigo-300 transition-colors cursor-pointer" onClick={() => setActiveFilter('PENDING')}>
-            <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">HỒ SƠ CHỜ DUYỆT</Text>
-              <Tag color="error" className="!m-0 rounded-full font-bold">Cần xử lý sớm</Tag>
-            </div>
-            <div className="flex items-end gap-2">
-              <Title level={1} className="!m-0 text-indigo-900 !text-4xl">{pendingCount}</Title>
-            </div>
-            <div className="mt-2">
-              <Text className="text-rose-500 text-xs font-medium">Hạn chót thẩm định: &lt; 24 giờ</Text>
-            </div>
-          </Card>
-        </Col>
-        
-        <Col xs={12} sm={12} md={6}>
-          <Card className="rounded-2xl shadow-sm border-gray-100 bg-white hover:border-indigo-300 transition-colors cursor-pointer" onClick={() => setActiveFilter('NEEDS_INFO')}>
-            <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">CẦN BỔ SUNG TÀI LIỆU</Text>
-              <Tag color="warning" className="!m-0 rounded-full">Đã gửi thông báo</Tag>
-            </div>
-            <div className="flex items-end gap-2">
-              <Title level={1} className="!m-0 text-gray-900 !text-4xl">{needsInfoCount}</Title>
-            </div>
-            <div className="mt-2">
-              <Text className="text-gray-500 text-xs">Chờ phản hồi (Hồ sơ quá hạn 7 ngày)</Text>
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={12} sm={12} md={6}>
-          <Card className="rounded-2xl shadow-sm border-gray-100 bg-white hover:border-indigo-300 transition-colors cursor-pointer" onClick={() => setActiveFilter('VERIFIED')}>
-            <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">GIÁO VIÊN ĐÃ XÁC MINH</Text>
-              <Tag color="success" className="!m-0 rounded-full font-medium">97.4% Đủ điều kiện</Tag>
-            </div>
-            <div className="flex items-end gap-2">
-              <Title level={1} className="!m-0 text-gray-900 !text-4xl">{verifiedCount}</Title>
-              <Text className="text-emerald-500 text-xs font-medium mb-1">+14 tháng này</Text>
-            </div>
-            <div className="mt-2">
-              <Text className="text-gray-500 text-xs">Đang hoạt động trên nền tảng</Text>
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={12} sm={12} md={6}>
-          <Card className="rounded-2xl shadow-sm border-gray-100 bg-white hover:border-indigo-300 transition-colors cursor-pointer" onClick={() => setActiveFilter('REJECTED')}>
-            <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">TỪ CHỐI / KHIẾU NẠI</Text>
-              <Tag color="default" className="!m-0 rounded-full">Đã trả kết quả</Tag>
-            </div>
-            <div className="flex items-end gap-2">
-              <Title level={1} className="!m-0 text-gray-900 !text-4xl">{rejectedCount}</Title>
-            </div>
-            <div className="mt-2">
-              <Text className="text-gray-500 text-xs">Tỷ lệ không đạt: 1.5%</Text>
-            </div>
-          </Card>
-        </Col>
-      </Row>
-
       <div className="flex flex-col md:flex-row justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
         <div className="flex gap-3 overflow-x-auto pb-1 md:pb-0 hide-scrollbar flex-1">
-          <Button type={activeFilter === 'ALL' ? 'primary' : 'default'} onClick={() => setActiveFilter('ALL')} className={activeFilter === 'ALL' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}>
-            Tất cả ({mockAdminTeacherVerifications.length})
-          </Button>
           <Button type={activeFilter === 'PENDING' ? 'primary' : 'default'} onClick={() => setActiveFilter('PENDING')} className={activeFilter === 'PENDING' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}>
-            Chờ duyệt ({pendingCount})
-          </Button>
-          <Button type={activeFilter === 'NEEDS_INFO' ? 'primary' : 'default'} onClick={() => setActiveFilter('NEEDS_INFO')} className={activeFilter === 'NEEDS_INFO' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}>
-            Cần bổ sung ({needsInfoCount})
+            Chờ duyệt
           </Button>
           <Button type={activeFilter === 'VERIFIED' ? 'primary' : 'default'} onClick={() => setActiveFilter('VERIFIED')} className={activeFilter === 'VERIFIED' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}>
-            Đã xác minh ({verifiedCount})
+            Đã xác minh
           </Button>
           <Button type={activeFilter === 'REJECTED' ? 'primary' : 'default'} onClick={() => setActiveFilter('REJECTED')} className={activeFilter === 'REJECTED' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}>
-            Từ chối ({rejectedCount})
+            Từ chối
           </Button>
-        </div>
-        
-        <div className="flex gap-3 shrink-0">
-          <Input placeholder="Tìm kiếm giáo viên..." prefix={<SearchOutlined />} className="rounded-lg w-full md:w-[250px]" />
-          <Select defaultValue="newest" className="w-[150px]" options={[{value: 'newest', label: 'Mới nhất trước'}]} />
         </div>
       </div>
 
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex justify-between items-center mb-6">
-          <Title level={4} className="!m-0 text-gray-800">Danh sách hàng đợi</Title>
-          <Button type="text" className="text-indigo-600 font-medium">Làm mới</Button>
+          <Title level={4} className="!m-0 text-gray-800">Danh sách hàng đợi ({pagedVerifications?.paging?.total || 0})</Title>
+          <Button type="text" onClick={() => refetch()} className="text-indigo-600 font-medium">Làm mới</Button>
         </div>
+        
+        {isError && (
+          <Alert message="Không thể tải danh sách xác minh." type="error" showIcon className="mb-4" />
+        )}
         
         <Table 
           columns={columns} 
-          dataSource={filteredTeachers} 
-          rowKey="id"
+          dataSource={pagedVerifications?.data || []} 
+          rowKey="teacherId"
           pagination={{ pageSize: 10 }}
+          loading={isLoading}
         />
       </div>
     </div>

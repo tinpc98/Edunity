@@ -35,8 +35,16 @@ export default function LoginPage() {
         description: "Chào mừng bạn quay trở lại Edunity.",
         placement: "topRight",
       });
-      setAuth(data.user, data.accessToken);
-      navigate(redirectUrl || ROUTES.HOME);
+      setAuth(data.user, data.accessToken, data.refreshToken);
+      if (redirectUrl) {
+        navigate(redirectUrl);
+      } else {
+        // Route based on role
+        if (data.user.role === "TEACHER") navigate(ROUTES.TEACHER.HOME);
+        else if (data.user.role === "ADMIN") navigate(ROUTES.ADMIN.HOME);
+        else if (data.user.role === "SPONSOR") navigate(ROUTES.SPONSOR.HOME);
+        else navigate(ROUTES.STUDENT.HOME);
+      }
     },
     onError: (error: Error) => {
       notificationApi.error({

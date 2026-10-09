@@ -1,13 +1,16 @@
-import React, { useState } from "react";
-import { Layout, Menu, Input, Avatar, Badge, Button, Flex, Typography } from "antd";
+import React, { useState, useEffect } from "react";
+import { Layout, Menu, Input, Avatar, Badge, Button, Flex, Typography, Dropdown, App as AntdApp } from "antd";
 import { 
   SearchOutlined, 
   BellOutlined, 
   MessageOutlined,
   UserOutlined,
-  ReadOutlined
+  ReadOutlined,
+  LogoutOutlined
 } from "@ant-design/icons";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuthStore } from "../../stores/auth.store";
+import { ROUTES } from "../../routes/routePaths";
 
 const { Header, Sider, Content } = Layout;
 const { Text, Title } = Typography;
@@ -15,14 +18,60 @@ const { Text, Title } = Typography;
 interface DashboardShellProps {
   children: React.ReactNode;
   menuItems: any[];
-  role: "TEACHER" | "ADMIN";
-  userName: string;
-  userRole: string;
+  role: "TEACHER" | "ADMIN" | "SPONSOR";
+  userName?: string;
+  userRole?: string;
 }
 
 export default function DashboardShell({ children, menuItems, role, userName, userRole }: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { notification } = AntdApp.useApp();
+  const { user, isAuthenticated, logout } = useAuthStore();
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`, { replace: true });
+      return;
+    }
+
+    if (user.role !== role) {
+      notification.error({
+        message: "Quyền truy cập bị từ chối",
+        description: `Bạn không có quyền truy cập trang này.`,
+        placement: "topRight",
+      });
+      navigate(ROUTES.HOME, { replace: true });
+    }
+  }, [isAuthenticated, user, role, navigate, notification, location.pathname]);
+
+  if (!isAuthenticated || !user || user.role !== role) {
+    return null;
+  }
+
+  const handleLogout = async () => {
+    try {
+      const { refreshToken } = useAuthStore.getState();
+      const { logoutUser } = await import("../../services/auth.service");
+      await logoutUser(refreshToken);
+    } catch {
+      // Ignore errors
+    } finally {
+      logout();
+      navigate(ROUTES.HOME);
+    }
+  };
+
+  const userMenuItems = [
+    {
+      key: "logout",
+      danger: true,
+      icon: <LogoutOutlined />,
+      label: "Đăng xuất",
+      onClick: handleLogout,
+    },
+  ];
 
   return (
     <Layout style={{ minHeight: "100vh", background: "#f7f7fb" }}>
@@ -109,13 +158,19 @@ export default function DashboardShell({ children, menuItems, role, userName, us
             
             <div className="h-6 w-[1px] bg-gray-200 hidden sm:block"></div>
             
-            <Flex align="center" gap="small" className="cursor-pointer">
-              <Avatar size="default" icon={<UserOutlined />} className="bg-indigo-600" />
-              <div className="hidden sm:flex flex-col leading-tight justify-center h-full">
-                <Text strong className="text-[13px] leading-tight">{userName}</Text>
-                <Text type="secondary" className="text-[11px] leading-tight">{userRole}</Text>
-              </div>
-            </Flex>
+            <Dropdown menu={{ items: userMenuItems }} trigger={["click", "hover"]} placement="bottomRight">
+              <Flex align="center" gap="small" className="cursor-pointer">
+                {user.avatarUrl ? (
+                  <Avatar src={user.avatarUrl} size="default" />
+                ) : (
+                  <Avatar size="default" icon={<UserOutlined />} className="bg-indigo-600" />
+                )}
+                <div className="hidden sm:flex flex-col leading-tight justify-center h-full">
+                  <Text strong className="text-[13px] leading-tight">{user.fullName || userName}</Text>
+                  <Text type="secondary" className="text-[11px] leading-tight">{userRole || role}</Text>
+                </div>
+              </Flex>
+            </Dropdown>
           </div>
         </Header>
         

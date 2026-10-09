@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { App as AntdApp, Avatar, Button, Form, Input, DatePicker, Upload, Skeleton, Alert } from "antd";
+import { App as AntdApp, Avatar, Button, Form, Input, DatePicker, Upload, Skeleton, Alert, Modal } from "antd";
 import {
   CameraOutlined,
   EditOutlined,
@@ -21,20 +21,26 @@ export default function StudentProfilePage() {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [form] = Form.useForm();
+  
+  // Password state
+  const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
+  const [passwordForm] = Form.useForm();
 
-  const { data: profile, isLoading, isError } = useQuery({
+  const { data: profileData, isLoading, isError } = useQuery({
     queryKey: ["studentProfile", user?.userId],
     queryFn: () => {
       if (!user) throw new Error("No user");
-      return profileService.getStudentProfile(user);
+      return profileService.getMyProfile();
     },
     enabled: !!user,
   });
 
+  const profile = profileData as StudentProfile;
+
   const updateProfileMutation = useMutation({
     mutationFn: (payload: UpdateStudentProfilePayload) => {
       if (!user) throw new Error("No user");
-      return profileService.updateStudentProfile(user.userId, payload);
+      return profileService.updateMyProfile(payload);
     },
     onSuccess: (updatedProfile) => {
       queryClient.setQueryData(["studentProfile", user?.userId], updatedProfile);
@@ -50,7 +56,7 @@ export default function StudentProfilePage() {
   const updateAvatarMutation = useMutation({
     mutationFn: (file: File) => {
       if (!user) throw new Error("No user");
-      return profileService.updateAvatar(user.userId, file);
+      return profileService.updateAvatar(file);
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["studentProfile", user?.userId], (old: StudentProfile | undefined) => {
@@ -62,6 +68,18 @@ export default function StudentProfilePage() {
     },
     onError: () => {
       message.error("Có lỗi xảy ra khi cập nhật ảnh đại diện.");
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: (values: any) => profileService.changePassword({ currentPassword: values.currentPassword, newPassword: values.newPassword }),
+    onSuccess: () => {
+      message.success("Đổi mật khẩu thành công!");
+      setIsPasswordModalVisible(false);
+      passwordForm.resetFields();
+    },
+    onError: (error: any) => {
+      message.error(error.message || "Đổi mật khẩu thất bại. Mật khẩu hiện tại có thể không đúng.");
     },
   });
 
@@ -192,14 +210,22 @@ export default function StudentProfilePage() {
             <p className="text-[13px] text-slate-500 mt-0.5">Cập nhật thông tin hồ sơ của bạn</p>
           </div>
           {!isEditing && (
-            <Button
-              type="primary"
-              icon={<EditOutlined />}
-              onClick={handleEditClick}
-              className="bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium h-[38px] px-4 shadow-sm"
-            >
-              Chỉnh sửa
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setIsPasswordModalVisible(true)}
+                className="rounded-xl font-medium h-[38px] px-4 shadow-sm"
+              >
+                Đổi mật khẩu
+              </Button>
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                onClick={handleEditClick}
+                className="bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium h-[38px] px-4 shadow-sm"
+              >
+                Chỉnh sửa
+              </Button>
+            </div>
           )}
         </div>
 
@@ -342,6 +368,39 @@ export default function StudentProfilePage() {
           )}
         </div>
       </div>
+
+      <Modal
+        title="Đổi mật khẩu"
+        open={isPasswordModalVisible}
+        onCancel={() => !changePasswordMutation.isPending && setIsPasswordModalVisible(false)}
+        footer={null}
+      >
+        <Form form={passwordForm} layout="vertical" onFinish={(values) => changePasswordMutation.mutate(values)}>
+          <Form.Item label="Mật khẩu hiện tại" name="currentPassword" rules={[{ required: true, message: 'Vui lòng nhập mật khẩu hiện tại' }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Vui lòng nhập mật khẩu mới' }, { min: 8, message: 'Mật khẩu phải có ít nhất 8 ký tự' }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item label="Xác nhận mật khẩu mới" name="confirmPassword" dependencies={['newPassword']} rules={[
+            { required: true, message: 'Vui lòng xác nhận mật khẩu mới' },
+            ({ getFieldValue }) => ({
+              validator(_, value) {
+                if (!value || getFieldValue('newPassword') === value) {
+                  return Promise.resolve();
+                }
+                return Promise.reject(new Error('Mật khẩu xác nhận không khớp!'));
+              },
+            }),
+          ]}>
+            <Input.Password />
+          </Form.Item>
+          <div className="flex justify-end gap-3 mt-4">
+            <Button onClick={() => setIsPasswordModalVisible(false)} disabled={changePasswordMutation.isPending}>Hủy</Button>
+            <Button type="primary" htmlType="submit" loading={changePasswordMutation.isPending}>Đổi mật khẩu</Button>
+          </div>
+        </Form>
+      </Modal>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { App as AntdApp, Button } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "../../../stores/auth.store";
-import { enrollmentService } from "../../../services/enrollment.service";
+import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
 import { ROUTES } from "../../../routes/routePaths";
 import FreeEnrollmentModal from "../components/FreeEnrollmentModal";
 
@@ -27,11 +27,12 @@ export function useClassEnrollment() {
   const [freeClassTarget, setFreeClassTarget] = useState<EnrollableClassTarget | null>(null);
 
   // Query existing student enrollments to derive confirmed enrollment state
-  const { data: studentEnrollments } = useQuery({
-    queryKey: ["studentEnrollments", user?.userId],
-    queryFn: () => (user?.userId ? enrollmentService.getEnrollmentsByStudent(user.userId) : []),
-    enabled: Boolean(user?.userId),
+  const { data: studentEnrollmentsData } = useQuery({
+    queryKey: enrollmentKeys.myList(1, 100),
+    queryFn: () => enrollmentService.getMyEnrollments(1, 100, "class"),
+    enabled: Boolean(user?.userId && user?.role === "STUDENT"),
   });
+  const studentEnrollments = studentEnrollmentsData?.items || [];
 
   const isEnrolled = (classId: string): boolean => {
     return Boolean(

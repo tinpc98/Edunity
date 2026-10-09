@@ -22,9 +22,17 @@ export default function Header() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const isStudent = isAuthenticated && user?.role === "STUDENT";
 
-  const handleLogout = () => {
-    logout();
-    navigate(ROUTES.HOME);
+  const handleLogout = async () => {
+    try {
+      const { refreshToken } = useAuthStore.getState();
+      const { logoutUser } = await import("../../services/auth.service");
+      await logoutUser(refreshToken);
+    } catch {
+      // Ignore errors, clear local state anyway
+    } finally {
+      logout();
+      navigate(ROUTES.HOME);
+    }
   };
 
   const navLinks = [
@@ -32,11 +40,22 @@ export default function Header() {
     { label: "Giáo viên", href: "#", isRoute: false },
     {
       label: "Khóa học",
+      href: ROUTES.COURSES.LIST,
+      isRoute: true,
+      active: location.pathname.startsWith("/courses"),
+    },
+    {
+      label: "Lớp học",
       href: ROUTES.CLASSES,
       isRoute: true,
       active: location.pathname.startsWith("/classes"),
     },
-    { label: "Học bổng", href: "#", isRoute: false },
+    {
+      label: "Học bổng",
+      href: ROUTES.CAMPAIGNS,
+      isRoute: true,
+      active: location.pathname.startsWith("/campaigns"),
+    },
     { label: "Hỗ trợ", href: "#", isRoute: false },
   ];
 
@@ -56,18 +75,41 @@ export default function Header() {
     {
       type: "divider",
     },
-    {
-      key: "profile",
-      icon: <UserOutlined className="text-xs text-slate-500" />,
-      label: <span className="text-xs font-medium">Hồ sơ cá nhân</span>,
-      onClick: () => navigate(ROUTES.STUDENT.PROFILE),
-    },
-    {
-      key: "my-learning",
-      icon: <BookOutlined className="text-xs text-indigo-600" />,
-      label: <span className="text-xs font-medium">My Learning</span>,
-      onClick: () => navigate(ROUTES.STUDENT.HOME),
-    },
+    ...(user?.role === "SPONSOR"
+      ? [
+          {
+            key: "sponsor-portal",
+            icon: <BookOutlined className="text-xs text-indigo-600" />,
+            label: <span className="text-xs font-medium">Kênh Nhà tài trợ</span>,
+            onClick: () => navigate(ROUTES.SPONSOR.HOME),
+          },
+        ]
+      : user?.role === "TEACHER"
+      ? [
+          {
+            key: "teacher-portal",
+            icon: <BookOutlined className="text-xs text-indigo-600" />,
+            label: <span className="text-xs font-medium">Kênh Giảng viên</span>,
+            onClick: () => navigate(ROUTES.TEACHER.HOME),
+          },
+        ]
+      : user?.role === "ADMIN"
+      ? [
+          {
+            key: "admin-portal",
+            icon: <BookOutlined className="text-xs text-indigo-600" />,
+            label: <span className="text-xs font-medium">Trang Quản trị</span>,
+            onClick: () => navigate(ROUTES.ADMIN.HOME),
+          },
+        ]
+      : [
+          {
+            key: "my-learning",
+            icon: <BookOutlined className="text-xs text-indigo-600" />,
+            label: <span className="text-xs font-medium">Học tập của tôi</span>,
+            onClick: () => navigate(ROUTES.STUDENT.HOME),
+          },
+        ]),
     {
       type: "divider",
     },

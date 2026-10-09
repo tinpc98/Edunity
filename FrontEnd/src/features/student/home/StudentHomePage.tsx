@@ -8,7 +8,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "../../../stores/auth.store";
-import { enrollmentService } from "../../../services/enrollment.service";
+import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
 import { classDiscoveryService } from "../../../services/classDiscovery.service";
 import { ROUTES } from "../../../routes/routePaths";
 import type { ClassDiscoveryItem, SessionEntity } from "../../../types/classDiscovery";
@@ -34,18 +34,20 @@ export default function StudentHomePage() {
 
   // Query 1: Fetch enrollments for the authenticated student
   const {
-    data: enrollments,
+    data: enrollmentsData,
     isLoading: isLoadingEnrollments,
     isError: isEnrollmentError,
     refetch: refetchEnrollments,
   } = useQuery({
-    queryKey: ["studentEnrollments", user?.userId],
-    queryFn: () => (user?.userId ? enrollmentService.getEnrollmentsByStudent(user.userId) : []),
-    enabled: Boolean(user?.userId),
+    queryKey: enrollmentKeys.myList(1, 100),
+    queryFn: () => enrollmentService.getMyEnrollments(1, 100, "class"),
+    enabled: Boolean(user?.userId && user?.role === "STUDENT"),
   });
 
+  const enrollments = enrollmentsData?.items || [];
+
   // Source of Truth: Only CONFIRMED or COMPLETED enrollments grant learning access
-  const confirmedEnrollments = (enrollments || []).filter(
+  const confirmedEnrollments = enrollments.filter(
     (e) => e.enrollmentStatus === "CONFIRMED" || e.enrollmentStatus === "COMPLETED"
   );
 

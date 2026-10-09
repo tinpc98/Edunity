@@ -39,14 +39,19 @@ const adminMenuItems = [
         label: <Link to={ROUTES.ADMIN.TEACHER_VERIFICATIONS}>Giáo viên</Link>,
       },
       {
-        key: 'khoa-hoc',
+        key: ROUTES.ADMIN.CATALOG,
         icon: <AppstoreOutlined className="text-[18px]" />,
-        label: 'Khóa học',
+        label: <Link to={ROUTES.ADMIN.CATALOG}>Danh mục & Khóa học</Link>,
       },
       {
-        key: 'lop-hoc',
+        key: ROUTES.ADMIN.COURSE_PROPOSALS,
+        icon: <FileTextOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.ADMIN.COURSE_PROPOSALS}>Duyệt đề xuất khóa học</Link>,
+      },
+      {
+        key: ROUTES.ADMIN.CLASSES,
         icon: <BookOutlined className="text-[18px]" />,
-        label: 'Lớp học',
+        label: <Link to={ROUTES.ADMIN.CLASSES}>Lớp học</Link>,
       },
     ]
   },
@@ -71,14 +76,14 @@ const adminMenuItems = [
     label: 'TÀI CHÍNH',
     children: [
       {
-        key: 'thanh-toan',
+        key: ROUTES.ADMIN.PAYMENTS,
         icon: <WalletOutlined className="text-[18px]" />,
-        label: 'Thanh toán',
+        label: <Link to={ROUTES.ADMIN.PAYMENTS}>Thanh toán</Link>,
       },
       {
-        key: 'giao-dich',
+        key: ROUTES.ADMIN.TRANSACTIONS,
         icon: <FileTextOutlined className="text-[18px]" />,
-        label: 'Giao dịch',
+        label: <Link to={ROUTES.ADMIN.TRANSACTIONS}>Giao dịch</Link>,
       },
     ]
   },

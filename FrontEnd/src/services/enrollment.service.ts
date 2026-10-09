@@ -1,315 +1,133 @@
+import { apiClient } from "../api/apiClient";
 import type {
-  CreateEnrollmentPayload,
-  EnrollmentEntity,
+  ApiEnrollment,
+  Enrollment,
+  ClassAvailability,
+  PagedEnrollmentsResponse,
 } from "../types/enrollment";
-import { RAW_MOCK_CLASSES } from "../data/mockClassDiscovery";
+import { adaptEnrollment, adaptEnrollments } from "../api/enrollmentAdapters";
 
-const ENROLLMENTS_STORAGE_KEY = "edunity_mock_enrollments";
-const CLASS_OVERRIDES_STORAGE_KEY = "edunity_mock_class_overrides";
+export const enrollmentKeys = {
+  all: ["enrollments"] as const,
+  myList: (page = 1, limit = 20) => ["enrollments", "myList", page, limit] as const,
+  detail: (id: string) => ["enrollments", "detail", id] as const,
+  availability: (classId: string) => ["classes", "availability", classId] as const,
+};
 
-function getStoredEnrollments(): EnrollmentEntity[] {
-  try {
-    const raw = localStorage.getItem(ENROLLMENTS_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-
-    // Seed default enrollments for demo student to enable out-of-the-box UI testing
-    const defaultEnrollments: EnrollmentEntity[] = [
-      {
-        id: "enr_demo_001",
-        classId: "CLS_001",
-        courseId: "CRS_TOAN_12",
-        teacherId: "TEA_001",
-        studentId: "usr_student_001",
-        enrollmentStatus: "CONFIRMED",
-        paymentSource: "DIRECT_PAYMENT",
-        tuitionAmount: 1680000,
-        amountPaidViaPayment: 1680000,
-        amountPaidViaScholarship: 0,
-        enrolledAt: "2026-09-01T00:00:00Z",
-        holdExpiresAt: null,
-        createdAt: "2026-09-01T00:00:00Z",
-        updatedAt: "2026-09-01T00:00:00Z",
-      },
-      {
-        id: "enr_demo_002",
-        classId: "CLS_016",
-        courseId: "CRS_TOAN_12",
-        teacherId: "TEA_002",
-        studentId: "usr_student_001",
-        enrollmentStatus: "CONFIRMED",
-        paymentSource: "DIRECT_PAYMENT",
-        tuitionAmount: 1800000,
-        amountPaidViaPayment: 1800000,
-        amountPaidViaScholarship: 0,
-        enrolledAt: "2026-09-15T00:00:00Z",
-        holdExpiresAt: null,
-        createdAt: "2026-09-15T00:00:00Z",
-        updatedAt: "2026-09-15T00:00:00Z",
-      },
-      {
-        id: "enr_demo_003",
-        classId: "CLS_004",
-        courseId: "CRS_ANH_10",
-        teacherId: "TEA_004",
-        studentId: "usr_student_001",
-        enrollmentStatus: "CONFIRMED",
-        paymentSource: "DIRECT_PAYMENT",
-        tuitionAmount: 1450000,
-        amountPaidViaPayment: 1450000,
-        amountPaidViaScholarship: 0,
-        enrolledAt: "2026-09-20T00:00:00Z",
-        holdExpiresAt: null,
-        createdAt: "2026-09-20T00:00:00Z",
-        updatedAt: "2026-09-20T00:00:00Z",
-      }
-    ];
-    localStorage.setItem(ENROLLMENTS_STORAGE_KEY, JSON.stringify(defaultEnrollments));
-    return defaultEnrollments;
-  } catch (error) {
-    console.error("Failed to parse enrollments from localStorage:", error);
-    return [];
-  }
-}
-
-function saveStoredEnrollments(enrollments: EnrollmentEntity[]): void {
-  try {
-    localStorage.setItem(ENROLLMENTS_STORAGE_KEY, JSON.stringify(enrollments));
-  } catch (error) {
-    console.error("Failed to save enrollments to localStorage:", error);
-  }
-}
-
-export function getStoredClassEnrolledCountOverride(classId: string): number | null {
-  try {
-    const raw = localStorage.getItem(CLASS_OVERRIDES_STORAGE_KEY);
-    if (!raw) return null;
-    const map = JSON.parse(raw);
-    return typeof map[classId]?.enrolledCount === "number" ? map[classId].enrolledCount : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveClassEnrolledCountIncrement(classId: string): void {
-  try {
-    const raw = localStorage.getItem(CLASS_OVERRIDES_STORAGE_KEY);
-    const map = raw ? JSON.parse(raw) : {};
-    const cls = RAW_MOCK_CLASSES.find((c) => c._id === classId);
-    const currentCount = typeof map[classId]?.enrolledCount === "number"
-      ? map[classId].enrolledCount
-      : (cls?.enrolledCount ?? 0);
-    map[classId] = {
-      ...map[classId],
-      enrolledCount: currentCount + 1,
+export const enrollmentService = {
+  /**
+   * Public: Get real class capacity, enrolledCount, remaining seats and open window.
+   * GET /api/classes/:classId/availability
+   */
+  async getClassAvailability(classId: string): Promise<ClassAvailability> {
+    const data = await apiClient<ClassAvailability>(`/classes/${classId}/availability`);
+    return {
+      capacity: Number(data.capacity) || 0,
+      enrolledCount: Number(data.enrolledCount) || 0,
+      remaining: Math.max(0, Number(data.remaining) || 0),
+      enrollmentOpen: Boolean(data.enrollmentOpen),
+      classType: data.classType || "FREE",
+      price: Number(data.price) || 0,
     };
-    localStorage.setItem(CLASS_OVERRIDES_STORAGE_KEY, JSON.stringify(map));
-    if (cls) {
-      cls.enrolledCount = currentCount + 1;
+  },
+
+  /**
+   * Student: Create enrollment in a class.
+   * POST /api/classes/:classId/enrollments
+   * - FREE class: returns CONFIRMED immediately.
+   * - PAID class: returns PENDING_PAYMENT with 15-minute holdExpiresAt.
+   */
+  async createEnrollment(classId: string): Promise<Enrollment> {
+    const data = await apiClient<ApiEnrollment>(`/classes/${classId}/enrollments`, {
+      method: "POST",
+    });
+    return adaptEnrollment(data);
+  },
+
+  /**
+   * Student: Get authenticated student's enrollments.
+   * GET /api/me/enrollments?page=...&limit=...&include=class
+   */
+  async getMyEnrollments(
+    page = 1,
+    limit = 20,
+    include = "class"
+  ): Promise<PagedEnrollmentsResponse> {
+    const query = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    if (include) {
+      query.set("include", include);
     }
-  } catch (error) {
-    console.error("Failed to save class enrolledCount override:", error);
-  }
-}
+    const data = await apiClient<{
+      items: ApiEnrollment[];
+      page: number;
+      limit: number;
+      total: number;
+    }>(`/me/enrollments?${query.toString()}`);
 
-class EnrollmentService {
-  async getEnrollmentById(id: string): Promise<EnrollmentEntity | null> {
-    await new Promise((res) => setTimeout(res, 100));
-    const all = getStoredEnrollments();
-    const enrollment = all.find((e) => e.id === id);
-    if (!enrollment) return null;
-
-    // Check if hold has expired
-    if (
-      enrollment.enrollmentStatus === "PENDING_PAYMENT" &&
-      enrollment.holdExpiresAt &&
-      new Date(enrollment.holdExpiresAt).getTime() <= Date.now()
-    ) {
-      enrollment.enrollmentStatus = "EXPIRED";
-      enrollment.updatedAt = new Date().toISOString();
-      saveStoredEnrollments(all);
-    }
-
-    return enrollment;
-  }
-
-  async getEnrollmentsByStudent(studentId: string): Promise<EnrollmentEntity[]> {
-    await new Promise((res) => setTimeout(res, 150));
-    const all = getStoredEnrollments();
-    return all.filter((e) => e.studentId === studentId);
-  }
-
-  async createOrGetPendingEnrollment(
-    payload: CreateEnrollmentPayload
-  ): Promise<EnrollmentEntity> {
-    await new Promise((res) => setTimeout(res, 200));
-    const { classId, studentId } = payload;
-
-    const classEntity = RAW_MOCK_CLASSES.find((c) => c._id === classId);
-    if (!classEntity) {
-      throw new Error("Lớp học không tồn tại trong hệ thống.");
-    }
-
-    const currentEnrolled =
-      getStoredClassEnrolledCountOverride(classId) ?? classEntity.enrolledCount;
-    if (currentEnrolled >= classEntity.capacity) {
-      throw new Error("Lớp học đã đủ số lượng học viên.");
-    }
-
-    if (classEntity.status !== "OPEN") {
-      throw new Error("Lớp học hiện không mở đăng ký.");
-    }
-
-    const all = getStoredEnrollments();
-
-    // 1. Check if student already has a CONFIRMED or COMPLETED enrollment
-    const confirmed = all.find(
-      (e) =>
-        e.classId === classId &&
-        e.studentId === studentId &&
-        (e.enrollmentStatus === "CONFIRMED" || e.enrollmentStatus === "COMPLETED")
-    );
-    if (confirmed) {
-      throw new Error("Bạn đã đăng ký lớp học này thành công trước đó.");
-    }
-
-    // 2. Check if student already has an active PENDING_PAYMENT enrollment
-    const existingPending = all.find(
-      (e) =>
-        e.classId === classId &&
-        e.studentId === studentId &&
-        e.enrollmentStatus === "PENDING_PAYMENT"
-    );
-
-    if (existingPending) {
-      const now = Date.now();
-      const holdExpiresTime = existingPending.holdExpiresAt
-        ? new Date(existingPending.holdExpiresAt).getTime()
-        : 0;
-
-      if (holdExpiresTime > now) {
-        // Seat hold is still valid, reuse existing pending enrollment
-        return existingPending;
-      } else {
-        // Previous pending enrollment expired
-        existingPending.enrollmentStatus = "EXPIRED";
-        existingPending.updatedAt = new Date().toISOString();
-        saveStoredEnrollments(all);
-      }
-    }
-
-    // 3. Create new Enrollment with 15-minute seat hold
-    const now = new Date();
-    const holdExpiresAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
-
-    const newEnrollment: EnrollmentEntity = {
-      id: `enr_${Date.now()}`,
-      classId: classEntity._id,
-      courseId: classEntity.courseId,
-      teacherId: classEntity.teacherId,
-      studentId,
-      enrollmentStatus: "PENDING_PAYMENT",
-      paymentSource: "DIRECT_PAYMENT",
-      tuitionAmount: classEntity.price,
-      amountPaidViaPayment: 0,
-      amountPaidViaScholarship: 0,
-      enrolledAt: now.toISOString(),
-      holdExpiresAt,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
+    return {
+      items: adaptEnrollments(data.items || []),
+      page: data.page || page,
+      limit: data.limit || limit,
+      total: data.total || 0,
     };
+  },
 
-    all.push(newEnrollment);
-    saveStoredEnrollments(all);
+  /**
+   * Student: Get single enrollment detail by ID.
+   * GET /api/enrollments/:id
+   */
+  async getEnrollmentById(id: string): Promise<Enrollment> {
+    const data = await apiClient<ApiEnrollment>(`/enrollments/${id}`);
+    return adaptEnrollment(data);
+  },
 
-    return newEnrollment;
-  }
+  /**
+   * Student: Cancel a PENDING_PAYMENT enrollment to release reserved seat.
+   * POST /api/enrollments/:id/cancel
+   */
+  async cancelEnrollment(id: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/enrollments/${id}/cancel`, {
+      method: "POST",
+    });
+  },
 
-  async createFreeEnrollment(
-    payload: CreateEnrollmentPayload
-  ): Promise<EnrollmentEntity> {
-    await new Promise((res) => setTimeout(res, 300));
-    const { classId, studentId } = payload;
+  /**
+   * Helper for student learning view: fetches all active enrollments with class details.
+   */
+  async getEnrollmentsByStudent(_studentId?: string): Promise<Enrollment[]> {
+    const res = await this.getMyEnrollments(1, 100, "class");
+    return res.items;
+  },
 
-    const classEntity = RAW_MOCK_CLASSES.find((c) => c._id === classId);
-    if (!classEntity) {
-      throw new Error("Lớp học không tồn tại trong hệ thống.");
-    }
+  /**
+   * Compatibility wrapper for existing hooks:
+   */
+  async createOrGetPendingEnrollment(payload: { classId: string; studentId?: string }): Promise<Enrollment> {
+    return this.createEnrollment(payload.classId);
+  },
 
-    if (classEntity.classType !== "FREE") {
-      throw new Error("Lớp học này là lớp có học phí, không thể đăng ký theo luồng miễn phí.");
-    }
-
-    const currentEnrolled =
-      getStoredClassEnrolledCountOverride(classId) ?? classEntity.enrolledCount;
-    if (currentEnrolled >= classEntity.capacity) {
-      throw new Error("Lớp học đã đủ số lượng học viên.");
-    }
-
-    if (classEntity.status !== "OPEN") {
-      throw new Error("Lớp học hiện không mở đăng ký.");
-    }
-
-    const all = getStoredEnrollments();
-
-    // Check if student already has a CONFIRMED or COMPLETED enrollment
-    const confirmed = all.find(
-      (e) =>
-        e.classId === classId &&
-        e.studentId === studentId &&
-        (e.enrollmentStatus === "CONFIRMED" || e.enrollmentStatus === "COMPLETED")
-    );
-    if (confirmed) {
-      throw new Error("Bạn đã đăng ký lớp học này trước đó.");
-    }
-
-    const now = new Date();
-
-    const newEnrollment: EnrollmentEntity = {
-      id: `enr_free_${Date.now()}`,
-      classId: classEntity._id,
-      courseId: classEntity.courseId,
-      teacherId: classEntity.teacherId,
-      studentId,
-      enrollmentStatus: "CONFIRMED",
-      paymentSource: "FREE",
-      tuitionAmount: 0,
-      amountPaidViaPayment: 0,
-      amountPaidViaScholarship: 0,
-      enrolledAt: now.toISOString(),
-      holdExpiresAt: null,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    };
-
-    all.push(newEnrollment);
-    saveStoredEnrollments(all);
-
-    // Increment seat count for this confirmed enrollment
-    saveClassEnrolledCountIncrement(classId);
-
-    return newEnrollment;
-  }
+  async createFreeEnrollment(payload: { classId: string; studentId?: string }): Promise<Enrollment> {
+    return this.createEnrollment(payload.classId);
+  },
 
   async updateEnrollmentStatus(
     enrollmentId: string,
-    status: EnrollmentEntity["enrollmentStatus"],
+    status: Enrollment["enrollmentStatus"],
     amountPaid?: number
-  ): Promise<EnrollmentEntity> {
-    const all = getStoredEnrollments();
-    const idx = all.findIndex((e) => e.id === enrollmentId);
-    if (idx === -1) {
-      throw new Error("Không tìm thấy đơn đăng ký để cập nhật.");
-    }
+  ): Promise<Enrollment> {
+    const enrollment = await this.getEnrollmentById(enrollmentId);
+    return {
+      ...enrollment,
+      enrollmentStatus: status,
+      amountPaidViaPayment: amountPaid ?? enrollment.amountPaidViaPayment,
+    };
+  },
+};
 
-    all[idx].enrollmentStatus = status;
-    if (amountPaid !== undefined) {
-      all[idx].amountPaidViaPayment = amountPaid;
-    }
-    all[idx].updatedAt = new Date().toISOString();
-
-    saveStoredEnrollments(all);
-    return all[idx];
-  }
+export function saveClassEnrolledCountIncrement(_classId: string): void {
+  // Mock compatibility stub for payment service
 }
 
-export const enrollmentService = new EnrollmentService();

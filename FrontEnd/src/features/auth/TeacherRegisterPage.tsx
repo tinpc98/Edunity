@@ -3,7 +3,6 @@ import { CheckCircleFilled, LockOutlined, MailOutlined, UserOutlined } from "@an
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { registerTeacher } from "../../services/auth.service";
-import { useTeacherRegistrationStore } from "../../stores/teacherRegistration.store";
 import { ROUTES } from "../../routes/routePaths";
 import type { TeacherRegisterRequest } from "../../types/auth";
 
@@ -21,19 +20,17 @@ const benefits = [
 export default function TeacherRegisterPage() {
   const [form] = Form.useForm<TeacherRegisterFormValues>();
   const { notification } = AntdApp.useApp();
-  const setRegistration = useTeacherRegistrationStore((state) => state.setRegistration);
   const navigate = useNavigate();
 
   const registerMutation = useMutation({
     mutationFn: (values: TeacherRegisterRequest) => registerTeacher(values),
-    onSuccess: (data) => {
-      setRegistration(data);
+    onSuccess: () => {
       notification.success({
         title: "Đăng ký tài khoản giáo viên thành công",
-        description: "Vui lòng bổ sung hồ sơ chuyên môn để gửi yêu cầu xác minh.",
+        description: "Vui lòng đăng nhập để bổ sung hồ sơ xác minh.",
         placement: "topRight",
       });
-      navigate(ROUTES.AUTH.TEACHER_QUALIFICATION);
+      navigate(ROUTES.AUTH.LOGIN);
     },
     onError: (error: Error) => {
       notification.error({

@@ -2,7 +2,7 @@ import { App as AntdApp, Button, Checkbox, Form, Input } from "antd";
 import { CheckCircleFilled, LockOutlined, MailOutlined, UserOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { DuplicateEmailError } from "../../data/auth.mock";
+
 import { registerUser } from "../../services/auth.service";
 import { ROUTES } from "../../routes/routePaths";
 import type { RegisterPayload } from "../../types/auth";
@@ -36,8 +36,8 @@ export default function RegisterPage() {
       });
       navigate(ROUTES.AUTH.LOGIN);
     },
-    onError: (error: Error) => {
-      if (error instanceof DuplicateEmailError) {
+    onError: (error: any) => {
+      if (error.code === "DUPLICATE_EMAIL") {
         form.setFields([{ name: "email", errors: ["Email này đã được sử dụng."] }]);
       }
       notificationApi.error({

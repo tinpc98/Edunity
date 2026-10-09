@@ -33,7 +33,7 @@ export default function TeacherQualificationPage() {
         description: "Edunity đã nhận hồ sơ chuyên môn của bạn và sẽ tiến hành xem xét.",
         placement: "topRight",
       });
-      navigate(ROUTES.AUTH.TEACHER_PENDING);
+      navigate(ROUTES.AUTH.LOGIN);
     },
     onError: (error: Error) => {
       notification.error({

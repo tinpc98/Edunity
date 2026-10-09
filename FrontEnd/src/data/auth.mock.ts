@@ -170,6 +170,7 @@ export async function mockLogin(payload: LoginPayload): Promise<LoginResponse> {
 
   return {
     accessToken: `mock_access_token_${account.userId}`,
+    refreshToken: `mock_refresh_token_${account.userId}`,
     user: {
       userId: account.userId,
       fullName: account.fullName,
