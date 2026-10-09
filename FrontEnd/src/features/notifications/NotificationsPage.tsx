@@ -76,11 +76,11 @@ export const NotificationsPage: React.FC = () => {
     }
 
     if (item.type.includes("MESSAGE")) {
-      navigate(ROUTES.MESSAGES || "/messages");
+      navigate((ROUTES as any).MESSAGES || "/messages");
     } else if (item.type.includes("ENROLLMENT")) {
-      navigate(ROUTES.STUDENT.ENROLLMENTS);
+      navigate((ROUTES.STUDENT as any).ENROLLMENTS || ROUTES.STUDENT.HOME);
     } else if (item.type.includes("SCHOLARSHIP")) {
-      navigate(ROUTES.STUDENT.SCHOLARSHIPS);
+      navigate((ROUTES.STUDENT as any).SCHOLARSHIPS || ROUTES.STUDENT.HOME);
     } else if (item.type.includes("REPORT")) {
       navigate("/reports");
     } else if (item.type.includes("REVIEW")) {

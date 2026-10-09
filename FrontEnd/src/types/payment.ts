@@ -39,6 +39,7 @@ export interface Payment {
   holdExpiresAt?: string | null;
   classId?: string;
   className?: string;
+  errorMessage?: string;
 }
 
 export type PaymentEntity = Payment;

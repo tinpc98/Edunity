@@ -16,7 +16,7 @@ import {
   GiftOutlined,
 } from "@ant-design/icons";
 import { enrollmentService, enrollmentKeys } from "../../services/enrollment.service";
-import { paymentService, paymentKeys } from "../../services/payment.service";
+import { gatewayPaymentService as paymentService, paymentKeys } from "../../services/gatewayPayment.service";
 import { classKeys } from "../../services/class.service";
 import { sessionKeys } from "../../services/session.service";
 import { financeKeys } from "../../services/finance.service";
@@ -457,7 +457,7 @@ export default function CheckoutPage() {
 
             <div className="text-center pt-2">
               <Link
-                to={ROUTES.STUDENT.ENROLLMENTS}
+                to={(ROUTES.STUDENT as any).ENROLLMENTS || ROUTES.STUDENT.HOME}
                 className="text-xs font-semibold text-slate-400 hover:text-slate-600"
               >
                 ← Quay lại danh sách đơn đăng ký

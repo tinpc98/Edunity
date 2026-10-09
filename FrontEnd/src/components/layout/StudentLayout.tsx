@@ -1,25 +1,20 @@
 import { useEffect } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { Avatar, Dropdown, App as AntdApp } from "antd";
+import { Avatar, Dropdown, Badge, Button, App as AntdApp } from "antd";
 import type { MenuProps } from "antd";
 import {
   BookOutlined,
   CalendarOutlined,
-  FileTextOutlined,
   UserOutlined,
   WalletOutlined,
   HomeOutlined,
   LogoutOutlined,
+  BellOutlined,
   DownOutlined,
-  GiftOutlined,
-  AuditOutlined,
-  MessageOutlined,
-  AlertOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
 import { LOGO_URL } from "../../data/homeData";
-import { NotificationPopover } from "../../features/notifications/components/NotificationPopover";
 
 export default function StudentLayout() {
   const location = useLocation();
@@ -49,17 +44,9 @@ export default function StudentLayout() {
     return null;
   }
 
-  const handleLogout = async () => {
-    try {
-      const { refreshToken } = useAuthStore.getState();
-      const { logoutUser } = await import("../../services/auth.service");
-      await logoutUser(refreshToken);
-    } catch {
-      // Ignore errors, clear local state anyway
-    } finally {
-      logout();
-      navigate(ROUTES.HOME);
-    }
+  const handleLogout = () => {
+    logout();
+    navigate(ROUTES.HOME);
   };
 
   const userMenuItems: MenuProps["items"] = [
@@ -141,18 +128,6 @@ export default function StudentLayout() {
               <CalendarOutlined className="text-sm" />
               <span>Lịch học</span>
             </Link>
-
-            <Link
-              to={ROUTES.STUDENT.ENROLLMENTS}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                location.pathname === ROUTES.STUDENT.ENROLLMENTS
-                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
-              }`}
-            >
-              <FileTextOutlined className="text-sm" />
-              <span>Đơn đăng ký</span>
-            </Link>
           </div>
 
           {/* Nav Section: TÀI KHOẢN */}
@@ -183,54 +158,6 @@ export default function StudentLayout() {
             >
               <WalletOutlined className="text-sm" />
               <span>Lịch sử thanh toán</span>
-            </Link>
-
-            <Link
-              to={ROUTES.STUDENT.SCHOLARSHIPS}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                location.pathname === ROUTES.STUDENT.SCHOLARSHIPS
-                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
-              }`}
-            >
-              <GiftOutlined className="text-sm" />
-              <span>Học bổng của tôi</span>
-            </Link>
-
-            <Link
-              to={ROUTES.STUDENT.SCHOLARSHIP_APPLICATIONS}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                location.pathname === ROUTES.STUDENT.SCHOLARSHIP_APPLICATIONS
-                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
-              }`}
-            >
-              <AuditOutlined className="text-sm" />
-              <span>Hồ sơ xin học bổng</span>
-            </Link>
-
-            <Link
-              to={ROUTES.MESSAGES}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                location.pathname === ROUTES.MESSAGES
-                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
-              }`}
-            >
-              <MessageOutlined className="text-sm" />
-              <span>Tin nhắn</span>
-            </Link>
-
-            <Link
-              to={ROUTES.REPORTS}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                location.pathname === ROUTES.REPORTS
-                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
-              }`}
-            >
-              <AlertOutlined className="text-sm" />
-              <span>Khiếu nại / Báo cáo</span>
             </Link>
           </div>
         </div>
@@ -266,7 +193,14 @@ export default function StudentLayout() {
 
           <div className="flex items-center gap-4">
             {/* Notification Icon */}
-            <NotificationPopover />
+            <Badge dot color="#4f46e5">
+              <Button
+                type="text"
+                shape="circle"
+                icon={<BellOutlined className="text-base text-slate-600" />}
+                className="hover:bg-slate-100 flex items-center justify-center h-9 w-9"
+              />
+            </Badge>
 
             <div className="h-4 w-px bg-slate-200" />
 

@@ -132,7 +132,7 @@ export default function AdminClassesPage() {
           size="small"
           icon={<EyeOutlined />}
           className="bg-indigo-600 hover:bg-indigo-700 rounded-md font-medium text-xs"
-          onClick={() => navigate(ROUTES.ADMIN.CLASS_DETAIL.replace(":classId", record.id))}
+          onClick={() => navigate(((ROUTES.ADMIN as any).CLASS_DETAIL || "/admin/classes/:classId").replace(":classId", record.id))}
         >
           {record.status === 'PENDING_APPROVAL' ? 'Xét duyệt' : 'Chi tiết'}
         </Button>

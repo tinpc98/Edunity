@@ -21,7 +21,7 @@ import {
   EyeOutlined,
 } from "@ant-design/icons";
 import { courseService } from "../../../services/course.service";
-import { catalogService } from "../../../services/catalog.service";
+import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
 import type { Course, CourseSearchParams, GradeLevel, CourseLevel } from "../../../types/catalog";
 import {
   GRADE_LEVELS,

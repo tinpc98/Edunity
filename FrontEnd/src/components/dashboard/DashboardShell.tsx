@@ -84,7 +84,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
       icon: <UserOutlined />,
       label: "Hồ sơ cá nhân",
       onClick: () => {
-        if (role === "TEACHER") navigate(ROUTES.TEACHER.PROFILE);
+        if (role === "TEACHER") navigate((ROUTES.TEACHER as any).PROFILE || "/teacher");
         else if (role === "SPONSOR") navigate("/sponsor/profile");
       },
     },
@@ -190,7 +190,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
                 shape="circle"
                 icon={<MessageOutlined className="text-[16px] text-gray-600" />}
                 className="bg-gray-50 hover:bg-gray-100 h-9 w-9"
-                onClick={() => navigate(ROUTES.MESSAGES)}
+                onClick={() => navigate((ROUTES as any).MESSAGES || "/messages")}
                 title="Tin nhắn"
               />
               <NotificationPopover />

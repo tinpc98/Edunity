@@ -37,10 +37,15 @@ export default function Header() {
 
   const navLinks = [
     { label: "Giới thiệu", href: "#", isRoute: false },
-    { label: "Giáo viên", href: "#", isRoute: false },
+    {
+      label: "Giáo viên",
+      href: ROUTES.TEACHERS,
+      isRoute: true,
+      active: location.pathname.startsWith("/teachers"),
+    },
     {
       label: "Khóa học",
-      href: ROUTES.COURSES.LIST,
+      href: (ROUTES as any).COURSES?.LIST || "/courses",
       isRoute: true,
       active: location.pathname.startsWith("/courses"),
     },
@@ -52,7 +57,7 @@ export default function Header() {
     },
     {
       label: "Học bổng",
-      href: ROUTES.CAMPAIGNS,
+      href: (ROUTES as any).CAMPAIGNS || "/campaigns",
       isRoute: true,
       active: location.pathname.startsWith("/campaigns"),
     },

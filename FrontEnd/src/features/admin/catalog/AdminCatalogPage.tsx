@@ -19,7 +19,7 @@ import {
   EditOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { catalogService } from "../../../services/catalog.service";
+import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
 import { courseService } from "../../../services/course.service";
 import type {
   Category,

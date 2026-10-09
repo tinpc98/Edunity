@@ -30,19 +30,19 @@ const adminMenuItems = [
         label: <Link to={ROUTES.ADMIN.TEACHER_VERIFICATIONS}>Giáo viên</Link>,
       },
       {
-        key: ROUTES.ADMIN.CATALOG,
+        key: (ROUTES.ADMIN as any).CATALOG || "/admin/catalog",
         icon: <AppstoreOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.CATALOG}>Danh mục & Khóa học</Link>,
+        label: <Link to={(ROUTES.ADMIN as any).CATALOG || "/admin/catalog"}>Danh mục & Khóa học</Link>,
       },
       {
-        key: ROUTES.ADMIN.COURSE_PROPOSALS,
+        key: (ROUTES.ADMIN as any).COURSE_PROPOSALS || "/admin/course-proposals",
         icon: <FileTextOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.COURSE_PROPOSALS}>Duyệt đề xuất khóa học</Link>,
+        label: <Link to={(ROUTES.ADMIN as any).COURSE_PROPOSALS || "/admin/course-proposals"}>Duyệt đề xuất khóa học</Link>,
       },
       {
-        key: ROUTES.ADMIN.CLASSES,
+        key: (ROUTES.ADMIN as any).CLASSES || "/admin/classes",
         icon: <BookOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.CLASSES}>Lớp học</Link>,
+        label: <Link to={(ROUTES.ADMIN as any).CLASSES || "/admin/classes"}>Lớp học</Link>,
       },
     ]
   },
@@ -67,14 +67,14 @@ const adminMenuItems = [
     label: 'TÀI CHÍNH',
     children: [
       {
-        key: ROUTES.ADMIN.PAYMENTS,
+        key: (ROUTES.ADMIN as any).PAYMENTS || "/admin/payments",
         icon: <WalletOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.PAYMENTS}>Thanh toán</Link>,
+        label: <Link to={(ROUTES.ADMIN as any).PAYMENTS || "/admin/payments"}>Thanh toán</Link>,
       },
       {
-        key: ROUTES.ADMIN.TRANSACTIONS,
+        key: (ROUTES.ADMIN as any).TRANSACTIONS || "/admin/transactions",
         icon: <FileTextOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.TRANSACTIONS}>Giao dịch</Link>,
+        label: <Link to={(ROUTES.ADMIN as any).TRANSACTIONS || "/admin/transactions"}>Giao dịch</Link>,
       },
     ]
   },
@@ -83,14 +83,14 @@ const adminMenuItems = [
     label: 'VẬN HÀNH',
     children: [
       {
-        key: ROUTES.ADMIN.REPORTS,
+        key: (ROUTES.ADMIN as any).REPORTS || "/admin/reports",
         icon: <CustomerServiceOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.REPORTS}>Khiếu nại</Link>,
+        label: <Link to={(ROUTES.ADMIN as any).REPORTS || "/admin/reports"}>Khiếu nại</Link>,
       },
       {
-        key: ROUTES.NOTIFICATIONS,
+        key: (ROUTES as any).NOTIFICATIONS || "/notifications",
         icon: <NotificationOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.NOTIFICATIONS}>Thông báo</Link>,
+        label: <Link to={(ROUTES as any).NOTIFICATIONS || "/notifications"}>Thông báo</Link>,
       },
     ]
   }

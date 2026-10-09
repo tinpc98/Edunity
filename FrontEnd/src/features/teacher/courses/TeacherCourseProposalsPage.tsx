@@ -25,7 +25,7 @@ import {
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { courseProposalService } from "../../../services/courseProposal.service";
-import { catalogService } from "../../../services/catalog.service";
+import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
 import type {
   CourseProposal,
   ProposalStatus,

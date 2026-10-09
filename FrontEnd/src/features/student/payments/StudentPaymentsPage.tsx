@@ -20,7 +20,7 @@ import {
   EyeOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { paymentService, paymentKeys } from "../../../services/payment.service";
+import { gatewayPaymentService as paymentService, paymentKeys } from "../../../services/gatewayPayment.service";
 import type { Payment } from "../../../types/payment";
 import {
   PAYMENT_STATUS_LABELS,

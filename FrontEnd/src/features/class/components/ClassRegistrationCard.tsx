@@ -277,7 +277,7 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
                 Chỗ ngồi của bạn đang được hệ thống giữ tạm thời.
               </p>
               <div className="flex items-center gap-2 pt-1">
-                <Link to={ROUTES.STUDENT.ENROLLMENTS}>
+                <Link to={(ROUTES.STUDENT as any).ENROLLMENTS || ROUTES.STUDENT.HOME}>
                   <Button size="small" type="primary" className="bg-amber-600 text-xs font-semibold">
                     Xem đơn đăng ký
                   </Button>
@@ -313,7 +313,7 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
           Vào lớp học của tôi
         </Button>
       ) : isPending ? (
-        <Link to={ROUTES.STUDENT.ENROLLMENTS} className="w-full">
+        <Link to={(ROUTES.STUDENT as any).ENROLLMENTS || ROUTES.STUDENT.HOME} className="w-full">
           <Button
             size="large"
             className="font-bold text-sm h-12 rounded-xl w-full border-amber-500 text-amber-700 bg-amber-50/40 hover:bg-amber-100"
@@ -631,7 +631,7 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
                 navigate(
                   successModalData?.enrollmentStatus === "CONFIRMED"
                     ? ROUTES.STUDENT.HOME
-                    : ROUTES.STUDENT.ENROLLMENTS
+                    : ((ROUTES.STUDENT as any).ENROLLMENTS || ROUTES.STUDENT.HOME)
                 );
               }}
               className="bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold h-9 px-5 rounded-lg border-none"

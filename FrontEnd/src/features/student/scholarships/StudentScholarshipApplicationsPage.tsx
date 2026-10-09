@@ -121,7 +121,7 @@ export default function StudentScholarshipApplicationsPage() {
           </Text>
         </div>
 
-        <Link to={ROUTES.CAMPAIGNS}>
+        <Link to={(ROUTES as any).CAMPAIGNS || "/campaigns"}>
           <Button type="primary" className="bg-indigo-600 font-semibold text-xs rounded-xl h-10 px-5 shadow-2xs">
             Khám phá chiến dịch học bổng
           </Button>
@@ -151,7 +151,7 @@ export default function StudentScholarshipApplicationsPage() {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description="Bạn chưa nộp hồ sơ xin học bổng nào."
           >
-            <Link to={ROUTES.CAMPAIGNS}>
+            <Link to={(ROUTES as any).CAMPAIGNS || "/campaigns"}>
               <Button type="primary" className="bg-indigo-600 font-semibold text-xs rounded-xl h-9 px-5">
                 Tìm kiếm chiến dịch để ứng tuyển
               </Button>

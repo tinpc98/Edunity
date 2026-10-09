@@ -1,92 +1,207 @@
-import { apiClient } from "../api/apiClient";
 import type {
-  Payment,
-  ApiPayment,
-  CreatePaymentResponse,
-  WebhookResult,
+  CreatePaymentPayload,
+  PaymentEntity,
+  PaymentStatus,
 } from "../types/payment";
-import { adaptPayment, adaptPayments } from "../api/paymentAdapters";
+import type { EnrollmentEntity } from "../types/enrollment";
+import {
+  enrollmentService,
+  saveClassEnrolledCountIncrement,
+} from "./enrollment.service";
 
-export const paymentKeys = {
-  all: ["payments"] as const,
-  history: (enrollmentId: string) => ["payments", "history", enrollmentId] as const,
-  myPayments: () => ["payments", "myPayments"] as const,
-  detail: (id: string) => ["payments", "detail", id] as const,
-};
+const PAYMENTS_STORAGE_KEY = "edunity_mock_payments";
+const SCENARIO_STORAGE_KEY = "edunity_mock_payment_scenario";
 
-export const paymentService = {
+export type MockPaymentScenario = "SUCCESS" | "FAILED";
+
+function getStoredPayments(): PaymentEntity[] {
+  try {
+    const raw = localStorage.getItem(PAYMENTS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    console.error("Failed to parse payments from localStorage:", error);
+    return [];
+  }
+}
+
+function saveStoredPayments(payments: PaymentEntity[]): void {
+  try {
+    localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(payments));
+  } catch (error) {
+    console.error("Failed to save payments to localStorage:", error);
+  }
+}
+
+export class PaymentError extends Error {
+  payment?: PaymentEntity;
+  constructor(message: string, payment?: PaymentEntity) {
+    super(message);
+    this.name = "PaymentError";
+    this.payment = payment;
+  }
+}
+
+class PaymentService {
+  getMockScenario(): MockPaymentScenario {
+    try {
+      const saved = localStorage.getItem(SCENARIO_STORAGE_KEY);
+      if (saved === "FAILED" || saved === "SUCCESS") {
+        return saved;
+      }
+    } catch {}
+    return "SUCCESS";
+  }
+
+  setMockScenario(scenario: MockPaymentScenario): void {
+    try {
+      localStorage.setItem(SCENARIO_STORAGE_KEY, scenario);
+    } catch {}
+  }
+
+  async getPaymentsByEnrollmentId(enrollmentId: string): Promise<PaymentEntity[]> {
+    await new Promise((res) => setTimeout(res, 100));
+    const all = getStoredPayments();
+    return all.filter((p) => p.enrollmentId === enrollmentId);
+  }
+
+  async getMyPayments(userId: string) {
+    await new Promise((res) => setTimeout(res, 300));
+    const all = getStoredPayments();
+    const myPayments = all.filter((p) => p.payerUserId === userId);
+    
+    // Sort by createdAt desc
+    myPayments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Resolve enrollment and class data
+    const result = await Promise.all(
+      myPayments.map(async (payment) => {
+        let className = "Unknown Class";
+        let enrollmentStatus = "UNKNOWN";
+
+        try {
+          const enrollment = await enrollmentService.getEnrollmentById(payment.enrollmentId);
+          if (enrollment) {
+            enrollmentStatus = enrollment.enrollmentStatus;
+            
+            // In a real app we might have to fetch class details, 
+            // but for now we'll do our best with what we have in enrollment mock data.
+            // Enrollment usually has classId, we can get it from classDiscoveryService
+            const { classDiscoveryService } = await import("./classDiscovery.service");
+            const cls = await classDiscoveryService.fetchClassById(enrollment.classId);
+            if (cls) {
+              className = cls.title;
+            }
+          }
+        } catch (error) {
+          console.error("Error resolving enrollment for payment", error);
+        }
+
+        return {
+          ...payment,
+          className,
+          enrollmentStatus,
+        };
+      })
+    );
+
+    return result;
+  }
+
+  async getPaymentById(id: string): Promise<PaymentEntity | null> {
+    await new Promise((res) => setTimeout(res, 100));
+    const all = getStoredPayments();
+    return all.find((p) => p.id === id) || null;
+  }
+
   /**
-   * Student: Create or retrieve existing PENDING payment for an enrollment.
-   * POST /api/enrollments/:id/payments
-   * Backend calculates amount canonically from Class.price.
+   * Creates a new Payment attempt for an enrollment.
+   * If scenario is SUCCESS: Payment COMPLETED, Enrollment CONFIRMED.
+   * If scenario is FAILED: Payment FAILED, Enrollment remains PENDING_PAYMENT, throws PaymentError.
    */
-  async createPayment(enrollmentId: string): Promise<CreatePaymentResponse> {
-    const data = await apiClient<{
-      paymentId: string;
-      gatewayReference: string;
-      amount: number | string;
-      enrollmentId: string;
-      holdExpiresAt?: string | null;
-    }>(`/enrollments/${enrollmentId}/payments`, {
-      method: "POST",
-    });
+  async createPaymentAttempt(
+    payload: CreatePaymentPayload
+  ): Promise<{ payment: PaymentEntity; enrollment: EnrollmentEntity }> {
+    // Simulate real network/gateway latency
+    await new Promise((res) => setTimeout(res, 800));
+
+    const enrollment = await enrollmentService.getEnrollmentById(payload.enrollmentId);
+    if (!enrollment) {
+      throw new Error("Không tìm thấy thông tin đăng ký lớp học.");
+    }
+
+    if (enrollment.enrollmentStatus === "CONFIRMED" || enrollment.enrollmentStatus === "COMPLETED") {
+      throw new Error("Đăng ký này đã được thanh toán thành công trước đó.");
+    }
+
+    if (enrollment.enrollmentStatus === "EXPIRED") {
+      throw new Error("Thời gian giữ chỗ đã hết. Vui lòng quay lại trang lớp học để đăng ký lại.");
+    }
+
+    // Check expiration timestamp
+    if (
+      enrollment.holdExpiresAt &&
+      new Date(enrollment.holdExpiresAt).getTime() <= Date.now()
+    ) {
+      await enrollmentService.updateEnrollmentStatus(enrollment.id, "EXPIRED");
+      throw new Error("Thời gian giữ chỗ đã hết. Vui lòng quay lại trang lớp học để đăng ký lại.");
+    }
+
+    const scenario = this.getMockScenario();
+    const allPayments = getStoredPayments();
+    const now = new Date();
+
+    const paymentId = `pay_${Date.now()}`;
+    const gatewayReference = `MOCK_TXN_${Date.now()}`;
+
+    if (scenario === "FAILED") {
+      const failedPayment: PaymentEntity = {
+        id: paymentId,
+        enrollmentId: enrollment.id,
+        payerUserId: payload.payerUserId ?? "",
+        gateway: "MOCK_DIRECT",
+        gatewayReference,
+        amount: enrollment.tuitionAmount,
+        paymentStatus: "FAILED" as PaymentStatus,
+        errorMessage: "Thanh toán chưa thành công. Vui lòng thử lại.",
+        createdAt: now.toISOString(),
+      };
+
+      allPayments.push(failedPayment);
+      saveStoredPayments(allPayments);
+
+      throw new PaymentError("Thanh toán chưa thành công. Vui lòng thử lại.", failedPayment);
+    }
+
+    // SUCCESS scenario
+    const completedPayment: PaymentEntity = {
+      id: paymentId,
+      enrollmentId: enrollment.id,
+      payerUserId: payload.payerUserId ?? "",
+      gateway: "MOCK_DIRECT",
+      gatewayReference,
+      amount: enrollment.tuitionAmount,
+      paymentStatus: "COMPLETED" as PaymentStatus,
+      paidAt: now.toISOString(),
+      createdAt: now.toISOString(),
+    };
+
+    allPayments.push(completedPayment);
+    saveStoredPayments(allPayments);
+
+    // Confirm enrollment and increment class enrolled count
+    const updatedEnrollment = await enrollmentService.updateEnrollmentStatus(
+      enrollment.id,
+      "CONFIRMED",
+      enrollment.tuitionAmount
+    );
+
+    saveClassEnrolledCountIncrement(enrollment.classId);
 
     return {
-      paymentId: data.paymentId,
-      gatewayReference: data.gatewayReference,
-      amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount as string) || 0,
-      enrollmentId: data.enrollmentId,
-      holdExpiresAt: data.holdExpiresAt || null,
+      payment: completedPayment,
+      enrollment: updatedEnrollment,
     };
-  },
+  }
+}
 
-  /**
-   * Get single Payment by ID.
-   * GET /api/payments/:id
-   */
-  async getPaymentById(paymentId: string): Promise<Payment> {
-    const data = await apiClient<ApiPayment>(`/payments/${paymentId}`);
-    return adaptPayment(data);
-  },
-
-  /**
-   * Student: Get payment attempts history for a specific enrollment.
-   * GET /api/enrollments/:id/payments
-   */
-  async getPaymentHistory(enrollmentId: string): Promise<Payment[]> {
-    const data = await apiClient<ApiPayment[]>(`/enrollments/${enrollmentId}/payments`);
-    return adaptPayments(data);
-  },
-
-  /**
-   * Student: Get full payment history for authenticated student.
-   * GET /api/me/payments
-   */
-  async getMyPayments(): Promise<Payment[]> {
-    const data = await apiClient<ApiPayment[]>(`/me/payments`);
-    return adaptPayments(data);
-  },
-
-  /**
-   * Sandbox only: Simulate gateway webhook to confirm or fail a payment.
-   * POST /api/payments/sandbox/webhook
-   * Body: { gatewayReference, status: "SUCCESS" | "FAILED" }
-   */
-  async triggerSandboxWebhook(
-    gatewayReference: string,
-    status: "SUCCESS" | "FAILED"
-  ): Promise<WebhookResult> {
-    const data = await apiClient<WebhookResult>(`/payments/sandbox/webhook`, {
-      method: "POST",
-      body: JSON.stringify({ gatewayReference, status }),
-    });
-    return data;
-  },
-
-  /**
-   * Backward compatibility helper for existing checkout page
-   */
-  async createPaymentAttempt(payload: { enrollmentId: string }): Promise<CreatePaymentResponse> {
-    return this.createPayment(payload.enrollmentId);
-  },
-};
+export const paymentService = new PaymentService();

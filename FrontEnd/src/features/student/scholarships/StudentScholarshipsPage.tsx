@@ -86,7 +86,7 @@ export default function StudentScholarshipsPage() {
               <p className="text-xs text-slate-500 max-w-md mx-auto">
                 Hãy ứng tuyển vào các chiến dịch học bổng đang mở để nhận hỗ trợ học phí từ các Nhà tài trợ.
               </p>
-              <Link to={ROUTES.CAMPAIGNS}>
+              <Link to={(ROUTES as any).CAMPAIGNS || "/campaigns"}>
                 <Button type="primary" className="bg-indigo-600 font-semibold text-xs rounded-xl h-9 px-5">
                   Khám phá chiến dịch học bổng
                 </Button>

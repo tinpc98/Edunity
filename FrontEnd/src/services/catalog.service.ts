@@ -1,83 +1,36 @@
-// ============================================================
-// catalog.service.ts — Category + Subject API integration
-// Routes: GET /categories, GET /categories/:id/subjects,
-//         GET /subjects/:id (public, no auth required)
-//         POST/PATCH /admin/categories, /admin/subjects (admin)
-// ============================================================
+import { MOCK_TEACHERS } from "../data/mockClassDiscovery";
 
-import { apiClient } from "../api/apiClient";
-import {
-  adaptCategory,
-  adaptSubject,
-} from "../api/catalogAdapters";
-import type {
-  ApiCategory,
-  ApiSubject,
-  Category,
-  Subject,
-  CreateCategoryPayload,
-  UpdateCategoryPayload,
-  CreateSubjectPayload,
-  UpdateSubjectPayload,
-} from "../types/catalog";
+export interface PublicTeacherListItem {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+  biography: string | null;
+  qualificationSummary: string | null;
+  ratingAverage: number;
+  ratingCount: number;
+}
 
 class CatalogService {
-  // ─── PUBLIC ────────────────────────────────────────────────
+  async getTeachers(featured?: boolean, limit: number = 6): Promise<PublicTeacherListItem[]> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    
+    // Map from MOCK_TEACHERS to simulate GET /api/teachers response
+    let teachers: PublicTeacherListItem[] = MOCK_TEACHERS.map((t, index) => ({
+      id: t.id,
+      fullName: t.name,
+      avatarUrl: t.avatar || null,
+      biography: t.biography || null,
+      qualificationSummary: t.qualificationSummary || t.title || null,
+      // Simulate ratings based on id/index for deterministic mock
+      ratingAverage: 4.5 + (index % 5) * 0.1,
+      ratingCount: 15 + index * 12,
+    }));
 
-  /** GET /categories — returns ACTIVE categories (public, no auth) */
-  async listCategories(): Promise<Category[]> {
-    const raw = await apiClient<ApiCategory[]>("/categories");
-    return (raw || []).map(adaptCategory);
-  }
-
-  /** GET /categories/:id/subjects — returns ACTIVE subjects for a category */
-  async listSubjectsByCategory(categoryId: string): Promise<Subject[]> {
-    const raw = await apiClient<ApiSubject[]>(`/categories/${categoryId}/subjects`);
-    return (raw || []).map(adaptSubject);
-  }
-
-  /** GET /subjects/:id — returns subject detail with embedded course refs */
-  async getSubject(subjectId: string): Promise<Subject> {
-    const raw = await apiClient<ApiSubject>(`/subjects/${subjectId}`);
-    return adaptSubject(raw);
-  }
-
-  // ─── ADMIN ─────────────────────────────────────────────────
-
-  /** POST /admin/categories */
-  async createCategory(payload: CreateCategoryPayload): Promise<Category> {
-    const raw = await apiClient<ApiCategory>("/admin/categories", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    return adaptCategory(raw);
-  }
-
-  /** PATCH /admin/categories/:id */
-  async updateCategory(id: string, payload: UpdateCategoryPayload): Promise<Category> {
-    const raw = await apiClient<ApiCategory>(`/admin/categories/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    });
-    return adaptCategory(raw);
-  }
-
-  /** POST /admin/subjects */
-  async createSubject(payload: CreateSubjectPayload): Promise<Subject> {
-    const raw = await apiClient<ApiSubject>("/admin/subjects", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    return adaptSubject(raw);
-  }
-
-  /** PATCH /admin/subjects/:id */
-  async updateSubject(id: string, payload: UpdateSubjectPayload): Promise<Subject> {
-    const raw = await apiClient<ApiSubject>(`/admin/subjects/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    });
-    return adaptSubject(raw);
+    if (featured) {
+      teachers.sort((a, b) => b.ratingAverage - a.ratingAverage);
+    }
+    
+    return teachers.slice(0, limit);
   }
 }
 

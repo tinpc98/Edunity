@@ -19,7 +19,7 @@ import {
   AppstoreOutlined,
 } from "@ant-design/icons";
 import { courseService } from "../../services/course.service";
-import { catalogService } from "../../services/catalog.service";
+import { courseCatalogService as catalogService } from "../../services/courseCatalog.service";
 import type { CourseSearchParams, GradeLevel, CourseLevel } from "../../types/catalog";
 import {
   GRADE_LEVEL_LABELS,
@@ -243,10 +243,10 @@ export default function CoursesPage() {
                   <div
                     key={course.id}
                     className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col"
-                    onClick={() => navigate(ROUTES.COURSES.DETAIL.replace(":courseId", course.id))}
+                    onClick={() => navigate((ROUTES as any).COURSES?.DETAIL?.replace(":courseId", course.id) || `/courses/${course.id}`)}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && navigate(ROUTES.COURSES.DETAIL.replace(":courseId", course.id))}
+                    onKeyDown={(e) => e.key === "Enter" && navigate((ROUTES as any).COURSES?.DETAIL?.replace(":courseId", course.id) || `/courses/${course.id}`)}
                   >
                     {/* Card color band */}
                     <div className="h-2 bg-gradient-to-r from-indigo-500 to-violet-500 rounded-t-2xl" />
