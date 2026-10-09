@@ -131,7 +131,7 @@ export default function SponsorHomePage() {
             title={
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-900">Giao dịch tài trợ gần đây</span>
-                <Link to={(ROUTES.SPONSOR as any).CONTRIBUTIONS || ROUTES.SPONSOR.HOME} className="text-xs text-indigo-600 font-semibold">
+                <Link to={ROUTES.SPONSOR.CONTRIBUTIONS} className="text-xs text-indigo-600 font-semibold">
                   Xem tất cả
                 </Link>
               </div>

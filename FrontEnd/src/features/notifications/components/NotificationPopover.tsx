@@ -94,11 +94,11 @@ export const NotificationPopover: React.FC = () => {
 
     // Safe route navigation based on notification type
     if (item.type.includes("MESSAGE")) {
-      navigate((ROUTES as any).MESSAGES || "/messages");
+      navigate(ROUTES.MESSAGES);
     } else if (item.type.includes("ENROLLMENT")) {
-      navigate((ROUTES.STUDENT as any).ENROLLMENTS || ROUTES.STUDENT.HOME);
+      navigate(ROUTES.STUDENT.ENROLLMENTS);
     } else if (item.type.includes("SCHOLARSHIP")) {
-      navigate((ROUTES.STUDENT as any).SCHOLARSHIPS || ROUTES.STUDENT.HOME);
+      navigate(ROUTES.STUDENT.SCHOLARSHIPS);
     } else if (item.type.includes("REPORT")) {
       navigate("/reports");
     } else if (item.type.includes("REVIEW")) {

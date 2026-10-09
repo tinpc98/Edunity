@@ -30,19 +30,19 @@ const teacherMenuItems = [
         label: <Link to={ROUTES.TEACHER.CLASSES}>Lớp của tôi</Link>,
       },
       {
-        key: (ROUTES.TEACHER as any).COURSES || "/teacher/courses",
+        key: ROUTES.TEACHER.COURSES,
         icon: <AppstoreOutlined className="text-[18px]" />,
-        label: <Link to={(ROUTES.TEACHER as any).COURSES || "/teacher/courses"}>Danh mục khóa học</Link>,
+        label: <Link to={ROUTES.TEACHER.COURSES}>Danh mục khóa học</Link>,
       },
       {
-        key: (ROUTES.TEACHER as any).COURSE_PROPOSALS || "/teacher/course-proposals",
+        key: ROUTES.TEACHER.COURSE_PROPOSALS,
         icon: <FileTextOutlined className="text-[18px]" />,
-        label: <Link to={(ROUTES.TEACHER as any).COURSE_PROPOSALS || "/teacher/course-proposals"}>Đề xuất khóa học</Link>,
+        label: <Link to={ROUTES.TEACHER.COURSE_PROPOSALS}>Đề xuất khóa học</Link>,
       },
       {
-        key: (ROUTES.TEACHER as any).SCHEDULE || "/teacher/schedule",
+        key: ROUTES.TEACHER.SCHEDULE,
         icon: <CalendarOutlined className="text-[18px]" />,
-        label: <Link to={(ROUTES.TEACHER as any).SCHEDULE || "/teacher/schedule"}>Lịch giảng dạy</Link>,
+        label: <Link to={ROUTES.TEACHER.SCHEDULE}>Lịch giảng dạy</Link>,
       },
     ]
   },
@@ -51,14 +51,14 @@ const teacherMenuItems = [
     label: 'TƯƠNG TÁC',
     children: [
       {
-        key: (ROUTES.TEACHER as any).MESSAGES || "/messages",
+        key: ROUTES.TEACHER.MESSAGES,
         icon: <MessageOutlined className="text-[18px]" />,
-        label: <Link to={(ROUTES.TEACHER as any).MESSAGES || "/messages"}>Tin nhắn</Link>,
+        label: <Link to={ROUTES.TEACHER.MESSAGES}>Tin nhắn</Link>,
       },
       {
-        key: (ROUTES.TEACHER as any).REVIEWS || "/teacher/reviews",
+        key: ROUTES.TEACHER.REVIEWS,
         icon: <StarOutlined className="text-[18px]" />,
-        label: <Link to={(ROUTES.TEACHER as any).REVIEWS || "/teacher/reviews"}>Đánh giá</Link>,
+        label: <Link to={ROUTES.TEACHER.REVIEWS}>Đánh giá</Link>,
       },
     ]
   },
@@ -67,9 +67,9 @@ const teacherMenuItems = [
     label: 'TÀI CHÍNH',
     children: [
       {
-        key: (ROUTES.TEACHER as any).REVENUE || "/teacher/revenue",
+        key: ROUTES.TEACHER.REVENUE,
         icon: <WalletOutlined className="text-[18px]" />,
-        label: <Link to={(ROUTES.TEACHER as any).REVENUE || "/teacher/revenue"}>Doanh thu</Link>,
+        label: <Link to={ROUTES.TEACHER.REVENUE}>Doanh thu</Link>,
       },
     ]
   },
@@ -78,9 +78,9 @@ const teacherMenuItems = [
     label: 'TÀI KHOẢN',
     children: [
       {
-        key: 'ho-so-giao-vien',
+        key: ROUTES.TEACHER.PROFILE,
         icon: <IdcardOutlined className="text-[18px]" />,
-        label: <Link to="/teacher/profile">Hồ sơ giáo viên</Link>,
+        label: <Link to={ROUTES.TEACHER.PROFILE}>Hồ sơ giáo viên</Link>,
       },
     ]
   }

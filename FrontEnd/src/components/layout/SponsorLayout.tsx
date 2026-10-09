@@ -19,14 +19,14 @@ const sponsorMenuItems = [
     label: "TÀI TRỢ & HỌC BỔNG",
     children: [
       {
-        key: (ROUTES.SPONSOR as any).CONTRIBUTIONS || "/sponsor/contributions",
+        key: ROUTES.SPONSOR.CONTRIBUTIONS,
         icon: <HeartOutlined className="text-[18px]" />,
-        label: <Link to={(ROUTES.SPONSOR as any).CONTRIBUTIONS || "/sponsor/contributions"}>Lịch sử tài trợ</Link>,
+        label: <Link to={ROUTES.SPONSOR.CONTRIBUTIONS}>Lịch sử tài trợ</Link>,
       },
       {
-        key: (ROUTES as any).CAMPAIGNS || "/campaigns",
+        key: ROUTES.CAMPAIGNS,
         icon: <SafetyCertificateOutlined className="text-[18px]" />,
-        label: <Link to={(ROUTES as any).CAMPAIGNS || "/campaigns"}>Khám phá chiến dịch</Link>,
+        label: <Link to={ROUTES.CAMPAIGNS}>Khám phá chiến dịch</Link>,
       },
     ],
   },

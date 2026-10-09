@@ -110,7 +110,7 @@ export default function ClassroomPage() {
 
   const handleLeaveRoom = () => {
     if (isTeacher) {
-      navigate((ROUTES.TEACHER as any).SCHEDULE || ROUTES.TEACHER.HOME);
+      navigate(ROUTES.TEACHER.SCHEDULE);
     } else {
       navigate(ROUTES.STUDENT.SCHEDULE);
     }
@@ -138,7 +138,7 @@ export default function ClassroomPage() {
           title: "Buổi học đã bị hủy",
           desc: "Giảng viên hoặc ban quản trị đã hủy buổi học này.",
           actionText: "Quay lại lịch học",
-          actionRoute: isTeacher ? ((ROUTES.TEACHER as any).SCHEDULE || ROUTES.TEACHER.HOME) : ROUTES.STUDENT.SCHEDULE,
+          actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.STUDENT.SCHEDULE,
         };
       case "SESSION_ENDED":
         return {
@@ -152,7 +152,7 @@ export default function ClassroomPage() {
           title: "Chưa đến giờ mở phòng học",
           desc: msg || "Phòng học trực tuyến chỉ mở trước giờ học 15 phút và đóng khi buổi học kết thúc.",
           actionText: "Quay lại lịch học",
-          actionRoute: isTeacher ? ((ROUTES.TEACHER as any).SCHEDULE || ROUTES.TEACHER.HOME) : ROUTES.STUDENT.SCHEDULE,
+          actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.STUDENT.SCHEDULE,
         };
       case "FORBIDDEN":
         return {

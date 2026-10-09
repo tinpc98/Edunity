@@ -45,7 +45,7 @@ export default function Header() {
     },
     {
       label: "Khóa học",
-      href: (ROUTES as any).COURSES?.LIST || "/courses",
+      href: ROUTES.COURSES.LIST,
       isRoute: true,
       active: location.pathname.startsWith("/courses"),
     },
@@ -57,7 +57,7 @@ export default function Header() {
     },
     {
       label: "Học bổng",
-      href: (ROUTES as any).CAMPAIGNS || "/campaigns",
+      href: ROUTES.CAMPAIGNS,
       isRoute: true,
       active: location.pathname.startsWith("/campaigns"),
     },

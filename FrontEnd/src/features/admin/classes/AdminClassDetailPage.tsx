@@ -87,7 +87,7 @@ export default function AdminClassDetailPage() {
           message="Không tìm thấy hồ sơ lớp học"
           description={(error as any)?.message || "Lớp học không tồn tại hoặc đã bị xóa."}
           action={
-            <Link to={(ROUTES.ADMIN as any).CLASSES || ROUTES.ADMIN.HOME}>
+            <Link to={ROUTES.ADMIN.CLASSES}>
               <Button type="primary">Quay lại danh sách</Button>
             </Link>
           }
@@ -118,7 +118,7 @@ export default function AdminClassDetailPage() {
         className="text-sm font-medium"
         items={[
           { title: <Link to={ROUTES.ADMIN.HOME}>Tổng quan</Link> },
-          { title: <Link to={(ROUTES.ADMIN as any).CLASSES || ROUTES.ADMIN.HOME}>Quản lý Lớp học</Link> },
+          { title: <Link to={ROUTES.ADMIN.CLASSES}>Quản lý Lớp học</Link> },
           { title: cls.className },
         ]}
       />

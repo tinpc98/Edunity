@@ -457,7 +457,7 @@ export default function CheckoutPage() {
 
             <div className="text-center pt-2">
               <Link
-                to={(ROUTES.STUDENT as any).ENROLLMENTS || ROUTES.STUDENT.HOME}
+                to={ROUTES.STUDENT.ENROLLMENTS}
                 className="text-xs font-semibold text-slate-400 hover:text-slate-600"
               >
                 ← Quay lại danh sách đơn đăng ký

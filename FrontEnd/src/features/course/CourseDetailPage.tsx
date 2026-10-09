@@ -57,7 +57,7 @@ export default function CourseDetailPage() {
           description="Khóa học này không tồn tại hoặc đã bị gỡ khỏi hệ thống."
           showIcon
           action={
-            <Button onClick={() => navigate((ROUTES as any).COURSES?.LIST || "/courses")}>Về danh sách</Button>
+            <Button onClick={() => navigate(ROUTES.COURSES.LIST)}>Về danh sách</Button>
           }
         />
       </div>
@@ -73,7 +73,7 @@ export default function CourseDetailPage() {
             className="mb-4 text-indigo-300"
             items={[
               { title: <Link to={ROUTES.HOME} className="text-indigo-300 hover:text-white">Trang chủ</Link> },
-              { title: <Link to={(ROUTES as any).COURSES?.LIST || "/courses"} className="text-indigo-300 hover:text-white">Khóa học</Link> },
+              { title: <Link to={ROUTES.COURSES.LIST} className="text-indigo-300 hover:text-white">Khóa học</Link> },
               { title: <span className="text-white font-medium">{course.title}</span> },
             ]}
           />
@@ -242,7 +242,7 @@ export default function CourseDetailPage() {
 
       {/* Back button */}
       <div className="max-w-4xl mx-auto px-4 pb-10">
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate((ROUTES as any).COURSES?.LIST || "/courses")}>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(ROUTES.COURSES.LIST)}>
           Quay lại danh sách
         </Button>
       </div>
