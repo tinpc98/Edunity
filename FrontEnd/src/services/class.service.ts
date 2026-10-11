@@ -8,6 +8,7 @@ import type {
   ReviewClassPayload,
   ClassListFilters,
   PaginatedClasses,
+  ClassStudentRosterItem,
 } from "../types/class";
 import {
   adaptClassFromApi,
@@ -24,6 +25,7 @@ export const classKeys = {
     ["classes", "course", courseId, params] as const,
   teacherList: (filters?: Record<string, any>) => ["classes", "teacher", filters] as const,
   teacherDetail: (id: string) => ["classes", "teacher", "detail", id] as const,
+  teacherStudents: (id: string, status?: string) => ["classes", "teacher", "students", id, status] as const,
   adminPending: (filters?: Record<string, any>) => ["classes", "admin", "pending", filters] as const,
   adminDetail: (id: string) => ["classes", "admin", "detail", id] as const,
 };
@@ -119,6 +121,11 @@ export const classService = {
       method: "POST",
     });
     return adaptClassFromApi(data);
+  },
+
+  async getClassStudents(classId: string, status?: string): Promise<ClassStudentRosterItem[]> {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return apiClient<ClassStudentRosterItem[]>(`/teacher/classes/${classId}/students${qs}`);
   },
 
   // ---------------- ADMIN API ----------------

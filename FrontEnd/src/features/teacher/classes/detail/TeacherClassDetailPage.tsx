@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { 
   Typography, Tabs, Breadcrumb, Tag, Button, Row, Col, Card, 
-  Modal, Form, Input, InputNumber, DatePicker, Skeleton, Alert, message, List, Popconfirm, Table
+  Modal, Form, Input, InputNumber, DatePicker, Skeleton, Alert, message, List, Popconfirm, Table,
+  Avatar, Empty
 } from 'antd';
 import { 
   CalendarOutlined, 
@@ -16,16 +17,18 @@ import {
   StopOutlined,
   PoweroffOutlined,
   UserOutlined,
-  VideoCameraOutlined
+  VideoCameraOutlined,
+  MessageOutlined
 } from '@ant-design/icons';
 
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
 import { classService, classKeys } from '../../../../services/class.service';
+import { messageService } from '../../../../services/message.service';
 import { sessionService, sessionKeys } from '../../../../services/session.service';
-import type { UpdateClassPayload } from '../../../../types/class';
+import type { UpdateClassPayload, ClassStudentRosterItem, PaymentSourceType } from '../../../../types/class';
 import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../../types/class';
 import { deriveScheduleText } from '../../../../api/classAdapters';
 import type { 
@@ -44,11 +47,44 @@ const { Title, Text, Paragraph } = Typography;
 
 export default function TeacherClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm] = Form.useForm();
+
+  // Student roster & messaging state
+  const [isOpeningChat, setIsOpeningChat] = useState<string | null>(null);
+
+  const {
+    data: students = [],
+    isLoading: isLoadingStudents,
+    isError: isStudentsError,
+  } = useQuery({
+    queryKey: classKeys.teacherStudents(classId!),
+    queryFn: () => classService.getClassStudents(classId!),
+    enabled: Boolean(classId),
+  });
+
+  const handleMessageStudent = async (studentId: string | null) => {
+    if (!studentId) {
+      message.warning("Không thể trò chuyện với học viên này do thiếu thông tin tài khoản");
+      return;
+    }
+    setIsOpeningChat(studentId);
+    try {
+      const conv = await messageService.openConversation({
+        participantId: studentId,
+        classId,
+      });
+      navigate(`/messages?id=${conv.id}`);
+    } catch (err: any) {
+      message.error(err?.message || "Không thể mở cuộc trò chuyện với học viên");
+    } finally {
+      setIsOpeningChat(null);
+    }
+  };
 
   // Session management state
   const [isCreateSessionModalOpen, setIsCreateSessionModalOpen] = useState(false);
@@ -695,6 +731,144 @@ export default function TeacherClassDetailPage() {
     </div>
   );
 
+  // ---------------- Tab 3: Students Roster ----------------
+  const getPaymentSourceTag = (source: PaymentSourceType) => {
+    switch (source) {
+      case "FREE":
+        return <Tag color="default">Miễn phí</Tag>;
+      case "DIRECT_PAYMENT":
+        return <Tag color="blue">Tự thanh toán</Tag>;
+      case "SCHOLARSHIP":
+        return <Tag color="green">Học bổng</Tag>;
+      case "MIXED":
+        return <Tag color="purple">Hỗn hợp</Tag>;
+      default:
+        return <Tag>{source}</Tag>;
+    }
+  };
+
+  const getEnrollmentStatusTag = (status: string) => {
+    switch (status) {
+      case "CONFIRMED":
+        return <Tag color="success">Đã xác nhận</Tag>;
+      case "COMPLETED":
+        return <Tag color="purple">Đã hoàn thành</Tag>;
+      case "PENDING":
+        return <Tag color="warning">Chờ xử lý</Tag>;
+      case "CANCELLED":
+        return <Tag color="default">Đã hủy</Tag>;
+      default:
+        return <Tag>{status}</Tag>;
+    }
+  };
+
+  const studentColumns = [
+    {
+      title: "Học viên",
+      key: "student",
+      render: (_: unknown, record: ClassStudentRosterItem) => (
+        <div className="flex items-center gap-3">
+          <Avatar
+            src={record.avatarUrl}
+            icon={!record.avatarUrl && <UserOutlined />}
+            size={40}
+            className="border border-slate-200 shrink-0"
+          />
+          <div className="min-w-0">
+            <div className="font-semibold text-slate-800 text-sm truncate">
+              {record.fullName || "Học viên"}
+            </div>
+            <div className="text-xs text-slate-400 truncate">{record.email || "—"}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: "Trạng thái đăng ký",
+      dataIndex: "enrollmentStatus",
+      key: "enrollmentStatus",
+      render: (status: string) => getEnrollmentStatusTag(status),
+    },
+    {
+      title: "Nguồn thanh toán",
+      dataIndex: "paymentSource",
+      key: "paymentSource",
+      render: (source: PaymentSourceType) => getPaymentSourceTag(source),
+    },
+    {
+      title: "Ngày tham gia",
+      dataIndex: "enrolledAt",
+      key: "enrolledAt",
+      render: (date: string) => (
+        <span className="text-xs text-slate-600">
+          {date ? dayjs(date).format("DD/MM/YYYY HH:mm") : "—"}
+        </span>
+      ),
+    },
+    {
+      title: "Thao tác",
+      key: "actions",
+      render: (_: unknown, record: ClassStudentRosterItem) => (
+        <Button
+          type="primary"
+          ghost
+          size="small"
+          icon={<MessageOutlined />}
+          loading={isOpeningChat === record.studentId}
+          disabled={!record.studentId}
+          onClick={() => handleMessageStudent(record.studentId)}
+          className="rounded-lg text-xs"
+        >
+          Nhắn tin
+        </Button>
+      ),
+    },
+  ];
+
+  const renderStudents = () => (
+    <div className="mt-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Text className="font-semibold text-slate-800 text-base">Danh sách học viên</Text>
+          <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">
+            {students.length} học viên
+          </span>
+        </div>
+      </div>
+
+      {isStudentsError ? (
+        <Alert
+          type="error"
+          message="Không thể tải danh sách học viên"
+          description="Đã xảy ra lỗi khi tải danh sách học viên của lớp học. Vui lòng kiểm tra quyền truy cập hoặc thử lại sau."
+          className="rounded-xl"
+        />
+      ) : students.length === 0 && !isLoadingStudents ? (
+        <Card className="rounded-2xl border-slate-200 text-center py-12 bg-white">
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <span className="text-slate-500 font-medium">
+                Chưa có học viên đăng ký lớp này.
+              </span>
+            }
+          />
+        </Card>
+      ) : (
+        <Card className="rounded-2xl border-slate-200 bg-white overflow-hidden p-0 shadow-sm">
+          <Table
+            rowKey="enrollmentId"
+            columns={studentColumns}
+            dataSource={students}
+            loading={isLoadingStudents}
+            pagination={{ pageSize: 10, showTotal: (t) => `Tổng số ${t} học viên` }}
+            scroll={{ x: 700 }}
+          />
+        </Card>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex flex-col w-full pb-10 max-w-[1200px] mx-auto">
       <Breadcrumb 
@@ -811,6 +985,7 @@ export default function TeacherClassDetailPage() {
         items={[
           { key: 'overview', label: `Tổng quan`, children: renderOverview() },
           { key: 'sessions', label: `Buổi học (${sessionsList.length})`, children: renderSessions() },
+          { key: 'students', label: `Học viên (${students.length})`, children: renderStudents() },
         ]}
       />
 

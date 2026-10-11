@@ -2,6 +2,7 @@ export const ROUTES = {
   HOME: "/",
   CLASSES: "/classes",
   TEACHERS: "/teachers",
+  TEACHER_DETAIL: "/teachers/:teacherId",
   CLASS_DETAIL: "/classes/:classId",
   ENROLLMENT: "/enrollment/:classId",
   CHECKOUT: "/checkout/:enrollmentId",
@@ -51,6 +52,7 @@ export const ROUTES = {
   },
   ADMIN: {
     HOME: "/admin",
+    USERS: "/admin/users",
     CLASSES: "/admin/classes",
     CLASS_DETAIL: "/admin/classes/:classId",
     CATALOG: "/admin/catalog",
@@ -69,6 +71,7 @@ export const ROUTES = {
   },
   SPONSOR: {
     HOME: "/sponsor",
+    PROFILE: "/sponsor/profile",
     CONTRIBUTIONS: "/sponsor/contributions",
   },
 } as const;
