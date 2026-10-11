@@ -6,6 +6,7 @@ import {
   DashboardOutlined,
   HeartOutlined,
   SafetyCertificateOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 
 const sponsorMenuItems = [
@@ -13,6 +14,11 @@ const sponsorMenuItems = [
     key: ROUTES.SPONSOR.HOME,
     icon: <DashboardOutlined className="text-[18px]" />,
     label: <Link to={ROUTES.SPONSOR.HOME}>Tổng quan</Link>,
+  },
+  {
+    key: ROUTES.SPONSOR.PROFILE,
+    icon: <UserOutlined className="text-[18px]" />,
+    label: <Link to={ROUTES.SPONSOR.PROFILE}>Hồ sơ</Link>,
   },
   {
     type: "group",

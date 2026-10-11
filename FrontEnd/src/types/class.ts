@@ -218,3 +218,17 @@ export function formatDayOfWeek(dayOfWeek: number): string {
     default: return `Thứ ${dayOfWeek + 1}`;
   }
 }
+
+export type PaymentSourceType = "FREE" | "DIRECT_PAYMENT" | "SCHOLARSHIP" | "MIXED";
+
+export interface ClassStudentRosterItem {
+  enrollmentId: string;
+  studentId: string | null;
+  fullName: string | null;
+  avatarUrl: string | null;
+  email: string | null;
+  enrollmentStatus: string;
+  paymentSource: PaymentSourceType;
+  enrolledAt: string;
+}
+

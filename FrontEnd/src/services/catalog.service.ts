@@ -1,4 +1,5 @@
-import { MOCK_TEACHERS } from "../data/mockClassDiscovery";
+import { apiClient } from "../api/apiClient";
+import type { ApiClass } from "../types/class";
 
 export interface PublicTeacherListItem {
   id: string;
@@ -10,27 +11,28 @@ export interface PublicTeacherListItem {
   ratingCount: number;
 }
 
-class CatalogService {
-  async getTeachers(featured?: boolean, limit: number = 6): Promise<PublicTeacherListItem[]> {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    
-    // Map from MOCK_TEACHERS to simulate GET /api/teachers response
-    let teachers: PublicTeacherListItem[] = MOCK_TEACHERS.map((t, index) => ({
-      id: t.id,
-      fullName: t.name,
-      avatarUrl: t.avatar || null,
-      biography: t.biography || null,
-      qualificationSummary: t.qualificationSummary || t.title || null,
-      // Simulate ratings based on id/index for deterministic mock
-      ratingAverage: 4.5 + (index % 5) * 0.1,
-      ratingCount: 15 + index * 12,
-    }));
+export interface PublicTeacherDetail extends PublicTeacherListItem {
+  classes: ApiClass[];
+}
 
-    if (featured) {
-      teachers.sort((a, b) => b.ratingAverage - a.ratingAverage);
-    }
-    
-    return teachers.slice(0, limit);
+export const catalogKeys = {
+  teachers: (params?: { featured?: boolean; limit?: number }) =>
+    ["catalog", "teachers", params] as const,
+  teacherDetail: (id: string) => ["catalog", "teachers", "detail", id] as const,
+};
+
+class CatalogService {
+  async getTeachers(featured?: boolean, limit: number = 24): Promise<PublicTeacherListItem[]> {
+    const query = new URLSearchParams();
+    if (featured !== undefined) query.set("featured", String(featured));
+    if (limit) query.set("limit", String(limit));
+
+    const endpoint = `/teachers${query.toString() ? `?${query.toString()}` : ""}`;
+    return apiClient<PublicTeacherListItem[]>(endpoint, { method: "GET" });
+  }
+
+  async getTeacherById(id: string): Promise<PublicTeacherDetail> {
+    return apiClient<PublicTeacherDetail>(`/teachers/${id}`, { method: "GET" });
   }
 }
 

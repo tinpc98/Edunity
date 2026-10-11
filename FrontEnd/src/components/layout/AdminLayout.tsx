@@ -12,6 +12,7 @@ import {
   FileTextOutlined,
   CustomerServiceOutlined,
   NotificationOutlined,
+  TeamOutlined,
 } from "@ant-design/icons";
 
 const adminMenuItems = [
@@ -24,6 +25,11 @@ const adminMenuItems = [
     type: 'group',
     label: 'QUẢN LÝ HỆ THỐNG',
     children: [
+      {
+        key: ROUTES.ADMIN.USERS,
+        icon: <TeamOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.ADMIN.USERS}>Người dùng</Link>,
+      },
       {
         key: ROUTES.ADMIN.TEACHER_VERIFICATIONS,
         icon: <IdcardOutlined className="text-[18px]" />,
