@@ -1,10 +1,5 @@
 import { apiClient } from "../api/apiClient";
-
-/**
- * Public catalog API (no auth required).
- * - GET /api/teachers?featured=&limit=
- * - GET /api/catalog/categories
- */
+import type { ApiClass } from "../types/class";
 
 export interface PublicTeacherListItem {
   id: string;
@@ -16,53 +11,28 @@ export interface PublicTeacherListItem {
   ratingCount: number;
 }
 
-export interface PublicSubject {
-  id: string;
-  name: string;
-  slug: string;
-}
-
-export interface PublicCategory {
-  id: string;
-  name: string;
-  slug: string;
-  subjects: PublicSubject[];
+export interface PublicTeacherDetail extends PublicTeacherListItem {
+  classes: ApiClass[];
 }
 
 export const catalogKeys = {
-  teachers: (featured: boolean, limit: number) => ["catalog", "teachers", featured, limit] as const,
-  categories: () => ["catalog", "categories"] as const,
+  teachers: (params?: { featured?: boolean; limit?: number }) =>
+    ["catalog", "teachers", params] as const,
+  teacherDetail: (id: string) => ["catalog", "teachers", "detail", id] as const,
 };
 
 class CatalogService {
-  async getTeachers(featured?: boolean, limit: number = 6): Promise<PublicTeacherListItem[]> {
-    const query = new URLSearchParams({ limit: String(limit) });
-    if (featured) query.set("featured", "true");
+  async getTeachers(featured?: boolean, limit: number = 24): Promise<PublicTeacherListItem[]> {
+    const query = new URLSearchParams();
+    if (featured !== undefined) query.set("featured", String(featured));
+    if (limit) query.set("limit", String(limit));
 
-    const data = await apiClient<Array<Partial<PublicTeacherListItem> & { id: string }>>(`/teachers?${query}`);
-    return (Array.isArray(data) ? data : []).map((teacher) => ({
-      id: teacher.id,
-      fullName: teacher.fullName || "Giáo viên Edunity",
-      avatarUrl: teacher.avatarUrl || null,
-      biography: teacher.biography || null,
-      qualificationSummary: teacher.qualificationSummary || null,
-      ratingAverage: Number(teacher.ratingAverage ?? 0),
-      ratingCount: Number(teacher.ratingCount ?? 0),
-    }));
+    const endpoint = `/teachers${query.toString() ? `?${query.toString()}` : ""}`;
+    return apiClient<PublicTeacherListItem[]>(endpoint, { method: "GET" });
   }
 
-  async getCategories(): Promise<PublicCategory[]> {
-    const data = await apiClient<PublicCategory[]>("/catalog/categories");
-    return (Array.isArray(data) ? data : []).map((category) => ({
-      id: category.id,
-      name: category.name,
-      slug: category.slug,
-      subjects: (category.subjects || []).map((subject) => ({
-        id: subject.id,
-        name: subject.name,
-        slug: subject.slug,
-      })),
-    }));
+  async getTeacherById(id: string): Promise<PublicTeacherDetail> {
+    return apiClient<PublicTeacherDetail>(`/teachers/${id}`, { method: "GET" });
   }
 }
 

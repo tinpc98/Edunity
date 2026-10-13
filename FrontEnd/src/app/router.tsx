@@ -17,6 +17,7 @@ import StudentScholarshipApplicationsPage from "../features/student/scholarships
 import StudentScholarshipExplorePage from "../features/student/scholarships/StudentScholarshipExplorePage";
 import StudentScholarshipDetailPage from "../features/student/scholarships/StudentScholarshipDetailPage";
 import TeacherDiscoveryPage from "../features/teacher/discovery/TeacherDiscoveryPage";
+import TeacherDetailPage from "../features/teacher/discovery/TeacherDetailPage";
 import TeacherLayout from "../components/layout/TeacherLayout";
 import TeacherHomePage from "../features/teacher/home/TeacherHomePage";
 import TeacherClassesPage from "../features/teacher/classes/TeacherClassesPage";
@@ -30,6 +31,7 @@ import TeacherRevenuePage from "../features/teacher/revenue/TeacherRevenuePage";
 import { TeacherReviewsPage } from "../features/teacher/reviews/TeacherReviewsPage";
 import AdminLayout from "../components/layout/AdminLayout";
 import AdminHomePage from "../features/admin/home/AdminHomePage";
+import AdminUsersPage from "../features/admin/users/AdminUsersPage";
 import TeacherVerificationPage from "../features/admin/teachers/verifications/TeacherVerificationPage";
 import TeacherVerificationDetailPage from "../features/admin/teachers/verifications/TeacherVerificationDetailPage";
 import AdminCampaignsPage from "../features/admin/campaigns/AdminCampaignsPage";
@@ -46,6 +48,7 @@ import AdminTransactionsPage from "../features/admin/finance/AdminTransactionsPa
 import { AdminReportsPage } from "../features/admin/reports/AdminReportsPage";
 import SponsorLayout from "../components/layout/SponsorLayout";
 import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
+import SponsorProfilePage from "../features/sponsor/profile/SponsorProfilePage";
 import SponsorContributionsPage from "../features/sponsor/contributions/SponsorContributionsPage";
 import LoginPage from "../features/auth/LoginPage";
 import RegisterPage from "../features/auth/RegisterPage";
@@ -79,6 +82,10 @@ const router = createBrowserRouter([
       {
         path: ROUTES.TEACHERS,
         element: <TeacherDiscoveryPage />,
+      },
+      {
+        path: ROUTES.TEACHER_DETAIL,
+        element: <TeacherDetailPage />,
       },
       {
         path: ROUTES.CLASS_DETAIL,
@@ -247,6 +254,10 @@ const router = createBrowserRouter([
         element: <AdminHomePage />,
       },
       {
+        path: "users",
+        element: <AdminUsersPage />,
+      },
+      {
         path: "classes",
         element: <AdminClassesPage />,
       },
@@ -311,6 +322,10 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <SponsorHomePage />,
+      },
+      {
+        path: "profile",
+        element: <SponsorProfilePage />,
       },
       {
         path: "contributions",
