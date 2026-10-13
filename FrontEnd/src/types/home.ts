@@ -1,6 +1,11 @@
+export interface CategorySubject {
+  id: string;
+  name: string;
+}
+
 export interface CategoryGroup {
   name: string;
-  subjects: string[];
+  subjects: CategorySubject[];
   isHighlight?: boolean;
 }
 

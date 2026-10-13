@@ -10,7 +10,7 @@ interface PriceFilterProps {
 
 export default function PriceFilter({
   minLimit = 0,
-  maxLimit = 2000000,
+  maxLimit = 5000000,
   minPrice,
   maxPrice,
   onChange,

@@ -11,6 +11,9 @@ import {
   LogoutOutlined,
   BellOutlined,
   DownOutlined,
+  GiftOutlined,
+  FileSearchOutlined,
+  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
@@ -26,7 +29,7 @@ export default function StudentLayout() {
   // Auth Guard: Only authenticated STUDENT can access
   useEffect(() => {
     if (!isAuthenticated || !user) {
-      navigate(`/login?redirect=${encodeURIComponent(ROUTES.STUDENT.HOME)}`, { replace: true });
+      navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`, { replace: true });
       return;
     }
 
@@ -38,7 +41,7 @@ export default function StudentLayout() {
       });
       navigate(ROUTES.HOME, { replace: true });
     }
-  }, [isAuthenticated, user, navigate, notification]);
+  }, [isAuthenticated, user, navigate, notification, location.pathname, location.search]);
 
   if (!isAuthenticated || !user || user.role !== "STUDENT") {
     return null;
@@ -128,6 +131,47 @@ export default function StudentLayout() {
               <CalendarOutlined className="text-sm" />
               <span>Lịch học</span>
             </Link>
+          </div>
+
+          {/* Nav Section: HỌC BỔNG */}
+          <div className="space-y-1 mt-6">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 mb-1.5">
+              HỌC BỔNG
+            </div>
+
+            {[
+              {
+                to: ROUTES.STUDENT.SCHOLARSHIP_EXPLORE,
+                label: "Tìm học bổng",
+                icon: <SafetyCertificateOutlined className="text-sm" />,
+                active: location.pathname.startsWith(ROUTES.STUDENT.SCHOLARSHIP_EXPLORE),
+              },
+              {
+                to: ROUTES.STUDENT.SCHOLARSHIP_APPLICATIONS,
+                label: "Hồ sơ của tôi",
+                icon: <FileSearchOutlined className="text-sm" />,
+                active: location.pathname === ROUTES.STUDENT.SCHOLARSHIP_APPLICATIONS,
+              },
+              {
+                to: ROUTES.STUDENT.SCHOLARSHIPS,
+                label: "Học bổng đã nhận",
+                icon: <GiftOutlined className="text-sm" />,
+                active: location.pathname === ROUTES.STUDENT.SCHOLARSHIPS,
+              },
+            ].map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                  item.active
+                    ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
+                    : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+                }`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </Link>
+            ))}
           </div>
 
           {/* Nav Section: TÀI KHOẢN */}

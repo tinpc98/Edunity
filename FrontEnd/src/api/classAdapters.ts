@@ -10,7 +10,7 @@ import type {
   TimeOfDay,
   BackendGradeLevel,
 } from "../types/classDiscovery";
-import { GRADE_LEVEL_LABELS } from "../data/mockClassDiscovery";
+import { GRADE_LEVEL_LABELS } from "../types/catalog";
 
 const DAY_NAMES = [
   "Chủ nhật",
@@ -175,7 +175,7 @@ export function adaptClassModelToDiscoveryItem(cls: ClassModel): ClassDiscoveryI
     courseId: cls.courseId,
     courseTitle: cls.courseTitle,
     subjectId: cls.subjectId,
-    subjectName: (cls.course as any)?.subjectName || "Môn học",
+    subjectName: (cls.course as any)?.subjectName || "",
     teacherId: cls.teacherId,
     teacherName: cls.teacherName || cls.teacher?.fullName || "Giảng viên",
     teacherAvatar: cls.teacher?.avatarUrl || undefined,

@@ -23,6 +23,8 @@ export class FetchError extends Error {
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
 
+const NO_REFRESH_ENDPOINTS = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"];
+
 let refreshPromise: Promise<string | null> | null = null;
 
 async function refreshSession(): Promise<string | null> {
@@ -82,8 +84,9 @@ export async function apiClient<T>(
   try {
     const response = await fetch(url, { ...options, headers });
 
-    // Handle 401 Unauthorized
-    if (response.status === 401 && !isRetry) {
+    // Handle 401 Unauthorized. On the credential endpoints a 401 means wrong credentials or a dead
+    // refresh token, not an expired access token, so it must not trigger a refresh.
+    if (response.status === 401 && !isRetry && !NO_REFRESH_ENDPOINTS.includes(endpoint)) {
       if (!refreshPromise) {
         refreshPromise = refreshSession();
       }

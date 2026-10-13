@@ -14,6 +14,8 @@ import StudentPaymentHistoryPage from "../features/student/payment/StudentPaymen
 import StudentEnrollmentsPage from "../features/student/enrollments/StudentEnrollmentsPage";
 import StudentScholarshipsPage from "../features/student/scholarships/StudentScholarshipsPage";
 import StudentScholarshipApplicationsPage from "../features/student/scholarships/StudentScholarshipApplicationsPage";
+import StudentScholarshipExplorePage from "../features/student/scholarships/StudentScholarshipExplorePage";
+import StudentScholarshipDetailPage from "../features/student/scholarships/StudentScholarshipDetailPage";
 import TeacherDiscoveryPage from "../features/teacher/discovery/TeacherDiscoveryPage";
 import TeacherLayout from "../components/layout/TeacherLayout";
 import TeacherHomePage from "../features/teacher/home/TeacherHomePage";
@@ -179,6 +181,14 @@ const router = createBrowserRouter([
       {
         path: "scholarships/applications",
         element: <StudentScholarshipApplicationsPage />,
+      },
+      {
+        path: "scholarships/explore",
+        element: <StudentScholarshipExplorePage />,
+      },
+      {
+        path: "scholarships/explore/:campaignId",
+        element: <StudentScholarshipDetailPage />,
       },
     ],
   },

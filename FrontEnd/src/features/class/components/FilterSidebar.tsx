@@ -63,7 +63,7 @@ export default function FilterSidebar({
   const classTypeActiveCount = filters.classTypes.length;
   const priceActiveCount =
     (filters.minPrice !== undefined && filters.minPrice > 0) ||
-    (filters.maxPrice !== undefined && filters.maxPrice < (metadata?.maxPrice ?? 2000000))
+    (filters.maxPrice !== undefined && filters.maxPrice < (metadata?.maxPrice ?? 5000000))
       ? 1
       : 0;
   const scheduleActiveCount = filters.timeOfDay.length;
@@ -164,7 +164,7 @@ export default function FilterSidebar({
         >
           <PriceFilter
             minLimit={metadata?.minPrice || 0}
-            maxLimit={metadata?.maxPrice || 2000000}
+            maxLimit={metadata?.maxPrice || 5000000}
             minPrice={filters.minPrice}
             maxPrice={filters.maxPrice}
             onChange={([minPrice, maxPrice]) =>

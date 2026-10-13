@@ -1,6 +1,17 @@
 import { Skeleton } from "antd";
 import type { SessionEntity } from "../../../types/classDiscovery";
 
+function formatSessionTime(start: string, end?: string): string {
+  const startDate = new Date(start);
+  if (Number.isNaN(startDate.getTime())) return "";
+  const time = (d: Date) => d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+  const day = startDate.toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+  const endDate = end ? new Date(end) : null;
+  return endDate && !Number.isNaN(endDate.getTime())
+    ? `${day} • ${time(startDate)} – ${time(endDate)}`
+    : `${day} • ${time(startDate)}`;
+}
+
 interface ClassSessionsTabProps {
   sessions: SessionEntity[];
   isLoading?: boolean;
@@ -45,8 +56,15 @@ export default function ClassSessionsTab({ sessions, isLoading }: ClassSessionsT
                 <div className="w-8 h-8 rounded-lg bg-indigo-50/80 border border-indigo-100/80 text-indigo-600 font-bold text-xs flex items-center justify-center font-mono shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                   {sessionNum}
                 </div>
-                <div className="text-sm font-medium text-slate-800 leading-normal">
-                  {session.title}
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-slate-800 leading-normal">
+                    {session.title}
+                  </div>
+                  {session.startDatetime && (
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {formatSessionTime(session.startDatetime, session.endDatetime)}
+                    </div>
+                  )}
                 </div>
               </div>
             );

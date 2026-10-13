@@ -1,4 +1,10 @@
-import { MOCK_TEACHERS } from "../data/mockClassDiscovery";
+import { apiClient } from "../api/apiClient";
+
+/**
+ * Public catalog API (no auth required).
+ * - GET /api/teachers?featured=&limit=
+ * - GET /api/catalog/categories
+ */
 
 export interface PublicTeacherListItem {
   id: string;
@@ -10,27 +16,53 @@ export interface PublicTeacherListItem {
   ratingCount: number;
 }
 
+export interface PublicSubject {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface PublicCategory {
+  id: string;
+  name: string;
+  slug: string;
+  subjects: PublicSubject[];
+}
+
+export const catalogKeys = {
+  teachers: (featured: boolean, limit: number) => ["catalog", "teachers", featured, limit] as const,
+  categories: () => ["catalog", "categories"] as const,
+};
+
 class CatalogService {
   async getTeachers(featured?: boolean, limit: number = 6): Promise<PublicTeacherListItem[]> {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    
-    // Map from MOCK_TEACHERS to simulate GET /api/teachers response
-    let teachers: PublicTeacherListItem[] = MOCK_TEACHERS.map((t, index) => ({
-      id: t.id,
-      fullName: t.name,
-      avatarUrl: t.avatar || null,
-      biography: t.biography || null,
-      qualificationSummary: t.qualificationSummary || t.title || null,
-      // Simulate ratings based on id/index for deterministic mock
-      ratingAverage: 4.5 + (index % 5) * 0.1,
-      ratingCount: 15 + index * 12,
-    }));
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (featured) query.set("featured", "true");
 
-    if (featured) {
-      teachers.sort((a, b) => b.ratingAverage - a.ratingAverage);
-    }
-    
-    return teachers.slice(0, limit);
+    const data = await apiClient<Array<Partial<PublicTeacherListItem> & { id: string }>>(`/teachers?${query}`);
+    return (Array.isArray(data) ? data : []).map((teacher) => ({
+      id: teacher.id,
+      fullName: teacher.fullName || "Giáo viên Edunity",
+      avatarUrl: teacher.avatarUrl || null,
+      biography: teacher.biography || null,
+      qualificationSummary: teacher.qualificationSummary || null,
+      ratingAverage: Number(teacher.ratingAverage ?? 0),
+      ratingCount: Number(teacher.ratingCount ?? 0),
+    }));
+  }
+
+  async getCategories(): Promise<PublicCategory[]> {
+    const data = await apiClient<PublicCategory[]>("/catalog/categories");
+    return (Array.isArray(data) ? data : []).map((category) => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      subjects: (category.subjects || []).map((subject) => ({
+        id: subject.id,
+        name: subject.name,
+        slug: subject.slug,
+      })),
+    }));
   }
 }
 

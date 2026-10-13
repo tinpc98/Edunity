@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { classDiscoveryService } from "../../../services/classDiscovery.service";
+import { classDiscoveryService, DEFAULT_MAX_PRICE } from "../../../services/classDiscovery.service";
 import type {
   BackendClassStatus,
   BackendClassType,
@@ -174,7 +174,7 @@ export function useClassDiscoveryFilters() {
           }
 
           if ("maxPrice" in updates) {
-            if (updates.maxPrice !== undefined && updates.maxPrice < 2000000) {
+            if (updates.maxPrice !== undefined && updates.maxPrice < DEFAULT_MAX_PRICE) {
               next.set("maxPrice", String(updates.maxPrice));
             } else {
               next.delete("maxPrice");
@@ -222,7 +222,7 @@ export function useClassDiscoveryFilters() {
         filters.statuses.length > 0 ||
         filters.teacherId ||
         (filters.minPrice !== undefined && filters.minPrice > 0) ||
-        (filters.maxPrice !== undefined && filters.maxPrice < 2000000)
+        (filters.maxPrice !== undefined && filters.maxPrice < DEFAULT_MAX_PRICE)
     );
   }, [filters]);
 

@@ -1,4 +1,4 @@
-import { Button } from "antd";
+import { Link } from "react-router-dom";
 
 import {
   StarFilled,
@@ -24,6 +24,8 @@ interface FeaturedClassCardProps {
   schedule?: string;
   seatsLeft?: number;
   capacity?: number;
+  teacherInitials?: string;
+  to: string;
 }
 
 export default function FeaturedClassCard({
@@ -43,6 +45,8 @@ export default function FeaturedClassCard({
   schedule = "Thứ 2 & Thứ 5 • 19:30",
   seatsLeft = 3,
   capacity = 12,
+  teacherInitials = "GV",
+  to,
 }: FeaturedClassCardProps) {
   const nearlyFull = seatsLeft <= 3;
 
@@ -87,7 +91,7 @@ export default function FeaturedClassCard({
       {/* Teacher */}
       <div className="mt-2 flex items-center gap-2.5">
         <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-[11px] shrink-0">
-          VD
+          {teacherInitials}
         </div>
 
         <div className="min-w-0">
@@ -168,12 +172,12 @@ export default function FeaturedClassCard({
           )}
         </div>
 
-        <Button
-          type="primary"
-          className="bg-indigo-600 hover:bg-indigo-700 font-bold text-[12px] px-3.5 h-8 rounded-md border-none shadow-sm"
+        <Link
+          to={to}
+          className="inline-flex items-center bg-indigo-600 hover:bg-indigo-700 text-white hover:text-white font-bold text-[12px] px-3.5 h-8 rounded-md shadow-sm transition-colors"
         >
           Xem lớp
-        </Button>
+        </Link>
       </div>
     </div>
   );
