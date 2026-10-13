@@ -70,11 +70,11 @@ export default function FeaturedTeachersSection() {
                   </div>
 
                   <Link
-                    to={`/classes?teacherId=${teacher.id}`}
+                    to={`/teachers/${teacher.id}`}
                     className="mt-auto pt-3 block"
                   >
                     <span className="flex items-center justify-center gap-1 h-9 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10.5px] transition-colors">
-                      Xem lớp của giáo viên <ArrowRightOutlined />
+                      Xem hồ sơ <ArrowRightOutlined />
                     </span>
                   </Link>
                 </article>

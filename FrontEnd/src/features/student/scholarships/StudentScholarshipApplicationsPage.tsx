@@ -56,9 +56,9 @@ function ApplicationProgress({ app }: { app: ScholarshipApplication }) {
   const resultTitle =
     app.status === "APPROVED" ? "Được cấp học bổng" : app.status === "REJECTED" ? "Không được duyệt" : "Kết quả";
 
-  const current = app.status === "SUBMITTED" ? 1 : app.status === "NEED_MORE_INFORMATION" ? 1 : 2;
+  const current = app.status === "SUBMITTED" || app.status === "NEED_MORE_INFORMATION" ? 1 : 2;
   const status =
-    app.status === "REJECTED" ? "error" : app.status === "APPROVED" ? "finish" : app.status === "NEED_MORE_INFORMATION" ? "error" : "process";
+    app.status === "REJECTED" ? "error" : app.status === "APPROVED" ? "finish" : "process";
 
   return (
     <Steps

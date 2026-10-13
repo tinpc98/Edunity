@@ -37,15 +37,16 @@ export default function StudentScholarshipExplorePage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  const params = { status: statusTab, page, pageSize: PAGE_SIZE };
+  // GET /api/campaigns has no keyword or phase filter, so all campaigns of the selected status are
+  // loaded at once (the backend caps pageSize at 100) and filtered / paginated on the client.
+  const params = { status: statusTab, page: 1, pageSize: 100 };
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: campaignKeys.list(params),
     queryFn: () => campaignService.listCampaigns(params),
   });
   const { byCampaign } = useMyApplicationByCampaign();
 
-  // GET /api/campaigns has no keyword or phase filter: both narrow the current page only
-  const visible = useMemo(() => {
+  const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return (data?.items ?? []).filter((campaign) => {
       if (acceptingOnly && !campaign.isAcceptingApplications) return false;
@@ -54,6 +55,7 @@ export default function StudentScholarshipExplorePage() {
         .some((text) => text?.toLowerCase().includes(keyword));
     });
   }, [data, search, acceptingOnly]);
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
@@ -89,7 +91,7 @@ export default function StudentScholarshipExplorePage() {
           {statusTab === "OPEN_FOR_FUNDING" && (
             <Segmented<"ALL" | "ACCEPTING">
               value={acceptingOnly ? "ACCEPTING" : "ALL"}
-              onChange={(value) => setAcceptingOnly(value === "ACCEPTING")}
+              onChange={(value) => { setAcceptingOnly(value === "ACCEPTING"); setPage(1); }}
               options={[
                 { label: "Tất cả", value: "ALL" },
                 { label: "Đang nhận hồ sơ", value: "ACCEPTING" },
@@ -101,7 +103,7 @@ export default function StudentScholarshipExplorePage() {
             prefix={<SearchOutlined className="text-slate-400" />}
             placeholder="Tìm theo tên, mô tả, điều kiện..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="md:ml-auto md:max-w-xs rounded-xl"
           />
         </div>
@@ -123,7 +125,7 @@ export default function StudentScholarshipExplorePage() {
           description="Không thể tải danh sách chiến dịch học bổng. Vui lòng thử lại."
           action={<Button size="small" type="primary" onClick={() => refetch()}>Thử lại</Button>}
         />
-      ) : visible.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card className="rounded-2xl border-dashed border-slate-200 text-center py-12">
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -138,7 +140,7 @@ export default function StudentScholarshipExplorePage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {visible.map((campaign) => {
+          {pageItems.map((campaign) => {
             const phase = getApplicationPhase(campaign);
             const myApp = byCampaign.get(campaign.id);
             const daysLeft = phase === "OPEN" ? daysUntil(campaign.applicationEnd) : null;
@@ -214,9 +216,9 @@ export default function StudentScholarshipExplorePage() {
         </div>
       )}
 
-      {data && data.total > PAGE_SIZE && (
+      {filtered.length > PAGE_SIZE && (
         <div className="flex justify-center pt-2">
-          <Pagination current={page} pageSize={PAGE_SIZE} total={data.total} onChange={setPage} showSizeChanger={false} />
+          <Pagination current={page} pageSize={PAGE_SIZE} total={filtered.length} onChange={setPage} showSizeChanger={false} />
         </div>
       )}
     </div>

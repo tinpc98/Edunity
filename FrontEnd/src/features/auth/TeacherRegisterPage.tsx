@@ -40,7 +40,7 @@ export default function TeacherRegisterPage() {
       // Step 2 uploads private documents, which requires an authenticated Teacher
       try {
         const session = await loginUser({ email: values.email, password: values.password });
-        setAuth(session.user, session.accessToken, session.refreshToken);
+        setAuth(session.user, session.accessToken, session.refreshToken, true);
         return { loggedIn: true as const };
       } catch {
         return { loggedIn: false as const };

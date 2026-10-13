@@ -37,7 +37,7 @@ export default function LoginPage() {
   const loginMutation = useMutation({
     mutationFn: async (payload: LoginPayload) => {
       const data = await loginUser(payload);
-      setAuth(data.user, data.accessToken, data.refreshToken);
+      setAuth(data.user, data.accessToken, data.refreshToken, Boolean(payload.rememberMe));
       return { data, path: await resolvePostLoginPath(data.user.role, redirectUrl) };
     },
     onSuccess: ({ data, path }) => {
@@ -144,6 +144,9 @@ export default function LoginPage() {
             <div className="mt-6 text-center text-sm text-slate-500">
               <p>
                 Chưa có tài khoản? <Link to={ROUTES.AUTH.REGISTER} className="font-bold text-indigo-600 hover:text-indigo-700">Đăng ký ngay</Link>
+              </p>
+              <p className="mt-3 text-xs text-slate-400">
+                Bạn là giáo viên? <Link to={ROUTES.AUTH.TEACHER_REGISTER} className="font-semibold text-indigo-600 hover:text-indigo-700">Đăng ký trở thành giáo viên</Link>
               </p>
             </div>
           </section>

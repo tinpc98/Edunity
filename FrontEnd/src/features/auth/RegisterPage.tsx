@@ -35,7 +35,7 @@ export default function RegisterPage() {
       // The account is ACTIVE right away: sign in with the same credentials
       try {
         const session = await loginUser({ email: payload.email, password: payload.password });
-        setAuth(session.user, session.accessToken, session.refreshToken);
+        setAuth(session.user, session.accessToken, session.refreshToken, true);
         return { loggedIn: true as const };
       } catch {
         return { loggedIn: false as const };

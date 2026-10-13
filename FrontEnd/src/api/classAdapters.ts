@@ -50,7 +50,7 @@ export function deriveTimeOfDay(schedule?: { dayOfWeek: number; startTime: strin
 }
 
 function formatDateVN(dateStr?: string | null): string {
-  if (!dateStr) return "Sắp xếp";
+  if (!dateStr) return "sắp công bố";
   try {
     const d = new Date(dateStr);
     if (Number.isNaN(d.getTime())) return dateStr;

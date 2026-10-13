@@ -57,12 +57,12 @@ export default function ClassTeacherTab({ item }: ClassTeacherTabProps) {
           {/* Action button */}
           {item.teacherId && (
             <div className="mt-5">
-              <Link to={`/classes?teacherId=${item.teacherId}`}>
+              <Link to={`/teachers/${item.teacherId}`}>
                 <Button
                   type="default"
                   className="rounded-xl border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-400 font-semibold text-xs h-9 px-4 inline-flex items-center gap-1.5 shadow-2xs"
                 >
-                  <span>Xem các lớp của giáo viên</span>
+                  <span>Xem hồ sơ giáo viên</span>
                   <ArrowRightOutlined className="text-[10px]" />
                 </Button>
               </Link>

@@ -38,7 +38,7 @@ export function useHomeFreeClasses(limit = 4) {
 
 export function useHomeFeaturedTeachers(limit = 4) {
   return useQuery({
-    queryKey: catalogKeys.teachers(true, limit),
+    queryKey: catalogKeys.teachers({ featured: true, limit }),
     queryFn: () => catalogService.getTeachers(true, limit),
     staleTime: HOME_STALE_TIME,
   });

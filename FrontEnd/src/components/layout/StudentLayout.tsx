@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, Dropdown, Badge, Button, App as AntdApp } from "antd";
 import type { MenuProps } from "antd";
@@ -16,6 +16,7 @@ import {
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "../../stores/auth.store";
+import { logoutUser } from "../../services/auth.service";
 import { ROUTES } from "../../routes/routePaths";
 import { LOGO_URL } from "../../data/homeData";
 
@@ -24,10 +25,13 @@ export default function StudentLayout() {
   const navigate = useNavigate();
   const { notification } = AntdApp.useApp();
   const { user, isAuthenticated, logout } = useAuthStore();
+  // Set while logging out so the guard below does not bounce the user to /login
+  const isLoggingOut = useRef(false);
 
 
   // Auth Guard: Only authenticated STUDENT can access
   useEffect(() => {
+    if (isLoggingOut.current) return;
     if (!isAuthenticated || !user) {
       navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`, { replace: true });
       return;
@@ -47,9 +51,17 @@ export default function StudentLayout() {
     return null;
   }
 
-  const handleLogout = () => {
-    logout();
-    navigate(ROUTES.HOME);
+  const handleLogout = async () => {
+    try {
+      // Revoke the refresh token server-side, like Header/DashboardShell do
+      await logoutUser(useAuthStore.getState().refreshToken);
+    } catch {
+      // Ignore errors, clear local state anyway
+    } finally {
+      isLoggingOut.current = true;
+      navigate(ROUTES.HOME, { replace: true });
+      logout();
+    }
   };
 
   const userMenuItems: MenuProps["items"] = [
