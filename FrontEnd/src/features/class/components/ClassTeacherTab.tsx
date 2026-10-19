@@ -1,5 +1,6 @@
 import { StarFilled, UserOutlined, ArrowRightOutlined } from "@ant-design/icons";
 import { Button } from "antd";
+import { Link } from "react-router-dom";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
 
 interface ClassTeacherTabProps {
@@ -54,15 +55,19 @@ export default function ClassTeacherTab({ item }: ClassTeacherTabProps) {
           )}
 
           {/* Action button */}
-          <div className="mt-5">
-            <Button
-              type="default"
-              className="rounded-xl border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-400 font-semibold text-xs h-9 px-4 inline-flex items-center gap-1.5 shadow-2xs"
-            >
-              <span>Xem hồ sơ giáo viên</span>
-              <ArrowRightOutlined className="text-[10px]" />
-            </Button>
-          </div>
+          {item.teacherId && (
+            <div className="mt-5">
+              <Link to={`/teachers/${item.teacherId}`}>
+                <Button
+                  type="default"
+                  className="rounded-xl border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-400 font-semibold text-xs h-9 px-4 inline-flex items-center gap-1.5 shadow-2xs"
+                >
+                  <span>Xem hồ sơ giáo viên</span>
+                  <ArrowRightOutlined className="text-[10px]" />
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </div>

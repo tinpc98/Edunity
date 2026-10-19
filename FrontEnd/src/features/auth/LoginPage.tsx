@@ -1,11 +1,13 @@
 import { App as AntdApp, Button, Checkbox, Form, Input } from "antd";
 import { CheckCircleFilled, LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { loginUser } from "../../services/auth.service";
 import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
 import type { LoginPayload } from "../../types/auth";
+import { getAuthErrorMessage } from "../../utils/apiErrorMap";
+import { getRoleHome, getSafeRedirect, resolvePostLoginPath } from "./authRedirect";
 
 interface LoginFormValues {
   email: string;
@@ -23,37 +25,42 @@ export default function LoginPage() {
   const [form] = Form.useForm<LoginFormValues>();
   const { notification: notificationApi } = AntdApp.useApp();
   const setAuth = useAuthStore((state) => state.setAuth);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const redirectUrl = searchParams.get("redirect");
 
+  const prefilledEmail = (location.state as { email?: string } | null)?.email;
+
   const loginMutation = useMutation({
-    mutationFn: (payload: LoginPayload) => loginUser(payload),
-    onSuccess: (data) => {
+    mutationFn: async (payload: LoginPayload) => {
+      const data = await loginUser(payload);
+      setAuth(data.user, data.accessToken, data.refreshToken, Boolean(payload.rememberMe));
+      return { data, path: await resolvePostLoginPath(data.user.role, redirectUrl) };
+    },
+    onSuccess: ({ data, path }) => {
       notificationApi.success({
         title: "Đăng nhập thành công",
-        description: "Chào mừng bạn quay trở lại Edunity.",
+        description: `Chào mừng ${data.user.fullName} quay trở lại Edunity.`,
         placement: "topRight",
       });
-      setAuth(data.user, data.accessToken, data.refreshToken);
-      if (redirectUrl) {
-        navigate(redirectUrl);
-      } else {
-        // Route based on role
-        if (data.user.role === "TEACHER") navigate(ROUTES.TEACHER.HOME);
-        else if (data.user.role === "ADMIN") navigate(ROUTES.ADMIN.HOME);
-        else if (data.user.role === "SPONSOR") navigate(ROUTES.SPONSOR.HOME);
-        else navigate(ROUTES.STUDENT.HOME);
-      }
+      navigate(path, { replace: true });
     },
-    onError: (error: Error) => {
+    onError: (error: unknown) => {
       notificationApi.error({
         title: "Đăng nhập thất bại",
-        description: error.message || "Đã xảy ra lỗi. Vui lòng thử lại.",
+        description: getAuthErrorMessage(error),
         placement: "topRight",
       });
     },
   });
+
+  // Already signed in (e.g. back button after login): leave the login page
+  if (isAuthenticated && user && !loginMutation.isPending && !loginMutation.isSuccess) {
+    return <Navigate to={getSafeRedirect(redirectUrl) ?? getRoleHome(user.role)} replace />;
+  }
 
   const handleSubmit = (values: LoginFormValues) => {
     loginMutation.mutate({
@@ -97,7 +104,7 @@ export default function LoginPage() {
               layout="vertical"
               requiredMark
               onFinish={handleSubmit}
-              initialValues={{ rememberMe: false }}
+              initialValues={{ rememberMe: false, email: prefilledEmail }}
               autoComplete="off"
               scrollToFirstError
             >
@@ -137,6 +144,9 @@ export default function LoginPage() {
             <div className="mt-6 text-center text-sm text-slate-500">
               <p>
                 Chưa có tài khoản? <Link to={ROUTES.AUTH.REGISTER} className="font-bold text-indigo-600 hover:text-indigo-700">Đăng ký ngay</Link>
+              </p>
+              <p className="mt-3 text-xs text-slate-400">
+                Bạn là giáo viên? <Link to={ROUTES.AUTH.TEACHER_REGISTER} className="font-semibold text-indigo-600 hover:text-indigo-700">Đăng ký trở thành giáo viên</Link>
               </p>
             </div>
           </section>

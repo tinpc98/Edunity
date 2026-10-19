@@ -114,6 +114,12 @@ export default function Header() {
             label: <span className="text-xs font-medium">Học tập của tôi</span>,
             onClick: () => navigate(ROUTES.STUDENT.HOME),
           },
+          {
+            key: "my-scholarships",
+            icon: <BookOutlined className="text-xs text-indigo-600" />,
+            label: <span className="text-xs font-medium">Học bổng & hồ sơ của tôi</span>,
+            onClick: () => navigate(ROUTES.STUDENT.SCHOLARSHIP_APPLICATIONS),
+          },
         ]),
     {
       type: "divider",

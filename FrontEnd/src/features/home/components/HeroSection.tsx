@@ -4,19 +4,22 @@ import type { Category } from "../../../types/home";
 import CategorySidebar from "./CategorySidebar";
 import CategoryMegaMenu from "./CategoryMegaMenu";
 import { useHomeStore } from "../../../stores/useHomeStore";
-import { CATEGORIES_DATA, HERO_BANNER_URL } from "../../../data/homeData";
+import { HERO_BANNER_URL } from "../../../data/homeData";
+import { useHomeCategories } from "../hooks/useHomeData";
 
 export default function HeroSection() {
   const activeCategoryId = useHomeStore((state) => state.activeCategoryId);
   const setActiveCategoryId = useHomeStore((state) => state.setActiveCategoryId);
   const clearActiveCategory = useHomeStore((state) => state.clearActiveCategory);
-  const currentCategory = CATEGORIES_DATA.find((category: Category) => category.id === activeCategoryId);
+  const { data: categories = [], isLoading: isCategoriesLoading } = useHomeCategories();
+  const currentCategory = categories.find((category: Category) => category.id === activeCategoryId);
 
   return (
     <section className="relative pt-5" onMouseLeave={clearActiveCategory}>
       <div className="flex gap-4 items-stretch h-[clamp(430px,54vh,485px)]">
         <CategorySidebar
-          categories={CATEGORIES_DATA}
+          categories={categories}
+          isLoading={isCategoriesLoading}
           activeCategoryId={activeCategoryId}
           onSelectCategory={setActiveCategoryId}
         />

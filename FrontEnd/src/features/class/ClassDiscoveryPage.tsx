@@ -10,7 +10,7 @@ import {
 import FilterSidebar from "./components/FilterSidebar";
 import SearchToolbar from "./components/SearchToolbar";
 import ClassGrid from "./components/ClassGrid";
-import { GRADE_LEVEL_LABELS } from "../../data/mockClassDiscovery";
+import { GRADE_LEVEL_LABELS } from "../../types/catalog";
 
 export default function ClassDiscoveryPage() {
   const { filters, updateFilters, resetAllFilters, hasActiveFilters } =
@@ -138,12 +138,12 @@ export default function ClassDiscoveryPage() {
     // Price
     if (
       (filters.minPrice !== undefined && filters.minPrice > 0) ||
-      (filters.maxPrice !== undefined && filters.maxPrice < (metadata?.maxPrice ?? 2000000))
+      (filters.maxPrice !== undefined && filters.maxPrice < (metadata?.maxPrice ?? 5000000))
     ) {
       tags.push({
         key: "price-range",
         label: `Giá: ${(filters.minPrice ?? 0).toLocaleString("vi-VN")}đ - ${(
-          filters.maxPrice ?? (metadata?.maxPrice || 2000000)
+          filters.maxPrice ?? (metadata?.maxPrice || 5000000)
         ).toLocaleString("vi-VN")}đ`,
         onRemove: () =>
           updateFilters({

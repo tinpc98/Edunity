@@ -1,6 +1,6 @@
 import type { ClassItem } from "../../../types/home";
 
-import { Button } from "antd";
+import { Link } from "react-router-dom";
 
 import {
   ClockCircleOutlined,
@@ -18,6 +18,7 @@ export default function ClassCard({
   compact = false,
 }: ClassCardProps) {
   const {
+    id,
     tag,
     title,
     teacher,
@@ -35,7 +36,7 @@ export default function ClassCard({
   const isFree = Number(price) === 0;
 
   return (
-    <div className="group bg-white rounded-xl border border-slate-100 hover:border-indigo-200 hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col h-full">
+    <Link to={`/classes/${id}`} className="group bg-white rounded-xl border border-slate-100 hover:border-indigo-200 hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col h-full">
       <div
         className={`relative ${
           compact ? "h-[102px]" : "h-[116px]"
@@ -128,14 +129,11 @@ export default function ClassCard({
             )}
           </div>
 
-          <Button
-            size="small"
-            className="text-[11px] font-semibold text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:border-indigo-500 rounded-md px-2.5 h-[27px]"
-          >
+          <span className="inline-flex items-center border border-indigo-200 group-hover:bg-indigo-50 group-hover:border-indigo-500 text-[11px] font-semibold text-indigo-600 rounded-md px-2.5 h-[27px] transition-colors">
             Xem lớp
-          </Button>
+          </span>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }

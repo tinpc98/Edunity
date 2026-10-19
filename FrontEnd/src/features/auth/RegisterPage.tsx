@@ -3,9 +3,11 @@ import { CheckCircleFilled, LockOutlined, MailOutlined, UserOutlined } from "@an
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 
-import { registerUser } from "../../services/auth.service";
+import { loginUser, registerUser } from "../../services/auth.service";
+import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
 import type { RegisterPayload } from "../../types/auth";
+import { getAuthErrorMessage } from "../../utils/apiErrorMap";
 
 interface RegisterFormValues {
   fullName: string;
@@ -25,24 +27,39 @@ export default function RegisterPage() {
   const [form] = Form.useForm<RegisterFormValues>();
   const { notification: notificationApi } = AntdApp.useApp();
   const navigate = useNavigate();
+  const setAuth = useAuthStore((state) => state.setAuth);
 
   const registerMutation = useMutation({
-    mutationFn: (payload: RegisterPayload) => registerUser(payload),
-    onSuccess: () => {
+    mutationFn: async (payload: RegisterPayload) => {
+      await registerUser(payload);
+      // The account is ACTIVE right away: sign in with the same credentials
+      try {
+        const session = await loginUser({ email: payload.email, password: payload.password });
+        setAuth(session.user, session.accessToken, session.refreshToken, true);
+        return { loggedIn: true as const };
+      } catch {
+        return { loggedIn: false as const };
+      }
+    },
+    onSuccess: ({ loggedIn }, payload) => {
       notificationApi.success({
         title: "Đăng ký thành công",
-        description: "Tài khoản của bạn đã được tạo thành công.",
+        description: loggedIn
+          ? "Chào mừng bạn đến với Edunity!"
+          : "Tài khoản đã được tạo. Vui lòng đăng nhập để tiếp tục.",
         placement: "topRight",
       });
-      navigate(ROUTES.AUTH.LOGIN);
+      if (loggedIn) navigate(ROUTES.STUDENT.HOME, { replace: true });
+      else navigate(ROUTES.AUTH.LOGIN, { state: { email: payload.email } });
     },
-    onError: (error: any) => {
-      if (error.code === "DUPLICATE_EMAIL") {
+    onError: (error: unknown) => {
+      const message = getAuthErrorMessage(error);
+      if ((error as { code?: string })?.code === "DUPLICATE_EMAIL") {
         form.setFields([{ name: "email", errors: ["Email này đã được sử dụng."] }]);
       }
       notificationApi.error({
         title: "Đăng ký thất bại",
-        description: error.message || "Đã xảy ra lỗi. Vui lòng thử lại.",
+        description: message,
         placement: "topRight",
       });
     },

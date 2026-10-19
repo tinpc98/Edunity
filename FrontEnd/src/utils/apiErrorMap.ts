@@ -4,6 +4,31 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
   if (error instanceof FetchError || (typeof error === "object" && error !== null && ("code" in error || "status" in error))) {
     const err = error as { code?: string; status?: number; message?: string };
     
+    // Auth errors
+    if (err.code === "DUPLICATE_EMAIL") {
+      return "Email này đã được sử dụng. Vui lòng dùng email khác hoặc đăng nhập.";
+    }
+    if (err.code === "ACCOUNT_BLOCKED") {
+      return "Tài khoản của bạn đang bị tạm khóa. Vui lòng liên hệ Edunity để được hỗ trợ.";
+    }
+
+    // Scholarship errors
+    if (err.code === "CAMPAIGN_NOT_ACCEPTING_APPLICATIONS") {
+      return "Chiến dịch này hiện không trong thời gian nhận hồ sơ.";
+    }
+    if (err.code === "DUPLICATE_APPLICATION") {
+      return "Bạn đã có hồ sơ đang xử lý hoặc đã được duyệt cho chiến dịch này.";
+    }
+    if (err.code === "APPLICATION_NOT_RESUBMITTABLE") {
+      return "Hồ sơ này hiện không ở trạng thái cần bổ sung thông tin.";
+    }
+    if (err.code === "APPLICATION_NOT_FOUND") {
+      return "Không tìm thấy hồ sơ học bổng.";
+    }
+    if (err.code === "CAMPAIGN_NOT_FOUND") {
+      return "Không tìm thấy chiến dịch học bổng.";
+    }
+
     // Avatar errors
     if (err.code === "UNSUPPORTED_FILE_TYPE") {
       return "Định dạng tệp không được hỗ trợ. Chỉ chấp nhận tệp JPG, PNG hoặc WebP (tối đa 5MB).";
@@ -65,4 +90,16 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
   }
 
   return fallbackMessage;
+}
+
+/** Login/register: a 401 there means wrong credentials, not an expired session. */
+export function getAuthErrorMessage(error: unknown, fallbackMessage = "Đã xảy ra lỗi. Vui lòng thử lại."): string {
+  const err = (error ?? {}) as { code?: string; status?: number; message?: string };
+  if (err.status === 401 || err.code === "UNAUTHORIZED") {
+    return "Email hoặc mật khẩu không chính xác.";
+  }
+  if (err.code === "VALIDATION_ERROR") {
+    return "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại email và mật khẩu (tối thiểu 6 ký tự).";
+  }
+  return getFriendlyErrorMessage(error, fallbackMessage);
 }

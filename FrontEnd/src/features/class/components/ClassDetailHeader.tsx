@@ -105,10 +105,13 @@ export default function ClassDetailHeader({ item }: ClassDetailHeaderProps) {
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
             Giới thiệu lớp học
           </div>
-          <p className="text-sm text-slate-600 leading-relaxed m-0">
-            {item.description ||
-              "Lớp tập trung vào các chuyên đề Đại số và Hình học trọng tâm của Toán 12, kết hợp ôn lý thuyết, luyện dạng bài và chữa đề trực tiếp. Học viên được hướng dẫn phương pháp làm bài hiệu quả từ cơ bản đến nâng cao."}
-          </p>
+          {item.description ? (
+            <p className="text-sm text-slate-600 leading-relaxed m-0 whitespace-pre-line">{item.description}</p>
+          ) : (
+            <p className="text-sm text-slate-400 italic leading-relaxed m-0">
+              Giáo viên chưa cập nhật phần giới thiệu cho lớp học này.
+            </p>
+          )}
         </div>
       </div>
     </div>

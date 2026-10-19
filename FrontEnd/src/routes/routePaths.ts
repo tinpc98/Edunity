@@ -34,6 +34,8 @@ export const ROUTES = {
     CLASS_SESSIONS: "/student/classes/:classId",
     SCHOLARSHIPS: "/student/scholarships",
     SCHOLARSHIP_APPLICATIONS: "/student/scholarships/applications",
+    SCHOLARSHIP_EXPLORE: "/student/scholarships/explore",
+    SCHOLARSHIP_DETAIL: "/student/scholarships/explore/:campaignId",
     MESSAGES: "/messages",
     REPORTS: "/reports",
   },

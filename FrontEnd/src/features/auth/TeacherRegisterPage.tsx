@@ -2,9 +2,12 @@ import { App as AntdApp, Button, Checkbox, Form, Input } from "antd";
 import { CheckCircleFilled, LockOutlined, MailOutlined, UserOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { registerTeacher } from "../../services/auth.service";
+import { loginUser, registerTeacher } from "../../services/auth.service";
+import { useAuthStore } from "../../stores/auth.store";
+import { useTeacherRegistrationStore } from "../../stores/teacherRegistration.store";
 import { ROUTES } from "../../routes/routePaths";
 import type { TeacherRegisterRequest } from "../../types/auth";
+import { getAuthErrorMessage } from "../../utils/apiErrorMap";
 
 interface TeacherRegisterFormValues extends TeacherRegisterRequest {
   confirmPassword: string;
@@ -21,21 +24,51 @@ export default function TeacherRegisterPage() {
   const [form] = Form.useForm<TeacherRegisterFormValues>();
   const { notification } = AntdApp.useApp();
   const navigate = useNavigate();
+  const setAuth = useAuthStore((state) => state.setAuth);
+  const setDraft = useTeacherRegistrationStore((state) => state.setDraft);
 
   const registerMutation = useMutation({
-    mutationFn: (values: TeacherRegisterRequest) => registerTeacher(values),
-    onSuccess: () => {
+    mutationFn: async (values: TeacherRegisterRequest) => {
+      const account = await registerTeacher(values);
+      setDraft({
+        userId: account.userId,
+        fullName: account.fullName,
+        email: account.email,
+        qualificationSummary: values.qualificationSummary,
+        biography: values.biography,
+      });
+      // Step 2 uploads private documents, which requires an authenticated Teacher
+      try {
+        const session = await loginUser({ email: values.email, password: values.password });
+        setAuth(session.user, session.accessToken, session.refreshToken, true);
+        return { loggedIn: true as const };
+      } catch {
+        return { loggedIn: false as const };
+      }
+    },
+    onSuccess: ({ loggedIn }, values) => {
       notification.success({
-        title: "Đăng ký tài khoản giáo viên thành công",
-        description: "Vui lòng đăng nhập để bổ sung hồ sơ xác minh.",
+        title: "Tạo tài khoản giáo viên thành công",
+        description: loggedIn
+          ? "Tiếp tục bổ sung giấy tờ để Edunity xác minh hồ sơ của bạn."
+          : "Vui lòng đăng nhập để bổ sung hồ sơ xác minh.",
         placement: "topRight",
       });
-      navigate(ROUTES.AUTH.LOGIN);
+      if (loggedIn) {
+        navigate(ROUTES.AUTH.TEACHER_QUALIFICATION, { replace: true });
+      } else {
+        navigate(`${ROUTES.AUTH.LOGIN}?redirect=${encodeURIComponent(ROUTES.AUTH.TEACHER_QUALIFICATION)}`, {
+          state: { email: values.email },
+        });
+      }
     },
-    onError: (error: Error) => {
+    onError: (error: unknown) => {
+      if ((error as { code?: string })?.code === "DUPLICATE_EMAIL") {
+        form.setFields([{ name: "email", errors: ["Email này đã được sử dụng."] }]);
+      }
       notification.error({
         title: "Đăng ký thất bại",
-        description: error.message || "Đã có lỗi xảy ra. Vui lòng thử lại.",
+        description: getAuthErrorMessage(error, "Đã có lỗi xảy ra. Vui lòng thử lại."),
         placement: "topRight",
       });
     },

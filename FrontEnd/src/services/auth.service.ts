@@ -4,13 +4,9 @@ import type {
   LoginResponse,
   RegisterPayload,
   RegisterResponse,
-  SubmitQualificationRequest,
-  SubmitQualificationResponse,
   TeacherRegisterRequest,
-  TeacherRegisterResponse,
   AuthUser,
 } from "../types/auth";
-import { mockSubmitQualification } from "../data/auth.mock";
 
 export function registerUser(payload: RegisterPayload): Promise<RegisterResponse> {
   return apiClient<RegisterResponse>("/auth/register", {
@@ -26,18 +22,20 @@ export function loginUser(payload: LoginPayload): Promise<LoginResponse> {
   });
 }
 
-export function registerTeacher(payload: TeacherRegisterRequest): Promise<TeacherRegisterResponse> {
-  return apiClient<TeacherRegisterResponse>("/auth/register", {
+/**
+ * POST /api/auth/register with role TEACHER. The backend only stores fullName/email/password here;
+ * qualificationSummary and biography are submitted later with POST /api/teacher/verification.
+ */
+export function registerTeacher(payload: TeacherRegisterRequest): Promise<RegisterResponse> {
+  return apiClient<RegisterResponse>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ ...payload, role: "TEACHER" }),
+    body: JSON.stringify({
+      fullName: payload.fullName,
+      email: payload.email,
+      password: payload.password,
+      role: "TEACHER",
+    }),
   });
-}
-
-export function submitTeacherQualification(
-  payload: SubmitQualificationRequest,
-): Promise<SubmitQualificationResponse> {
-  // Mock fallback for Phase 2 Verification, as per instructions.
-  return mockSubmitQualification(payload);
 }
 
 export function logoutUser(refreshToken: string | null): Promise<{ loggedOut: boolean }> {
