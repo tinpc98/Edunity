@@ -1,19 +1,14 @@
 const jwt = require("jsonwebtoken");
+const secrets = require("./secrets");
 
 const ISSUER = "edunity";
-const DEV_SECRET = "edunity-dev-jwt-secret";
 
-// In production the secret must come from the environment (server.js refuses to start without it).
-const getSecret = () => {
-  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
-  if (process.env.NODE_ENV === "production") throw new Error("JWT_SECRET is not set");
-  return DEV_SECRET;
-};
+const getSecret = () => secrets.getSecret("JWT_SECRET");
 
 const getAccessTtl = () => process.env.JWT_ACCESS_TTL || "15m";
 
 const signAccessToken = (user) =>
-  jwt.sign({ role: user.role }, getSecret(), {
+  jwt.sign({ role: user.role, tv: user.tokenVersion || 0 }, getSecret(), {
     algorithm: "HS256",
     issuer: ISSUER,
     subject: user._id.toString(),

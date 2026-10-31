@@ -1,6 +1,7 @@
 const enrollmentService = require("../services/enrollmentService");
 const { serializeDecimal128 } = require("../utils/serialize");
 const { ENROLLMENT_NOT_FOUND } = require("../utils/errors");
+const { parsePaging } = require("../utils/http");
 
 const createEnrollment = async (req, res, next) => {
   try {
@@ -21,8 +22,7 @@ const createEnrollment = async (req, res, next) => {
 const getMyEnrollments = async (req, res, next) => {
   try {
     const studentId = req.user.id;
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const { page, pageSize: limit } = parsePaging(req.query);
 
     const { items, total } = await enrollmentService.getMyEnrollments(studentId, page, limit, req.query.include === "class");
     

@@ -1,6 +1,14 @@
 const User = require("../models/User");
 const { AppError } = require("../utils/errors");
-const { hashPassword, verifyPassword } = require("../utils/password");
+const {
+  MIN_PASSWORD_LENGTH,
+  MAX_PASSWORD_LENGTH,
+  verifyPassword,
+  hashPasswordAsync,
+  verifyPasswordAsync,
+  burnPasswordCheck,
+} = require("../utils/password");
+const { isBlank } = require("../utils/http");
 const authTokenService = require("../services/authTokenService");
 const { getAccessTtl } = require("../utils/jwt");
 
@@ -54,12 +62,19 @@ const validateEmail = (email) => {
 
 exports.register = async (req, res, next) => {
   try {
-    const { fullName, email, password, role } = req.body;
-    if (!fullName || !email || !password || password.length < 6 || !REGISTRABLE_ROLES.includes(role)) {
+    const { fullName, email, password, role } = req.body || {};
+    if (
+      isBlank(fullName) ||
+      isBlank(email) ||
+      typeof password !== "string" ||
+      password.length < MIN_PASSWORD_LENGTH ||
+      password.length > MAX_PASSWORD_LENGTH ||
+      !REGISTRABLE_ROLES.includes(role)
+    ) {
       throw new AppError("Invalid input", "VALIDATION_ERROR", 400);
     }
 
-    const lowerEmail = email.toLowerCase();
+    const lowerEmail = email.trim().toLowerCase();
     if (!validateEmail(lowerEmail)) {
       throw new AppError("Invalid email format", "VALIDATION_ERROR", 400);
     }
@@ -71,12 +86,18 @@ exports.register = async (req, res, next) => {
 
     const user = new User({
       email: lowerEmail,
-      passwordHash: hashPassword(password),
+      passwordHash: await hashPasswordAsync(password),
       role,
       status: "ACTIVE",
       ...buildProfile(role, req.body)
     });
-    await user.save();
+    try {
+      await user.save();
+    } catch (err) {
+      // Two simultaneous registrations pass the check above: the unique index decides
+      if (err.code === 11000) throw new AppError("Email already exists", "DUPLICATE_EMAIL", 409);
+      throw err;
+    }
 
     res.status(201).json({
       success: true,
@@ -105,8 +126,12 @@ exports.loginWithRefreshToken = async (req, res, next) => {
     if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
       return unauthorized();
     }
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user || !verifyPassword(password, user.passwordHash)) {
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    if (!user) {
+      await burnPasswordCheck(password);
+      return unauthorized();
+    }
+    if (!(await verifyPasswordAsync(password, user.passwordHash))) {
       return unauthorized();
     }
     authTokenService.assertAccountUsable(user);

@@ -25,37 +25,53 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api
 
 const NO_REFRESH_ENDPOINTS = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"];
 
+const REFRESH_LOCK = "edunity-auth-refresh";
+
 let refreshPromise: Promise<string | null> | null = null;
 
-async function refreshSession(): Promise<string | null> {
-  const { refreshToken, setTokens, logout } = useAuthStore.getState();
-  
-  if (!refreshToken) {
-    logout();
-    return null;
-  }
+/**
+ * Refresh tokens are single-use and shared by every tab: the backend treats a second use as theft and ends all
+ * sessions. So only one tab refreshes at a time. navigator.locks needs a secure context (HTTPS or localhost).
+ */
+function runExclusive<T>(task: () => Promise<T>): Promise<T> {
+  return navigator.locks ? navigator.locks.request(REFRESH_LOCK, task) : task();
+}
 
+async function refreshSession(expiredToken: string | null): Promise<string | null> {
   try {
-    const response = await fetch(`${BASE_URL}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    });
+    return await runExclusive(async () => {
+      // Another tab may have rotated the session while this one was waiting for the lock
+      await useAuthStore.persist.rehydrate();
+      const { accessToken, refreshToken, setTokens, logout } = useAuthStore.getState();
+      if (accessToken && accessToken !== expiredToken) return accessToken;
 
-    if (!response.ok) {
-      throw new Error("Refresh failed");
-    }
+      if (!refreshToken) {
+        logout();
+        return null;
+      }
 
-    const result = await response.json();
-    if (result.success && result.data?.accessToken) {
+      const response = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      // Only the server rejecting the token ends the session. A rate limit or a server error says nothing
+      // about it: the session stays and the next request tries again.
+      if (response.status === 401 || response.status === 403) {
+        logout();
+        return null;
+      }
+      if (!response.ok) return null;
+
+      const result = await response.json();
+      if (!result.success || !result.data?.accessToken) return null;
+
       setTokens(result.data.accessToken, result.data.refreshToken);
       return result.data.accessToken;
-    } else {
-      throw new Error("Invalid refresh response");
-    }
-  } catch (error) {
-    logout();
-    return null;
+    });
+  } catch {
+    return null; // network failure: same as above, the session is not in doubt
   } finally {
     refreshPromise = null;
   }
@@ -88,7 +104,7 @@ export async function apiClient<T>(
     // refresh token, not an expired access token, so it must not trigger a refresh.
     if (response.status === 401 && !isRetry && !NO_REFRESH_ENDPOINTS.includes(endpoint)) {
       if (!refreshPromise) {
-        refreshPromise = refreshSession();
+        refreshPromise = refreshSession(store.accessToken);
       }
       const newAccessToken = await refreshPromise;
       

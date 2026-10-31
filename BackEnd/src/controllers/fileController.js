@@ -1,12 +1,21 @@
 const storage = require("../services/storageService");
-const { AppError } = require("../utils/errors");
+const { AppError, FORBIDDEN } = require("../utils/errors");
 const { handle } = require("../utils/http");
+const { getAllowedOrigins } = require("../config/env");
 
 // POST /api/uploads/private (multipart: file, purpose)
 exports.uploadPrivate = handle((req) => storage.savePrivateFile(req.user.id, (req.body || {}).purpose, req.file), 201);
 
 // POST /api/uploads/public (multipart: file, purpose)
-exports.uploadPublic = handle((req) => storage.savePublicFile((req.body || {}).purpose, req.file), 201);
+// Cover images illustrate classes, so only the people who manage classes can publish them
+const COVER_IMAGE_ROLES = ["TEACHER", "ADMIN"];
+exports.uploadPublic = handle((req) => {
+  const { purpose } = req.body || {};
+  if (purpose === "COVER_IMAGE" && !COVER_IMAGE_ROLES.includes(req.user.role)) {
+    throw FORBIDDEN("Only TEACHER/ADMIN can upload a cover image");
+  }
+  return storage.savePublicFile(purpose, req.file);
+}, 201);
 
 // POST /api/files/signed-url { storageKey } — only the owner of the file or an Admin (NFR-04)
 exports.createSignedUrl = handle((req) => {
@@ -27,7 +36,10 @@ exports.download = async (req, res, next) => {
       "Content-Disposition": "inline",
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
+      // The FE shows documents in an <iframe>; everyone else is still refused
+      "Content-Security-Policy": `frame-ancestors ${getAllowedOrigins().join(" ") || "'none'"}`,
     });
+    res.removeHeader("X-Frame-Options");
     res.sendFile(absolutePath, (err) => {
       if (err && !res.headersSent) next(err);
     });

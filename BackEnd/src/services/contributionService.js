@@ -11,6 +11,7 @@ const { AppError, FORBIDDEN } = require("../utils/errors");
 const { paged } = require("../utils/http");
 const { toNum, toDec, parseAmount } = require("../utils/money");
 const campaignService = require("./campaignService");
+const { toPublic } = require("../utils/publicView");
 const { notify } = require("./notificationService");
 
 /**
@@ -173,7 +174,7 @@ const getCampaignImpact = async (sponsorId, campaignId) => {
   const percent = (part, whole) => (whole > 0 ? Math.round((part / whole) * 10000) / 100 : 0);
 
   return {
-    campaign: campaignService.present(campaign.toObject()),
+    campaign: toPublic(campaignService.present(campaign.toObject())),
     myContribution: {
       total: toDec(myTotal),
       count: myContributions.length,

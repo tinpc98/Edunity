@@ -28,7 +28,7 @@ exports.livekitWebhook = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     const videoProvider = require("../services/videoProvider");
     if (!authHeader) return res.status(401).json({ success: false, error: "UNAUTHORIZED" });
-    const event = videoProvider.processWebhook(req.body, authHeader);
+    const event = videoProvider.processWebhook(req.rawBody, req.body, authHeader);
     await sessions.handleLiveKitWebhook(event);
     res.status(200).send("OK");
   } catch (err) {

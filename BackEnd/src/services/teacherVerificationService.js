@@ -5,6 +5,7 @@ const { paged, validationError, isBlank } = require("../utils/http");
 const { audit } = require("./auditService");
 const storage = require("./storageService");
 const { notify, notifyAdmins } = require("./notificationService");
+const { withoutReviewer } = require("../utils/publicView");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const TEACHER_DOCUMENT_TYPES = ["IDENTITY", "QUALIFICATION"];
@@ -110,7 +111,7 @@ const submitVerification = async (teacherId, body) => {
   return presentStatus(teacher);
 };
 
-const getMyVerification = async (teacherId) => presentStatus(await getTeacher(teacherId));
+const getMyVerification = async (teacherId) => withoutReviewer(await presentStatus(await getTeacher(teacherId)));
 
 // ---------- Admin (UC-ADM-01 / FR-ADM-02) ----------
 

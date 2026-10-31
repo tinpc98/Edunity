@@ -29,7 +29,7 @@ Dữ liệu mẫu cho học bổng:
 - Học viên 2 có hồ sơ học bổng đang chờ duyệt.
 - Có sẵn 1 khiếu nại đang mở và 1 cuộc trò chuyện giữa Học viên 1 và Giảng viên.
 
-*Lưu ý: Header cũ `x-user-id` và `x-user-role` vẫn dùng được ở môi trường test/dev. Đăng nhập thật dùng `POST /auth/login` (JWT + refresh token); `POST /auth/dev-login` vẫn trả token giả lập cho dev.*
+*Lưu ý: Header cũ `x-user-id` và `x-user-role` chỉ còn hoạt động trong bộ test tự động, không dùng được khi chạy server. Đăng nhập thật dùng `POST /auth/login` (JWT + refresh token); `POST /auth/dev-login` vẫn trả token giả lập cho dev.*
 
 ## 3. Map FE Service -> BE API
 
@@ -37,7 +37,7 @@ Dưới đây là mapping các hàm trong FrontEnd/src/services sang API thực 
 
 | Màn hình FE | Hàm service FE | Endpoint BE tương ứng |
 |---|---|---|
-| **Auth** | `authService.login` | `POST /auth/dev-login` |
+| **Auth** | `authService.login` | `POST /auth/login` |
 | **Auth** | `authService.register` | `POST /auth/register` |
 | **Auth** | `authService.getCurrentUser` | `GET /auth/me` |
 | **Home** | `homeService.getFeaturedTeachers` | `GET /teachers?featured=true` |
@@ -60,8 +60,8 @@ Dưới đây là mapping các hàm trong FrontEnd/src/services sang API thực 
 ## 4. Những điểm khác biệt / Cần lưu ý khi ghép API
 
 1. **Authentication (Token)**
-   Gọi `POST /auth/dev-login` sẽ nhận được `accessToken` dạng `dev-66a00...`.
-   FE cần gửi token này trong header: `Authorization: Bearer dev-66a00...`.
+   Gọi `POST /auth/login` sẽ nhận được `accessToken` (JWT) và `refreshToken`.
+   FE cần gửi token này trong header: `Authorization: Bearer <accessToken>`.
    Đồng thời API `/auth/me` cũng cần header này.
 
 2. **Xử lý trùng lặp đăng ký (DUPLICATE_ENROLLMENT)**
@@ -85,7 +85,7 @@ Dưới đây là mapping các hàm trong FrontEnd/src/services sang API thực 
 4. **Thanh toán 2 bước (Mock Webhook)**
    Luồng thanh toán hiện tại là:
    - Gọi `POST /enrollments/:id/payments` -> lấy được thông tin `paymentId` và `gatewayReference`.
-   - Giả lập việc cổng thanh toán callback bằng cách gọi thẳng webhook từ FE:
+   - Chỉ ở development: giả lập việc cổng thanh toán callback bằng cách gọi thẳng webhook từ FE (production trả 404):
      `POST /payments/sandbox/webhook` với body `{ "gatewayReference": "SBX-...", "status": "SUCCESS" }`
    - Nhận status 200 từ Webhook là giao dịch hoàn tất.
 
