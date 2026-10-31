@@ -8,7 +8,7 @@ Các API đã có trước đó (`api-contract-auth.md`, `api-contract-catalog.m
 
 - Base URL: `http://localhost:3000/api`
 - Xác thực: header `Authorization: Bearer <accessToken>` với JWT lấy từ `POST /auth/login` (mục 1).
-  Ở môi trường dev/test vẫn dùng được `Bearer dev-<userId>` và header `x-user-id`; production chỉ nhận JWT.
+  Mọi môi trường đều chỉ nhận JWT. `Bearer dev-<userId>` và header `x-user-id` chỉ còn hoạt động trong bộ test tự động (`NODE_ENV=test`).
 - Response thành công: `{ "success": true, "data": ... }`
 - Response lỗi: `{ "success": false, "error": "<MÃ_LỖI>", "message": "...", "details": { ... } }`
 - Tiền tệ (Decimal128) trả về dạng chuỗi, ví dụ `"200000"`. Mọi document đều có thêm trường `id`.
@@ -25,12 +25,14 @@ Biến môi trường mới (xem `.env.example`; đều có giá trị mặc đ�
 | `SCHOLARSHIP_VALID_DAYS` | `180` | Số ngày hiệu lực của Scholarship kể từ khi được duyệt |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | Thời hạn refresh token |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | (không đặt) | Cấu hình phòng học LiveKit. Thiếu một trong ba → dùng token dev nội bộ |
-| `ROOM_TOKEN_SECRET` | (secret dev) | Khóa ký token phòng học khi chưa cấu hình LiveKit |
+| `ROOM_TOKEN_SECRET` | production: bắt buộc nếu không dùng LiveKit; development: tự sinh | Khóa ký token phòng học khi chưa cấu hình LiveKit |
 | `STORAGE_DIR` | `./storage` | Thư mục lưu file (đã thêm vào `.gitignore`) |
 | `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | Gốc URL dùng để tạo link file |
-| `FILE_URL_SECRET` | (secret dev) | Khóa ký signed URL |
+| `FILE_URL_SECRET` | production: bắt buộc; development: tự sinh | Khóa ký signed URL, phải khác `JWT_SECRET` |
 | `FILE_URL_TTL_SECONDS` | `300` | Thời hạn signed URL |
-| `PAYMENT_WEBHOOK_SECRET` | (không đặt) | Nếu đặt, `POST /payments/webhook` yêu cầu header `x-webhook-secret` |
+| `PAYMENT_WEBHOOK_SECRET` | production: bắt buộc; development: có thể bỏ trống | `POST /payments/webhook` yêu cầu header `x-webhook-secret` |
+| `CORS_ORIGIN` | development: `http://localhost:5173`; production: bắt buộc | Danh sách origin chính xác, cách nhau bằng dấu phẩy; không nhận `*` |
+| `TRUST_PROXY` | (không đặt) | Số reverse proxy phía trước app, cần để rate limit nhận đúng IP client |
 | `APP_TZ_OFFSET_MINUTES` | `420` | Múi giờ của `schedule.startTime/endTime` (UTC+7) |
 
 ## 1. Authentication
@@ -42,7 +44,7 @@ Biến môi trường mới (xem `.env.example`; đều có giá trị mặc đ�
 | POST | `/auth/refresh` | User | Body `{ refreshToken }` → `{ accessToken, expiresIn, refreshToken }` (token cũ bị thu hồi) |
 | POST | `/auth/logout` | User | Body `{ refreshToken }` → thu hồi refresh token |
 | GET | `/auth/me` | User | Đã có; nay dùng được cả ở production |
-| POST | `/auth/dev-login` | Public | Đã có; chỉ còn ở dev/test (production trả 404) |
+| POST | `/auth/dev-login` | Test | Chỉ dùng trong bộ test tự động (mọi môi trường khác trả 404) |
 
 - `accessToken` là JWT (HS256), mặc định sống 15 phút. Gửi trong header `Authorization: Bearer <accessToken>`.
 - Khi API trả `401 TOKEN_EXPIRED`, FE gọi `/auth/refresh` để lấy cặp token mới rồi gọi lại request.
@@ -219,7 +221,7 @@ Lỗi: `409 VERIFICATION_PENDING`, `409 ALREADY_VERIFIED`, `409 VERIFICATION_NOT
 | GET | `/payments/:id` | Người trả / Admin | Trạng thái Payment + `enrollmentStatus`, `paymentSource`, `holdExpiresAt` |
 
 Webhook body: `{ "gatewayReference": "SBX-...", "status": "SUCCESS" | "FAILED" }`. Gọi trùng trả `result: "IDEMPOTENT"`.
-`POST /payments/sandbox/webhook` cũ vẫn hoạt động cho thanh toán học phí.
+`POST /payments/sandbox/webhook` chỉ tồn tại ở development/test (production trả 404) vì không có xác thực.
 
 ## 7. Scholarship Campaign
 
@@ -366,7 +368,8 @@ Lỗi: `403 REVIEW_NOT_ALLOWED`, `409 DUPLICATE_REVIEW`.
 - Upload dạng `multipart/form-data`, field file tên `file`, kèm field `purpose`.
 - Private: `purpose` ∈ `IDENTITY`, `QUALIFICATION`, `SCHOLARSHIP_PROOF`; nhận PDF, JPEG, PNG, WEBP; tối đa 10MB.
   File **không** truy cập được qua URL tĩnh, chỉ qua signed URL (mặc định sống 5 phút).
-- Public: `purpose` ∈ `AVATAR`, `COVER_IMAGE`; chỉ nhận ảnh; tối đa 5MB. Dùng `url` cho `avatarUrl`, `coverImage`.
+- Public: `purpose` ∈ `AVATAR`, `COVER_IMAGE`; chỉ nhận ảnh; tối đa 5MB. Dùng `url` cho `avatarUrl`, `coverImage`. `COVER_IMAGE` chỉ dành cho Teacher/Admin (`403` với vai trò khác).
+- Upload giới hạn 60 lần/giờ mỗi tài khoản (`429 RATE_LIMITED`).
 - Backend kiểm tra nội dung file thật sự khớp định dạng khai báo.
 - Signed URL đã có sẵn trong response chi tiết hồ sơ (mục 5, mục 10), FE thường không cần gọi `/files/signed-url`.
 - Lỗi: `400 UNSUPPORTED_FILE_TYPE`, `413 FILE_TOO_LARGE`, `404 FILE_NOT_FOUND`, `403 INVALID_FILE_URL`.
@@ -410,6 +413,8 @@ Trường chung: `id`, `email`, `role`, `status`, `fullName`, `avatarUrl`, `crea
 | DELETE | `/messages/:id` | Thu hồi tin nhắn của chính mình |
 
 - Chỉ Student và Teacher nhắn được với nhau; nếu có `classId` thì lớp phải thuộc Teacher đó.
+- Teacher chỉ mở được cuộc trò chuyện với học viên có Enrollment `CONFIRMED`/`COMPLETED` trong lớp của mình, hoặc học viên đã từng nhắn trước; nếu không trả `403 MESSAGING_NOT_ALLOWED`.
+- Gửi tin nhắn giới hạn 60 tin/phút mỗi tài khoản (`429 RATE_LIMITED`).
 - Conversation: `{ id, classId, className, participant: { id, fullName, avatarUrl, role }, lastMessagePreview, lastMessageAt }`.
 - `items` xếp theo thời gian tăng dần. Tải trang cũ hơn: gọi lại với `before = nextBefore`.
 - Tin nhắn đã thu hồi vẫn nằm trong danh sách với `isDeleted: true`, `content: null`.

@@ -56,10 +56,17 @@ const refresh = async (refreshToken, meta) => {
   const user = await User.findById(record.userId);
   assertAccountUsable(user);
 
+  // The replacement is created before the token is claimed, so whoever loses a race below revokes it too:
+  // a token presented twice at the same time is treated like any other replay.
   const { token, record: replacement } = await issueRefreshToken(user._id, meta);
-  record.revokedAt = new Date();
-  record.replacedByTokenId = replacement._id;
-  await record.save();
+  const claimed = await RefreshToken.updateOne(
+    { _id: record._id, revokedAt: null },
+    { $set: { revokedAt: new Date(), replacedByTokenId: replacement._id } }
+  );
+  if (claimed.modifiedCount !== 1) {
+    await revokeAllForUser(record.userId);
+    throw invalidRefreshToken();
+  }
 
   return { accessToken: buildAccessToken(user), expiresIn: getAccessTtl(), refreshToken: token, user };
 };

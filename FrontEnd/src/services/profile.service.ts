@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { useAuthStore } from "../stores/auth.store";
 import type { 
   Profile, 
   UpdateProfilePayload,
@@ -34,10 +35,13 @@ export class ProfileService {
   }
 
   async changePassword(payload: ChangePasswordPayload): Promise<{ changed: boolean }> {
-    return apiClient<{ changed: boolean }>("/me/password", {
+    const data = await apiClient<{ changed: boolean; accessToken: string; refreshToken: string }>("/me/password", {
       method: "POST",
       body: JSON.stringify(payload),
     });
+    // The change ends every session, including this one's old tokens: keep this device signed in with the new ones
+    useAuthStore.getState().setTokens(data.accessToken, data.refreshToken);
+    return { changed: data.changed };
   }
 }
 

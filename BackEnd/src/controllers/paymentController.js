@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const paymentService = require("../services/paymentService");
 const { serializeDecimal128 } = require("../utils/serialize");
 const contributionService = require("../services/contributionService");
@@ -29,9 +30,23 @@ const createSandboxPayment = async (req, res, next) => {
   }
 };
 
+const WEBHOOK_STATUSES = ["SUCCESS", "FAILED"];
+
+const safeEqual = (a, b) => {
+  const hash = (value) => crypto.createHash("sha256").update(String(value)).digest();
+  return crypto.timingSafeEqual(hash(a), hash(b));
+};
+
+/**
+ * POST /api/payments/sandbox/webhook — simulates the gateway so payments can be exercised without one.
+ * It has no credentials by design, so the route only exists in development and test (see paymentRoutes).
+ */
 const processWebhook = async (req, res, next) => {
   try {
-    const { gatewayReference, status } = req.body;
+    const { gatewayReference, status } = req.body || {};
+    if (typeof gatewayReference !== "string" || !WEBHOOK_STATUSES.includes(status)) {
+      throw new AppError("gatewayReference and status (SUCCESS | FAILED) are required", "VALIDATION_ERROR", 400);
+    }
 
     const result = await paymentService.processWebhook(gatewayReference, status);
 
@@ -47,17 +62,19 @@ const processWebhook = async (req, res, next) => {
 /**
  * POST /api/payments/webhook — single gateway callback for every payment kind:
  * class tuition (Payment) and Sponsor Contribution. Idempotent on duplicate webhooks.
- * When PAYMENT_WEBHOOK_SECRET is configured, the gateway must send it in `x-webhook-secret`.
+ * The gateway must send PAYMENT_WEBHOOK_SECRET in `x-webhook-secret`. Only development and test
+ * may run without one configured; everywhere else a missing secret refuses every call.
  */
 const processGatewayWebhook = async (req, res, next) => {
   try {
     const secret = process.env.PAYMENT_WEBHOOK_SECRET;
-    if (secret && req.headers["x-webhook-secret"] !== secret) {
+    const secretOptional = ["development", "test"].includes(process.env.NODE_ENV);
+    if (secret ? !safeEqual(req.headers["x-webhook-secret"], secret) : !secretOptional) {
       throw new AppError("Invalid webhook signature", "UNAUTHORIZED", 401);
     }
 
     const { gatewayReference, status } = req.body || {};
-    if (typeof gatewayReference !== "string" || !["SUCCESS", "FAILED"].includes(status)) {
+    if (typeof gatewayReference !== "string" || !WEBHOOK_STATUSES.includes(status)) {
       throw new AppError("gatewayReference and status (SUCCESS | FAILED) are required", "VALIDATION_ERROR", 400);
     }
 

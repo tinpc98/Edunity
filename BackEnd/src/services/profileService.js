@@ -1,7 +1,8 @@
 const { User, Class } = require("../models");
 const { AppError } = require("../utils/errors");
-const { validationError, parseDate, isBlank } = require("../utils/http");
-const { hashPassword, verifyPassword } = require("../utils/password");
+const { validationError, parseDate, isBlank, parseImageUrl } = require("../utils/http");
+const { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH, hashPasswordAsync, verifyPasswordAsync } = require("../utils/password");
+const { getAccessTtl } = require("../utils/jwt");
 const storage = require("./storageService");
 const authTokenService = require("./authTokenService");
 
@@ -70,14 +71,6 @@ const requiredName = (value, field) => {
   return value;
 };
 
-const parseAvatarUrl = (value) => {
-  if (value === null || value === "") return undefined;
-  if (typeof value !== "string" || !/^(https?:\/\/|\/uploads\/)/.test(value)) {
-    throw validationError("avatarUrl must be an http(s) URL or a path returned by the upload API");
-  }
-  return value;
-};
-
 const getMyProfile = async (userId) => present(await getUser(userId));
 
 /**
@@ -92,7 +85,7 @@ const updateMyProfile = async (userId, body) => {
   const profile = user[key];
   const previousName = user.role === "TEACHER" ? profile.fullName : null;
 
-  if (body.avatarUrl !== undefined) profile.avatarUrl = parseAvatarUrl(body.avatarUrl);
+  if (body.avatarUrl !== undefined) profile.avatarUrl = parseImageUrl(body.avatarUrl, "avatarUrl");
 
   if (user.role === "STUDENT") {
     if (body.fullName !== undefined) profile.fullName = requiredName(body.fullName, "fullName");
@@ -140,24 +133,35 @@ const updateMyAvatar = async (userId, file) => {
   return { avatarUrl: saved.url };
 };
 
-// Changing the password signs the account out everywhere (all refresh tokens revoked)
-const changeMyPassword = async (userId, body) => {
+// Changing the password signs the account out everywhere: every refresh token is revoked and older access
+// tokens stop working. The device that made the change receives a fresh session so it stays signed in.
+const changeMyPassword = async (userId, body, meta) => {
   const { currentPassword, newPassword } = body;
   if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
     throw validationError("currentPassword and newPassword are required");
   }
-  if (newPassword.length < 6) throw validationError("newPassword must be at least 6 characters");
+  if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+    throw validationError(`newPassword must be ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} characters`);
+  }
 
   const user = await getUser(userId);
-  if (!verifyPassword(currentPassword, user.passwordHash)) {
+  if (!(await verifyPasswordAsync(currentPassword, user.passwordHash))) {
     throw new AppError("Current password is incorrect", "INVALID_PASSWORD", 400);
   }
   if (currentPassword === newPassword) throw validationError("newPassword must be different from the current password");
 
-  user.passwordHash = hashPassword(newPassword);
+  user.passwordHash = await hashPasswordAsync(newPassword);
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
   await user.save();
   await authTokenService.revokeAllForUser(user._id);
-  return { changed: true };
+
+  const { token } = await authTokenService.issueRefreshToken(user._id, meta);
+  return {
+    changed: true,
+    accessToken: authTokenService.buildAccessToken(user),
+    expiresIn: getAccessTtl(),
+    refreshToken: token,
+  };
 };
 
 module.exports = { getMyProfile, updateMyProfile, updateMyAvatar, changeMyPassword };

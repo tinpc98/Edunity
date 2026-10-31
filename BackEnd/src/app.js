@@ -1,19 +1,46 @@
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const { getAllowedOrigins } = require("./config/env");
 const enrollmentRoutes = require("./routes/enrollmentRoutes");
 const catalogRoutes = require("./routes/catalogRoutes");
 const authRoutes = require("./routes/authRoutes");
 const financeRoutes = require("./routes/financeRoutes");
 
 const app = express();
-app.use(express.json());
 
+// Number of reverse proxies in front of the app; without it every client behind a proxy shares one rate limit
+if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY));
+
+app.use(
+  helmet({
+    // JSON API: nothing here should load resources or be framed. /files/download relaxes framing for the FE viewer.
+    contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+    frameguard: { action: "deny" },
+    // Avatars and cover images are loaded by the FE from another origin
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+
+const allowedOrigins = getAllowedOrigins();
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+  origin: (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)),
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "x-user-id", "x-user-role", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
+// Before the body parser, so a parse error still reaches the browser with CORS headers
 app.use(cors(corsOptions));
+
+const LIVEKIT_WEBHOOK_PATH = "/api/sessions/livekit-webhook";
+app.use(
+  express.json({
+    // LiveKit posts application/webhook+json and signs the exact bytes it sent
+    type: ["application/json", "application/webhook+json"],
+    verify: (req, res, buffer) => {
+      if (req.originalUrl === LIVEKIT_WEBHOOK_PATH) req.rawBody = buffer;
+    },
+  })
+);
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -42,6 +69,14 @@ app.use((err, req, res, next) => {
       message: err.message,
       ...(err.details ? { details: err.details } : {})
     });
+  }
+
+  // Rejected by the body parser: a client error, not a server fault
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({ success: false, error: "VALIDATION_ERROR", message: "Request body is not valid JSON" });
+  }
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({ success: false, error: "PAYLOAD_TOO_LARGE", message: "Request body is too large" });
   }
 
   // Malformed input caught by Mongoose (invalid enum/number/ObjectId...) is a client error, not a server fault

@@ -1,5 +1,6 @@
 const catalogService = require("../services/catalogService");
 const { AppError } = require("../utils/errors");
+const { parsePaging } = require("../utils/http");
 const { serializeDecimal128 } = require("../utils/serialize");
 const mongoose = require("mongoose");
 
@@ -30,8 +31,8 @@ exports.getClasses = async (req, res, next) => {
     if (filters.courseId && !mongoose.isValidObjectId(filters.courseId)) delete filters.courseId;
     if (filters.teacherId && !mongoose.isValidObjectId(filters.teacherId)) delete filters.teacherId;
 
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = Math.min(parseInt(req.query.pageSize) || 12, 100);
+    const { page, pageSize } = parsePaging(req.query, 12);
+
     
     const result = await catalogService.getClasses(filters, page, pageSize);
     res.json({ success: true, data: serializeDecimal128(result) });
@@ -62,7 +63,7 @@ exports.getTeachers = async (req, res, next) => {
   try {
     const { featured, limit } = req.query;
     const isFeatured = featured === "true";
-    const limitNum = parseInt(limit) || 6;
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 6, 1), 100);
     const result = await catalogService.getTeachers(isFeatured, limitNum);
     res.json({ success: true, data: serializeDecimal128(result) });
   } catch (error) {

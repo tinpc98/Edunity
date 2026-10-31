@@ -160,7 +160,9 @@ const getMyApplications = async (studentId, paging) => {
     ScholarshipApplication.find(filter).sort({ submittedAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
     ScholarshipApplication.countDocuments(filter),
   ]);
-  return paged(await attachCampaigns(items), total, paging);
+  // The student reads the note and the date of the decision, not which staff member made it
+  const rows = await attachCampaigns(items);
+  return paged(rows.map(({ reviewedBy, ...row }) => row), total, paging);
 };
 
 // FR-STU-26

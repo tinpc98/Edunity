@@ -6,6 +6,183 @@
   },
   "item": [
     {
+      "name": "0a. Đăng nhập (lấy JWT cho các request sau)",
+      "item": [
+        {
+          "name": "Login student1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"student1@test.com\",\"password\":\"password\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"tokenStudent1\", pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login student2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"student2@test.com\",\"password\":\"password\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"tokenStudent2\", pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login teacher",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"teacher@test.com\",\"password\":\"password\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"tokenTeacher\", pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"admin@test.com\",\"password\":\"password\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"tokenAdmin\", pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "0. Kiểm tra server & dữ liệu seed",
       "item": [
         {
@@ -85,10 +262,10 @@
       "description": "Chạy `npm run seed` TRƯỚC mỗi lần Run collection để dữ liệu sạch."
     },
     {
-      "name": "1. mockAuth",
+      "name": "1. Xác thực",
       "item": [
         {
-          "name": "Không có x-user-id -> 401",
+          "name": "Không có token -> 401",
           "request": {
             "method": "GET",
             "header": [
@@ -122,17 +299,17 @@
           ]
         },
         {
-          "name": "x-user-id sai định dạng -> 401",
+          "name": "Token sai định dạng -> 401",
           "request": {
             "method": "GET",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{badId}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{badId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -170,12 +347,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -214,12 +391,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -290,12 +467,12 @@
             "method": "GET",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -330,12 +507,12 @@
             "method": "GET",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -369,12 +546,12 @@
             "method": "GET",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -407,12 +584,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -446,12 +623,12 @@
             "method": "GET",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -489,12 +666,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -528,12 +705,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -567,12 +744,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenTeacher}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{teacher}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -606,12 +783,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -644,12 +821,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -688,12 +865,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -732,12 +909,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -774,12 +951,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -814,12 +991,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -974,12 +1151,12 @@
             "method": "GET",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -1014,12 +1191,12 @@
             "method": "GET",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -1060,12 +1237,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -1136,12 +1313,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -1174,12 +1351,12 @@
             "method": "GET",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -1249,12 +1426,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -1288,12 +1465,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -1407,7 +1584,50 @@
           }
         },
         {
-          "name": "Get Me (Dev token)",
+          "name": "Login tài khoản vừa tạo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"newstudent@test.com\",\"password\":\"password123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"newStudentToken\", pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Me (JWT)",
           "event": [
             {
               "listen": "test",
@@ -1425,7 +1645,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer dev-{{newStudentId}}"
+                "value": "Bearer {{newStudentToken}}"
               }
             ],
             "url": {
@@ -1463,12 +1683,8 @@
             "method": "GET",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
-              },
-              {
-                "key": "x-user-role",
-                "value": "STUDENT"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               }
             ],
             "url": {
@@ -1508,12 +1724,8 @@
             "method": "GET",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
-              },
-              {
-                "key": "x-user-role",
-                "value": "STUDENT"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               }
             ],
             "url": {
@@ -1536,7 +1748,7 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
-                  "pm.test(\"Returns joinUrl\", () => { pm.expect(pm.response.json().data.joinUrl).to.include('https://meet.edunity.com'); });"
+                  "pm.test(\"Returns a classroom token\", () => { const d = pm.response.json().data; pm.expect(d.accessToken).to.be.a(\"string\"); pm.expect(d.provider).to.be.a(\"string\"); });"
                 ],
                 "type": "text/javascript"
               }
@@ -1546,12 +1758,8 @@
             "method": "GET",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
-              },
-              {
-                "key": "x-user-role",
-                "value": "STUDENT"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               }
             ],
             "url": {
@@ -1585,12 +1793,8 @@
             "method": "GET",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
-              },
-              {
-                "key": "x-user-role",
-                "value": "STUDENT"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               }
             ],
             "url": {
@@ -1623,12 +1827,8 @@
             "method": "POST",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
-              },
-              {
-                "key": "x-user-role",
-                "value": "STUDENT"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               }
             ],
             "url": {
@@ -1858,7 +2058,7 @@
       ]
     },
     {
-      "name": "8. Dev login",
+      "name": "8. Login",
       "item": [
         {
           "name": "Login success",
@@ -1868,9 +2068,9 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => { pm.response.to.have.status(200); });",
-                  "pm.test(\"Has token\", () => { pm.expect(pm.response.json().data.accessToken).to.include('dev-'); });",
+                  "pm.test(\"Has token\", () => { pm.expect(pm.response.json().data.accessToken.split('.').length).to.eql(3); pm.expect(pm.response.json().data.refreshToken).to.be.a('string'); });",
                   "pm.test(\"FullName not empty\", () => { pm.expect(pm.response.json().data.user.fullName).to.not.be.empty; });",
-                  "pm.collectionVariables.set('devToken', pm.response.json().data.accessToken);"
+                  "pm.collectionVariables.set('loginToken', pm.response.json().data.accessToken);"
                 ],
                 "type": "text/javascript"
               }
@@ -1885,13 +2085,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/auth/dev-login",
+              "raw": "{{baseUrl}}/auth/login",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "auth",
-                "dev-login"
+                "login"
               ]
             },
             "body": {
@@ -1922,13 +2122,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/auth/dev-login",
+              "raw": "{{baseUrl}}/auth/login",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "auth",
-                "dev-login"
+                "login"
               ]
             },
             "body": {
@@ -1938,7 +2138,7 @@
           }
         },
         {
-          "name": "Get me with devToken",
+          "name": "Get me with JWT",
           "event": [
             {
               "listen": "test",
@@ -1956,7 +2156,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{devToken}}"
+                "value": "Bearer {{loginToken}}"
               }
             ],
             "url": {
@@ -1970,6 +2170,48 @@
               ]
             }
           }
+        },
+        {
+          "name": "dev-login không còn tồn tại -> 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"student1@test.com\",\"password\":\"password\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/dev-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "dev-login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1994,12 +2236,8 @@
             "method": "GET",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{teacher}}"
-              },
-              {
-                "key": "x-user-role",
-                "value": "TEACHER"
+                "key": "Authorization",
+                "value": "Bearer {{tokenTeacher}}"
               }
             ],
             "url": {
@@ -2032,12 +2270,8 @@
             "method": "GET",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{admin}}"
-              },
-              {
-                "key": "x-user-role",
-                "value": "ADMIN"
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
               }
             ],
             "url": {
@@ -2069,12 +2303,8 @@
             "method": "GET",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{student1}}"
-              },
-              {
-                "key": "x-user-role",
-                "value": "STUDENT"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent1}}"
               }
             ],
             "url": {
@@ -2090,7 +2320,7 @@
           }
         },
         {
-          "name": "Fake ID + ADMIN role -> 401",
+          "name": "Header x-user-id + x-user-role của Admin -> 401 (bypass đã gỡ)",
           "event": [
             {
               "listen": "test",
@@ -2107,7 +2337,7 @@
             "header": [
               {
                 "key": "x-user-id",
-                "value": "66a000000000000000000999"
+                "value": "{{admin}}"
               },
               {
                 "key": "x-user-role",
@@ -2137,12 +2367,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -2177,12 +2407,12 @@
             "method": "GET",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -2305,12 +2535,12 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "Bearer {{tokenStudent2}}"
               },
               {
-                "key": "x-user-id",
-                "value": "{{student2}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
