@@ -14,16 +14,18 @@ const campaignService = require("./campaignService");
 const { notify } = require("./notificationService");
 
 /**
- * UC-SPO-02: creates the contribution intent (PENDING). Like a class payment, the money is only
- * counted once the gateway webhook confirms it — the frontend result alone is never trusted.
+ * UC-SPO-02: Tạo yêu cầu tài trợ (PENDING). Tương tự thanh toán học phí, số tiền chỉ
+ * được ghi nhận khi webhook từ gateway xác nhận — không tin cậy kết quả trực tiếp từ frontend.
  */
 const createContribution = async (sponsorId, campaignId, body) => {
+  // PAY-06: Parse và validate số tiền trước khi thực hiện truy vấn database
+  const amount = parseAmount(body ? body.amount : undefined, "amount");
+
   const campaign = await campaignService.getCampaignOrThrow(campaignId);
   // BR-17: Sponsor chỉ tài trợ Campaign đang OPEN (và đang trong thời gian nhận tài trợ)
   if (!campaignService.isAcceptingFunding(campaign)) {
     throw new AppError("Campaign is not accepting contributions", "CAMPAIGN_NOT_ACCEPTING_FUNDING", 409);
   }
-  const amount = parseAmount(body.amount, "amount");
 
   const contribution = await SponsorContribution.create({
     campaignId: campaign._id,
@@ -44,14 +46,27 @@ const createContribution = async (sponsorId, campaignId, body) => {
 };
 
 /**
- * Gateway webhook for a contribution. Returns null when the reference is not a contribution
- * so the caller can fall back to the enrollment payment webhook. Idempotent on duplicates.
+ * Webhook từ gateway cho khoản tài trợ. Trả về null khi mã tham chiếu không phải khoản tài trợ
+ * để caller có thể fallback sang webhook thanh toán học phí. Đảm bảo idempotent khi nhận trùng lặp.
  */
 const processWebhook = async (gatewayReference, status) => {
   const contribution = await SponsorContribution.findOne({ paymentReference: gatewayReference });
   if (!contribution) return null;
 
   if (contribution.contributionStatus !== "PENDING") {
+    // PAY-04: Đánh dấu trạng thái SUCCESS đến muộn sau khi đã FAILED để đối soát thủ công (manual review)
+    if (contribution.contributionStatus === "FAILED" && status === "SUCCESS") {
+      console.warn(JSON.stringify({
+        event: "LATE_SUCCESS_AFTER_FAILED",
+        contributionId: contribution._id ? contribution._id.toString() : null,
+        paymentReference: gatewayReference,
+        timestamp: new Date().toISOString()
+      }));
+      return {
+        contributionStatus: "FAILED",
+        result: "LATE_SUCCESS_FLAGGED_FOR_REVIEW"
+      };
+    }
     return { contributionStatus: contribution.contributionStatus, result: "IDEMPOTENT" };
   }
 
@@ -92,7 +107,10 @@ const processWebhook = async (gatewayReference, status) => {
 
   if (!applied) {
     const current = await SponsorContribution.findById(contribution._id).lean();
-    return { contributionStatus: current.contributionStatus, result: "IDEMPOTENT" };
+    if (current && current.contributionStatus === "FAILED" && status === "SUCCESS") {
+      return { contributionStatus: "FAILED", result: "LATE_SUCCESS_FLAGGED_FOR_REVIEW" };
+    }
+    return { contributionStatus: current ? current.contributionStatus : "UNKNOWN", result: "IDEMPOTENT" };
   }
   if (targetStatus === "COMPLETED") {
     await notify(
@@ -144,8 +162,8 @@ const getMyContributions = async (sponsorId, query, paging) => {
 };
 
 /**
- * FR-SPO-07..10: impact report of a Campaign for a Sponsor who funded it.
- * Only aggregated figures are exposed — never the identity or documents of the students (NFR-04).
+ * FR-SPO-07..10: Báo cáo tác động (impact report) của Campaign cho Sponsor đã tài trợ.
+ * Chỉ trả về số liệu tổng hợp — tuyệt đối không để lộ danh tính hoặc hồ sơ của học viên (NFR-04).
  */
 const getCampaignImpact = async (sponsorId, campaignId) => {
   const campaign = await campaignService.getCampaignOrThrow(campaignId);
