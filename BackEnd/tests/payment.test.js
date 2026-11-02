@@ -7,7 +7,20 @@ const scholarshipPaymentService = require("../src/services/scholarshipPaymentSer
 const Payment = require("../src/models/Payment");
 const SponsorContribution = require("../src/models/SponsorContribution");
 const Enrollment = require("../src/models/Enrollment");
-const { ScholarshipCampaign, Scholarship, Class, ScholarshipUsage, Transaction, TeacherEarning } = require("../src/models");
+const {
+  User,
+  Category,
+  Subject,
+  Course,
+  ScholarshipCampaign,
+  Scholarship,
+  Class,
+  ScholarshipUsage,
+  Transaction,
+  TeacherEarning
+} = require("../src/models");
+const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
+const { releaseReservation } = require("../src/services/reservationService");
 const campaignService = require("../src/services/campaignService");
 const { AppError } = require("../src/utils/errors");
 
@@ -833,22 +846,6 @@ describe("PAY-03: Idempotency & Concurrency Safety", () => {
     campaignUpdateSpy.mockRestore();
     txCreateSpy.mockRestore();
   });
-
-  const hasIsolatedReplSet = Boolean(process.env.ISOLATED_TEST_REPLSET_URI);
-
-  (hasIsolatedReplSet ? test : test.skip)(
-    "PAY-03.3 [BLOCKED: Cần MongoDB Replica Set cô lập]: 2 webhook SUCCESS đồng thời - kiểm tra thực tế DB cô lập (1 Transaction, 1 Enrollment, 1 TeacherEarning, 0 REFUND)",
-    async () => {
-      // Test suite thực thi trên Replica Set cô lập khi có ISOLATED_TEST_REPLSET_URI
-    }
-  );
-
-  (hasIsolatedReplSet ? test : test.skip)(
-    "PAY-03.4 [BLOCKED: Cần MongoDB Replica Set cô lập]: 10 webhook SUCCESS đồng thời - kiểm tra thực tế DB cô lập (1 Transaction, 1 Enrollment, 1 TeacherEarning, 0 REFUND)",
-    async () => {
-      // Test suite thực thi trên Replica Set cô lập khi có ISOLATED_TEST_REPLSET_URI
-    }
-  );
 });
 
 describe("PAY-06: Money Validation & Limit Controls", () => {
@@ -1342,5 +1339,529 @@ describe("PAY-OWNERSHIP: Quyền sở hữu và kiểm soát truy cập cho endp
     const error = next.mock.calls[0][0];
     expect(error.statusCode).toBe(403);
     expect(error.code).toBe("FORBIDDEN");
+  });
+});
+
+describe("PAY-03 & Ngoại lệ trên MongoMemoryReplSet (Database cô lập)", () => {
+  beforeAll(async () => {
+    await connectDB();
+    await syncIndexes();
+  }, 30000);
+
+  afterAll(async () => {
+    await disconnectDB();
+  });
+
+  beforeEach(async () => {
+    await clearDB();
+  });
+
+  const setupBaseData = async () => {
+    const admin = await User.create({ email: "admin_concur@test.com", passwordHash: "x", role: "ADMIN" });
+    const teacher = await User.create({
+      email: "teacher_concur@test.com",
+      passwordHash: "x",
+      role: "TEACHER",
+      teacherProfile: { fullName: "Teacher Concurrency", verificationStatus: "VERIFIED" }
+    });
+    const student = await User.create({
+      email: "student_concur@test.com",
+      passwordHash: "x",
+      role: "STUDENT",
+      studentProfile: { fullName: "Student Concurrency" }
+    });
+    const sponsor = await User.create({
+      email: "sponsor_concur@test.com",
+      passwordHash: "x",
+      role: "SPONSOR",
+      sponsorProfile: { sponsorType: "ORGANIZATION", representativeName: "Sponsor Concurrency" }
+    });
+
+    const category = await Category.create({ name: "Công nghệ thông tin", slug: "cntt-" + Date.now(), createdBy: admin._id });
+    const subject = await Subject.create({
+      name: "Lập trình Web",
+      slug: "web-" + Date.now(),
+      categoryId: category._id,
+      categoryName: category.name,
+      createdBy: admin._id
+    });
+    const course = await Course.create({
+      title: "Node.js Chuyên sâu",
+      slug: "nodejs-" + Date.now(),
+      categoryId: category._id,
+      categoryName: category.name,
+      subjectId: subject._id,
+      subjectName: subject.name,
+      gradeLevel: "GRADE_12",
+      createdBy: admin._id
+    });
+    const cls = await Class.create({
+      courseId: course._id,
+      courseTitle: course.title,
+      teacherId: teacher._id,
+      teacherName: "Teacher Concurrency",
+      categoryId: category._id,
+      subjectId: subject._id,
+      className: "Lớp Node.js Concurrency",
+      classType: "PAID",
+      price: 1000000,
+      capacity: 20,
+      status: "OPEN"
+    });
+
+    return { admin, teacher, student, sponsor, category, subject, course, cls };
+  };
+
+  test("PAY-03.3 [Real DB]: 2 webhook SUCCESS đồng thời cho đơn DIRECT - đúng 1 Transaction ENROLLMENT_PAYMENT, 1 Enrollment CONFIRMED, 1 TeacherEarning, 0 REFUND", async () => {
+    const { student, teacher, cls, course } = await setupBaseData();
+    const holdExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    const enrollment = await Enrollment.create({
+      classId: cls._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      studentId: student._id,
+      enrollmentStatus: "PENDING_PAYMENT",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      holdExpiresAt
+    });
+
+    const payment = await Payment.create({
+      enrollmentId: enrollment._id,
+      payerUserId: student._id,
+      gateway: "SANDBOX",
+      gatewayReference: "GW-REAL-RACE-2",
+      amount: mongoose.Types.Decimal128.fromString("1000000"),
+      paymentStatus: "PENDING"
+    });
+
+    const [res1, res2] = await Promise.all([
+      paymentService.processWebhook("GW-REAL-RACE-2", "SUCCESS"),
+      paymentService.processWebhook("GW-REAL-RACE-2", "SUCCESS")
+    ]);
+
+    const results = [res1.result, res2.result];
+    expect(results).toContain("PAYMENT_SUCCESS");
+    expect(results).toContain("IDEMPOTENT");
+
+    const updatedPayment = await Payment.findById(payment._id);
+    expect(updatedPayment.paymentStatus).toBe("COMPLETED");
+
+    const updatedEnrollment = await Enrollment.findById(enrollment._id);
+    expect(updatedEnrollment.enrollmentStatus).toBe("CONFIRMED");
+
+    const txs = await Transaction.find({ relatedPaymentId: payment._id });
+    expect(txs).toHaveLength(1);
+    expect(txs[0].transactionType).toBe("ENROLLMENT_PAYMENT");
+    expect(txs[0].status).toBe("COMPLETED");
+
+    const refundTxs = await Transaction.find({ relatedPaymentId: payment._id, transactionType: "REFUND" });
+    expect(refundTxs).toHaveLength(0);
+
+    const earnings = await TeacherEarning.find({ enrollmentId: enrollment._id });
+    expect(earnings).toHaveLength(1);
+    expect(earnings[0].status).toBe("PENDING");
+  });
+
+  test("PAY-03.4 [Real DB]: 10 webhook SUCCESS đồng thời cho đơn DIRECT - đúng 1 Transaction ENROLLMENT_PAYMENT, 1 Enrollment CONFIRMED, 1 TeacherEarning, 0 REFUND", async () => {
+    const { student, teacher, cls, course } = await setupBaseData();
+    const holdExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    const enrollment = await Enrollment.create({
+      classId: cls._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      studentId: student._id,
+      enrollmentStatus: "PENDING_PAYMENT",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      holdExpiresAt
+    });
+
+    const payment = await Payment.create({
+      enrollmentId: enrollment._id,
+      payerUserId: student._id,
+      gateway: "SANDBOX",
+      gatewayReference: "GW-REAL-RACE-10",
+      amount: mongoose.Types.Decimal128.fromString("1000000"),
+      paymentStatus: "PENDING"
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, () => paymentService.processWebhook("GW-REAL-RACE-10", "SUCCESS"))
+    );
+
+    const successCount = responses.filter(r => r.result === "PAYMENT_SUCCESS").length;
+    const idempotentCount = responses.filter(r => r.result === "IDEMPOTENT").length;
+    expect(successCount).toBe(1);
+    expect(idempotentCount).toBe(9);
+
+    const updatedPayment = await Payment.findById(payment._id);
+    expect(updatedPayment.paymentStatus).toBe("COMPLETED");
+
+    const updatedEnrollment = await Enrollment.findById(enrollment._id);
+    expect(updatedEnrollment.enrollmentStatus).toBe("CONFIRMED");
+
+    const txs = await Transaction.find({ relatedPaymentId: payment._id });
+    expect(txs).toHaveLength(1);
+    expect(txs[0].transactionType).toBe("ENROLLMENT_PAYMENT");
+    expect(txs[0].status).toBe("COMPLETED");
+
+    const refundTxs = await Transaction.find({ relatedPaymentId: payment._id, transactionType: "REFUND" });
+    expect(refundTxs).toHaveLength(0);
+
+    const earnings = await TeacherEarning.find({ enrollmentId: enrollment._id });
+    expect(earnings).toHaveLength(1);
+  });
+
+  test("PAY-03.5.1 [Real DB]: Concurrency cho contributionService - 2 và 10 webhook SUCCESS trùng, fundedAmount chỉ cộng đúng 1 lần, đúng 1 Transaction", async () => {
+    const { admin, sponsor } = await setupBaseData();
+
+    const campaign1 = await ScholarshipCampaign.create({
+      createdBy: admin._id,
+      title: "Quỹ Học Bổng Đồng Thời 1",
+      targetBudget: mongoose.Types.Decimal128.fromString("50000000"),
+      fundedAmount: mongoose.Types.Decimal128.fromString("0"),
+      usedAmount: mongoose.Types.Decimal128.fromString("0"),
+      expectedSlots: 50,
+      awardAmountPerStudent: mongoose.Types.Decimal128.fromString("1000000"),
+      status: "OPEN_FOR_FUNDING",
+      fundingStart: new Date(Date.now() - 3600000),
+      fundingEnd: new Date(Date.now() + 3600000)
+    });
+
+    const contrib1 = await SponsorContribution.create({
+      campaignId: campaign1._id,
+      sponsorId: sponsor._id,
+      amount: mongoose.Types.Decimal128.fromString("5000000"),
+      contributionStatus: "PENDING",
+      paymentReference: "SBX-C-CONCUR-2"
+    });
+
+    const [cRes1, cRes2] = await Promise.all([
+      contributionService.processWebhook("SBX-C-CONCUR-2", "SUCCESS"),
+      contributionService.processWebhook("SBX-C-CONCUR-2", "SUCCESS")
+    ]);
+
+    const cResults = [cRes1.result, cRes2.result];
+    expect(cResults).toContain("CONTRIBUTION_SUCCESS");
+    expect(cResults).toContain("IDEMPOTENT");
+
+    const updatedCampaign1 = await ScholarshipCampaign.findById(campaign1._id);
+    expect(Number(updatedCampaign1.fundedAmount.toString())).toBe(5000000);
+
+    const txs1 = await Transaction.find({ sourceUserId: sponsor._id });
+    expect(txs1).toHaveLength(1);
+    expect(txs1[0].transactionType).toBe("SPONSOR_CONTRIBUTION");
+
+    const campaign2 = await ScholarshipCampaign.create({
+      createdBy: admin._id,
+      title: "Quỹ Học Bổng Đồng Thời 2",
+      targetBudget: mongoose.Types.Decimal128.fromString("50000000"),
+      fundedAmount: mongoose.Types.Decimal128.fromString("0"),
+      usedAmount: mongoose.Types.Decimal128.fromString("0"),
+      expectedSlots: 50,
+      awardAmountPerStudent: mongoose.Types.Decimal128.fromString("1000000"),
+      status: "OPEN_FOR_FUNDING",
+      fundingStart: new Date(Date.now() - 3600000),
+      fundingEnd: new Date(Date.now() + 3600000)
+    });
+
+    const contrib2 = await SponsorContribution.create({
+      campaignId: campaign2._id,
+      sponsorId: sponsor._id,
+      amount: mongoose.Types.Decimal128.fromString("10000000"),
+      contributionStatus: "PENDING",
+      paymentReference: "SBX-C-CONCUR-10"
+    });
+
+    const cResponses = await Promise.all(
+      Array.from({ length: 10 }, () => contributionService.processWebhook("SBX-C-CONCUR-10", "SUCCESS"))
+    );
+
+    const cSuccessCount = cResponses.filter(r => r.result === "CONTRIBUTION_SUCCESS").length;
+    const cIdempotentCount = cResponses.filter(r => r.result === "IDEMPOTENT").length;
+    expect(cSuccessCount).toBe(1);
+    expect(cIdempotentCount).toBe(9);
+
+    const updatedCampaign2 = await ScholarshipCampaign.findById(campaign2._id);
+    expect(Number(updatedCampaign2.fundedAmount.toString())).toBe(10000000);
+  });
+
+  test("PAY-EXCEPT.1 [Real DB]: Ca (a) Giữ chỗ hết hạn, đơn DIRECT - Payment COMPLETED, Enrollment không CONFIRMED, Transaction REFUND PENDING, không TeacherEarning, LATE_PAYMENT_PENDING_REVIEW", async () => {
+    const { student, teacher, cls, course } = await setupBaseData();
+    const expiredHold = new Date(Date.now() - 5 * 60 * 1000);
+
+    const enrollment = await Enrollment.create({
+      classId: cls._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      studentId: student._id,
+      enrollmentStatus: "PENDING_PAYMENT",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      holdExpiresAt: expiredHold
+    });
+
+    const payment = await Payment.create({
+      enrollmentId: enrollment._id,
+      payerUserId: student._id,
+      gateway: "SANDBOX",
+      gatewayReference: "GW-EXPIRED-HOLD-REAL-1",
+      amount: mongoose.Types.Decimal128.fromString("1000000"),
+      paymentStatus: "PENDING"
+    });
+
+    const result = await paymentService.processWebhook("GW-EXPIRED-HOLD-REAL-1", "SUCCESS");
+
+    expect(result.paymentStatus).toBe("COMPLETED");
+    expect(result.enrollmentStatus).toBe("PENDING_PAYMENT");
+    expect(result.result).toBe("LATE_PAYMENT_PENDING_REVIEW");
+
+    const updatedPayment = await Payment.findById(payment._id);
+    expect(updatedPayment.paymentStatus).toBe("COMPLETED");
+
+    const updatedEnrollment = await Enrollment.findById(enrollment._id);
+    expect(updatedEnrollment.enrollmentStatus).toBe("PENDING_PAYMENT");
+
+    const refundTxs = await Transaction.find({ relatedPaymentId: payment._id, transactionType: "REFUND" });
+    expect(refundTxs).toHaveLength(1);
+    expect(refundTxs[0].status).toBe("PENDING");
+
+    const normalTxs = await Transaction.find({ relatedPaymentId: payment._id, transactionType: "ENROLLMENT_PAYMENT" });
+    expect(normalTxs).toHaveLength(0);
+
+    const earnings = await TeacherEarning.find({ enrollmentId: enrollment._id });
+    expect(earnings).toHaveLength(0);
+  });
+
+  test("PAY-EXCEPT.2 [Real DB]: Ca (b) Enrollment đã EXPIRED / CANCELLED - tương tự ca (a)", async () => {
+    const { student, teacher, cls, course } = await setupBaseData();
+
+    const enrollment = await Enrollment.create({
+      classId: cls._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      studentId: student._id,
+      enrollmentStatus: "EXPIRED",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      holdExpiresAt: null
+    });
+
+    const payment = await Payment.create({
+      enrollmentId: enrollment._id,
+      payerUserId: student._id,
+      gateway: "SANDBOX",
+      gatewayReference: "GW-ALREADY-EXPIRED-REAL-1",
+      amount: mongoose.Types.Decimal128.fromString("1000000"),
+      paymentStatus: "PENDING"
+    });
+
+    const result = await paymentService.processWebhook("GW-ALREADY-EXPIRED-REAL-1", "SUCCESS");
+
+    expect(result.paymentStatus).toBe("COMPLETED");
+    expect(result.enrollmentStatus).toBe("EXPIRED");
+    expect(result.result).toBe("LATE_PAYMENT_PENDING_REVIEW");
+
+    const updatedEnrollment = await Enrollment.findById(enrollment._id);
+    expect(updatedEnrollment.enrollmentStatus).toBe("EXPIRED");
+
+    const refundTxs = await Transaction.find({ relatedPaymentId: payment._id, transactionType: "REFUND" });
+    expect(refundTxs).toHaveLength(1);
+    expect(refundTxs[0].status).toBe("PENDING");
+
+    const earnings = await TeacherEarning.find({ enrollmentId: enrollment._id });
+    expect(earnings).toHaveLength(0);
+  });
+
+  test("PAY-EXCEPT.3 [Real DB]: Ca (c) SUCCESS sau FAILED do áp dụng học bổng (updateMany) - Payment giữ FAILED, không Transaction, không TeacherEarning, mã LATE_SUCCESS_FLAGGED_FOR_REVIEW", async () => {
+    const { admin, student, teacher, cls, course } = await setupBaseData();
+
+    const campaign = await ScholarshipCampaign.create({
+      createdBy: admin._id,
+      title: "Học bổng CNTT Real DB",
+      targetBudget: mongoose.Types.Decimal128.fromString("20000000"),
+      fundedAmount: mongoose.Types.Decimal128.fromString("20000000"),
+      usedAmount: mongoose.Types.Decimal128.fromString("0"),
+      expectedSlots: 20,
+      awardAmountPerStudent: mongoose.Types.Decimal128.fromString("1000000"),
+      status: "OPEN_FOR_FUNDING",
+      fundingStart: new Date(Date.now() - 3600000),
+      fundingEnd: new Date(Date.now() + 3600000)
+    });
+
+    const scholarship = await Scholarship.create({
+      campaignId: campaign._id,
+      applicationId: new mongoose.Types.ObjectId(),
+      studentId: student._id,
+      allocatedAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      remainingAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      validFrom: new Date(Date.now() - 3600000),
+      expiresAt: new Date(Date.now() + 30 * 24 * 3600000),
+      status: "ACTIVE"
+    });
+
+    const holdExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const enrollment = await Enrollment.create({
+      classId: cls._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      studentId: student._id,
+      enrollmentStatus: "PENDING_PAYMENT",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      holdExpiresAt
+    });
+
+    const oldPayment = await Payment.create({
+      enrollmentId: enrollment._id,
+      payerUserId: student._id,
+      gateway: "SANDBOX",
+      gatewayReference: "GW-OLD-PENDING-REAL",
+      amount: mongoose.Types.Decimal128.fromString("1000000"),
+      paymentStatus: "PENDING"
+    });
+
+    await scholarshipPaymentService.payWithScholarship(student._id, enrollment._id, scholarship._id);
+
+    const checkOldPayment = await Payment.findById(oldPayment._id);
+    expect(checkOldPayment.paymentStatus).toBe("FAILED");
+
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await paymentService.processWebhook("GW-OLD-PENDING-REAL", "SUCCESS");
+
+    expect(result.paymentStatus).toBe("FAILED");
+    expect(result.result).toBe("LATE_SUCCESS_FLAGGED_FOR_REVIEW");
+
+    const finalPayment = await Payment.findById(oldPayment._id);
+    expect(finalPayment.paymentStatus).toBe("FAILED");
+
+    const txs = await Transaction.find({ relatedPaymentId: oldPayment._id });
+    expect(txs).toHaveLength(0);
+
+    const earnings = await TeacherEarning.find({ enrollmentId: enrollment._id });
+    expect(earnings).toHaveLength(1);
+    expect(earnings[0].grossAmount.toString()).toBe("1000000");
+
+    warnSpy.mockRestore();
+  });
+
+  test("PAY-EXCEPT.4 [Real DB]: Ca (d) Hành vi hiện tại đang chờ duyệt: đóng thiếu học phí dù giữ chỗ còn hạn kích hoạt nhánh else và tạo REFUND PENDING", async () => {
+    const { student, teacher, cls, course } = await setupBaseData();
+    const holdExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    const enrollment = await Enrollment.create({
+      classId: cls._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      studentId: student._id,
+      enrollmentStatus: "PENDING_PAYMENT",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      holdExpiresAt
+    });
+
+    const underPayment = await Payment.create({
+      enrollmentId: enrollment._id,
+      payerUserId: student._id,
+      gateway: "SANDBOX",
+      gatewayReference: "GW-UNDERPAID-REAL-500K",
+      amount: mongoose.Types.Decimal128.fromString("500000"),
+      paymentStatus: "PENDING"
+    });
+
+    const result = await paymentService.processWebhook("GW-UNDERPAID-REAL-500K", "SUCCESS");
+
+    expect(result.paymentStatus).toBe("COMPLETED");
+    expect(result.enrollmentStatus).toBe("PENDING_PAYMENT");
+    expect(result.result).toBe("LATE_PAYMENT_PENDING_REVIEW");
+
+    const updatedEnrollment = await Enrollment.findById(enrollment._id);
+    expect(updatedEnrollment.enrollmentStatus).toBe("PENDING_PAYMENT");
+
+    const refundTxs = await Transaction.find({ relatedPaymentId: underPayment._id, transactionType: "REFUND" });
+    expect(refundTxs).toHaveLength(1);
+    expect(refundTxs[0].status).toBe("PENDING");
+
+    const earnings = await TeacherEarning.find({ enrollmentId: enrollment._id });
+    expect(earnings).toHaveLength(0);
+  });
+
+  test("PAY-EXCEPT.5 [Real DB]: Ca (e) Đơn MIXED gặp (a) - expireEnrollmentsJob/releaseReservation giải phóng ScholarshipUsage sang RELEASED và hoàn lại remainingAmount", async () => {
+    const { admin, student, teacher, cls, course } = await setupBaseData();
+
+    const campaign = await ScholarshipCampaign.create({
+      createdBy: admin._id,
+      title: "Học bổng Hỗ trợ một phần Real DB",
+      targetBudget: mongoose.Types.Decimal128.fromString("20000000"),
+      fundedAmount: mongoose.Types.Decimal128.fromString("20000000"),
+      usedAmount: mongoose.Types.Decimal128.fromString("0"),
+      expectedSlots: 20,
+      awardAmountPerStudent: mongoose.Types.Decimal128.fromString("1000000"),
+      status: "OPEN_FOR_FUNDING",
+      fundingStart: new Date(Date.now() - 3600000),
+      fundingEnd: new Date(Date.now() + 3600000)
+    });
+
+    const scholarship = await Scholarship.create({
+      campaignId: campaign._id,
+      applicationId: new mongoose.Types.ObjectId(),
+      studentId: student._id,
+      allocatedAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      remainingAmount: mongoose.Types.Decimal128.fromString("1000000"),
+      validFrom: new Date(Date.now() - 3600000),
+      expiresAt: new Date(Date.now() + 30 * 24 * 3600000),
+      status: "ACTIVE"
+    });
+
+    const expensiveClass = await Class.create({
+      courseId: course._id,
+      courseTitle: course.title,
+      teacherId: teacher._id,
+      teacherName: "Teacher Concurrency",
+      categoryId: cls.categoryId,
+      subjectId: cls.subjectId,
+      className: "Lớp Học Phí 1tr5",
+      classType: "PAID",
+      price: 1500000,
+      capacity: 20,
+      status: "OPEN"
+    });
+
+    const holdExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const enrollment = await Enrollment.create({
+      classId: expensiveClass._id,
+      courseId: course._id,
+      teacherId: teacher._id,
+      studentId: student._id,
+      enrollmentStatus: "PENDING_PAYMENT",
+      paymentSource: "DIRECT_PAYMENT",
+      tuitionAmount: mongoose.Types.Decimal128.fromString("1500000"),
+      holdExpiresAt
+    });
+
+    await scholarshipPaymentService.payWithScholarship(student._id, enrollment._id, scholarship._id);
+
+    const checkScholarship = await Scholarship.findById(scholarship._id);
+    expect(Number(checkScholarship.remainingAmount.toString())).toBe(0);
+
+    const pendingUsage = await ScholarshipUsage.findOne({ enrollmentId: enrollment._id });
+    expect(pendingUsage.status).toBe("PENDING");
+
+    await Enrollment.updateOne({ _id: enrollment._id }, { $set: { holdExpiresAt: new Date(Date.now() - 60000) } });
+
+    const released = await releaseReservation(enrollment._id, "EXPIRED");
+    expect(released).toBe(true);
+
+    const updatedUsage = await ScholarshipUsage.findById(pendingUsage._id);
+    expect(updatedUsage.status).toBe("RELEASED");
+
+    const restoredScholarship = await Scholarship.findById(scholarship._id);
+    expect(Number(restoredScholarship.remainingAmount.toString())).toBe(1000000);
+
+    const finalEnrollment = await Enrollment.findById(enrollment._id);
+    expect(finalEnrollment.enrollmentStatus).toBe("EXPIRED");
   });
 });
