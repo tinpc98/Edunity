@@ -5,11 +5,18 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
     const err = error as { code?: string; status?: number; message?: string };
     
     // Auth errors
+    if (err.code === "RATE_LIMITED" || err.status === 429) {
+      return "Bạn đã thử quá nhiều lần. Vui lòng đợi ít phút rồi thử lại.";
+    }
     if (err.code === "DUPLICATE_EMAIL") {
       return "Email này đã được sử dụng. Vui lòng dùng email khác hoặc đăng nhập.";
     }
     if (err.code === "ACCOUNT_BLOCKED") {
       return "Tài khoản của bạn đang bị tạm khóa. Vui lòng liên hệ Edunity để được hỗ trợ.";
+    }
+
+    if (err.code === "MESSAGING_NOT_ALLOWED") {
+      return "Bạn chỉ có thể nhắn tin cho học viên thuộc lớp của mình.";
     }
 
     // Scholarship errors
@@ -99,7 +106,7 @@ export function getAuthErrorMessage(error: unknown, fallbackMessage = "Đã xả
     return "Email hoặc mật khẩu không chính xác.";
   }
   if (err.code === "VALIDATION_ERROR") {
-    return "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại email và mật khẩu (tối thiểu 6 ký tự).";
+    return "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại email và mật khẩu (tối thiểu 8 ký tự).";
   }
   return getFriendlyErrorMessage(error, fallbackMessage);
 }

@@ -7,6 +7,7 @@ const { resolveGradeLevel } = require("../utils/gradeLevel");
 const catalog = require("./courseCatalogService");
 const { audit } = require("./auditService");
 const { notify, notifyAdmins } = require("./notificationService");
+const { withoutReviewer } = require("../utils/publicView");
 
 const TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "estimatedDuration"];
 const STATUSES = ["PENDING_REVIEW", "NEED_CHANGES", "APPROVED", "REJECTED"];
@@ -68,7 +69,7 @@ const listMyProposals = async (teacherId, query, paging) => {
     CourseProposal.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
     CourseProposal.countDocuments(filter),
   ]);
-  return paged(items, total, paging);
+  return paged(items.map(withoutReviewer), total, paging);
 };
 
 // Teacher chỉnh sửa và gửi lại khi Admin yêu cầu (NEED_CHANGES) hoặc khi hồ sơ còn chờ duyệt

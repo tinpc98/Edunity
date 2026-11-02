@@ -3,6 +3,7 @@ const fs = require("fs/promises");
 const path = require("path");
 const { AppError } = require("../utils/errors");
 const { validationError } = require("../utils/http");
+const { getSecret } = require("../utils/secrets");
 
 /**
  * File storage (mục 11.8) on the local disk, split in two areas:
@@ -15,7 +16,8 @@ const { validationError } = require("../utils/http");
 const getRoot = () => path.resolve(process.env.STORAGE_DIR || path.join(__dirname, "../../storage"));
 const getPublicDir = () => path.join(getRoot(), "public");
 
-const PRIVATE_PURPOSES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF", "RECORDING"];
+// What clients may upload. Recording keys are only ever created by the backend when a session starts.
+const PRIVATE_PURPOSES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF"];
 const PUBLIC_PURPOSES = ["AVATAR", "COVER_IMAGE"];
 const MAX_PRIVATE_SIZE = 10 * 1024 * 1024;
 const MAX_PUBLIC_SIZE = 5 * 1024 * 1024;
@@ -112,7 +114,7 @@ const assertOwnedKeys = async (userId, storageKeys) => {
 
 // ---------- Signed URLs ----------
 
-const getUrlSecret = () => process.env.FILE_URL_SECRET || process.env.JWT_SECRET || "edunity-dev-file-secret";
+const getUrlSecret = () => getSecret("FILE_URL_SECRET");
 const getUrlTtlMs = () => (parseInt(process.env.FILE_URL_TTL_SECONDS, 10) || 300) * 1000;
 
 const sign = (storageKey, expires) =>
@@ -147,7 +149,8 @@ const resolveSignedDownload = async ({ key, expires, signature }) => {
   if (!parsed || !Number.isFinite(expiresAt) || typeof signature !== "string") throw denied();
 
   const expected = sign(key, expiresAt);
-  const valid = signature.length === expected.length && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  const given = Buffer.from(signature);
+  const valid = given.length === expected.length && crypto.timingSafeEqual(given, Buffer.from(expected));
   if (!valid || expiresAt <= Date.now()) throw denied();
   if (!(await exists(key))) throw new AppError("File not found", "FILE_NOT_FOUND", 404);
 

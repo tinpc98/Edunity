@@ -123,26 +123,26 @@ const createOpenClass = (price, overrides = {}) =>
 
 describe("Auth", () => {
   it("registers TEACHER and SPONSOR, never ADMIN", async () => {
-    const t = await request(app).post("/api/auth/register").send({ fullName: "New Teacher", email: "nt@test.com", password: "secret1", role: "TEACHER" });
+    const t = await request(app).post("/api/auth/register").send({ fullName: "New Teacher", email: "nt@test.com", password: "secret12", role: "TEACHER" });
     expect(t.statusCode).toBe(201);
     const created = await User.findOne({ email: "nt@test.com" });
     expect(created.teacherProfile.verificationStatus).toBe("UNVERIFIED");
 
-    const s = await request(app).post("/api/auth/register").send({ fullName: "New Sponsor", email: "ns@test.com", password: "secret1", role: "SPONSOR" });
+    const s = await request(app).post("/api/auth/register").send({ fullName: "New Sponsor", email: "ns@test.com", password: "secret12", role: "SPONSOR" });
     expect(s.statusCode).toBe(201);
     expect(s.body.data.fullName).toBe("New Sponsor");
 
-    const a = await request(app).post("/api/auth/register").send({ fullName: "Hacker", email: "h@test.com", password: "secret1", role: "ADMIN" });
+    const a = await request(app).post("/api/auth/register").send({ fullName: "Hacker", email: "h@test.com", password: "secret12", role: "ADMIN" });
     expect(a.statusCode).toBe(400);
   });
 
   it("login issues a refresh token that rotates and can be revoked", async () => {
-    await request(app).post("/api/auth/register").send({ fullName: "Stu", email: "stu@test.com", password: "secret1", role: "STUDENT" });
+    await request(app).post("/api/auth/register").send({ fullName: "Stu", email: "stu@test.com", password: "secret12", role: "STUDENT" });
 
     const bad = await request(app).post("/api/auth/login").send({ email: "stu@test.com", password: "wrong" });
     expect(bad.statusCode).toBe(401);
 
-    const login = await request(app).post("/api/auth/login").send({ email: "stu@test.com", password: "secret1" });
+    const login = await request(app).post("/api/auth/login").send({ email: "stu@test.com", password: "secret12" });
     expect(login.statusCode).toBe(200);
     // a real JWT, not the dev token
     expect(jwt.decode(login.body.data.accessToken).role).toBe("STUDENT");
@@ -163,7 +163,7 @@ describe("Auth", () => {
     const afterReuse = await request(app).post("/api/auth/refresh").send({ refreshToken: secondToken });
     expect(afterReuse.statusCode).toBe(401);
 
-    const login2 = await request(app).post("/api/auth/login").send({ email: "stu@test.com", password: "secret1" });
+    const login2 = await request(app).post("/api/auth/login").send({ email: "stu@test.com", password: "secret12" });
     const logout = await request(app).post("/api/auth/logout").send({ refreshToken: login2.body.data.refreshToken });
     expect(logout.statusCode).toBe(200);
     const afterLogout = await request(app).post("/api/auth/refresh").send({ refreshToken: login2.body.data.refreshToken });

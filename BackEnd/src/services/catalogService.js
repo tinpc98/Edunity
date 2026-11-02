@@ -1,9 +1,15 @@
 const { Class, Session, Subject, Course, Category, User } = require("../models");
 const { AppError } = require("../utils/errors");
+const { toPublic } = require("../utils/publicView");
+const { escapeRegex } = require("../utils/http");
 
 // Class chưa được Admin duyệt (DRAFT, PENDING_APPROVAL, REJECTED) không được hiển thị công khai
 const PUBLIC_CLASS_STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const NOT_DELETED = { isDeleted: { $ne: true } };
+const MAX_SEARCH_LENGTH = 100;
+
+// A repeated query parameter arrives as an array
+const asList = (value) => [].concat(value).join(",").split(",").filter(Boolean);
 
 // Public view of a Teacher: fields live in the embedded teacherProfile; review notes stay private
 const toPublicTeacher = (teacher) => {
@@ -56,25 +62,24 @@ class CatalogService {
   async getClasses(filters, page, pageSize) {
     const query = { ...NOT_DELETED };
 
-    if (filters.search) {
-      query.$or = [
-        { className: { $regex: filters.search, $options: "i" } },
-        { courseTitle: { $regex: filters.search, $options: "i" } },
-        { teacherName: { $regex: filters.search, $options: "i" } },
-      ];
+    const search = [].concat(filters.search)[0];
+    if (typeof search === "string" && search) {
+      // Plain-text search: user input must never be interpreted as a regular expression
+      const pattern = { $regex: escapeRegex(search.slice(0, MAX_SEARCH_LENGTH)), $options: "i" };
+      query.$or = [{ className: pattern }, { courseTitle: pattern }, { teacherName: pattern }];
     }
     if (filters.subjectId) query.subjectId = filters.subjectId;
     if (filters.courseId) query.courseId = filters.courseId;
     if (filters.teacherId) query.teacherId = filters.teacherId;
     
     if (filters.statuses) {
-      query.status = { $in: filters.statuses.split(",").filter(status => PUBLIC_CLASS_STATUSES.includes(status)) };
+      query.status = { $in: asList(filters.statuses).filter(status => PUBLIC_CLASS_STATUSES.includes(status)) };
     } else {
       query.status = { $in: ["OPEN", "IN_PROGRESS"] };
     }
 
     if (filters.classTypes) {
-      const types = filters.classTypes.split(",");
+      const types = asList(filters.classTypes);
       if (types.includes("FREE") && !types.includes("PAID")) query.price = 0;
       if (types.includes("PAID") && !types.includes("FREE")) query.price = { $gt: 0 };
     }
@@ -98,7 +103,7 @@ class CatalogService {
     const total = await Class.countDocuments(query);
 
     return {
-      items,
+      items: items.map(toPublic),
       total,
       page,
       pageSize,
@@ -112,15 +117,19 @@ class CatalogService {
 
     const teacher = await User.findById(cls.teacherId).select("teacherProfile").lean();
     return {
-      ...cls,
+      ...toPublic(cls),
       teacher: teacher ? toPublicTeacher(teacher) : null
     };
   }
 
   async getClassSessions(classId) {
-    const hidden = await Class.exists({ _id: classId, status: { $nin: PUBLIC_CLASS_STATUSES } });
-    if (hidden) throw new AppError("Class not found", "CLASS_NOT_FOUND", 404);
-    return await Session.find({ classId }).sort({ startDatetime: 1 }).lean();
+    const visible = await Class.exists({ _id: classId, status: { $in: PUBLIC_CLASS_STATUSES }, ...NOT_DELETED });
+    if (!visible) throw new AppError("Class not found", "CLASS_NOT_FOUND", 404);
+    // meetingRoomId and recording locations stay private: joining and playback go through authenticated endpoints
+    return await Session.find({ classId })
+      .select("-meetingRoomId -recording.storageKey -recording.providerRecordingId")
+      .sort({ startDatetime: 1 })
+      .lean();
   }
 
   async getTeachers(featured, limit) {
@@ -132,13 +141,13 @@ class CatalogService {
   }
 
   async getTeacherById(teacherId) {
-    const teacher = await User.findOne({ _id: teacherId, role: "TEACHER", "teacherProfile.verificationStatus": "VERIFIED", ...NOT_DELETED }).select("teacherProfile").lean();
+    const teacher = await User.findOne({ _id: teacherId, role: "TEACHER", status: "ACTIVE", "teacherProfile.verificationStatus": "VERIFIED", ...NOT_DELETED }).select("teacherProfile").lean();
     if (!teacher) throw new AppError("Teacher not found", "TEACHER_NOT_FOUND", 404);
 
     const classes = await Class.find({ teacherId, status: "OPEN", ...NOT_DELETED }).lean();
     return {
       ...toPublicTeacher(teacher),
-      classes
+      classes: classes.map(toPublic)
     };
   }
 }

@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const { Category, Subject, Course, Class } = require("../models");
 const { GRADE_LEVELS, COURSE_LEVELS } = require("../models/constants");
 const { AppError } = require("../utils/errors");
+const { toPublic } = require("../utils/publicView");
 const { assertId, paged, validationError, escapeRegex, isBlank } = require("../utils/http");
 const { slugify, uniqueSlug } = require("../utils/slug");
 const { allowedGradeLevelsForCategory, resolveGradeLevel } = require("../utils/gradeLevel");
@@ -62,7 +63,7 @@ const getCourseOrThrow = async (courseId) => {
 
 const listCategories = async () => {
   const categories = await Category.find({ status: "ACTIVE", ...NOT_DELETED }).sort({ name: 1 }).lean();
-  return categories.map(presentCategory);
+  return categories.map(presentCategory).map(toPublic);
 };
 
 const createCategory = async (adminId, body) => {
@@ -108,7 +109,8 @@ const updateCategory = async (adminId, categoryId, body) => {
 
 const listSubjectsByCategory = async (categoryId) => {
   const category = await getCategoryOrThrow(categoryId);
-  return Subject.find({ categoryId: category._id, status: "ACTIVE", ...NOT_DELETED }).sort({ name: 1 }).lean();
+  const subjects = await Subject.find({ categoryId: category._id, status: "ACTIVE", ...NOT_DELETED }).sort({ name: 1 }).lean();
+  return subjects.map(toPublic);
 };
 
 const getSubject = async (subjectId) => {
@@ -117,7 +119,7 @@ const getSubject = async (subjectId) => {
     .select("title slug level gradeLevel")
     .sort({ title: 1 })
     .lean();
-  return { ...subject.toObject(), courses };
+  return { ...toPublic(subject.toObject()), courses };
 };
 
 const createSubject = async (adminId, body) => {
@@ -193,14 +195,14 @@ const searchCourses = async (query, paging) => {
     Course.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
     Course.countDocuments(filter),
   ]);
-  return paged(items, total, paging);
+  return paged(items.map(toPublic), total, paging);
 };
 
 const getCourse = async (courseId) => {
   const course = await getCourseOrThrow(courseId);
   if (course.status !== "ACTIVE") throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
   const openClassCount = await Class.countDocuments({ courseId: course._id, status: "OPEN", ...NOT_DELETED });
-  return { ...course.toObject(), openClassCount };
+  return { ...toPublic(course.toObject()), openClassCount };
 };
 
 // FR-STU-11: only classes approved by Admin and OPEN are available to students
@@ -211,7 +213,7 @@ const getCourseClasses = async (courseId, paging) => {
     Class.find(filter).sort({ startDate: 1, createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
     Class.countDocuments(filter),
   ]);
-  return paged(items, total, paging);
+  return paged(items.map(toPublic), total, paging);
 };
 
 const assertCourseTitleAvailable = async (subjectId, title, excludeId) => {

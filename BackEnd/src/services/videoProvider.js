@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { createRoomToken } = require("../utils/roomToken");
 const { EgressClient, EncodedFileOutput } = require("livekit-server-sdk");
@@ -114,18 +115,25 @@ const startRecording = async (roomId, storageKey) => {
   }
 };
 
-const { WebhookReceiver } = require("livekit-server-sdk");
 
-const processWebhook = (reqBody, authHeader) => {
+/**
+ * The Authorization header is a JWT signed with the apiSecret; its `sha256` claim is the hash of the exact
+ * bytes LiveKit sent. Checking it binds the signature to this body, so a captured header cannot be replayed
+ * with different content. app.js keeps the raw bytes of this route for that purpose.
+ */
+const processWebhook = (rawBody, parsedBody, authHeader) => {
   const config = getLiveKitConfig();
   if (!config) throw new Error("LiveKit not configured");
-  
-  // The webhook auth header is a JWT signed with the apiSecret.
-  // By verifying it, we ensure the payload was sent by LiveKit.
-  // (We use jwt.verify instead of WebhookReceiver to avoid raw body strict matching issues when express.json() is used)
-  jwt.verify(authHeader, config.apiSecret, { issuer: config.apiKey });
-  
-  return reqBody;
+  if (!rawBody) throw new Error("Webhook body is missing");
+
+  const claims = jwt.verify(authHeader.replace(/^Bearer /, ""), config.apiSecret, {
+    algorithms: ["HS256"],
+    issuer: config.apiKey,
+  });
+  const expected = crypto.createHash("sha256").update(rawBody).digest("base64");
+  if (claims.sha256 !== expected) throw new Error("sha256 checksum of body does not match");
+
+  return parsedBody;
 };
 
 module.exports = { getProviderName, createJoinToken, closeRoom, startRecording, processWebhook };

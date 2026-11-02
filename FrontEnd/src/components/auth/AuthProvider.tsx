@@ -15,11 +15,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
           // Update user with fresh data from Backend
           setAuth(user, useAuthStore.getState().accessToken!, useAuthStore.getState().refreshToken!);
         } catch (error) {
-          // apiClient already handles token refresh and logout on failure
-          // If we reach here and it failed, the session is dead.
-          logout();
+          // apiClient already ends the session when the refresh token is rejected. What is left here is either
+          // an account the server refuses (403/404) or a temporary failure, which must not sign the user out.
+          const status = (error as { status?: number }).status;
+          if (status === 403 || status === 404) logout();
         }
-      } else {
+      } else if (accessToken || useAuthStore.getState().refreshToken) {
         // If not authenticated, ensure we don't have dangling tokens
         logout();
       }

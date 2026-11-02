@@ -67,7 +67,9 @@ const getMyReports = async (userId, paging) => {
     Report.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
     Report.countDocuments(filter),
   ]);
-  return paged(await present(items), total, paging);
+  // The reporter follows the outcome; who handled it inside the team stays internal
+  const rows = await present(items);
+  return paged(rows.map(({ reviewedBy, handledBy, ...row }) => row), total, paging);
 };
 
 const adminListReports = async (query, paging) => {

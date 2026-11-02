@@ -10,7 +10,9 @@ const body = (req) => req.body || {};
 exports.getMyProfile = handle((req) => profiles.getMyProfile(req.user.id));
 exports.updateMyProfile = handle((req) => profiles.updateMyProfile(req.user.id, body(req)));
 exports.updateMyAvatar = handle((req) => profiles.updateMyAvatar(req.user.id, req.file));
-exports.changeMyPassword = handle((req) => profiles.changeMyPassword(req.user.id, body(req)));
+exports.changeMyPassword = handle((req) =>
+  profiles.changeMyPassword(req.user.id, body(req), { userAgent: req.headers["user-agent"], ip: req.ip })
+);
 
 // Messaging
 exports.openConversation = handle((req) => messaging.openConversation(req.user, body(req)));

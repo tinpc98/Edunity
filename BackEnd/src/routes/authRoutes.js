@@ -2,21 +2,20 @@ const express = require("express");
 const router = express.Router();
 const devAuthController = require("../controllers/authController");
 const authMiddleware = require("../middlewares/authMiddleware");
+const rateLimit = require("../middlewares/rateLimit");
 
-router.post("/register", devAuthController.register);
-router.post("/login", devAuthController.loginWithRefreshToken);
-router.post("/refresh", devAuthController.refresh);
+router.post("/register", rateLimit.register, devAuthController.register);
+router.post("/login", rateLimit.login, devAuthController.loginWithRefreshToken);
+router.post("/refresh", rateLimit.refresh, devAuthController.refresh);
 router.post("/logout", devAuthController.logout);
 router.get("/me", authMiddleware, devAuthController.getMe);
 
-// DEV/TEST shortcut only: "dev-<userId>" tokens are not accepted in production
-router.use((req, res, next) => {
-  if (process.env.NODE_ENV === "production") {
+// Test-suite shortcut only: "dev-<userId>" tokens are accepted nowhere else
+router.post("/dev-login", (req, res, next) => {
+  if (process.env.NODE_ENV !== "test") {
     return res.status(404).json({ success: false, error: "NOT_FOUND" });
   }
   next();
-});
-
-router.post("/dev-login", devAuthController.login);
+}, devAuthController.login);
 
 module.exports = router;

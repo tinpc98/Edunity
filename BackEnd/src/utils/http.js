@@ -15,9 +15,9 @@ const handle = (fn, statusCode = 200) => async (req, res, next) => {
   }
 };
 
-const parsePaging = (query = {}) => {
+const parsePaging = (query = {}, defaultPageSize = 20) => {
   const page = Math.max(parseInt(query.page, 10) || 1, 1);
-  const pageSize = Math.min(Math.max(parseInt(query.pageSize || query.limit, 10) || 20, 1), 100);
+  const pageSize = Math.min(Math.max(parseInt(query.pageSize || query.limit, 10) || defaultPageSize, 1), 100);
   return { page, pageSize, skip: (page - 1) * pageSize };
 };
 
@@ -54,6 +54,15 @@ const escapeRegex = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"
 
 const isBlank = (value) => typeof value !== "string" || value.trim() === "";
 
+// Only a location the app can load an image from: never a script or an inline document
+const parseImageUrl = (value, field) => {
+  if (value === null || value === "") return undefined;
+  if (typeof value !== "string" || !/^(https?:\/\/|\/uploads\/)/.test(value)) {
+    throw validationError(`${field} must be an http(s) URL or a path returned by the upload API`);
+  }
+  return value;
+};
+
 module.exports = {
   handle,
   parsePaging,
@@ -63,4 +72,5 @@ module.exports = {
   parseDate,
   escapeRegex,
   isBlank,
+  parseImageUrl,
 };
