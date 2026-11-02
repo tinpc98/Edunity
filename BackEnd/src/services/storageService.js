@@ -20,7 +20,7 @@ const PUBLIC_PURPOSES = ["AVATAR", "COVER_IMAGE"];
 const MAX_PRIVATE_SIZE = 10 * 1024 * 1024;
 const MAX_PUBLIC_SIZE = 5 * 1024 * 1024;
 
-const IMAGE_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+const IMAGE_TYPES = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp" };
 const PRIVATE_TYPES = { ...IMAGE_TYPES, "application/pdf": "pdf", "video/mp4": "mp4" };
 const MIME_BY_EXTENSION = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf", mp4: "video/mp4" };
 
@@ -33,6 +33,7 @@ const matchesSignature = (buffer, mimeType) => {
     case "application/pdf":
       return startsWith([0x25, 0x50, 0x44, 0x46]); // %PDF
     case "image/jpeg":
+    case "image/jpg":
       return startsWith([0xff, 0xd8, 0xff]);
     case "image/png":
       return startsWith([0x89, 0x50, 0x4e, 0x47]);

@@ -325,26 +325,26 @@ describe("Public catalog", () => {
     expect((await request(app).get(`/api/classes/${open._id}/sessions`)).statusCode).toBe(200);
   });
 
-  it("GET /sessions/:id/join returns a room token instead of a meeting URL", async () => {
+  it("GET /sessions/:id/join is rejected with 405 METHOD_NOT_ALLOWED; joining requires POST", async () => {
     const cls = await createOpenClass(0);
     const session = await Session.create({
       classId: cls._id,
       className: cls.className,
       teacherId: teacher._id,
-      title: "Buổi 1",
+      title: "Buoi 1",
       startDatetime: new Date(Date.now() - 60000),
       endDatetime: new Date(Date.now() + 3600000),
     });
 
-    const notEnrolled = await request(app).get(`/api/sessions/${session._id}/join`).set(as(student));
-    expect(notEnrolled.statusCode).toBe(403);
-    expect(notEnrolled.body.error).toBe("NOT_ENROLLED");
-    const byTeacher = await request(app).get(`/api/sessions/${session._id}/join`).set(as(teacher));
-    expect(byTeacher.statusCode).toBe(403);
-    expect(byTeacher.body.error).toBe("FORBIDDEN");
-
     await request(app).post(`/api/classes/${cls._id}/enrollments`).set(as(student));
-    const joined = await request(app).get(`/api/sessions/${session._id}/join`).set(as(student));
+
+    // BUG-TIN03-01: GET is rejected with 405 to prevent side-effects
+    const getRes = await request(app).get(`/api/sessions/${session._id}/join`).set(as(student));
+    expect(getRes.statusCode).toBe(405);
+    expect(getRes.body.error).toBe("METHOD_NOT_ALLOWED");
+
+    // Joining is performed via POST /api/sessions/:id/join
+    const joined = await request(app).post(`/api/sessions/${session._id}/join`).set(as(student));
     expect(joined.statusCode).toBe(200);
     expect(joined.body.data.joinUrl).toBeUndefined();
     expect(joined.body.data.role).toBe("PARTICIPANT");

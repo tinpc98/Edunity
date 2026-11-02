@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { createRoomToken } = require("../utils/roomToken");
-const { EgressClient, EncodedFileOutput } = require("livekit-server-sdk");
+const { EgressClient, EncodedFileOutput, EgressStatus } = require("livekit-server-sdk");
 
 /**
  * Embedded Live Classroom provider (mục 11.7).
@@ -114,6 +114,134 @@ const startRecording = async (roomId, storageKey) => {
   }
 };
 
+/**
+ * Dừng một tiến trình LiveKit Egress cụ thể theo egressId (phục vụ bồi hoàn an toàn khi không thể lưu metadata).
+ *
+ * YÊU CẦU AN TOÀN:
+ * 1. Validate egressId hợp lệ trước khi gửi RPC.
+ * 2. Chỉ dừng đúng Egress được chỉ định, TUYỆT ĐỐI KHÔNG gọi DeleteRoom (không ngắt lớp học đang diễn ra).
+ * 3. Không log API key hoặc API secret.
+ * 4. Thiết lập bounded RPC timeout (5 giây) thông qua EgressClient options.
+ * 5. Phân loại lỗi và kết quả chính xác, không dùng regex / substring mơ hồ.
+ *
+ * @param {string} egressId ID tiến trình Egress cần dừng
+ * @returns {Promise<{
+ *   success: boolean,
+ *   reason: "STOP_REQUEST_ACCEPTED" | "ALREADY_TERMINAL_VERIFIED" | "INVALID_EGRESS_ID" | "PROVIDER_NOT_CONFIGURED" | "RPC_FAILED" | "OUTCOME_UNKNOWN",
+ *   status?: string,
+ *   egressId?: string,
+ *   code?: string,
+ *   statusCode?: number,
+ *   error?: string
+ * }>}
+ */
+const stopRecording = async (egressId) => {
+  const config = getLiveKitConfig();
+  if (!config) {
+    return {
+      success: false,
+      reason: "PROVIDER_NOT_CONFIGURED",
+    };
+  }
+
+  if (!egressId || typeof egressId !== "string" || !egressId.trim()) {
+    return {
+      success: false,
+      reason: "INVALID_EGRESS_ID",
+    };
+  }
+
+  const trimmedId = egressId.trim();
+
+  try {
+    // Sử dụng requestTimeout: 5s để đảm bảo không bị treo RPC vô hạn
+    const egressClient = new EgressClient(config.url, config.apiKey, config.apiSecret, {
+      requestTimeout: 5,
+    });
+
+    const info = await egressClient.stopEgress(trimmedId);
+
+    // Kiểm tra trạng thái trả về từ EgressInfo
+    const statusCode = info?.status;
+    const statusName =
+      EgressStatus && statusCode !== undefined && EgressStatus[statusCode]
+        ? EgressStatus[statusCode]
+        : String(statusCode);
+
+    // Nếu Egress đã ở trạng thái kết thúc (COMPLETE, FAILED, ABORTED)
+    if (
+      statusCode === EgressStatus.EGRESS_COMPLETE ||
+      statusCode === EgressStatus.EGRESS_FAILED ||
+      statusCode === EgressStatus.EGRESS_ABORTED
+    ) {
+      return {
+        success: true,
+        reason: "ALREADY_TERMINAL_VERIFIED",
+        status: statusName,
+        egressId: trimmedId,
+      };
+    }
+
+    // Nếu Egress đang trong quá trình dừng (EGRESS_ENDING)
+    if (statusCode === EgressStatus.EGRESS_ENDING) {
+      return {
+        success: true,
+        reason: "STOP_REQUEST_ACCEPTED",
+        status: "EGRESS_ENDING",
+        egressId: trimmedId,
+      };
+    }
+
+    // Trạng thái hợp lệ khác trả về từ RPC
+    return {
+      success: true,
+      reason: "STOP_REQUEST_ACCEPTED",
+      status: statusName,
+      egressId: trimmedId,
+    };
+  } catch (err) {
+    // Phân loại lỗi mạng / timeout
+    const isTimeout =
+      err.name === "TimeoutError" ||
+      err.name === "AbortError" ||
+      err.code === "deadline_exceeded" ||
+      (err.message && err.message.toLowerCase().includes("timeout"));
+
+    if (isTimeout) {
+      console.error(`[LiveKit Provider] stopRecording timed out for egress ${trimmedId}:`, {
+        reason: "OUTCOME_UNKNOWN",
+        code: "TIMEOUT",
+      });
+      return {
+        success: false,
+        reason: "OUTCOME_UNKNOWN",
+        code: "TIMEOUT",
+        egressId: trimmedId,
+      };
+    }
+
+    // Phân loại lỗi RPC / ServerError (không dùng broad substring)
+    const errorCode = err.code || err.name || "RPC_ERROR";
+    const httpStatus = err.status || undefined;
+
+    console.error(`[LiveKit Provider] stopRecording RPC failed for egress ${trimmedId}:`, {
+      reason: "RPC_FAILED",
+      code: errorCode,
+      status: httpStatus,
+      message: err.message,
+    });
+
+    return {
+      success: false,
+      reason: "RPC_FAILED",
+      code: errorCode,
+      statusCode: httpStatus,
+      error: err.message,
+      egressId: trimmedId,
+    };
+  }
+};
+
 const { WebhookReceiver } = require("livekit-server-sdk");
 
 const processWebhook = (reqBody, authHeader) => {
@@ -128,4 +256,4 @@ const processWebhook = (reqBody, authHeader) => {
   return reqBody;
 };
 
-module.exports = { getProviderName, createJoinToken, closeRoom, startRecording, processWebhook };
+module.exports = { getProviderName, createJoinToken, closeRoom, startRecording, stopRecording, processWebhook };

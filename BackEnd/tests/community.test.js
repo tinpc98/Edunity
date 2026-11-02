@@ -174,6 +174,154 @@ describe("File upload and signed URLs", () => {
       .attach("file", PDF, { filename: "a.pdf", contentType: "application/pdf" });
     expect(pdfAsPublic.body.error).toBe("UNSUPPORTED_FILE_TYPE");
   });
+
+  it("TIN-02A: validates secure file uploads and verifies JPG fix (TC-01 to TC-17)", async () => {
+    const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from("valid jpeg payload")]);
+    const WEBP = Buffer.concat([Buffer.from("RIFF", "ascii"), Buffer.from([0x00, 0x00, 0x00, 0x00]), Buffer.from("WEBP", "ascii"), Buffer.from("test webp payload")]);
+    const FAKE_TEXT = Buffer.from("This is plain text pretending to be an image");
+    const DOCX_ZIP = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("docx zip contents")]);
+    const MP4_PAYLOAD = Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x18]), Buffer.from("ftypisom", "ascii"), Buffer.from("mp4 video stream")]);
+
+    // TC-01: JPEG hợp lệ với MIME image/jpeg
+    const tc01 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", JPEG, { filename: "photo.jpg", contentType: "image/jpeg" });
+    expect(tc01.statusCode).toBe(200);
+    expect(tc01.body.data.avatarUrl).toMatch(/\.jpg$/);
+
+    // TC-02: JPEG hợp lệ với MIME image/jpg (TIN-02A fix)
+    const tc02 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", JPEG, { filename: "photo.jpg", contentType: "image/jpg" });
+    expect(tc02.statusCode).toBe(200);
+    expect(tc02.body.data.avatarUrl).toMatch(/\.jpg$/);
+
+    // TC-03: JPEG với MIME application/octet-stream (bị từ chối theo chính sách strict MIME)
+    const tc03 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", JPEG, { filename: "photo.jpg", contentType: "application/octet-stream" });
+    expect(tc03.statusCode).toBe(400);
+    expect(tc03.body.error).toBe("UNSUPPORTED_FILE_TYPE");
+
+    // TC-04: JPEG với MIME rỗng / không thể xác định từ filename (default application/octet-stream)
+    const tc04 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", JPEG, { filename: "blob" });
+    expect(tc04.statusCode).toBe(400);
+    expect(tc04.body.error).toBe("UNSUPPORTED_FILE_TYPE");
+
+    // TC-05: PNG hợp lệ
+    const tc05 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", PNG, { filename: "photo.png", contentType: "image/png" });
+    expect(tc05.statusCode).toBe(200);
+    expect(tc05.body.data.avatarUrl).toMatch(/\.png$/);
+
+    // TC-06: WebP hợp lệ
+    const tc06 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", WEBP, { filename: "photo.webp", contentType: "image/webp" });
+    expect(tc06.statusCode).toBe(200);
+    expect(tc06.body.data.avatarUrl).toMatch(/\.webp$/);
+
+    // TC-07: PDF hợp lệ với purpose private
+    const tc07 = await request(app)
+      .post("/api/uploads/private")
+      .set(as(student))
+      .field("purpose", "IDENTITY")
+      .attach("file", PDF, { filename: "id.pdf", contentType: "application/pdf" });
+    expect(tc07.statusCode).toBe(201);
+    expect(tc07.body.data.storageKey).toMatch(/\.pdf$/);
+
+    // TC-08: Text giả mạo file JPG
+    const tc08 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", FAKE_TEXT, { filename: "fake.jpg", contentType: "image/jpg" });
+    expect(tc08.statusCode).toBe(400);
+    expect(tc08.body.error).toBe("UNSUPPORTED_FILE_TYPE");
+
+    // TC-09: PDF giả mạo PNG
+    const tc09 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", PDF, { filename: "fake.png", contentType: "image/png" });
+    expect(tc09.statusCode).toBe(400);
+    expect(tc09.body.error).toBe("UNSUPPORTED_FILE_TYPE");
+
+    // TC-10: MIME image/jpeg nhưng nội dung text giả mạo
+    const tc10 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", FAKE_TEXT, { filename: "fake.jpeg", contentType: "image/jpeg" });
+    expect(tc10.statusCode).toBe(400);
+    expect(tc10.body.error).toBe("UNSUPPORTED_FILE_TYPE");
+
+    // TC-11: File rỗng (0 bytes)
+    const tc11 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", Buffer.alloc(0), { filename: "empty.jpg", contentType: "image/jpeg" });
+    expect(tc11.statusCode).toBe(400);
+
+    // TC-12: File vượt giới hạn dung lượng (> 5MB cho avatar)
+    const bigHeader = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    const bigPayload = Buffer.alloc(5 * 1024 * 1024 + 1);
+    bigHeader.copy(bigPayload, 0);
+    const tc12 = await request(app)
+      .post("/api/me/avatar")
+      .set(as(student))
+      .attach("file", bigPayload, { filename: "large.jpg", contentType: "image/jpeg" });
+    expect(tc12.statusCode).toBe(413);
+    expect(tc12.body.error).toBe("FILE_TOO_LARGE");
+
+    // TC-13: Request thiếu file (không attach field file)
+    const tc13 = await request(app).post("/api/me/avatar").set(as(student));
+    expect(tc13.statusCode).toBe(400);
+
+    // TC-14: Upload không có JWT hợp lệ (invalid access token)
+    const tc14 = await request(app)
+      .post("/api/me/avatar")
+      .set(bearer("invalid.jwt.token"))
+      .attach("file", JPEG, { filename: "photo.jpg", contentType: "image/jpeg" });
+    expect(tc14.statusCode).toBe(401);
+    expect(tc14.body.error).toBe("UNAUTHORIZED");
+
+    // TC-15: Không có quyền truy cập file private (User khác)
+    const uploadPrivate = await request(app)
+      .post("/api/uploads/private")
+      .set(as(student))
+      .field("purpose", "QUALIFICATION")
+      .attach("file", PDF, { filename: "cert.pdf", contentType: "application/pdf" });
+    expect(uploadPrivate.statusCode).toBe(201);
+    const foreignKey = uploadPrivate.body.data.storageKey;
+    const tc15 = await request(app).post("/api/files/signed-url").set(as(student2)).send({ storageKey: foreignKey });
+    expect(tc15.statusCode).toBe(404);
+
+    // TC-16: File DOC/DOCX khi chưa được hỗ trợ
+    const tc16 = await request(app)
+      .post("/api/uploads/private")
+      .set(as(student))
+      .field("purpose", "QUALIFICATION")
+      .attach("file", DOCX_ZIP, { filename: "essay.docx", contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    expect(tc16.statusCode).toBe(400);
+    expect(tc16.body.error).toBe("UNSUPPORTED_FILE_TYPE");
+
+    // TC-17: Không thay đổi hành vi MP4 hiện tại (chưa mở rộng trong TIN-02A)
+    const tc17 = await request(app)
+      .post("/api/uploads/private")
+      .set(as(student))
+      .field("purpose", "RECORDING")
+      .attach("file", MP4_PAYLOAD, { filename: "session.mp4", contentType: "video/mp4" });
+    expect(tc17.statusCode).toBe(400);
+    expect(tc17.body.error).toBe("UNSUPPORTED_FILE_TYPE");
+  });
 });
 
 describe("Profile", () => {
@@ -209,6 +357,103 @@ describe("Profile", () => {
     expect((await request(app).get("/api/me/profile").set(as(student))).body.data.avatarUrl).toBe(avatar.body.data.avatarUrl);
     const script = await request(app).patch("/api/me/profile").set(as(student)).send({ avatarUrl: "javascript:alert(1)" });
     expect(script.statusCode).toBe(400);
+  });
+
+  it("TIN-01: allows new users without embedded profile to upload avatar", async () => {
+    const passwordHash = hashPassword("password");
+
+    // 1. Student without studentProfile
+    const rawStudent = await User.create({ email: "raw_student@test.com", passwordHash, role: "STUDENT" });
+    const stuRes = await request(app).post("/api/me/avatar").set(as(rawStudent)).attach("file", PNG, { filename: "me.png", contentType: "image/png" });
+    expect(stuRes.statusCode).toBe(200);
+    expect(stuRes.body.data.avatarUrl).toMatch(/\/uploads\/avatar\//);
+    const stuProfile = await request(app).get("/api/me/profile").set(as(rawStudent));
+    expect(stuProfile.body.data.fullName).toBe("raw_student@test.com");
+    expect(stuProfile.body.data.avatarUrl).toBe(stuRes.body.data.avatarUrl);
+
+    // 2. Teacher without teacherProfile
+    const rawTeacher = await User.create({ email: "raw_teacher@test.com", passwordHash, role: "TEACHER" });
+    const teaRes = await request(app).post("/api/me/avatar").set(as(rawTeacher)).attach("file", PNG, { filename: "tea.png", contentType: "image/png" });
+    expect(teaRes.statusCode).toBe(200);
+    expect(teaRes.body.data.avatarUrl).toMatch(/\/uploads\/avatar\//);
+    const teaProfile = await request(app).get("/api/me/profile").set(as(rawTeacher));
+    expect(teaProfile.body.data.fullName).toBe("raw_teacher@test.com");
+    expect(teaProfile.body.data.verificationStatus).toBe("UNVERIFIED");
+
+    // 3. Sponsor without sponsorProfile
+    const rawSponsor = await User.create({ email: "raw_sponsor@test.com", passwordHash, role: "SPONSOR" });
+    const spoRes = await request(app).post("/api/me/avatar").set(as(rawSponsor)).attach("file", PNG, { filename: "spo.png", contentType: "image/png" });
+    expect(spoRes.statusCode).toBe(200);
+    expect(spoRes.body.data.avatarUrl).toMatch(/\/uploads\/avatar\//);
+    const spoProfile = await request(app).get("/api/me/profile").set(as(rawSponsor));
+    expect(spoProfile.body.data.sponsorType).toBe("INDIVIDUAL");
+
+    // 4. Admin cannot update avatar
+    const adminRes = await request(app).post("/api/me/avatar").set(as(admin)).attach("file", PNG, { filename: "admin.png", contentType: "image/png" });
+    expect(adminRes.statusCode).toBe(400);
+    expect(adminRes.body.error).toBe("PROFILE_NOT_EDITABLE");
+
+    // 5. Preserves existing profile data on update
+    await request(app).patch("/api/me/profile").set(as(rawStudent)).send({ fullName: "Updated Name", bio: "My Bio" });
+    const stuRes2 = await request(app).post("/api/me/avatar").set(as(rawStudent)).attach("file", PNG, { filename: "me2.png", contentType: "image/png" });
+    expect(stuRes2.statusCode).toBe(200);
+    const stuProfile2 = await request(app).get("/api/me/profile").set(as(rawStudent));
+    expect(stuProfile2.body.data.fullName).toBe("Updated Name");
+    expect(stuProfile2.body.data.bio).toBe("My Bio");
+    expect(stuProfile2.body.data.avatarUrl).toBe(stuRes2.body.data.avatarUrl);
+
+    // 6. Invalid file format
+    const badFile = await request(app).post("/api/me/avatar").set(as(rawStudent)).attach("file", PDF, { filename: "test.pdf", contentType: "application/pdf" });
+    expect(badFile.statusCode).toBe(400);
+    expect(badFile.body.error).toBe("UNSUPPORTED_FILE_TYPE");
+
+    // 7. Missing file
+    const noFile = await request(app).post("/api/me/avatar").set(as(rawStudent));
+    expect(noFile.statusCode).toBe(400);
+
+    // 8. TC-08: Avatar vượt 5MB phải bị từ chối 413 FILE_TOO_LARGE
+    const bigPNGHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const bigPayload = Buffer.alloc(5 * 1024 * 1024 + 1); // 5MB + 1 byte
+    bigPNGHeader.copy(bigPayload, 0);
+    const tooLarge = await request(app)
+      .post("/api/me/avatar")
+      .set(as(rawStudent))
+      .attach("file", bigPayload, { filename: "large.png", contentType: "image/png" });
+    expect(tooLarge.statusCode).toBe(413);
+    expect(tooLarge.body.error).toBe("FILE_TOO_LARGE");
+
+    // 9. TC-09: Giả lập storage lưu file thành công nhưng user.save() thất bại
+    const beforeUser = await User.findById(rawStudent._id);
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const saveSpy = jest.spyOn(User.prototype, "save").mockRejectedValueOnce(new Error("Simulated DB save failure"));
+    const failedSaveRes = await request(app)
+      .post("/api/me/avatar")
+      .set(as(rawStudent))
+      .attach("file", PNG, { filename: "fail_save.png", contentType: "image/png" });
+    saveSpy.mockRestore();
+    consoleSpy.mockRestore();
+    expect(failedSaveRes.statusCode).toBe(500);
+    expect(failedSaveRes.body.error).toBe("INTERNAL_SERVER_ERROR");
+    const afterUser = await User.findById(rawStudent._id);
+    expect(afterUser.studentProfile?.avatarUrl).toBe(beforeUser.studentProfile?.avatarUrl);
+
+    // 10. TC-10: Giáo viên cập nhật avatar không làm thay đổi teacherName hoặc dữ liệu lớp học liên quan
+    const beforeClass = await Class.findById(cls._id).lean();
+    const teaAvatarRes = await request(app)
+      .post("/api/me/avatar")
+      .set(as(teacher))
+      .attach("file", PNG, { filename: "teacher_new_avatar.png", contentType: "image/png" });
+    expect(teaAvatarRes.statusCode).toBe(200);
+    expect(teaAvatarRes.body.data.avatarUrl).toMatch(/\/uploads\/avatar\//);
+
+    const afterClass = await Class.findById(cls._id).lean();
+    expect(afterClass.teacherName).toBe(beforeClass.teacherName);
+    expect(afterClass.title).toBe(beforeClass.title);
+    expect(afterClass.status).toBe(beforeClass.status);
+
+    const teaProfileAfter = await request(app).get("/api/me/profile").set(as(teacher));
+    expect(teaProfileAfter.body.data.fullName).toBe("Teacher One");
+    expect(teaProfileAfter.body.data.avatarUrl).toBe(teaAvatarRes.body.data.avatarUrl);
   });
 
   it("changes the password and signs the account out everywhere", async () => {

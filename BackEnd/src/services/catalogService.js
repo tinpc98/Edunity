@@ -1,7 +1,8 @@
+const mongoose = require("mongoose");
 const { Class, Session, Subject, Course, Category, User } = require("../models");
 const { AppError } = require("../utils/errors");
 
-// Class chưa được Admin duyệt (DRAFT, PENDING_APPROVAL, REJECTED) không được hiển thị công khai
+// Class chua duoc Admin duyet (DRAFT, PENDING_APPROVAL, REJECTED) khong duoc hien thi cong khai
 const PUBLIC_CLASS_STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const NOT_DELETED = { isDeleted: { $ne: true } };
 
@@ -56,12 +57,22 @@ class CatalogService {
   async getClasses(filters, page, pageSize) {
     const query = { ...NOT_DELETED };
 
+    // Search query left untouched for Security workstream (Bao)
     if (filters.search) {
       query.$or = [
         { className: { $regex: filters.search, $options: "i" } },
         { courseTitle: { $regex: filters.search, $options: "i" } },
         { teacherName: { $regex: filters.search, $options: "i" } },
       ];
+    }
+
+    // BUG-CAT-03 Fix: Include categoryId filter
+    if (filters.categoryId) {
+      if (mongoose.isValidObjectId(filters.categoryId)) {
+        query.categoryId = filters.categoryId;
+      } else {
+        query._id = null; // defensive fallback if called directly
+      }
     }
     if (filters.subjectId) query.subjectId = filters.subjectId;
     if (filters.courseId) query.courseId = filters.courseId;
@@ -73,36 +84,92 @@ class CatalogService {
       query.status = { $in: ["OPEN", "IN_PROGRESS"] };
     }
 
+    // BUG-CAT-02 Fix: Unified price & classTypes filtering without overwrite
+    let isFreeOnly = false;
+    let isPaidOnly = false;
     if (filters.classTypes) {
-      const types = filters.classTypes.split(",");
-      if (types.includes("FREE") && !types.includes("PAID")) query.price = 0;
-      if (types.includes("PAID") && !types.includes("FREE")) query.price = { $gt: 0 };
+      const types = Array.isArray(filters.classTypes)
+        ? filters.classTypes
+        : (typeof filters.classTypes === "string" ? filters.classTypes.split(",") : []);
+      const hasFree = types.includes("FREE");
+      const hasPaid = types.includes("PAID");
+      if (hasFree && !hasPaid) isFreeOnly = true;
+      if (hasPaid && !hasFree) isPaidOnly = true;
     }
 
-    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
-      query.price = {};
-      if (filters.minPrice) query.price.$gte = Number(filters.minPrice);
-      if (filters.maxPrice) query.price.$lte = Number(filters.maxPrice);
+    let minPriceNum = undefined;
+    if (filters.minPrice !== undefined && filters.minPrice !== null && filters.minPrice !== "") {
+      const parsed = Number(filters.minPrice);
+      if (Number.isFinite(parsed)) {
+        minPriceNum = Math.max(parsed, 0); // clamp negative to 0
+      }
     }
 
+    let maxPriceNum = undefined;
+    if (filters.maxPrice !== undefined && filters.maxPrice !== null && filters.maxPrice !== "") {
+      const parsed = Number(filters.maxPrice);
+      if (Number.isFinite(parsed)) {
+        maxPriceNum = parsed;
+      }
+    }
+
+    if (isFreeOnly) {
+      // FREE classes must have price = 0
+      if ((minPriceNum !== undefined && minPriceNum > 0) || (maxPriceNum !== undefined && maxPriceNum < 0)) {
+        query.price = -1; // impossible match since class price >= 0
+      } else {
+        query.price = 0;
+      }
+    } else if (isPaidOnly) {
+      // PAID classes must have price > 0
+      if (maxPriceNum !== undefined && maxPriceNum <= 0) {
+        query.price = -1; // impossible match
+      } else {
+        const priceCond = { $gt: 0 };
+        if (minPriceNum !== undefined && minPriceNum > 0) {
+          priceCond.$gte = minPriceNum;
+        }
+        if (maxPriceNum !== undefined) {
+          priceCond.$lte = maxPriceNum;
+        }
+        query.price = priceCond;
+      }
+    } else {
+      const hasMin = minPriceNum !== undefined;
+      const hasMax = maxPriceNum !== undefined;
+      if (hasMin || hasMax) {
+        const priceCond = {};
+        if (hasMin) priceCond.$gte = minPriceNum;
+        if (hasMax) priceCond.$lte = maxPriceNum;
+        query.price = priceCond;
+      }
+    }
+
+    // Stable sorting with unique tie-breaker (_id)
     let sort = {};
     switch (filters.sort) {
-      case "price_asc": sort = { price: 1 }; break;
-      case "price_desc": sort = { price: -1 }; break;
-      case "upcoming": sort = { startDate: 1 }; break;
-      default: sort = { createdAt: -1 }; break;
+      case "price_asc": sort = { price: 1, _id: 1 }; break;
+      case "price_desc": sort = { price: -1, _id: 1 }; break;
+      case "upcoming": sort = { startDate: 1, _id: 1 }; break;
+      case "newest": sort = { createdAt: -1, _id: -1 }; break;
+      case "oldest": sort = { createdAt: 1, _id: 1 }; break;
+      default: sort = { createdAt: -1, _id: -1 }; break;
     }
 
-    const skip = (page - 1) * pageSize;
-    const items = await Class.find(query).sort(sort).skip(skip).limit(pageSize).lean();
+    // BUG-CAT-04 Fix: Ensure safe positive page and pageSize
+    const safePage = Number.isInteger(page) && page > 0 ? page : 1;
+    const safePageSize = Number.isInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, 100) : 12;
+
+    const skip = (safePage - 1) * safePageSize;
+    const items = await Class.find(query).sort(sort).skip(skip).limit(safePageSize).lean();
     const total = await Class.countDocuments(query);
 
     return {
       items,
       total,
-      page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize)
+      page: safePage,
+      pageSize: safePageSize,
+      totalPages: Math.ceil(total / safePageSize)
     };
   }
 

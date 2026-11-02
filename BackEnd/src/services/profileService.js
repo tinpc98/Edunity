@@ -80,16 +80,20 @@ const parseAvatarUrl = (value) => {
 
 const getMyProfile = async (userId) => present(await getUser(userId));
 
+const ensureProfile = (user) => {
+  const key = PROFILE_KEY[user.role];
+  if (!key) throw new AppError("This account has no editable profile", "PROFILE_NOT_EDITABLE", 400);
+  if (!user[key]) user[key] = user.role === "SPONSOR" ? { sponsorType: "INDIVIDUAL" } : { fullName: user.email };
+  return { key, profile: user[key] };
+};
+
 /**
  * FR-STU-03 / FR-TEA-04 / FR-SPO-02. Only the fields a user owns are editable:
  * email, role, account status, verification status and ratings are never taken from the request.
  */
 const updateMyProfile = async (userId, body) => {
   const user = await getUser(userId);
-  const key = PROFILE_KEY[user.role];
-  if (!key) throw new AppError("This account has no editable profile", "PROFILE_NOT_EDITABLE", 400);
-  if (!user[key]) user[key] = user.role === "SPONSOR" ? { sponsorType: "INDIVIDUAL" } : { fullName: user.email };
-  const profile = user[key];
+  const { profile } = ensureProfile(user);
   const previousName = user.role === "TEACHER" ? profile.fullName : null;
 
   if (body.avatarUrl !== undefined) profile.avatarUrl = parseAvatarUrl(body.avatarUrl);
@@ -131,11 +135,10 @@ const updateMyProfile = async (userId, body) => {
 // Uploads the image to public storage and sets it as the avatar in one step
 const updateMyAvatar = async (userId, file) => {
   const user = await getUser(userId);
-  const key = PROFILE_KEY[user.role];
-  if (!key || !user[key]) throw new AppError("This account has no editable profile", "PROFILE_NOT_EDITABLE", 400);
+  const { profile } = ensureProfile(user);
 
   const saved = await storage.savePublicFile("AVATAR", file);
-  user[key].avatarUrl = saved.url;
+  profile.avatarUrl = saved.url;
   await user.save();
   return { avatarUrl: saved.url };
 };

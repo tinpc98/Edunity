@@ -25,13 +25,26 @@ exports.getClasses = async (req, res, next) => {
   try {
     const filters = { ...req.query };
     
-    // Ignore invalid ObjectIds to prevent 500
+    // Validate categoryId
+    if (filters.categoryId !== undefined && filters.categoryId !== null && filters.categoryId !== "") {
+      if (typeof filters.categoryId !== "string" || !mongoose.isValidObjectId(filters.categoryId)) {
+        throw new AppError("Invalid categoryId format", "VALIDATION_ERROR", 400);
+      }
+    } else {
+      delete filters.categoryId;
+    }
+
+    // Ignore invalid ObjectIds to prevent 500 for optional filters
     if (filters.subjectId && !mongoose.isValidObjectId(filters.subjectId)) delete filters.subjectId;
     if (filters.courseId && !mongoose.isValidObjectId(filters.courseId)) delete filters.courseId;
     if (filters.teacherId && !mongoose.isValidObjectId(filters.teacherId)) delete filters.teacherId;
 
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = Math.min(parseInt(req.query.pageSize) || 12, 100);
+    const parsedPage = parseInt(req.query.page, 10);
+    const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+
+    const parsedPageSize = parseInt(req.query.pageSize, 10);
+    const rawPageSize = Number.isInteger(parsedPageSize) && parsedPageSize > 0 ? parsedPageSize : 12;
+    const pageSize = Math.min(rawPageSize, 100);
     
     const result = await catalogService.getClasses(filters, page, pageSize);
     res.json({ success: true, data: serializeDecimal128(result) });

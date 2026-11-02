@@ -118,7 +118,7 @@ const joinSession = async (user, sessionId) => {
     }
     role = "HOST";
   } else if (user.role === "STUDENT") {
-    // BR-12: Enrollment phải tồn tại (CONFIRMED) trước khi Join Session
+    // BR-12: Enrollment phai ton tai (CONFIRMED) truoc khi Join Session
     const enrollment = await Enrollment.exists({ studentId: user.id, classId: session.classId, enrollmentStatus: "CONFIRMED" });
     if (!enrollment) throw new AppError("Not enrolled in this class", "NOT_ENROLLED", 403);
     role = "PARTICIPANT";
@@ -129,7 +129,7 @@ const joinSession = async (user, sessionId) => {
   if (session.status === "CANCELLED") throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
   if (session.status === "COMPLETED") throw new AppError("Session has ended", "SESSION_ENDED", 409);
 
-  // BR-14: Session Room chỉ truy cập được trong thời gian cho phép
+  // BR-14: Session Room chi truy cap duoc trong thoi gian cho phep
   const now = new Date();
   const windowStart = new Date(session.startDatetime.getTime() - JOIN_WINDOW_BEFORE_MS);
   if (now < windowStart || now > session.endDatetime) {
@@ -141,35 +141,192 @@ const joinSession = async (user, sessionId) => {
   }
 
   if (!session.meetingRoomId) session.meetingRoomId = `room_${session._id}`;
-  if (role === "HOST" && session.status === "SCHEDULED") {
-    session.status = "IN_PROGRESS";
-    const storageKey = `private/${user.id}/RECORDING/${crypto.randomUUID()}.mp4`;
-    const egressId = await videoProvider.startRecording(session.meetingRoomId, storageKey);
-    session.recording = {
-      providerRecordingId: egressId || null,
-      storageKey: storageKey,
-      status: egressId ? "PROCESSING" : "FAILED",
-      failureReason: egressId ? null : "Failed to start LiveKit egress"
-    };
-  }
-  if (session.isModified()) await session.save();
 
-  if (role === "PARTICIPANT") {
-    const late = now.getTime() > session.startDatetime.getTime() + LATE_AFTER_MS;
-    await SessionAttendance.updateOne(
-      { sessionId: session._id, studentId: user.id },
+  // TIN-05B-FIX (BUG-TIN05B-02): Atomic conditional transition for Teacher Start
+  // Only ONE concurrent request can transition SCHEDULED -> IN_PROGRESS and start recording
+  if (role === "HOST" && session.status === "SCHEDULED") {
+    const storageKey = `private/${user.id}/RECORDING/${crypto.randomUUID()}.mp4`;
+    const transitioned = await Session.findOneAndUpdate(
+      { _id: session._id, status: "SCHEDULED" },
       {
-        $setOnInsert: {
-          classId: session.classId,
-          joinedAt: now,
-          attendanceStatus: late ? "LATE" : "PRESENT",
+        $set: {
+          status: "IN_PROGRESS",
+          meetingRoomId: session.meetingRoomId,
         },
       },
-      { upsert: true }
+      { returnDocument: 'after' }
     );
+
+    if (transitioned) {
+      // This request won the atomic transition to start LiveKit recording
+      const egressId = await videoProvider.startRecording(session.meetingRoomId, storageKey);
+      const recordingData = {
+        providerRecordingId: egressId || null,
+        storageKey: storageKey,
+        status: egressId ? "PROCESSING" : "FAILED",
+        failureReason: egressId ? null : "Failed to start LiveKit egress",
+      };
+
+      // TIN-05C-P2: Bounded retry to save recording metadata with safe compensation
+      let metadataSaved = false;
+      let lastSaveError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const updateRes = await Session.updateOne(
+            { _id: session._id },
+            { $set: { recording: recordingData } }
+          );
+          if (updateRes.matchedCount === 0) {
+            throw new AppError("Session no longer exists", "SESSION_NOT_FOUND", 404);
+          }
+          metadataSaved = true;
+          break;
+        } catch (saveErr) {
+          lastSaveError = saveErr;
+          if (saveErr instanceof AppError || saveErr.statusCode || attempt === 2) {
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+        }
+      }
+
+      if (!metadataSaved) {
+        // Safe compensation: ONLY if this request created an Egress (egressId != null)
+        if (egressId) {
+          let canVerify = false;
+          let isPersisted = false;
+
+          try {
+            // Read back Session.recording to verify actual persistence outcome
+            const checkDoc = await Session.findById(session._id).select("recording").lean();
+            canVerify = true;
+            if (checkDoc && checkDoc.recording && checkDoc.recording.providerRecordingId === egressId) {
+              isPersisted = true;
+            }
+          } catch (readErr) {
+            // MongoDB unreachable or query failed -> UNKNOWN WRITE OUTCOME
+            canVerify = false;
+          }
+
+          if (canVerify && !isPersisted) {
+            // CONFIRMED NOT PERSISTED: safe to stop only the specific Egress owned by this request
+            try {
+              const compRes = await videoProvider.stopRecording(egressId);
+              if (compRes?.reason === "ALREADY_TERMINAL_VERIFIED") {
+                console.info(`[Session Compensation] Egress ${egressId} is already terminal.`);
+              } else if (compRes?.reason === "STOP_REQUEST_ACCEPTED") {
+                console.info(`[Session Compensation] Stop request accepted for egress ${egressId}.`);
+              } else if (compRes?.reason === "OUTCOME_UNKNOWN") {
+                console.warn(`[Session Compensation] OUTCOME_UNKNOWN for egress ${egressId}. Needs reconciliation.`, {
+                  code: compRes.code,
+                });
+              } else if (compRes?.reason === "RPC_FAILED") {
+                console.warn(`[Session Compensation] stopRecording RPC failed for egress ${egressId}:`, {
+                  code: compRes.code,
+                  statusCode: compRes.statusCode,
+                });
+              } else if (compRes?.reason === "PROVIDER_NOT_CONFIGURED") {
+                console.warn(`[Session Compensation] Provider not configured; egress ${egressId} cleanup unverified.`);
+              } else if (compRes?.reason === "INVALID_EGRESS_ID") {
+                console.warn(`[Session Compensation] Invalid egress ID provided: ${egressId}`);
+              }
+            } catch (compErr) {
+              console.warn(`[Session Compensation] Unexpected error stopping egress ${egressId}:`, compErr.message);
+            }
+          } else if (!canVerify) {
+            // UNKNOWN WRITE OUTCOME: DB query failed, cannot verify persistence -> do NOT blind-stop
+            console.warn(
+              `[Session Compensation] UNKNOWN_WRITE_OUTCOME for egress ${egressId}: Failed to verify DB persistence status. Blind-stop prevented.`,
+              {
+                sessionId: session._id?.toString(),
+                egressId,
+                saveError: lastSaveError?.message,
+              }
+            );
+          } else if (canVerify && isPersisted) {
+            // Metadata was actually persisted despite updateOne reporting error -> do NOT stopRecording!
+            console.info(`[Session Compensation] Metadata confirmed persisted for egress ${egressId}; stopRecording skipped.`);
+          }
+        }
+
+        // Never hide or swallow the original save error
+        throw lastSaveError;
+      }
+
+      // TIN-05B-FINAL (Start vs End race): If session was COMPLETED in the meantime, do not issue host token
+      const currentInDb = await Session.findById(session._id).select("status").lean();
+      if (currentInDb && (currentInDb.status === "COMPLETED" || currentInDb.status === "CANCELLED")) {
+        session.status = currentInDb.status;
+        session.recording = recordingData;
+        if (currentInDb.status === "COMPLETED") throw new AppError("Session has ended", "SESSION_ENDED", 409);
+        if (currentInDb.status === "CANCELLED") throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
+      }
+
+      session.status = "IN_PROGRESS";
+      session.recording = recordingData;
+    } else {
+      // Another concurrent Teacher Join request already transitioned the session
+      const refreshed = await Session.findById(session._id).lean();
+      if (!refreshed || refreshed.status === "COMPLETED") {
+        throw new AppError("Session has ended", "SESSION_ENDED", 409);
+      }
+      if (refreshed.status === "CANCELLED") {
+        throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
+      }
+      session.status = refreshed.status;
+      session.recording = refreshed.recording;
+    }
+  } else if (session.isModified()) {
+    await session.save();
   }
 
-  const expiresAt = session.endDatetime; // NFR-12: token hết hạn khi buổi học kết thúc
+  // TIN-05B-FINAL (BUG-TIN05B-01): Atomic write-guard consistency guard for Student Join
+  // Coordinates write locks on Session document to guarantee no TOCTOU stale read against Teacher End
+  if (role === "PARTICIPANT") {
+    const late = now.getTime() > session.startDatetime.getTime() + LATE_AFTER_MS;
+    const dbSession = await mongoose.startSession();
+    try {
+      await dbSession.withTransaction(async () => {
+        // Step 1: Snapshot check inside transaction
+        const currentSession = await Session.findById(session._id).session(dbSession);
+        if (!currentSession || currentSession.status === "COMPLETED" || currentSession.status === "CANCELLED") {
+          throw new AppError("This session has already ended", "SESSION_ENDED", 409);
+        }
+
+        // Step 2: Atomic write-guard: mutate __v on Session document inside transaction
+        // Ensures WiredTiger write-lock serialization against Teacher endSession
+        const guardedSession = await Session.findOneAndUpdate(
+          {
+            _id: session._id,
+            status: { $in: ["SCHEDULED", "IN_PROGRESS"] },
+          },
+          {
+            $inc: { __v: 1 },
+          },
+          { session: dbSession, returnDocument: 'after' }
+        );
+        if (!guardedSession) {
+          throw new AppError("This session has already ended", "SESSION_ENDED", 409);
+        }
+
+        await SessionAttendance.updateOne(
+          { sessionId: session._id, studentId: user.id },
+          {
+            $setOnInsert: {
+              classId: session.classId,
+              joinedAt: now,
+              attendanceStatus: late ? "LATE" : "PRESENT",
+            },
+          },
+          { upsert: true, session: dbSession }
+        );
+      });
+    } finally {
+      await dbSession.endSession();
+    }
+  }
+
+  const expiresAt = session.endDatetime; // NFR-12: token het han khi buoi hoc ket thuc
   const account = await User.findById(user.id).select("role studentProfile teacherProfile").lean();
   const { provider, serverUrl, accessToken } = videoProvider.createJoinToken({
     roomId: session.meetingRoomId,
@@ -193,37 +350,92 @@ const joinSession = async (user, sessionId) => {
 
 // UC-TEA-05: khi kết thúc Session = COMPLETED, Attendance được cập nhật
 const endSession = async (teacherId, sessionId) => {
-  const session = await getOwnSession(teacherId, sessionId);
-  if (session.status !== "IN_PROGRESS") {
+  const sessionDoc = await getOwnSession(teacherId, sessionId);
+  if (sessionDoc.status !== "IN_PROGRESS") {
     throw new AppError("Only an IN_PROGRESS session can be ended", "SESSION_NOT_IN_PROGRESS", 409);
   }
 
   const now = new Date();
-  session.status = "COMPLETED";
-  await session.save();
-  await videoProvider.closeRoom(session.meetingRoomId); // force-disconnect whoever is still in the room
+  const dbSession = await mongoose.startSession();
+  let attendedCount = 0;
+  let absentCount = 0;
 
-  await SessionAttendance.updateMany({ sessionId: session._id, leftAt: null }, { $set: { leftAt: now } });
+  try {
+    await dbSession.withTransaction(async () => {
+      // 1. Kiem tra lai trang thai ben trong transaction de chong double-end dong thoi
+      const current = await Session.findOne({ _id: sessionDoc._id, teacherId }).session(dbSession);
+      if (!current || current.status !== "IN_PROGRESS") {
+        throw new AppError("Only an IN_PROGRESS session can be ended", "SESSION_NOT_IN_PROGRESS", 409);
+      }
 
-  const [enrollments, attended] = await Promise.all([
-    Enrollment.find({ classId: session.classId, enrollmentStatus: "CONFIRMED" }).select("studentId").lean(),
-    SessionAttendance.find({ sessionId: session._id }).select("studentId").lean(),
-  ]);
-  const attendedIds = new Set(attended.map((row) => row.studentId.toString()));
-  const absent = enrollments.filter((enrollment) => !attendedIds.has(enrollment.studentId.toString()));
-  if (absent.length) {
-    await SessionAttendance.insertMany(
-      absent.map((enrollment) => ({
-        sessionId: session._id,
-        classId: session.classId,
-        studentId: enrollment.studentId,
-        attendanceStatus: "ABSENT",
-      })),
-      { ordered: false }
-    );
+      current.status = "COMPLETED";
+      await current.save({ session: dbSession });
+
+      // 2. Chot leftAt cho hoc vien co mat
+      await SessionAttendance.updateMany(
+        { sessionId: current._id, leftAt: null },
+        { $set: { leftAt: now } },
+        { session: dbSession }
+      );
+
+      // 3. Lay danh sach dang ky CONFIRMED va danh sach da diem danh (tuan tu de an toan voi dbSession)
+      const enrollments = await Enrollment.find({ classId: current.classId, enrollmentStatus: "CONFIRMED" })
+        .select("studentId")
+        .session(dbSession)
+        .lean();
+
+      const existingAttendances = await SessionAttendance.find({ sessionId: current._id })
+        .select("studentId attendanceStatus")
+        .session(dbSession)
+        .lean();
+
+      const existingStudentIds = new Set(existingAttendances.map((row) => row.studentId.toString()));
+      const absentEnrollments = enrollments.filter(
+        (enrollment) => !existingStudentIds.has(enrollment.studentId.toString())
+      );
+
+      // 4. Chen ABSENT an toan, idempotent bang bulkWrite voi $setOnInsert
+      // Tranh loi E11000 va khong ghi de neu hoc vien vua join hoac da co diem danh truoc do
+      if (absentEnrollments.length) {
+        const ops = absentEnrollments.map((enrollment) => ({
+          updateOne: {
+            filter: { sessionId: current._id, studentId: enrollment.studentId },
+            update: {
+              $setOnInsert: {
+                classId: current.classId,
+                attendanceStatus: "ABSENT",
+              },
+            },
+            upsert: true,
+          },
+        }));
+        await SessionAttendance.bulkWrite(ops, { session: dbSession });
+      }
+
+      // 5. Tinh toan thong ke attendance tu trang thai cuoi cung da duoc commit trong transaction
+      const finalAttendances = await SessionAttendance.find({ sessionId: current._id })
+        .select("studentId attendanceStatus")
+        .session(dbSession)
+        .lean();
+
+      const confirmedStudentIds = new Set(enrollments.map((e) => e.studentId.toString()));
+      const confirmedAttendances = finalAttendances.filter((a) => confirmedStudentIds.has(a.studentId.toString()));
+
+      attendedCount = confirmedAttendances.filter(
+        (a) => a.attendanceStatus === "PRESENT" || a.attendanceStatus === "LATE"
+      ).length;
+      absentCount = confirmedAttendances.filter((a) => a.attendanceStatus === "ABSENT").length;
+    });
+  } finally {
+    await dbSession.endSession();
   }
 
-  return { ...session.toObject(), attendance: { present: attendedIds.size, absent: absent.length } };
+  // 6. Tac dung phu ngoai vi: Dong phong LiveKit SAU KHI DB transaction da commit thanh cong.
+  // Best effort: Loi mang LiveKit khong lam rollback DB va khong nem loi unhandled.
+  await videoProvider.closeRoom(sessionDoc.meetingRoomId);
+
+  const finalSession = await Session.findById(sessionDoc._id).lean();
+  return { ...finalSession, attendance: { present: attendedCount, absent: absentCount } };
 };
 
 // FR-TEA-13: attendance list of a session for the owning Teacher

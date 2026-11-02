@@ -29,7 +29,10 @@ class StudentService {
       const start = new Date(s.startDatetime);
       const end = new Date(s.endDatetime);
       const windowStart = new Date(start.getTime() - 15 * 60 * 1000); // 15 mins before
-      const canJoin = currentNow >= windowStart && currentNow <= end;
+      // BUG-TIN03-02: only SCHEDULED and IN_PROGRESS sessions are joinable during the time window.
+      // CANCELLED and COMPLETED sessions are not joinable.
+      const isJoinableStatus = s.status === "SCHEDULED" || s.status === "IN_PROGRESS";
+      const canJoin = isJoinableStatus && currentNow >= windowStart && currentNow <= end;
       
       return {
         ...s,
