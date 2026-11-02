@@ -22,8 +22,8 @@ const isClassInCampaignScope = (campaign, cls) => {
 const scholarshipUnavailable = (message, code = "SCHOLARSHIP_NOT_USABLE") => new AppError(message, code, 409);
 
 /**
- * Resolves the Scholarship to use: the one requested, or the student's usable
- * Scholarship that expires first and whose Campaign scope covers the Class.
+ * Tìm Scholarship phù hợp để sử dụng: theo scholarshipId yêu cầu, hoặc học bổng còn hiệu lực
+ * hết hạn sớm nhất của học viên có Campaign scope bao trùm Class.
  */
 const resolveScholarship = async (studentId, scholarshipId, cls, now) => {
   const usable = { studentId, status: "ACTIVE", validFrom: { $lte: now }, expiresAt: { $gt: now }, remainingAmount: { $gt: 0 } };
@@ -56,9 +56,9 @@ const resolveScholarship = async (studentId, scholarshipId, cls, now) => {
 
 /**
  * UC-STU-08: POST /enrollments/:id/scholarship-payment.
- * - Scholarship covers the whole tuition → paymentSource = SCHOLARSHIP, Enrollment CONFIRMED.
- * - Scholarship covers a part → paymentSource = MIXED, the amount is held (usage PENDING) and the
- *   student pays `remainingDue` through POST /enrollments/:id/payments within the seat-hold window.
+ * - Học bổng chi trả toàn bộ học phí → paymentSource = SCHOLARSHIP, Enrollment CONFIRMED.
+ * - Học bổng chi trả một phần → paymentSource = MIXED, số tiền được tạm giữ (ScholarshipUsage PENDING)
+ *   và học viên thanh toán phần chênh lệch (remainingDue) qua POST /enrollments/:id/payments trong thời gian giữ chỗ.
  */
 const payWithScholarship = async (studentId, enrollmentId, scholarshipId) => {
   if (!mongoose.isValidObjectId(enrollmentId)) throw ENROLLMENT_NOT_FOUND();
@@ -76,7 +76,21 @@ const payWithScholarship = async (studentId, enrollmentId, scholarshipId) => {
   const { scholarship, campaign } = await resolveScholarship(studentId, scholarshipId, cls, now);
 
   const tuition = toNum(enrollment.tuitionAmount);
-  const scholarshipAmount = Math.min(toNum(scholarship.remainingAmount), tuition);
+  // PAY-06: Kiểm tra chặt chẽ số tiền học phí, không cho phép âm / 0 / NaN hoặc vượt ngưỡng an toàn
+  if (!Number.isFinite(tuition) || tuition <= 0 || tuition > 1e12) {
+    throw new AppError("Invalid tuition amount", "VALIDATION_ERROR", 400);
+  }
+
+  const scholarshipRemaining = toNum(scholarship.remainingAmount);
+  if (!Number.isFinite(scholarshipRemaining) || scholarshipRemaining <= 0) {
+    throw scholarshipUnavailable("Scholarship has no remaining balance");
+  }
+
+  const scholarshipAmount = Math.min(scholarshipRemaining, tuition);
+  if (!Number.isFinite(scholarshipAmount) || scholarshipAmount <= 0) {
+    throw scholarshipUnavailable("Scholarship balance is not available");
+  }
+
   const remainingDue = tuition - scholarshipAmount;
   const isFullyCovered = remainingDue <= 0;
   const amountDec = toDec(scholarshipAmount);
@@ -90,7 +104,7 @@ const payWithScholarship = async (studentId, enrollmentId, scholarshipId) => {
   let usage;
   try {
     await session.withTransaction(async () => {
-      // Enrollment 1 — 0..1 ScholarshipUsage
+      // Quan hệ Enrollment 1 — 0..1 ScholarshipUsage
       const existingUsage = await ScholarshipUsage.findOne({
         enrollmentId: enrollment._id,
         status: { $in: ["PENDING", "CONFIRMED"] },
@@ -99,13 +113,24 @@ const payWithScholarship = async (studentId, enrollmentId, scholarshipId) => {
         throw new AppError("A scholarship is already applied to this enrollment", "SCHOLARSHIP_ALREADY_APPLIED", 409);
       }
 
-      // BR-25: atomic deduction, never below zero. Released again if the hold expires (reservationService).
-      const deducted = await Scholarship.updateOne(
+      // PAY-06: Đảm bảo quỹ Campaign khả dụng đủ chi trả bên trong session transaction
+      const campaignCheck = await ScholarshipCampaign.findOne({
+        _id: scholarship.campaignId,
+        $expr: {
+          $gte: [{ $subtract: ["$fundedAmount", "$usedAmount"] }, amountDec]
+        }
+      }).session(session);
+      if (!campaignCheck) {
+        throw new AppError("Campaign fund is not available", "CAMPAIGN_FUND_UNAVAILABLE", 409);
+      }
+
+      // BR-25 / PAY-06: Trừ số dư học bổng bằng findOneAndUpdate có điều kiện nguyên tử (kiểm tra và cập nhật cùng một thao tác) trong session
+      const deducted = await Scholarship.findOneAndUpdate(
         { _id: scholarship._id, status: "ACTIVE", remainingAmount: { $gte: amountDec } },
         { $inc: { remainingAmount: toDec(-scholarshipAmount) } },
-        { session }
+        { session, new: true }
       );
-      if (deducted.modifiedCount !== 1) throw scholarshipUnavailable("Scholarship balance is no longer available");
+      if (!deducted) throw scholarshipUnavailable("Scholarship balance is no longer available");
 
       const enrollmentUpdate = isFullyCovered
         ? { enrollmentStatus: "CONFIRMED", paymentSource: "SCHOLARSHIP", amountPaidViaScholarship: amountDec, holdExpiresAt: null }
@@ -117,7 +142,7 @@ const payWithScholarship = async (studentId, enrollmentId, scholarshipId) => {
       );
       if (updated.modifiedCount !== 1) throw ENROLLMENT_EXPIRED();
 
-      // A payment intent created for the full tuition is no longer valid once a scholarship is applied
+      // Payment intent tạo cho toàn bộ học phí trước đó sẽ không còn hiệu lực khi áp dụng học bổng
       await Payment.updateMany(
         { enrollmentId: enrollment._id, paymentStatus: "PENDING" },
         { $set: { paymentStatus: "FAILED" } },
