@@ -1,4 +1,4 @@
-import { Typography, Button, List } from "antd";
+import { Typography, Button, List, Tooltip } from "antd";
 import { 
   CalendarOutlined, 
   ArrowRightOutlined, 
@@ -8,14 +8,21 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { Session } from "../../../../types/session";
+import { VERIFICATION_REQUIRED_MESSAGE } from "../../../../hooks/useTeacherVerification";
 
 const { Title, Text } = Typography;
 
 interface TodayScheduleProps {
   todaySessions: Session[];
+  isVerified?: boolean;
+  verificationMessage?: string;
 }
 
-export default function TodaySchedule({ todaySessions = [] }: TodayScheduleProps) {
+export default function TodaySchedule({
+  todaySessions = [],
+  isVerified = false,
+  verificationMessage = VERIFICATION_REQUIRED_MESSAGE,
+}: TodayScheduleProps) {
   const navigate = useNavigate();
 
   const formatTimeOnly = (isoString?: string) => {
@@ -38,13 +45,16 @@ export default function TodaySchedule({ todaySessions = [] }: TodayScheduleProps
             {todaySessions.length} ca
           </span>
         </div>
-        <Button 
-          type="link" 
-          onClick={() => navigate("/teacher/schedule")}
-          className="font-semibold text-indigo-600 p-0 text-[13px] cursor-pointer"
-        >
-          Xem toàn bộ lịch giảng <ArrowRightOutlined className="ml-1" />
-        </Button>
+        <Tooltip title={!isVerified ? verificationMessage : undefined}>
+          <Button 
+            type="link" 
+            disabled={!isVerified}
+            onClick={() => isVerified && navigate("/teacher/schedule")}
+            className="font-semibold text-indigo-600 p-0 text-[13px] cursor-pointer"
+          >
+            Xem toàn bộ lịch giảng <ArrowRightOutlined className="ml-1" />
+          </Button>
+        </Tooltip>
       </div>
 
       {todaySessions.length === 0 ? (
@@ -52,14 +62,19 @@ export default function TodaySchedule({ todaySessions = [] }: TodayScheduleProps
           <CheckCircleOutlined className="text-3xl text-emerald-500 mb-2" />
           <Text strong className="text-[14px] text-gray-700">Hôm nay không có lịch dạy trực tuyến</Text>
           <Text type="secondary" className="text-[12px] mt-1">
-            Thầy/Cô có thể nghỉ ngơi hoặc kiểm tra lịch các ngày tiếp theo trong tuần.
+            {isVerified
+              ? "Thầy/Cô có thể nghỉ ngơi hoặc kiểm tra lịch các ngày tiếp theo trong tuần."
+              : verificationMessage}
           </Text>
-          <Button 
-            onClick={() => navigate("/teacher/schedule")}
-            className="mt-3 rounded-xl bg-indigo-50 text-indigo-600 border-0 font-semibold h-8 text-[12px] cursor-pointer"
-          >
-            Mở thời khóa biểu
-          </Button>
+          <Tooltip title={!isVerified ? verificationMessage : undefined}>
+            <Button 
+              disabled={!isVerified}
+              onClick={() => isVerified && navigate("/teacher/schedule")}
+              className="mt-3 rounded-xl bg-indigo-50 text-indigo-600 border-0 font-semibold h-8 text-[12px] cursor-pointer"
+            >
+              Mở thời khóa biểu
+            </Button>
+          </Tooltip>
         </div>
       ) : (
         <List
@@ -123,20 +138,26 @@ export default function TodaySchedule({ todaySessions = [] }: TodayScheduleProps
                 
                 <div className="flex items-center gap-2 sm:self-center pr-1">
                   {isInProgress || isScheduled ? (
-                    <Button 
-                      type="primary" 
-                      onClick={() => navigate(`/classroom/${session.id}`)}
-                      className="bg-indigo-600 shadow-md shadow-indigo-600/25 rounded-[10px] border-0 h-9 px-3.5 flex items-center text-[13px] font-semibold cursor-pointer"
-                    >
-                      <LoginOutlined className="mr-1" /> Vào lớp Live
-                    </Button>
+                    <Tooltip title={!isVerified ? verificationMessage : undefined}>
+                      <Button 
+                        type="primary" 
+                        disabled={!isVerified}
+                        onClick={() => isVerified && navigate(`/classroom/${session.id}`)}
+                        className="bg-indigo-600 shadow-md shadow-indigo-600/25 rounded-[10px] border-0 h-9 px-3.5 flex items-center text-[13px] font-semibold cursor-pointer"
+                      >
+                        <LoginOutlined className="mr-1" /> Vào lớp Live
+                      </Button>
+                    </Tooltip>
                   ) : (
-                    <Button 
-                      onClick={() => navigate(`/teacher/classes/${session.classId}`)}
-                      className="rounded-[10px] h-9 px-3 bg-gray-50 border-0 flex items-center text-[13px] font-medium hover:bg-gray-100 cursor-pointer"
-                    >
-                      <EyeOutlined className="mr-1 text-gray-500" /> Xem chi tiết
-                    </Button>
+                    <Tooltip title={!isVerified ? verificationMessage : undefined}>
+                      <Button 
+                        disabled={!isVerified}
+                        onClick={() => isVerified && navigate(`/teacher/classes/${session.classId}`)}
+                        className="rounded-[10px] h-9 px-3 bg-gray-50 border-0 flex items-center text-[13px] font-medium hover:bg-gray-100 cursor-pointer"
+                      >
+                        <EyeOutlined className="mr-1 text-gray-500" /> Xem chi tiết
+                      </Button>
+                    </Tooltip>
                   )}
                 </div>
               </div>

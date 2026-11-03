@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Tabs, Button, Pagination, Empty, Spin, Typography, Card, Tag } from "antd";
 import {
   CheckOutlined,
@@ -16,6 +16,7 @@ import { notificationService, notificationKeys } from "../../services/notificati
 import type { NotificationItem } from "../../types/communication";
 import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
+import { invalidateTeacherVerificationState } from "../../hooks/useTeacherVerification";
 
 const { Title, Text } = Typography;
 
@@ -84,6 +85,7 @@ export const NotificationsPage: React.FC = () => {
       notificationType === "TEACHER_VERIFICATION_REJECTED" ||
       notificationType === "TEACHER_VERIFIED"
     ) {
+      void invalidateTeacherVerificationState(queryClient, user?.userId);
       if (!user || user.role === "TEACHER") {
         navigate(ROUTES.TEACHER.PROFILE);
       }
@@ -103,6 +105,23 @@ export const NotificationsPage: React.FC = () => {
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const unreadCount = data?.unreadCount ?? 0;
+  const syncedVerificationNotificationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (user?.role !== "TEACHER" || items.length === 0) return;
+    const latestVerificationNotif = items.find(
+      (item) =>
+        !item.isRead &&
+        (item.type === "TEACHER_VERIFIED" || item.type === "TEACHER_VERIFICATION_REJECTED")
+    );
+    if (
+      latestVerificationNotif &&
+      syncedVerificationNotificationIdRef.current !== latestVerificationNotif.id
+    ) {
+      syncedVerificationNotificationIdRef.current = latestVerificationNotif.id;
+      void invalidateTeacherVerificationState(queryClient, user.userId);
+    }
+  }, [items, queryClient, user?.role, user?.userId]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">

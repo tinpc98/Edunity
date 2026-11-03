@@ -1,13 +1,15 @@
-import { App as AntdApp, Button, Checkbox, Form, Input } from "antd";
+import { App as AntdApp, Button, Checkbox, Form, Input, Spin } from "antd";
 import { CheckCircleFilled, LockOutlined, MailOutlined, UserOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { loginUser, registerTeacher } from "../../services/auth.service";
 import { useAuthStore } from "../../stores/auth.store";
 import { useTeacherRegistrationStore } from "../../stores/teacherRegistration.store";
 import { ROUTES } from "../../routes/routePaths";
 import type { TeacherRegisterRequest } from "../../types/auth";
 import { getAuthErrorMessage } from "../../utils/apiErrorMap";
+import { getRoleHome } from "./authRedirect";
+import { useTeacherVerification } from "../../hooks/useTeacherVerification";
 
 interface TeacherRegisterFormValues extends TeacherRegisterRequest {
   confirmPassword: string;
@@ -25,7 +27,9 @@ export default function TeacherRegisterPage() {
   const { notification } = AntdApp.useApp();
   const navigate = useNavigate();
   const setAuth = useAuthStore((state) => state.setAuth);
+  const { user, isAuthenticated } = useAuthStore();
   const setDraft = useTeacherRegistrationStore((state) => state.setDraft);
+  const { verificationStatus, isLoading: isVerificationLoading } = useTeacherVerification();
 
   const registerMutation = useMutation({
     mutationFn: async (values: TeacherRegisterRequest) => {
@@ -83,6 +87,26 @@ export default function TeacherRegisterPage() {
       biography: values.biography?.trim(),
     });
   };
+
+  if (isAuthenticated && user && !registerMutation.isPending && !registerMutation.isSuccess) {
+    if (user.role !== "TEACHER") {
+      return <Navigate to={getRoleHome(user.role)} replace />;
+    }
+    if (isVerificationLoading) {
+      return (
+        <main className="site-container flex min-h-[calc(100vh-72px)] items-center justify-center py-14">
+          <Spin size="large" />
+        </main>
+      );
+    }
+    if (verificationStatus === "UNVERIFIED") {
+      return <Navigate to={ROUTES.AUTH.TEACHER_QUALIFICATION} replace />;
+    }
+    if (verificationStatus === "REJECTED") {
+      return <Navigate to={ROUTES.TEACHER.PROFILE} replace />;
+    }
+    return <Navigate to={ROUTES.TEACHER.HOME} replace />;
+  }
 
   return (
     <main className="site-container flex min-h-[calc(100vh-72px)] items-center py-14">

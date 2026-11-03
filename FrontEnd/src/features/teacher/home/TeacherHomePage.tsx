@@ -1,5 +1,4 @@
 import { Row, Col, Skeleton, Alert, Button } from "antd";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import TeacherWelcomeHero from "./components/TeacherWelcomeHero";
 import DashboardStatCard from "../../../components/dashboard/DashboardStatCard";
@@ -9,8 +8,10 @@ import RecentStudents from "./components/RecentStudents";
 import RecentMessages from "./components/RecentMessages";
 import TeacherRevenue from "./components/TeacherRevenue";
 import { useTeacherDashboard } from "./hooks/useTeacherDashboard";
-import { teacherVerificationService } from "../../../services/teacherVerification.service";
-import { useAuthStore } from "../../../stores/auth.store";
+import {
+  getVerificationGuidanceMessage,
+  useTeacherVerification,
+} from "../../../hooks/useTeacherVerification";
 import { ROUTES } from "../../../routes/routePaths";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 import {
@@ -23,21 +24,17 @@ import {
 } from "@ant-design/icons";
 
 export default function TeacherHomePage() {
-  const { user } = useAuthStore();
-  const isTeacher = Boolean(user?.userId && user.role === "TEACHER");
-
   const {
-    data: verification,
+    verification,
+    verificationStatus,
+    isVerified,
+    isTeacher,
     isLoading: isLoadingVerification,
     isError: isVerificationError,
     error: verificationError,
     refetch: refetchVerification,
-  } = useQuery({
-    queryKey: ["teacherVerification", user?.userId],
-    queryFn: () => teacherVerificationService.getMyVerification(),
-    enabled: isTeacher,
-    staleTime: 30_000,
-  });
+  } = useTeacherVerification();
+  const verificationGuidance = getVerificationGuidanceMessage(verificationStatus);
 
   const {
     teacherName,
@@ -56,8 +53,6 @@ export default function TeacherHomePage() {
     conversations,
     isLoading,
   } = useTeacherDashboard();
-
-  const verificationStatus = !isVerificationError ? verification?.verificationStatus : undefined;
 
   const renderVerificationBanner = () => {
     if (!isTeacher) return null;
@@ -201,7 +196,9 @@ export default function TeacherHomePage() {
       <TeacherWelcomeHero 
         teacherName={teacherName} 
         nextSession={nextSession} 
-        todaySessionsCount={todaySessions.length} 
+        todaySessionsCount={todaySessions.length}
+        isVerified={isVerified}
+        verificationMessage={verificationGuidance}
       />
       
       <Row gutter={[16, 16]}>
@@ -243,8 +240,17 @@ export default function TeacherHomePage() {
       <Row gutter={[20, 20]}>
         {/* Left Column */}
         <Col xs={24} xl={16} className="flex flex-col gap-5">
-          <TodaySchedule todaySessions={todaySessions} />
-          <TeachingClasses classes={classes} total={classesTotal} />
+          <TodaySchedule
+            todaySessions={todaySessions}
+            isVerified={isVerified}
+            verificationMessage={verificationGuidance}
+          />
+          <TeachingClasses
+            classes={classes}
+            total={classesTotal}
+            isVerified={isVerified}
+            verificationMessage={verificationGuidance}
+          />
           <TeacherRevenue 
             gross={totalGrossRevenue}
             commission={totalCommission}

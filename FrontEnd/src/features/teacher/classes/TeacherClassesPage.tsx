@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Typography, Input, Button, Tabs, Card, Tag, Progress, Row, Col, Select, Skeleton, Alert, Empty } from 'antd';
+import { Typography, Input, Button, Tabs, Card, Tag, Progress, Row, Col, Select, Skeleton, Alert, Empty, Tooltip } from 'antd';
 import { 
   PlusOutlined, 
   SearchOutlined, 
@@ -17,11 +17,17 @@ import { classService, classKeys } from '../../../services/class.service';
 import type { ClassStatus, ClassModel } from '../../../types/class';
 import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../types/class';
 import { deriveScheduleText } from '../../../api/classAdapters';
+import {
+  getVerificationGuidanceMessage,
+  useTeacherVerification,
+} from '../../../hooks/useTeacherVerification';
 
 const { Title, Text } = Typography;
 
 export default function TeacherClassesPage() {
   const navigate = useNavigate();
+  const { isVerified, verificationStatus } = useTeacherVerification();
+  const lockTooltip = getVerificationGuidanceMessage(verificationStatus);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -107,15 +113,18 @@ export default function TeacherClassesPage() {
               { value: 'PAID', label: 'Có phí' }
             ]}
           />
-          <Button 
-            type="primary" 
-            icon={<PlusOutlined />} 
-            size="large"
-            className="rounded-lg bg-indigo-600 hover:bg-indigo-700"
-            onClick={() => navigate(ROUTES.TEACHER.CREATE_CLASS)}
-          >
-            Tạo lớp mới
-          </Button>
+          <Tooltip title={!isVerified ? lockTooltip : undefined}>
+            <Button 
+              type="primary" 
+              icon={<PlusOutlined />} 
+              size="large"
+              disabled={!isVerified}
+              className="rounded-lg bg-indigo-600 hover:bg-indigo-700"
+              onClick={() => isVerified && navigate(ROUTES.TEACHER.CREATE_CLASS)}
+            >
+              Tạo lớp mới
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
@@ -244,14 +253,17 @@ export default function TeacherClassesPage() {
               </span>
             }
           >
-            <Button 
-              type="primary" 
-              icon={<PlusOutlined />}
-              className="bg-indigo-600 hover:bg-indigo-700"
-              onClick={() => navigate(ROUTES.TEACHER.CREATE_CLASS)}
-            >
-              Tạo lớp mới ngay
-            </Button>
+            <Tooltip title={!isVerified ? lockTooltip : undefined}>
+              <Button 
+                type="primary" 
+                icon={<PlusOutlined />}
+                disabled={!isVerified}
+                className="bg-indigo-600 hover:bg-indigo-700"
+                onClick={() => isVerified && navigate(ROUTES.TEACHER.CREATE_CLASS)}
+              >
+                Tạo lớp mới ngay
+              </Button>
+            </Tooltip>
           </Empty>
         </Card>
       )}

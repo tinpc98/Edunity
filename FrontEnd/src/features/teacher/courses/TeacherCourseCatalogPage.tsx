@@ -11,6 +11,7 @@ import {
   Button,
   Pagination,
   Card,
+  Tooltip,
 } from "antd";
 import {
   SearchOutlined,
@@ -29,9 +30,15 @@ import {
   COURSE_LEVELS,
   COURSE_LEVEL_LABELS,
 } from "../../../types/catalog";
+import {
+  getVerificationGuidanceMessage,
+  useTeacherVerification,
+} from "../../../hooks/useTeacherVerification";
 
 export default function TeacherCourseCatalogPage() {
   const navigate = useNavigate();
+  const { isVerified, verificationStatus } = useTeacherVerification();
+  const lockTooltip = getVerificationGuidanceMessage(verificationStatus);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedSubject, setSelectedSubject] = useState<string>("");
@@ -90,16 +97,26 @@ export default function TeacherCourseCatalogPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Link to="/teacher/course-proposals">
-            <Button icon={<FileTextOutlined />}>
+          <Tooltip title={!isVerified ? lockTooltip : undefined}>
+            <Button
+              icon={<FileTextOutlined />}
+              disabled={!isVerified}
+              onClick={() => isVerified && navigate("/teacher/course-proposals")}
+            >
               Đề xuất của tôi
             </Button>
-          </Link>
-          <Link to="/teacher/course-proposals?create=true">
-            <Button type="primary" icon={<PlusOutlined />} className="bg-brand-600 hover:bg-brand-700">
+          </Tooltip>
+          <Tooltip title={!isVerified ? lockTooltip : undefined}>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              disabled={!isVerified}
+              onClick={() => isVerified && navigate("/teacher/course-proposals?create=true")}
+              className="bg-brand-600 hover:bg-brand-700"
+            >
               Đề xuất khóa học mới
             </Button>
-          </Link>
+          </Tooltip>
         </div>
       </div>
 
@@ -193,12 +210,26 @@ export default function TeacherCourseCatalogPage() {
         />
       ) : courses.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <Empty description="Không tìm thấy khóa học nào phù hợp. Bạn có thể đề xuất khóa học mới!" />
-          <Link to="/teacher/course-proposals?create=true" className="mt-4 inline-block">
-            <Button type="primary" icon={<PlusOutlined />} className="bg-brand-600">
-              Đề xuất khóa học mới
-            </Button>
-          </Link>
+          <Empty
+            description={
+              isVerified
+                ? "Không tìm thấy khóa học nào phù hợp. Bạn có thể đề xuất khóa học mới!"
+                : "Không tìm thấy khóa học nào phù hợp."
+            }
+          />
+          <div className="mt-4 inline-block">
+            <Tooltip title={!isVerified ? lockTooltip : undefined}>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                disabled={!isVerified}
+                onClick={() => isVerified && navigate("/teacher/course-proposals?create=true")}
+                className="bg-brand-600"
+              >
+                Đề xuất khóa học mới
+              </Button>
+            </Tooltip>
+          </div>
         </div>
       ) : (
         <>
@@ -259,16 +290,21 @@ export default function TeacherCourseCatalogPage() {
                     <EyeOutlined /> Xem chi tiết
                   </Link>
 
-                  <Button
-                    size="small"
-                    type="primary"
-                    className="bg-brand-600 hover:bg-brand-700 text-xs"
-                    onClick={() => {
-                      navigate(`/teacher/classes/create?courseId=${course.id}`);
-                    }}
-                  >
-                    Tạo lớp học
-                  </Button>
+                  <Tooltip title={!isVerified ? lockTooltip : undefined}>
+                    <Button
+                      size="small"
+                      type="primary"
+                      disabled={!isVerified}
+                      className="bg-brand-600 hover:bg-brand-700 text-xs"
+                      onClick={() => {
+                        if (isVerified) {
+                          navigate(`/teacher/classes/create?courseId=${course.id}`);
+                        }
+                      }}
+                    >
+                      Tạo lớp học
+                    </Button>
+                  </Tooltip>
                 </div>
               </div>
             ))}

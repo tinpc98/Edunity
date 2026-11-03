@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Popover, Badge, Button, Empty, Spin, Typography } from "antd";
 import {
   BellOutlined,
@@ -16,6 +16,7 @@ import { notificationService, notificationKeys } from "../../../services/notific
 import type { NotificationItem } from "../../../types/communication";
 import { useAuthStore } from "../../../stores/auth.store";
 import { ROUTES } from "../../../routes/routePaths";
+import { invalidateTeacherVerificationState } from "../../../hooks/useTeacherVerification";
 
 const { Text } = Typography;
 
@@ -72,6 +73,23 @@ export const NotificationPopover: React.FC = () => {
 
   const unreadCount = data?.unreadCount ?? 0;
   const items = data?.items ?? [];
+  const syncedVerificationNotificationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (user?.role !== "TEACHER" || items.length === 0) return;
+    const latestVerificationNotif = items.find(
+      (item) =>
+        !item.isRead &&
+        (item.type === "TEACHER_VERIFIED" || item.type === "TEACHER_VERIFICATION_REJECTED")
+    );
+    if (
+      latestVerificationNotif &&
+      syncedVerificationNotificationIdRef.current !== latestVerificationNotif.id
+    ) {
+      syncedVerificationNotificationIdRef.current = latestVerificationNotif.id;
+      void invalidateTeacherVerificationState(queryClient, user.userId);
+    }
+  }, [items, queryClient, user?.role, user?.userId]);
 
   // Mutation: Mark one as read
   const markReadMutation = useMutation({
@@ -102,6 +120,7 @@ export const NotificationPopover: React.FC = () => {
       notificationType === "TEACHER_VERIFICATION_REJECTED" ||
       notificationType === "TEACHER_VERIFIED"
     ) {
+      void invalidateTeacherVerificationState(queryClient, user?.userId);
       if (!user || user.role === "TEACHER") {
         navigate(ROUTES.TEACHER.PROFILE);
       } else {

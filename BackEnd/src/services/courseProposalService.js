@@ -8,13 +8,14 @@ const catalog = require("./courseCatalogService");
 const { audit } = require("./auditService");
 const { notify, notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
+const { getVerifiedTeacher } = require("./teacherClassService");
 
 const TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "estimatedDuration"];
 const STATUSES = ["PENDING_REVIEW", "NEED_CHANGES", "APPROVED", "REJECTED"];
 
 const getActiveTeacher = async (teacherId) => {
   const teacher = await User.findById(teacherId);
-  if (!teacher || teacher.role !== "TEACHER") throw FORBIDDEN("Only TEACHER can perform this action");
+  if (!teacher || teacher.isDeleted || teacher.role !== "TEACHER") throw FORBIDDEN("Only TEACHER can perform this action");
   if (teacher.status !== "ACTIVE") throw new AppError("Teacher account is not active", "ACCOUNT_NOT_ACTIVE", 403);
   return teacher;
 };
@@ -54,7 +55,7 @@ const buildProposalData = async (data) => {
 };
 
 const createProposal = async (teacherId, body) => {
-  await getActiveTeacher(teacherId);
+  await getVerifiedTeacher(teacherId);
   const data = await buildProposalData(body);
   const proposal = await CourseProposal.create({ ...data, teacherId, status: "PENDING_REVIEW" });
 
@@ -63,6 +64,7 @@ const createProposal = async (teacherId, body) => {
 };
 
 const listMyProposals = async (teacherId, query, paging) => {
+  await getActiveTeacher(teacherId);
   const filter = { teacherId };
   if (query.status) filter.status = query.status;
   const [items, total] = await Promise.all([
@@ -74,7 +76,7 @@ const listMyProposals = async (teacherId, query, paging) => {
 
 // Teacher chỉnh sửa và gửi lại khi Admin yêu cầu (NEED_CHANGES) hoặc khi hồ sơ còn chờ duyệt
 const updateMyProposal = async (teacherId, proposalId, body) => {
-  await getActiveTeacher(teacherId);
+  await getVerifiedTeacher(teacherId);
   assertId(proposalId, "Course proposal not found", "COURSE_PROPOSAL_NOT_FOUND");
   const proposal = await CourseProposal.findOne({ _id: proposalId, teacherId });
   if (!proposal) throw new AppError("Course proposal not found", "COURSE_PROPOSAL_NOT_FOUND", 404);
