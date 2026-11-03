@@ -12,6 +12,7 @@ import {
   Typography,
   Space,
   Avatar,
+  Alert,
   App as AntdApp,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -24,9 +25,13 @@ import {
   UserOutlined,
   BookOutlined,
   EyeOutlined,
+  SafetyCertificateOutlined,
+  CalendarOutlined,
+  DollarOutlined,
 } from "@ant-design/icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { reportService, reportKeys } from "../../../services/report.service";
+import { sessionService, sessionKeys } from "../../../services/session.service";
 import {
   REPORT_TYPES,
   type ReportItem,
@@ -75,6 +80,7 @@ export const AdminReportsPage: React.FC = () => {
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
 
+  const [mainSection, setMainSection] = useState<string>("REPORTS");
   const [activeTab, setActiveTab] = useState<string>("ALL");
   const [selectedType, setSelectedType] = useState<string | undefined>(undefined);
   const [page, setPage] = useState<number>(1);
@@ -110,6 +116,50 @@ export const AdminReportsPage: React.FC = () => {
         page,
         pageSize,
       }),
+  });
+
+  // Fetch Smart Classroom & Teacher Incident / Discipline / Reschedule / Refund Overview (TIN-05D/E)
+  const { data: smartOverview, isLoading: isLoadingSmart } = useQuery({
+    queryKey: sessionKeys.adminSmartClassroom(),
+    queryFn: () => sessionService.getAdminSmartClassroomOverview(),
+    enabled: mainSection === "SMART_CLASSROOM",
+  });
+
+  const reviewIncidentMutation = useMutation({
+    mutationFn: ({ id, decision, note }: { id: string; decision: "APPROVED" | "REJECTED"; note: string }) =>
+      sessionService.reviewIncidentReport(id, { decision, note, approveReschedule: decision === "APPROVED" }),
+    onSuccess: () => {
+      message.success("Đã cập nhật quyết định xét duyệt báo cáo sự cố giáo viên!");
+      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+    },
+    onError: (err: any) => message.error(err?.message || "Lỗi khi duyệt báo cáo sự cố"),
+  });
+
+  const reviewRescheduleMutation = useMutation({
+    mutationFn: ({ id, decision, note }: { id: string; decision: "APPROVED" | "REJECTED"; note: string }) =>
+      sessionService.reviewRescheduleRequest(id, { decision, note }),
+    onSuccess: () => {
+      message.success("Đã xử lý yêu cầu xếp lịch dạy bù!");
+      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+    },
+    onError: (err: any) => message.error(err?.message || "Lỗi khi duyệt lịch dạy bù"),
+  });
+
+  const reviewRefundMutation = useMutation({
+    mutationFn: ({
+      id,
+      status,
+      note,
+    }: {
+      id: string;
+      status: "APPROVED_FOR_PAYMENT_TEAM" | "RESCHEDULED_WAIVED" | "REJECTED";
+      note: string;
+    }) => sessionService.reviewRefundCase(id, { status, note }),
+    onSuccess: () => {
+      message.success("Đã cập nhật hồ sơ rà soát hoàn phí buổi học!");
+      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+    },
+    onError: (err: any) => message.error(err?.message || "Lỗi khi xử lý rà soát hoàn phí"),
   });
 
   const items = data?.items || [];
@@ -310,16 +360,312 @@ export const AdminReportsPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
-      <div className="mb-6">
-        <Title level={2} className="!mb-1 flex items-center gap-2">
-          <AlertOutlined className="text-rose-600" />
-          Quản lý Khiếu nại & Báo cáo
-        </Title>
-        <Text type="secondary">
-          Tiếp nhận, xử lý khiếu nại từ học viên, giảng viên và nhà tài trợ theo quy trình minh bạch.
-        </Text>
+      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <Title level={2} className="!mb-1 flex items-center gap-2">
+            <AlertOutlined className="text-rose-600" />
+            Quản lý Khiếu nại, Sự cố Giảng dạy & Giám sát Lớp học
+          </Title>
+          <Text type="secondary">
+            Xử lý khiếu nại người dùng, duyệt báo cáo sự cố giáo viên, lịch dạy bù và rà soát hoàn phí (TIN-05D / TIN-05E).
+          </Text>
+        </div>
+
+        <Tabs
+          activeKey={mainSection}
+          onChange={setMainSection}
+          items={[
+            { key: "REPORTS", label: "Khiếu nại người dùng" },
+            { key: "SMART_CLASSROOM", label: "Sự cố GV, Dạy bù & Kỷ luật (TIN-05D/E)" },
+          ]}
+        />
       </div>
 
+      {mainSection === "SMART_CLASSROOM" ? (
+        <div className="space-y-6">
+          <Alert
+            type="warning"
+            showIcon
+            icon={<SafetyCertificateOutlined />}
+            message="Cơ chế Bảo vệ Kỷ luật & Tài chính An toàn (Safe Review Workflow)"
+            description="Mọi hồ sơ đạt ngưỡng kỷ luật (3 Vàng / 1 Đỏ / 3 NO_SHOW) hoặc hủy buổi học được tập hợp tại đây để Admin xét duyệt. Hệ thống không tự ý trừ tiền lương hay tự động khóa hợp đồng khi chưa có quyết định của Admin & Payment Team."
+            className="rounded-2xl"
+          />
+
+          {/* 1. Incident Reports */}
+          <Card
+            title={
+              <span className="font-bold flex items-center gap-2">
+                <AlertOutlined className="text-amber-600" />
+                Báo cáo sự cố từ Giáo viên ({smartOverview?.incidents?.items?.length || 0})
+              </span>
+            }
+            className="rounded-2xl border-slate-200 shadow-sm"
+          >
+            <Table
+              loading={isLoadingSmart}
+              dataSource={smartOverview?.incidents?.items || []}
+              rowKey="_id"
+              pagination={{ pageSize: 5 }}
+              columns={[
+                {
+                  title: "Giáo viên",
+                  key: "teacher",
+                  render: (_, r: any) => (
+                    <div>
+                      <div className="font-semibold text-xs">{r.teacherId?.teacherProfile?.fullName || "Giáo viên"}</div>
+                      <div className="text-[11px] text-slate-400">{r.teacherId?.email}</div>
+                    </div>
+                  ),
+                },
+                {
+                  title: "Buổi học / Sự cố",
+                  key: "session",
+                  render: (_, r: any) => (
+                    <div>
+                      <div className="font-semibold text-xs text-indigo-600">{r.sessionId?.title || "Buổi học"}</div>
+                      <Tag color="orange" className="text-[10px] mt-1">{r.incidentType}</Tag>
+                      <Tag color="blue" className="text-[10px] mt-1">{r.requestedAction}</Tag>
+                    </div>
+                  ),
+                },
+                {
+                  title: "Mô tả & Minh chứng",
+                  key: "desc",
+                  render: (_, r: any) => (
+                    <div className="text-xs">
+                      <div>{r.description}</div>
+                      {Array.isArray(r.evidenceFiles) && r.evidenceFiles.length > 0 && (
+                        <div className="mt-1 space-x-2">
+                          {r.evidenceFiles.map((f: any, idx: number) =>
+                            f.url ? (
+                              <a key={idx} href={f.url} target="_blank" rel="noreferrer" className="text-indigo-600 underline">
+                                Minh chứng #{idx + 1}
+                              </a>
+                            ) : null
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ),
+                },
+                {
+                  title: "Trạng thái",
+                  dataIndex: "reviewStatus",
+                  key: "reviewStatus",
+                  render: (st: string) => (
+                    <Tag color={st === "APPROVED" ? "success" : st === "REJECTED" ? "error" : "gold"}>{st}</Tag>
+                  ),
+                },
+                {
+                  title: "Xét duyệt",
+                  key: "action",
+                  render: (_, r: any) =>
+                    r.reviewStatus === "PENDING" ? (
+                      <Space size="small">
+                        <Button
+                          size="small"
+                          type="primary"
+                          className="bg-emerald-600"
+                          loading={reviewIncidentMutation.isPending}
+                          onClick={() =>
+                            reviewIncidentMutation.mutate({
+                              id: r._id,
+                              decision: "APPROVED",
+                              note: "Admin chấp thuận báo cáo sự cố và miễn trừ vi phạm",
+                            })
+                          }
+                        >
+                          Chấp thuận
+                        </Button>
+                        <Button
+                          size="small"
+                          danger
+                          loading={reviewIncidentMutation.isPending}
+                          onClick={() =>
+                            reviewIncidentMutation.mutate({
+                              id: r._id,
+                              decision: "REJECTED",
+                              note: "Minh chứng sự cố không hợp lệ",
+                            })
+                          }
+                        >
+                          Từ chối
+                        </Button>
+                      </Space>
+                    ) : (
+                      <span className="text-xs text-slate-400">Đã duyệt</span>
+                    ),
+                },
+              ]}
+            />
+          </Card>
+
+          {/* 2. Reschedule Requests */}
+          <Card
+            title={
+              <span className="font-bold flex items-center gap-2">
+                <CalendarOutlined className="text-indigo-600" />
+                Yêu cầu xếp lịch dạy bù ({smartOverview?.rescheduleRequests?.length || 0})
+              </span>
+            }
+            className="rounded-2xl border-slate-200 shadow-sm"
+          >
+            <Table
+              loading={isLoadingSmart}
+              dataSource={smartOverview?.rescheduleRequests || []}
+              rowKey="_id"
+              pagination={{ pageSize: 5 }}
+              columns={[
+                {
+                  title: "Buổi học gốc",
+                  key: "orig",
+                  render: (_, r: any) => (
+                    <div className="text-xs font-semibold">{r.originalSessionId?.title || "Buổi học gốc"}</div>
+                  ),
+                },
+                {
+                  title: "Lịch dạy bù đề xuất",
+                  key: "proposed",
+                  render: (_, r: any) => (
+                    <div className="text-xs">
+                      <div>{new Date(r.proposedStartDatetime).toLocaleString("vi-VN")}</div>
+                      <div className="text-slate-400">Lý do: {r.reason}</div>
+                    </div>
+                  ),
+                },
+                {
+                  title: "Trạng thái",
+                  dataIndex: "status",
+                  key: "status",
+                  render: (st: string) => (
+                    <Tag color={st === "APPROVED" ? "success" : st === "REJECTED" ? "error" : "gold"}>{st}</Tag>
+                  ),
+                },
+                {
+                  title: "Thao tác",
+                  key: "act",
+                  render: (_, r: any) =>
+                    r.status === "PENDING_ADMIN_APPROVAL" ? (
+                      <Space size="small">
+                        <Button
+                          size="small"
+                          type="primary"
+                          className="bg-indigo-600"
+                          loading={reviewRescheduleMutation.isPending}
+                          onClick={() =>
+                            reviewRescheduleMutation.mutate({
+                              id: r._id,
+                              decision: "APPROVED",
+                              note: "Admin phê duyệt tạo buổi học bù",
+                            })
+                          }
+                        >
+                          Duyệt tạo buổi bù
+                        </Button>
+                        <Button
+                          size="small"
+                          danger
+                          loading={reviewRescheduleMutation.isPending}
+                          onClick={() =>
+                            reviewRescheduleMutation.mutate({
+                              id: r._id,
+                              decision: "REJECTED",
+                              note: "Từ chối lịch dạy bù",
+                            })
+                          }
+                        >
+                          Từ chối
+                        </Button>
+                      </Space>
+                    ) : (
+                      <span className="text-xs text-slate-400">Đã xử lý</span>
+                    ),
+                },
+              ]}
+            />
+          </Card>
+
+          {/* 3. Refund & Financial Review Cases */}
+          <Card
+            title={
+              <span className="font-bold flex items-center gap-2">
+                <DollarOutlined className="text-emerald-600" />
+                Hồ sơ phối hợp Rà soát Hoàn phí & Thù lao (Châu Payment Coordination) ({smartOverview?.refundReviews?.length || 0})
+              </span>
+            }
+            className="rounded-2xl border-slate-200 shadow-sm"
+          >
+            <Table
+              loading={isLoadingSmart}
+              dataSource={smartOverview?.refundReviews || []}
+              rowKey="_id"
+              pagination={{ pageSize: 5 }}
+              columns={[
+                {
+                  title: "Buổi học / Lý do",
+                  key: "reason",
+                  render: (_, r: any) => (
+                    <div className="text-xs">
+                      <div className="font-semibold">{r.sessionId?.title || "Buổi học"}</div>
+                      <Tag color="volcano" className="mt-1 text-[10px]">{r.triggerReason}</Tag>
+                    </div>
+                  ),
+                },
+                {
+                  title: "Học viên",
+                  key: "stu",
+                  render: (_, r: any) => (
+                    <div className="text-xs">{r.studentId?.studentProfile?.fullName || r.studentId?.email || "Học viên"}</div>
+                  ),
+                },
+                {
+                  title: "Trạng thái rà soát",
+                  dataIndex: "status",
+                  key: "status",
+                  render: (st: string) => <Tag color="gold">{st}</Tag>,
+                },
+                {
+                  title: "Xử lý phối hợp",
+                  key: "act",
+                  render: (_, r: any) =>
+                    r.status === "NEEDS_FINANCIAL_REVIEW" ? (
+                      <Space size="small">
+                        <Button
+                          size="small"
+                          type="primary"
+                          onClick={() =>
+                            reviewRefundMutation.mutate({
+                              id: r._id,
+                              status: "APPROVED_FOR_PAYMENT_TEAM",
+                              note: "Chuyển Payment Team xử lý hoàn phí / đối soát",
+                            })
+                          }
+                        >
+                          Chuyển Payment Team
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            reviewRefundMutation.mutate({
+                              id: r._id,
+                              status: "RESCHEDULED_WAIVED",
+                              note: "Đã bố trí học bù thành công",
+                            })
+                          }
+                        >
+                          Đã học bù
+                        </Button>
+                      </Space>
+                    ) : (
+                      <span className="text-xs text-slate-400">Đã xử lý</span>
+                    ),
+                },
+              ]}
+            />
+          </Card>
+        </div>
+      ) : (
       <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
         {/* Filters */}
         <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -374,6 +720,7 @@ export const AdminReportsPage: React.FC = () => {
           className="admin-reports-table"
         />
       </Card>
+      )}
 
       {/* Detail Modal */}
       {viewingReport && (

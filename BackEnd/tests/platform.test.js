@@ -786,9 +786,14 @@ describe("Scholarship campaign, contribution, application and usage", () => {
     expect(earning.commissionAmount.toString()).toBe("20000");
     expect(earning.netAmount.toString()).toBe("180000");
 
-    // the payment intent created before the scholarship is dead
+    // the payment intent created before the scholarship is dead: late SUCCESS is flagged for manual review
     const late = await request(app).post("/api/payments/webhook").send({ gatewayReference: staleIntent.body.data.gatewayReference, status: "SUCCESS" });
-    expect(late.body.data.result).toBe("IDEMPOTENT");
+    expect(late.body.data.result).toBe("LATE_SUCCESS_FLAGGED_FOR_REVIEW");
+    expect(late.body.data.paymentStatus).toBe("FAILED");
+    expect(late.body.data.enrollmentStatus).toBe("CONFIRMED");
+    expect((await Payment.findById(staleIntent.body.data.paymentId)).paymentStatus).toBe("FAILED");
+    expect(await Transaction.countDocuments({ relatedPaymentId: staleIntent.body.data.paymentId })).toBe(0);
+    expect(await Transaction.countDocuments({ transactionType: "SCHOLARSHIP_USAGE", status: "COMPLETED" })).toBe(1);
     expect(await TeacherEarning.countDocuments()).toBe(1);
 
     const twice = await request(app).post(`/api/enrollments/${enrollment.body.data.id}/scholarship-payment`).set(as(student)).send({});

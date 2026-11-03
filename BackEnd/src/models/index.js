@@ -25,4 +25,10 @@ module.exports = {
   Message: require("./Message"),
   Report: require("./Report"),
   AuditLog: require("./AuditLog"),
+  SessionPresenceInterval: require("./SessionPresenceInterval"),
+  TeacherViolation: require("./TeacherViolation"),
+  TeacherDisciplineCase: require("./TeacherDisciplineCase"),
+  TeacherIncidentReport: require("./TeacherIncidentReport"),
+  SessionRescheduleRequest: require("./SessionRescheduleRequest"),
+  SessionRefundReview: require("./SessionRefundReview"),
 };

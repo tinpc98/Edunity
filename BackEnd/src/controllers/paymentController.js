@@ -2,10 +2,33 @@ const crypto = require("crypto");
 const paymentService = require("../services/paymentService");
 const { serializeDecimal128 } = require("../utils/serialize");
 const contributionService = require("../services/contributionService");
-const { AppError } = require("../utils/errors");
+const { AppError, PAYMENT_NOT_FOUND } = require("../utils/errors");
+
+const ALLOWED_SANDBOX_ENVS = ["development", "test"];
+
+const isSandboxEnabled = () => {
+  if (!ALLOWED_SANDBOX_ENVS.includes(process.env.NODE_ENV)) {
+    return false;
+  }
+  return process.env.ENABLE_PAYMENT_SANDBOX !== "false";
+};
+
+const routeWebhook = async (gatewayReference, status) => {
+  if (gatewayReference.startsWith("SBX-C-") || gatewayReference.startsWith("CONTRIB-")) {
+    const result = await contributionService.processWebhook(gatewayReference, status);
+    if (!result) {
+      throw PAYMENT_NOT_FOUND("Sponsor contribution not found");
+    }
+    return result;
+  }
+  return paymentService.processWebhook(gatewayReference, status);
+};
 
 const createSandboxPayment = async (req, res, next) => {
   try {
+    if (!isSandboxEnabled()) {
+      throw new AppError("Sandbox payment is disabled in this environment", "FORBIDDEN", 403);
+    }
     if (req.user.role !== "STUDENT") {
       throw require("../utils/errors").FORBIDDEN("Only STUDENT can perform this action");
     }
@@ -43,12 +66,16 @@ const safeEqual = (a, b) => {
  */
 const processWebhook = async (req, res, next) => {
   try {
+    if (!isSandboxEnabled()) {
+      throw new AppError("Sandbox payment is disabled in this environment", "FORBIDDEN", 403);
+    }
+
     const { gatewayReference, status } = req.body || {};
     if (typeof gatewayReference !== "string" || !WEBHOOK_STATUSES.includes(status)) {
       throw new AppError("gatewayReference and status (SUCCESS | FAILED) are required", "VALIDATION_ERROR", 400);
     }
 
-    const result = await paymentService.processWebhook(gatewayReference, status);
+    const result = await routeWebhook(gatewayReference, status);
 
     res.status(200).json({
       success: true,
@@ -68,8 +95,13 @@ const processWebhook = async (req, res, next) => {
 const processGatewayWebhook = async (req, res, next) => {
   try {
     const secret = process.env.PAYMENT_WEBHOOK_SECRET;
+    const headerSecret = req.headers["x-webhook-secret"];
     const secretOptional = ["development", "test"].includes(process.env.NODE_ENV);
-    if (secret ? !safeEqual(req.headers["x-webhook-secret"], secret) : !secretOptional) {
+    if (!secret) {
+      if (!secretOptional || headerSecret !== undefined) {
+        throw new AppError("Webhook secret is not configured", "UNAUTHORIZED", 401);
+      }
+    } else if (typeof headerSecret !== "string" || !headerSecret || !safeEqual(headerSecret, secret)) {
       throw new AppError("Invalid webhook signature", "UNAUTHORIZED", 401);
     }
 
@@ -78,9 +110,7 @@ const processGatewayWebhook = async (req, res, next) => {
       throw new AppError("gatewayReference and status (SUCCESS | FAILED) are required", "VALIDATION_ERROR", 400);
     }
 
-    const result =
-      (await contributionService.processWebhook(gatewayReference, status)) ||
-      (await paymentService.processWebhook(gatewayReference, status));
+    const result = await routeWebhook(gatewayReference, status);
 
     res.status(200).json({
       success: true,

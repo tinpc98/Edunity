@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Modal, Table, Tag, Avatar, Typography, Space, Button, Alert, Spin } from "antd";
+import { Modal, Table, Tag, Avatar, Typography, Space, Button, Alert, Spin, Progress } from "antd";
 import {
   UserOutlined,
   ReloadOutlined,
@@ -7,6 +7,7 @@ import {
   ClockCircleOutlined,
   CloseCircleOutlined,
   TeamOutlined,
+  ExclamationCircleOutlined,
 } from "@ant-design/icons";
 import { sessionService, sessionKeys } from "../../../services/session.service";
 import type { SessionAttendanceItem } from "../../../types/session";
@@ -69,11 +70,11 @@ export default function TeacherAttendanceModal({
       ),
     },
     {
-      title: "Trạng thái",
+      title: "Trạng thái (Ngưỡng 70%)",
       dataIndex: "attendanceStatus",
       key: "attendanceStatus",
-      width: 140,
-      render: (status: string) => {
+      width: 165,
+      render: (status: string, record: SessionAttendanceItem) => {
         switch (status) {
           case "PRESENT":
             return (
@@ -84,7 +85,7 @@ export default function TeacherAttendanceModal({
           case "LATE":
             return (
               <Tag color="warning" icon={<ClockCircleOutlined />} className="rounded-md font-medium px-2 py-0.5">
-                Vào muộn
+                Vào muộn {record.lateArrivalSeconds ? `(${Math.ceil(record.lateArrivalSeconds / 60)}p)` : ""}
               </Tag>
             );
           case "ABSENT":
@@ -93,16 +94,53 @@ export default function TeacherAttendanceModal({
                 Vắng mặt
               </Tag>
             );
+          case "EXCUSED":
+            return (
+              <Tag color="processing" icon={<ExclamationCircleOutlined />} className="rounded-md font-medium px-2 py-0.5">
+                Được miễn (Học bù)
+              </Tag>
+            );
+          case "NOT_EVALUATED":
+            return (
+              <Tag color="default" className="rounded-md font-medium px-2 py-0.5">
+                Không tính vắng
+              </Tag>
+            );
           default:
             return <Tag className="rounded-md">{status}</Tag>;
         }
       },
     },
     {
+      title: "Thời lượng thực học",
+      key: "duration",
+      width: 170,
+      render: (_: any, record: SessionAttendanceItem) => {
+        const pct = Math.round(record.attendancePercentage ?? 0);
+        const mins = Math.floor((record.scheduledOnlineSeconds ?? 0) / 60);
+        return (
+          <div>
+            <div className="flex items-center justify-between text-xs mb-0.5">
+              <span className="font-semibold text-gray-700">{mins} phút</span>
+              <span className={pct >= 70 ? "text-emerald-600 font-bold" : "text-amber-600 font-semibold"}>
+                {pct}%
+              </span>
+            </div>
+            <Progress
+              percent={pct}
+              size="small"
+              showInfo={false}
+              status={pct >= 70 ? "success" : "normal"}
+            />
+          </div>
+        );
+      },
+    },
+    {
       title: "Thời gian vào",
       dataIndex: "joinedAt",
       key: "joinedAt",
-      width: 130,
+      width: 115,
       render: (joinedAt?: string) => (
         <Text className="text-gray-600 text-xs">
           {joinedAt ? new Date(joinedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—"}
@@ -113,10 +151,16 @@ export default function TeacherAttendanceModal({
       title: "Thời gian rời",
       dataIndex: "leftAt",
       key: "leftAt",
-      width: 130,
-      render: (leftAt?: string) => (
+      width: 115,
+      render: (leftAt?: string, record?: SessionAttendanceItem) => (
         <Text className="text-gray-600 text-xs">
-          {leftAt ? new Date(leftAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : isSessionActive ? "Đang trong lớp" : "—"}
+          {record?.isCurrentlyConnected
+            ? "Đang kết nối"
+            : leftAt
+            ? new Date(leftAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+            : isSessionActive
+            ? "Đang trong lớp"
+            : "—"}
         </Text>
       ),
     },
@@ -139,12 +183,12 @@ export default function TeacherAttendanceModal({
             </div>
             <div>
               <Title level={5} className="!m-0 text-gray-900">
-                Danh sách điểm danh buổi học
+                Danh sách điểm danh buổi học (Chuẩn 70% thời lượng)
               </Title>
               <Text className="text-gray-400 text-xs">
                 {isSessionActive
-                  ? "Dữ liệu tự động cập nhật từ server khi học viên vào lớp"
-                  : "Dữ liệu điểm danh chính thức từ hệ thống"}
+                  ? "Tự động ghi nhận thời gian hiện diện thực tế từ phòng học LiveKit"
+                  : "Dữ liệu điểm danh chính thức đã chốt từ hệ thống"}
               </Text>
             </div>
           </Space>
@@ -158,7 +202,7 @@ export default function TeacherAttendanceModal({
           </Button>
         </div>
       }
-      width={700}
+      width={780}
       centered
       className="rounded-2xl overflow-hidden"
     >
@@ -170,15 +214,15 @@ export default function TeacherAttendanceModal({
             <Text className="text-base font-bold text-gray-800">{totalCount}</Text>
           </div>
           <div>
-            <Text className="text-emerald-600 text-[11px] block uppercase font-bold">Có mặt</Text>
+            <Text className="text-emerald-600 text-[11px] block uppercase font-bold">Có mặt (≥70%)</Text>
             <Text className="text-base font-bold text-emerald-600">{presentCount}</Text>
           </div>
           <div>
-            <Text className="text-amber-600 text-[11px] block uppercase font-bold">Vào muộn</Text>
+            <Text className="text-amber-600 text-[11px] block uppercase font-bold">Vào muộn (&gt;5p)</Text>
             <Text className="text-base font-bold text-amber-600">{lateCount}</Text>
           </div>
           <div>
-            <Text className="text-rose-600 text-[11px] block uppercase font-bold">Vắng mặt</Text>
+            <Text className="text-rose-600 text-[11px] block uppercase font-bold">Vắng (&lt;70%)</Text>
             <Text className="text-base font-bold text-rose-600">{absentCount}</Text>
           </div>
         </div>

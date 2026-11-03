@@ -6,9 +6,13 @@ const { validationError, parseDate, isBlank } = require("../utils/http");
 const { getDisplayProfile } = require("../utils/userProfile");
 const videoProvider = require("./videoProvider");
 const { getOwnClass, isSessionWithinClass } = require("./teacherClassService");
+const presenceService = require("./sessionPresenceService");
 
-const JOIN_WINDOW_BEFORE_MS = 15 * 60 * 1000; // same join window as GET /me/sessions (canJoin)
-const LATE_AFTER_MS = 15 * 60 * 1000;
+const JOIN_WINDOW_BEFORE_MS = 10 * 60 * 1000; // 10 minutes pre-open waiting room window (TIN-05D)
+const LATE_AFTER_SECONDS = 5 * 60; // 5 minutes (300s) student late threshold (TIN-05D)
+const STUDENT_LATE_JITTER_SECONDS = 3; // 3s tolerance for HTTP/test boundary setup jitter
+const STUDENT_FIRST_JOIN_DEADLINE_SECONDS = 20 * 60; // 20 minutes (1200s) first-join deadline (TIN-05D)
+const STUDENT_FIRST_JOIN_JITTER_SECONDS = 2; // 2s tolerance for HTTP/test boundary jitter
 const CLOSED_CLASS_STATUSES = ["COMPLETED", "CANCELLED"];
 
 const sessionNotFound = () => new AppError("Session not found", "SESSION_NOT_FOUND", 404);
@@ -142,148 +146,234 @@ const joinSession = async (user, sessionId) => {
 
   if (!session.meetingRoomId) session.meetingRoomId = `room_${session._id}`;
 
-  // TIN-05B-FIX (BUG-TIN05B-02): Atomic conditional transition for Teacher Start
-  // Only ONE concurrent request can transition SCHEDULED -> IN_PROGRESS and start recording
-  if (role === "HOST" && session.status === "SCHEDULED") {
-    const storageKey = `private/${user.id}/RECORDING/${crypto.randomUUID()}.mp4`;
-    const transitioned = await Session.findOneAndUpdate(
-      { _id: session._id, status: "SCHEDULED" },
-      {
-        $set: {
-          status: "IN_PROGRESS",
-          meetingRoomId: session.meetingRoomId,
+  const startMs = session.startDatetime.getTime();
+  const endMs = session.endDatetime.getTime();
+  const nowMs = now.getTime();
+  const isWaitingRoomWindow = nowMs < startMs;
+
+  if (role === "HOST") {
+    if (isWaitingRoomWindow) {
+      // Pre-open Waiting Room (10m before startDatetime): open waiting room without starting recording yet
+      await Session.updateOne(
+        { _id: session._id, status: "SCHEDULED" },
+        {
+          $set: {
+            meetingRoomId: session.meetingRoomId,
+            roomState: "WAITING",
+            lifecycleState: "WAITING",
+            preOpenedAt: session.preOpenedAt || now,
+            "teacherPresence.firstPreOpenJoinAt": session.teacherPresence?.firstPreOpenJoinAt || now,
+            "teacherPresence.lastConnectedAt": now,
+            "teacherPresence.isCurrentlyConnected": true,
+          },
+        }
+      );
+      session.roomState = "WAITING";
+      session.lifecycleState = "WAITING";
+    } else if (session.status === "SCHEDULED" || session.status === "WAITING") {
+      // TIN-05B-FIX (BUG-TIN05B-02): Atomic conditional transition for Teacher Start
+      // Only ONE concurrent request can transition SCHEDULED/WAITING -> IN_PROGRESS and start recording
+      const storageKey = `private/${user.id}/RECORDING/${crypto.randomUUID()}.mp4`;
+      const expectedPriorStatus = session.status === "WAITING" ? "WAITING" : "SCHEDULED";
+      const transitioned = await Session.findOneAndUpdate(
+        { _id: session._id, status: expectedPriorStatus },
+        {
+          $set: {
+            status: "IN_PROGRESS",
+            roomState: "LIVE",
+            lifecycleState: "IN_PROGRESS",
+            actualStartAt: session.actualStartAt || now,
+            meetingRoomId: session.meetingRoomId,
+            "teacherPresence.firstTeachingJoinAt": session.teacherPresence?.firstTeachingJoinAt || now,
+            "teacherPresence.lastConnectedAt": now,
+            "teacherPresence.isCurrentlyConnected": true,
+            "teacherPresence.currentAbsenceStartedAt": null,
+          },
         },
-      },
-      { returnDocument: 'after' }
-    );
+        { returnDocument: "after" }
+      );
 
-    if (transitioned) {
-      // This request won the atomic transition to start LiveKit recording
-      const egressId = await videoProvider.startRecording(session.meetingRoomId, storageKey);
-      const recordingData = {
-        providerRecordingId: egressId || null,
-        storageKey: storageKey,
-        status: egressId ? "PROCESSING" : "FAILED",
-        failureReason: egressId ? null : "Failed to start LiveKit egress",
-      };
+      if (transitioned) {
+        // This request won the atomic transition to start LiveKit recording
+        const egressId = await videoProvider.startRecording(session.meetingRoomId, storageKey);
+        const recordingData = {
+          providerRecordingId: egressId || null,
+          storageKey: storageKey,
+          status: egressId ? "PROCESSING" : "FAILED",
+          failureReason: egressId ? null : "Failed to start LiveKit egress",
+        };
 
-      // TIN-05C-P2: Bounded retry to save recording metadata with safe compensation
-      let metadataSaved = false;
-      let lastSaveError = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const updateRes = await Session.updateOne(
-            { _id: session._id },
-            { $set: { recording: recordingData } }
-          );
-          if (updateRes.matchedCount === 0) {
-            throw new AppError("Session no longer exists", "SESSION_NOT_FOUND", 404);
-          }
-          metadataSaved = true;
-          break;
-        } catch (saveErr) {
-          lastSaveError = saveErr;
-          if (saveErr instanceof AppError || saveErr.statusCode || attempt === 2) {
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
-        }
-      }
-
-      if (!metadataSaved) {
-        // Safe compensation: ONLY if this request created an Egress (egressId != null)
-        if (egressId) {
-          let canVerify = false;
-          let isPersisted = false;
-
+        // TIN-05C-P2: Bounded retry to save recording metadata with safe compensation
+        let metadataSaved = false;
+        let lastSaveError = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            // Read back Session.recording to verify actual persistence outcome
-            const checkDoc = await Session.findById(session._id).select("recording").lean();
-            canVerify = true;
-            if (checkDoc && checkDoc.recording && checkDoc.recording.providerRecordingId === egressId) {
-              isPersisted = true;
-            }
-          } catch (readErr) {
-            // MongoDB unreachable or query failed -> UNKNOWN WRITE OUTCOME
-            canVerify = false;
-          }
-
-          if (canVerify && !isPersisted) {
-            // CONFIRMED NOT PERSISTED: safe to stop only the specific Egress owned by this request
-            try {
-              const compRes = await videoProvider.stopRecording(egressId);
-              if (compRes?.reason === "ALREADY_TERMINAL_VERIFIED") {
-                console.info(`[Session Compensation] Egress ${egressId} is already terminal.`);
-              } else if (compRes?.reason === "STOP_REQUEST_ACCEPTED") {
-                console.info(`[Session Compensation] Stop request accepted for egress ${egressId}.`);
-              } else if (compRes?.reason === "OUTCOME_UNKNOWN") {
-                console.warn(`[Session Compensation] OUTCOME_UNKNOWN for egress ${egressId}. Needs reconciliation.`, {
-                  code: compRes.code,
-                });
-              } else if (compRes?.reason === "RPC_FAILED") {
-                console.warn(`[Session Compensation] stopRecording RPC failed for egress ${egressId}:`, {
-                  code: compRes.code,
-                  statusCode: compRes.statusCode,
-                });
-              } else if (compRes?.reason === "PROVIDER_NOT_CONFIGURED") {
-                console.warn(`[Session Compensation] Provider not configured; egress ${egressId} cleanup unverified.`);
-              } else if (compRes?.reason === "INVALID_EGRESS_ID") {
-                console.warn(`[Session Compensation] Invalid egress ID provided: ${egressId}`);
-              }
-            } catch (compErr) {
-              console.warn(`[Session Compensation] Unexpected error stopping egress ${egressId}:`, compErr.message);
-            }
-          } else if (!canVerify) {
-            // UNKNOWN WRITE OUTCOME: DB query failed, cannot verify persistence -> do NOT blind-stop
-            console.warn(
-              `[Session Compensation] UNKNOWN_WRITE_OUTCOME for egress ${egressId}: Failed to verify DB persistence status. Blind-stop prevented.`,
-              {
-                sessionId: session._id?.toString(),
-                egressId,
-                saveError: lastSaveError?.message,
-              }
+            const updateRes = await Session.updateOne(
+              { _id: session._id },
+              { $set: { recording: recordingData } }
             );
-          } else if (canVerify && isPersisted) {
-            // Metadata was actually persisted despite updateOne reporting error -> do NOT stopRecording!
-            console.info(`[Session Compensation] Metadata confirmed persisted for egress ${egressId}; stopRecording skipped.`);
+            if (updateRes.matchedCount === 0) {
+              throw new AppError("Session no longer exists", "SESSION_NOT_FOUND", 404);
+            }
+            metadataSaved = true;
+            break;
+          } catch (saveErr) {
+            lastSaveError = saveErr;
+            if (saveErr instanceof AppError || saveErr.statusCode || attempt === 2) {
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
           }
         }
 
-        // Never hide or swallow the original save error
-        throw lastSaveError;
-      }
+        if (!metadataSaved) {
+          // Safe compensation: ONLY if this request created an Egress (egressId != null)
+          if (egressId) {
+            let canVerify = false;
+            let isPersisted = false;
 
-      // TIN-05B-FINAL (Start vs End race): If session was COMPLETED in the meantime, do not issue host token
-      const currentInDb = await Session.findById(session._id).select("status").lean();
-      if (currentInDb && (currentInDb.status === "COMPLETED" || currentInDb.status === "CANCELLED")) {
-        session.status = currentInDb.status;
+            try {
+              // Read back Session.recording to verify actual persistence outcome
+              const checkDoc = await Session.findById(session._id).select("recording").lean();
+              canVerify = true;
+              if (checkDoc && checkDoc.recording && checkDoc.recording.providerRecordingId === egressId) {
+                isPersisted = true;
+              }
+            } catch (readErr) {
+              // MongoDB unreachable or query failed -> UNKNOWN WRITE OUTCOME
+              canVerify = false;
+            }
+
+            if (canVerify && !isPersisted) {
+              // CONFIRMED NOT PERSISTED: safe to stop only the specific Egress owned by this request
+              try {
+                const compRes = await videoProvider.stopRecording(egressId);
+                if (compRes?.reason === "ALREADY_TERMINAL_VERIFIED") {
+                  console.info(`[Session Compensation] Egress ${egressId} is already terminal.`);
+                } else if (compRes?.reason === "STOP_REQUEST_ACCEPTED") {
+                  console.info(`[Session Compensation] Stop request accepted for egress ${egressId}.`);
+                } else if (compRes?.reason === "OUTCOME_UNKNOWN") {
+                  console.warn(`[Session Compensation] OUTCOME_UNKNOWN for egress ${egressId}. Needs reconciliation.`, {
+                    code: compRes.code,
+                  });
+                } else if (compRes?.reason === "RPC_FAILED") {
+                  console.warn(`[Session Compensation] stopRecording RPC failed for egress ${egressId}:`, {
+                    code: compRes.code,
+                    statusCode: compRes.statusCode,
+                  });
+                } else if (compRes?.reason === "PROVIDER_NOT_CONFIGURED") {
+                  console.warn(`[Session Compensation] Provider not configured; egress ${egressId} cleanup unverified.`);
+                } else if (compRes?.reason === "INVALID_EGRESS_ID") {
+                  console.warn(`[Session Compensation] Invalid egress ID provided: ${egressId}`);
+                }
+              } catch (compErr) {
+                console.warn(`[Session Compensation] Unexpected error stopping egress ${egressId}:`, compErr.message);
+              }
+            } else if (!canVerify) {
+              // UNKNOWN WRITE OUTCOME: DB query failed, cannot verify persistence -> do NOT blind-stop
+              console.warn(
+                `[Session Compensation] UNKNOWN_WRITE_OUTCOME for egress ${egressId}: Failed to verify DB persistence status. Blind-stop prevented.`,
+                {
+                  sessionId: session._id?.toString(),
+                  egressId,
+                  saveError: lastSaveError?.message,
+                }
+              );
+            } else if (canVerify && isPersisted) {
+              // Metadata was actually persisted despite updateOne reporting error -> do NOT stopRecording!
+              console.info(`[Session Compensation] Metadata confirmed persisted for egress ${egressId}; stopRecording skipped.`);
+            }
+          }
+
+          // Never hide or swallow the original save error
+          throw lastSaveError;
+        }
+
+        // TIN-05B-FINAL (Start vs End race): If session was COMPLETED in the meantime, do not issue host token
+        const currentInDb = await Session.findById(session._id).select("status").lean();
+        if (currentInDb && (currentInDb.status === "COMPLETED" || currentInDb.status === "CANCELLED")) {
+          session.status = currentInDb.status;
+          session.recording = recordingData;
+          if (currentInDb.status === "COMPLETED") throw new AppError("Session has ended", "SESSION_ENDED", 409);
+          if (currentInDb.status === "CANCELLED") throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
+        }
+
+        session.status = "IN_PROGRESS";
+        session.roomState = "LIVE";
+        session.lifecycleState = "IN_PROGRESS";
         session.recording = recordingData;
-        if (currentInDb.status === "COMPLETED") throw new AppError("Session has ended", "SESSION_ENDED", 409);
-        if (currentInDb.status === "CANCELLED") throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
+      } else {
+        // Another concurrent Teacher Join request already transitioned the session
+        const refreshed = await Session.findById(session._id).lean();
+        if (!refreshed || refreshed.status === "COMPLETED") {
+          throw new AppError("Session has ended", "SESSION_ENDED", 409);
+        }
+        if (refreshed.status === "CANCELLED") {
+          throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
+        }
+        session.status = refreshed.status;
+        session.recording = refreshed.recording;
       }
-
+    } else if (session.status === "INTERRUPTED") {
+      // Teacher reconnecting to an INTERRUPTED session before endDatetime
+      await Session.updateOne(
+        { _id: session._id, status: "INTERRUPTED" },
+        {
+          $set: {
+            status: "IN_PROGRESS",
+            roomState: "LIVE",
+            lifecycleState: "IN_PROGRESS",
+            "teacherPresence.lastConnectedAt": now,
+            "teacherPresence.isCurrentlyConnected": true,
+            "teacherPresence.currentAbsenceStartedAt": null,
+          },
+        }
+      );
       session.status = "IN_PROGRESS";
-      session.recording = recordingData;
-    } else {
-      // Another concurrent Teacher Join request already transitioned the session
-      const refreshed = await Session.findById(session._id).lean();
-      if (!refreshed || refreshed.status === "COMPLETED") {
-        throw new AppError("Session has ended", "SESSION_ENDED", 409);
-      }
-      if (refreshed.status === "CANCELLED") {
-        throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
-      }
-      session.status = refreshed.status;
-      session.recording = refreshed.recording;
+      session.roomState = "LIVE";
+      session.lifecycleState = "IN_PROGRESS";
+      await presenceService.startTeachingRecordingSegmentIfNeeded(session, user.id);
+    } else if (session.isModified()) {
+      await session.save();
     }
   } else if (session.isModified()) {
     await session.save();
   }
 
-  // TIN-05B-FINAL (BUG-TIN05B-01): Atomic write-guard consistency guard for Student Join
-  // Coordinates write locks on Session document to guarantee no TOCTOU stale read against Teacher End
+  // TIN-05B-FINAL (BUG-TIN05B-01) + TIN-05D Student Join Rules:
+  // 1) Enforce 20-minute first-join deadline based on trusted DB state (never client-supplied flags)
+  // 2) Enforce 5-minute late threshold (lateArrivalSeconds > 300s -> LATE, <= 300s -> PRESENT)
+  // 3) Coordinate write locks on Session document inside transaction against Teacher End
+  let hasVerifiedPriorJoin = false;
   if (role === "PARTICIPANT") {
-    const late = now.getTime() > session.startDatetime.getTime() + LATE_AFTER_MS;
+    const existingAttendance = await SessionAttendance.findOne({
+      sessionId: session._id,
+      studentId: user.id,
+    }).lean();
+
+    const elapsedSeconds = Math.floor((nowMs - startMs) / 1000);
+    const isPastFirstJoinDeadline =
+      elapsedSeconds > STUDENT_FIRST_JOIN_DEADLINE_SECONDS + STUDENT_FIRST_JOIN_JITTER_SECONDS;
+
+    hasVerifiedPriorJoin =
+      Boolean(existingAttendance?.hasVerifiedConnection) &&
+      Boolean(existingAttendance?.firstVerifiedJoinAt) &&
+      Math.floor((new Date(existingAttendance.firstVerifiedJoinAt).getTime() - startMs) / 1000) <=
+        STUDENT_FIRST_JOIN_DEADLINE_SECONDS + STUDENT_FIRST_JOIN_JITTER_SECONDS;
+
+    if (isPastFirstJoinDeadline && !hasVerifiedPriorJoin) {
+      throw new AppError(
+        "First-join deadline (20 minutes after session start) has passed",
+        "JOIN_WINDOW_CLOSED",
+        403
+      );
+    }
+
+    const lateArrivalSeconds = isWaitingRoomWindow
+      ? 0
+      : Math.max(0, Math.floor((nowMs - startMs) / 1000));
+    const late = !isWaitingRoomWindow && lateArrivalSeconds > LATE_AFTER_SECONDS + STUDENT_LATE_JITTER_SECONDS;
+
     const dbSession = await mongoose.startSession();
     try {
       await dbSession.withTransaction(async () => {
@@ -298,12 +388,12 @@ const joinSession = async (user, sessionId) => {
         const guardedSession = await Session.findOneAndUpdate(
           {
             _id: session._id,
-            status: { $in: ["SCHEDULED", "IN_PROGRESS"] },
+            status: { $in: ["SCHEDULED", "WAITING", "IN_PROGRESS", "INTERRUPTED"] },
           },
           {
             $inc: { __v: 1 },
           },
-          { session: dbSession, returnDocument: 'after' }
+          { session: dbSession, returnDocument: "after" }
         );
         if (!guardedSession) {
           throw new AppError("This session has already ended", "SESSION_ENDED", 409);
@@ -314,8 +404,17 @@ const joinSession = async (user, sessionId) => {
           {
             $setOnInsert: {
               classId: session.classId,
-              joinedAt: now,
+              joinedAt: isWaitingRoomWindow ? null : now,
+              firstPreOpenJoinAt: isWaitingRoomWindow ? now : null,
               attendanceStatus: late ? "LATE" : "PRESENT",
+              lateArrivalSeconds,
+              isLate: late,
+            },
+            $set: {
+              lastTokenIssuedAt: now,
+            },
+            $inc: {
+              tokenIssuedCount: 1,
             },
           },
           { upsert: true, session: dbSession }
@@ -327,6 +426,12 @@ const joinSession = async (user, sessionId) => {
   }
 
   const expiresAt = session.endDatetime; // NFR-12: token het han khi buoi hoc ket thuc
+  const firstJoinDeadlineAt =
+    role === "PARTICIPANT" && !hasVerifiedPriorJoin
+      ? new Date(Math.min(endMs, startMs + STUDENT_FIRST_JOIN_DEADLINE_SECONDS * 1000))
+      : null;
+  const tokenExpiresAt = firstJoinDeadlineAt || expiresAt;
+
   const account = await User.findById(user.id).select("role studentProfile teacherProfile").lean();
   const { provider, serverUrl, accessToken } = videoProvider.createJoinToken({
     roomId: session.meetingRoomId,
@@ -334,7 +439,8 @@ const joinSession = async (user, sessionId) => {
     userId: user.id.toString(),
     displayName: getDisplayProfile(account).fullName,
     role,
-    expiresAt,
+    expiresAt: tokenExpiresAt,
+    firstJoinDeadlineAt,
   });
 
   return {
@@ -345,6 +451,10 @@ const joinSession = async (user, sessionId) => {
     accessToken,
     role,
     expiresAt,
+    firstJoinDeadlineAt,
+    roomState: isWaitingRoomWindow ? "WAITING" : session.roomState || "LIVE",
+    isWaitingRoom: isWaitingRoomWindow,
+    isReconnect: role === "PARTICIPANT" ? hasVerifiedPriorJoin : false,
   };
 };
 
@@ -369,6 +479,10 @@ const endSession = async (teacherId, sessionId) => {
       }
 
       current.status = "COMPLETED";
+      current.roomState = "ENDED";
+      current.lifecycleState = "COMPLETED";
+      current.endReason = current.endReason || "TEACHER_ENDED";
+      current.actualEndAt = now;
       await current.save({ session: dbSession });
 
       // 2. Chot leftAt cho hoc vien co mat
@@ -430,7 +544,17 @@ const endSession = async (teacherId, sessionId) => {
     await dbSession.endSession();
   }
 
-  // 6. Tac dung phu ngoai vi: Dong phong LiveKit SAU KHI DB transaction da commit thanh cong.
+  // 6. Neu buoi hoc co du lieu SessionPresenceInterval hoac presenceTrackingActive,
+  // tinh toan lai chinh xac theo cong thuc 70% thoi luong + moc 5 phut LATE.
+  if (sessionDoc.presenceTrackingActive) {
+    const recomputed = await presenceService.finalizeSessionAttendance(sessionDoc._id, { now });
+    attendedCount = recomputed.filter(
+      (a) => a.attendanceStatus === "PRESENT" || a.attendanceStatus === "LATE"
+    ).length;
+    absentCount = recomputed.filter((a) => a.attendanceStatus === "ABSENT").length;
+  }
+
+  // 7. Tac dung phu ngoai vi: Dong phong LiveKit SAU KHI DB transaction da commit thanh cong.
   // Best effort: Loi mang LiveKit khong lam rollback DB va khong nem loi unhandled.
   await videoProvider.closeRoom(sessionDoc.meetingRoomId);
 
@@ -447,13 +571,29 @@ const getSessionAttendance = async (teacherId, sessionId) => {
 };
 
 const handleLiveKitWebhook = async (event) => {
-  if (!event || !event.egressInfo) return;
+  if (!event) return;
+
+  // Delegate participant_joined, participant_left, participant_disconnected, room_finished, and egress_ended
+  if (
+    event.event === "participant_joined" ||
+    event.event === "participant_left" ||
+    event.event === "participant_disconnected" ||
+    event.event === "room_finished"
+  ) {
+    await presenceService.handleLiveKitEvent(event);
+    return;
+  }
+
+  if (!event.egressInfo) return;
   const egressId = event.egressInfo.egressId;
   const status = event.egressInfo.status;
   const error = event.egressInfo.error;
 
   const session = await Session.findOne({ "recording.providerRecordingId": egressId });
-  if (!session || !session.recording) return;
+  if (!session || !session.recording) {
+    await presenceService.handleLiveKitEvent(event);
+    return;
+  }
 
   if (event.event === "egress_ended") {
     // 3 = EGRESS_COMPLETE

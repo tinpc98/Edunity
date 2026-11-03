@@ -2,7 +2,13 @@
  * Session Domain Types matching BackEnd/src/models/Session.js
  */
 
-export type SessionStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type SessionStatus =
+  | 'SCHEDULED'
+  | 'WAITING'
+  | 'IN_PROGRESS'
+  | 'INTERRUPTED'
+  | 'COMPLETED'
+  | 'CANCELLED';
 
 export type SessionContentType = 'LESSON' | 'MATERIAL' | 'ASSIGNMENT';
 
@@ -45,6 +51,9 @@ export interface ApiSession {
   endDatetime: string;
   meetingRoomId?: string;
   status: SessionStatus;
+  roomState?: string;
+  lifecycleState?: string;
+  endReason?: string | null;
   recording?: SessionRecording | null;
   createdAt?: string;
   updatedAt?: string;
@@ -63,6 +72,9 @@ export interface Session {
   endDatetime: string;
   meetingRoomId?: string;
   status: SessionStatus;
+  roomState?: string;
+  lifecycleState?: string;
+  endReason?: string | null;
   recording?: SessionRecording | null;
   createdAt?: string;
   updatedAt?: string;
@@ -108,9 +120,22 @@ export interface SessionAttendanceItem {
       avatarUrl?: string;
     };
   };
-  attendanceStatus: 'PRESENT' | 'LATE' | 'ABSENT';
+  attendanceStatus: 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED' | 'NOT_EVALUATED';
   joinedAt?: string;
   leftAt?: string;
+  hasVerifiedConnection?: boolean;
+  isCurrentlyConnected?: boolean;
+  reconnectionCount?: number;
+  rawOnlineSeconds?: number;
+  waitingRoomSeconds?: number;
+  scheduledDurationSeconds?: number;
+  scheduledOnlineSeconds?: number;
+  teacherStudentOverlapSeconds?: number;
+  attendancePercentage?: number;
+  lateArrivalSeconds?: number;
+  isLate?: boolean;
+  evaluationStatus?: string;
+  evaluationReason?: string | null;
 }
 
 export type VideoProviderType = 'LIVEKIT' | 'EDUNITY_DEV';
@@ -124,6 +149,92 @@ export interface JoinSessionResponse {
   accessToken: string;
   role: ClassroomRole;
   expiresAt: string;
+  firstJoinDeadlineAt?: string | null;
+  roomState?: string;
+  isWaitingRoom?: boolean;
+  isReconnect?: boolean;
+}
+
+export interface SessionLiveStatusResponse {
+  sessionId: string;
+  title: string;
+  className: string;
+  status: SessionStatus;
+  roomState: string;
+  lifecycleState: string;
+  endReason?: string | null;
+  startDatetime: string;
+  endDatetime: string;
+  preOpenAt: string;
+  studentFirstJoinDeadlineAt: string;
+  autoCompleteAt: string;
+  isWaitingRoom: boolean;
+  isInTeachingPeriod: boolean;
+  isOvertimeGracePeriod: boolean;
+  teacherPresence?: {
+    firstPreOpenJoinAt?: string | null;
+    firstTeachingJoinAt?: string | null;
+    isCurrentlyConnected?: boolean;
+    totalOnlineSeconds?: number;
+    scheduledOnlineSeconds?: number;
+    yellowWarningTriggeredAt?: string | null;
+    redViolationTriggeredAt?: string | null;
+    noShowCancelledAt?: string | null;
+    earlyLeaveTriggeredAt?: string | null;
+    overtimeRemindedAt?: string | null;
+  };
+  myAttendance?: {
+    attendanceStatus: string;
+    attendancePercentage: number;
+    scheduledOnlineSeconds: number;
+    scheduledDurationSeconds: number;
+    waitingRoomSeconds: number;
+    lateArrivalSeconds: number;
+    isLate: boolean;
+    reconnectionCount?: number;
+  } | null;
+  violations?: Array<{
+    _id: string;
+    violationCategory: string;
+    violationType: string;
+    severity: 'YELLOW' | 'RED' | 'NO_SHOW' | 'EARLY_LEAVE';
+    detectedAt: string;
+    reviewStatus: string;
+  }>;
+}
+
+export type IncidentType =
+  | 'DEVICE_FAILURE'
+  | 'INTERNET_FAILURE'
+  | 'POWER_OUTAGE'
+  | 'HEALTH_ISSUE'
+  | 'PERSONAL_EMERGENCY'
+  | 'PLATFORM_FAILURE'
+  | 'OTHER';
+
+export type IncidentRequestedAction =
+  | 'EXCUSE_LATE'
+  | 'CANCEL_SESSION'
+  | 'RESCHEDULE_SESSION'
+  | 'EXCUSE_INTERRUPTION';
+
+export interface SubmitIncidentReportPayload {
+  incidentType: IncidentType;
+  description: string;
+  requestedAction: IncidentRequestedAction;
+  evidenceFiles?: Array<{ storageKey: string; originalName?: string; mimeType?: string } | string>;
+  proposedSchedule?: {
+    startDatetime: string;
+    endDatetime: string;
+    title?: string;
+  };
+}
+
+export interface RequestReschedulePayload {
+  proposedStartDatetime: string;
+  proposedEndDatetime: string;
+  proposedTitle?: string;
+  reason: string;
 }
 
 /**
@@ -145,15 +256,18 @@ export interface ScheduleItem {
 
 export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
   SCHEDULED: 'Đã lên lịch',
+  WAITING: 'Phòng chờ (10p)',
   IN_PROGRESS: 'Đang diễn ra',
+  INTERRUPTED: 'Tạm gián đoạn',
   COMPLETED: 'Đã hoàn thành',
   CANCELLED: 'Đã hủy',
 };
 
 export const SESSION_STATUS_COLORS: Record<SessionStatus, string> = {
   SCHEDULED: 'blue',
+  WAITING: 'cyan',
   IN_PROGRESS: 'gold',
+  INTERRUPTED: 'volcano',
   COMPLETED: 'green',
   CANCELLED: 'default',
 };
-

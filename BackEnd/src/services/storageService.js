@@ -17,7 +17,7 @@ const getRoot = () => path.resolve(process.env.STORAGE_DIR || path.join(__dirnam
 const getPublicDir = () => path.join(getRoot(), "public");
 
 // What clients may upload. Recording keys are only ever created by the backend when a session starts.
-const PRIVATE_PURPOSES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF"];
+const PRIVATE_PURPOSES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF", "INCIDENT_EVIDENCE"];
 const PUBLIC_PURPOSES = ["AVATAR", "COVER_IMAGE"];
 const MAX_PRIVATE_SIZE = 10 * 1024 * 1024;
 const MAX_PUBLIC_SIZE = 5 * 1024 * 1024;

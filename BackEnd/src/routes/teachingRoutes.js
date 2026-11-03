@@ -6,6 +6,9 @@ const requireRole = require("../middlewares/requireRole");
 const router = express.Router();
 const admin = [authMiddleware, requireRole("ADMIN")];
 const teacher = [authMiddleware, requireRole("TEACHER")];
+const student = [authMiddleware, requireRole("STUDENT")];
+const classroomMember = [authMiddleware, requireRole("STUDENT", "TEACHER")];
+const anyAuthenticatedRole = [authMiddleware, requireRole("STUDENT", "TEACHER", "ADMIN")];
 
 // Teacher — classes
 router.get("/teacher/classes", teacher, controller.listMyClasses);
@@ -23,14 +26,35 @@ router.delete("/teacher/sessions/:id", teacher, controller.deleteSession);
 router.post("/teacher/sessions/:id/end", teacher, controller.endSession);
 router.get("/teacher/sessions/:id/attendance", teacher, controller.getSessionAttendance);
 
-// Student / Teacher — join the embedded classroom
-router.post("/sessions/:id/join", authMiddleware, requireRole("STUDENT", "TEACHER"), controller.joinSession);
+// Student / Teacher — join the embedded classroom & live presence tracking (TIN-05D)
+router.post("/sessions/:id/join", classroomMember, controller.joinSession);
+router.get("/sessions/:id/live-status", anyAuthenticatedRole, controller.getSessionLiveStatus);
+router.post("/sessions/:id/presence/connect", classroomMember, controller.connectSessionPresence);
+router.post("/sessions/:id/presence/heartbeat", classroomMember, controller.heartbeatSessionPresence);
+router.post("/sessions/:id/presence/leave", classroomMember, controller.leaveSessionPresence);
+router.post("/sessions/:id/presence/disconnect", classroomMember, controller.leaveSessionPresence);
 router.post("/sessions/livekit-webhook", controller.livekitWebhook);
 
-// Admin — class approval
+// Teacher — incident reports, rescheduling & discipline overview (TIN-05E)
+router.get("/teacher/discipline-overview", teacher, controller.getTeacherDisciplineOverview);
+router.post("/teacher/sessions/:id/incident-reports", teacher, controller.submitIncidentReport);
+router.post("/teacher/incident-reports/:id/appeal", teacher, controller.submitIncidentAppeal);
+router.post("/teacher/sessions/:id/reschedule-requests", teacher, controller.requestSessionReschedule);
+
+// Student — reschedule confirmation (TIN-05E)
+router.post("/student/reschedule-requests/:id/respond", student, controller.respondToRescheduleAsStudent);
+
+// Admin — class approval & Smart Classroom / Incident / Discipline / Reschedule / Refund review (TIN-05E)
 router.get("/admin/classes/pending", admin, controller.listPendingClasses);
 router.get("/admin/classes/:id", admin, controller.getClassForReview);
 router.post("/admin/classes/:id/approve", admin, controller.approveClass);
 router.post("/admin/classes/:id/reject", admin, controller.rejectClass);
+
+router.get("/admin/smart-classroom/overview", admin, controller.listAdminSmartClassroomOverview);
+router.post("/admin/incident-reports/:id/review", admin, controller.reviewIncidentReport);
+router.post("/admin/teacher-violations/:id/review", admin, controller.reviewTeacherViolation);
+router.post("/admin/discipline-cases/:id/review", admin, controller.reviewDisciplineCase);
+router.post("/admin/reschedule-requests/:id/review", admin, controller.reviewRescheduleRequest);
+router.post("/admin/session-refund-reviews/:id/review", admin, controller.reviewRefundCase);
 
 module.exports = router;

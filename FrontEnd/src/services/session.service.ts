@@ -8,6 +8,9 @@ import type {
   PlannedSession,
   SessionAttendanceItem,
   JoinSessionResponse,
+  SessionLiveStatusResponse,
+  SubmitIncidentReportPayload,
+  RequestReschedulePayload,
 } from "../types/session";
 import { adaptSession, adaptSessions } from "../api/sessionAdapters";
 
@@ -16,6 +19,9 @@ export const sessionKeys = {
   classSessions: (classId: string) => ["sessions", "class", classId] as const,
   teacherPlanned: (classId: string) => ["sessions", "teacher", "planned", classId] as const,
   attendance: (sessionId: string) => ["sessions", "attendance", sessionId] as const,
+  liveStatus: (sessionId: string) => ["sessions", "liveStatus", sessionId] as const,
+  teacherDiscipline: () => ["sessions", "teacher", "discipline"] as const,
+  adminSmartClassroom: (status?: string) => ["sessions", "admin", "smartClassroom", status || "ALL"] as const,
   studentMySessions: (from?: string, to?: string) => ["sessions", "student", "me", { from, to }] as const,
 };
 
@@ -133,5 +139,119 @@ export const sessionService = {
       method: "POST",
     });
   },
-};
 
+  /**
+   * Smart Classroom Live Status & Attendance Progress (TIN-05D)
+   * GET /api/sessions/:id/live-status
+   */
+  async getSessionLiveStatus(sessionId: string): Promise<SessionLiveStatusResponse> {
+    return apiClient<SessionLiveStatusResponse>(`/sessions/${sessionId}/live-status`);
+  },
+
+  async connectSessionPresence(sessionId: string, connectionSessionId: string): Promise<any> {
+    return apiClient<any>(`/sessions/${sessionId}/presence/connect`, {
+      method: "POST",
+      body: JSON.stringify({ connectionSessionId }),
+    });
+  },
+
+  async leaveSessionPresence(sessionId: string, connectionSessionId?: string): Promise<any> {
+    return apiClient<any>(`/sessions/${sessionId}/presence/leave`, {
+      method: "POST",
+      body: JSON.stringify({ connectionSessionId }),
+    });
+  },
+
+  /**
+   * Teacher Incident Reporting, Appeals, Rescheduling & Discipline Overview (TIN-05E)
+   */
+  async submitIncidentReport(sessionId: string, payload: SubmitIncidentReportPayload): Promise<any> {
+    return apiClient<any>(`/teacher/sessions/${sessionId}/incident-reports`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async submitIncidentAppeal(reportId: string, payload: { reason: string; evidenceFiles?: string[] }): Promise<any> {
+    return apiClient<any>(`/teacher/incident-reports/${reportId}/appeal`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async requestSessionReschedule(sessionId: string, payload: RequestReschedulePayload): Promise<any> {
+    return apiClient<any>(`/teacher/sessions/${sessionId}/reschedule-requests`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getTeacherDisciplineOverview(): Promise<any> {
+    return apiClient<any>(`/teacher/discipline-overview`);
+  },
+
+  async respondToRescheduleAsStudent(
+    requestId: string,
+    payload: { status: "ACCEPTED" | "CANNOT_ATTEND"; note?: string }
+  ): Promise<any> {
+    return apiClient<any>(`/student/reschedule-requests/${requestId}/respond`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getAdminSmartClassroomOverview(status?: string): Promise<any> {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return apiClient<any>(`/admin/smart-classroom/overview${qs}`);
+  },
+
+  async reviewIncidentReport(
+    reportId: string,
+    payload: { decision: "APPROVED" | "REJECTED" | "NEEDS_MORE_EVIDENCE"; note?: string; approveReschedule?: boolean }
+  ): Promise<any> {
+    return apiClient<any>(`/admin/incident-reports/${reportId}/review`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async reviewTeacherViolation(
+    violationId: string,
+    payload: { reviewStatus: "CONFIRMED" | "WAIVED" | "DOWNGRADED"; note?: string; newSeverity?: string }
+  ): Promise<any> {
+    return apiClient<any>(`/admin/teacher-violations/${violationId}/review`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async reviewDisciplineCase(
+    caseId: string,
+    payload: { status: "RESOLVED_APPROVED" | "RESOLVED_WAIVED" | "NEEDS_POLICY_CONFIGURATION"; note?: string }
+  ): Promise<any> {
+    return apiClient<any>(`/admin/discipline-cases/${caseId}/review`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async reviewRescheduleRequest(
+    requestId: string,
+    payload: { decision: "APPROVED" | "REJECTED"; note?: string }
+  ): Promise<any> {
+    return apiClient<any>(`/admin/reschedule-requests/${requestId}/review`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async reviewRefundCase(
+    refundReviewId: string,
+    payload: { status: "APPROVED_FOR_PAYMENT_TEAM" | "RESCHEDULED_WAIVED" | "REJECTED"; note?: string }
+  ): Promise<any> {
+    return apiClient<any>(`/admin/session-refund-reviews/${refundReviewId}/review`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+};

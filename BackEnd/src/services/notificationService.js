@@ -7,23 +7,61 @@ const { assertId, paged } = require("../utils/http");
  * Database-based notification (mục 11.9). Notifications are a side effect:
  * a failure here must never break the business operation that triggered it.
  */
-const notify = async (userId, title, content, type) => {
+const notify = async (userId, title, content, type, options = {}) => {
   try {
-    await Notification.create({ userId, title, content, type });
+    const { dedupeKey = null, sessionId = null } = options || {};
+    if (dedupeKey) {
+      await Notification.findOneAndUpdate(
+        { userId, dedupeKey },
+        {
+          $setOnInsert: {
+            userId,
+            title,
+            content,
+            type,
+            dedupeKey,
+            sessionId,
+            deliveryStatus: "DELIVERED",
+          },
+        },
+        { upsert: true, returnDocument: "after" }
+      );
+      return;
+    }
+    await Notification.create({ userId, title, content, type, sessionId });
   } catch (err) {
+    if (err && err.code === 11000) return;
     console.error("Failed to create notification:", err.message);
   }
 };
 
-const notifyAdmins = async (title, content, type) => {
+const notifyOnce = async (userId, title, content, type, dedupeKey, sessionId = null) =>
+  notify(userId, title, content, type, { dedupeKey, sessionId });
+
+const notifyAdmins = async (title, content, type, options = {}) => {
   try {
+    const { dedupeKey = null, sessionId = null } = options || {};
     const admins = await User.find({ role: "ADMIN", status: "ACTIVE", isDeleted: { $ne: true } }).select("_id").lean();
     if (!admins.length) return;
-    await Notification.insertMany(admins.map((admin) => ({ userId: admin._id, title, content, type })));
+    if (dedupeKey) {
+      await Promise.all(
+        admins.map((admin) =>
+          notify(admin._id, title, content, type, {
+            dedupeKey: `${dedupeKey}:admin:${admin._id.toString()}`,
+            sessionId,
+          })
+        )
+      );
+      return;
+    }
+    await Notification.insertMany(admins.map((admin) => ({ userId: admin._id, title, content, type, sessionId })));
   } catch (err) {
     console.error("Failed to notify admins:", err.message);
   }
 };
+
+const notifyAdminsOnce = async (title, content, type, dedupeKey, sessionId = null) =>
+  notifyAdmins(title, content, type, { dedupeKey, sessionId });
 
 const getMyNotifications = async (userId, paging, unreadOnly) => {
   const filter = { userId };
@@ -54,4 +92,12 @@ const markAllAsRead = async (userId) => {
   return { updated: result.modifiedCount };
 };
 
-module.exports = { notify, notifyAdmins, getMyNotifications, markAsRead, markAllAsRead };
+module.exports = {
+  notify,
+  notifyOnce,
+  notifyAdmins,
+  notifyAdminsOnce,
+  getMyNotifications,
+  markAsRead,
+  markAllAsRead,
+};

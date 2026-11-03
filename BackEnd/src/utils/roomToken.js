@@ -5,10 +5,12 @@ const { getSecret } = require("./secrets");
 // the backend issues its own short-lived signed token (NFR-11/NFR-12).
 const sign = (payload) => crypto.createHmac("sha256", getSecret("ROOM_TOKEN_SECRET")).update(payload).digest("base64url");
 
-const createRoomToken = ({ roomId, sessionId, userId, role, expiresAt }) => {
-  const payload = Buffer.from(
-    JSON.stringify({ roomId, sessionId, userId, role, exp: Math.floor(expiresAt.getTime() / 1000) })
-  ).toString("base64url");
+const createRoomToken = ({ roomId, sessionId, userId, role, expiresAt, firstJoinDeadlineAt = null }) => {
+  const payloadObj = { roomId, sessionId, userId, role, exp: Math.floor(expiresAt.getTime() / 1000) };
+  if (firstJoinDeadlineAt instanceof Date) {
+    payloadObj.firstJoinDeadlineExp = Math.floor(firstJoinDeadlineAt.getTime() / 1000);
+  }
+  const payload = Buffer.from(JSON.stringify(payloadObj)).toString("base64url");
   return `${payload}.${sign(payload)}`;
 };
 

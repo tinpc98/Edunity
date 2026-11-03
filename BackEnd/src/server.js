@@ -8,6 +8,7 @@ require("./config/env").assertEnv();
 const app = require("./app");
 const connectDB = require("./config/db");
 const { startJob } = require("./jobs/expireEnrollmentsJob");
+const { startSessionLifecycleJob } = require("./jobs/sessionLifecycleJob");
 
 const PORT = process.env.PORT || 3000;
 
@@ -20,6 +21,7 @@ const startServer = async () => {
   }
 
   startJob();
+  startSessionLifecycleJob();
 
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

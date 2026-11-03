@@ -262,7 +262,7 @@ describe("Another student's data", () => {
   it("classroom and recording need a confirmed enrollment", async () => {
     const id = data.session._id;
     expect((await call(OTHER, "post", `/api/sessions/${id}/join`)).statusCode).toBe(403);
-    expect((await call(OTHER, "get", `/api/sessions/${id}/join`)).statusCode).toBe(403);
+    expect((await call(OTHER, "get", `/api/sessions/${id}/join`)).statusCode).toBe(405);
     expect((await call(OTHER, "get", `/api/sessions/${id}/recording`)).statusCode).toBe(403);
     expect((await call("teacherB", "post", `/api/sessions/${id}/join`)).statusCode).toBe(403);
     expect((await call("sponsorA", "post", `/api/sessions/${id}/join`)).statusCode).toBe(403);

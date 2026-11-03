@@ -28,10 +28,14 @@ class StudentService {
     return sessions.map(s => {
       const start = new Date(s.startDatetime);
       const end = new Date(s.endDatetime);
-      const windowStart = new Date(start.getTime() - 15 * 60 * 1000); // 15 mins before
-      // BUG-TIN03-02: only SCHEDULED and IN_PROGRESS sessions are joinable during the time window.
+      const windowStart = new Date(start.getTime() - 10 * 60 * 1000); // 10 mins pre-open waiting room (TIN-05D)
+      // BUG-TIN03-02: only SCHEDULED, WAITING, IN_PROGRESS, and INTERRUPTED sessions are joinable during the time window.
       // CANCELLED and COMPLETED sessions are not joinable.
-      const isJoinableStatus = s.status === "SCHEDULED" || s.status === "IN_PROGRESS";
+      const isJoinableStatus =
+        s.status === "SCHEDULED" ||
+        s.status === "WAITING" ||
+        s.status === "IN_PROGRESS" ||
+        s.status === "INTERRUPTED";
       const canJoin = isJoinableStatus && currentNow >= windowStart && currentNow <= end;
       
       return {

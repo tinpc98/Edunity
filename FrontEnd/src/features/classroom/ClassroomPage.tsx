@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Tag, Typography, Spin, message } from "antd";
@@ -7,6 +7,8 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   TeamOutlined,
+  WarningOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "../../stores/auth.store";
 import { sessionService, sessionKeys } from "../../services/session.service";
@@ -18,6 +20,7 @@ import LiveKitClassroom from "./components/LiveKitClassroom";
 import DevClassroom from "./components/DevClassroom";
 import ClassroomHeader from "./components/ClassroomHeader";
 import TeacherAttendanceModal from "./components/TeacherAttendanceModal";
+import TeacherIncidentModal from "./components/TeacherIncidentModal";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -40,6 +43,8 @@ export default function ClassroomPage() {
   });
 
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState<boolean>(false);
+  const [isIncidentModalOpen, setIsIncidentModalOpen] = useState<boolean>(false);
+  const connectionSessionIdRef = useRef<string>(`ui_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
 
   // Authenticated user check
   useEffect(() => {
@@ -53,10 +58,8 @@ export default function ClassroomPage() {
     }
   }, [isAuthenticated, user, navigate, location.pathname]);
 
-  // Authenticated user role check
   const isTeacher = user?.role === "TEACHER";
   const userFullName = user?.fullName || (isTeacher ? "Giảng viên" : "Học viên");
-
 
   // Query student sessions to find current session metadata if available
   const { data: mySessions = [] } = useQuery({
@@ -66,19 +69,36 @@ export default function ClassroomPage() {
     staleTime: 60000,
   });
 
+  // Query Smart Classroom Live Status (TIN-05D)
+  const { data: liveStatus } = useQuery({
+    queryKey: sessionKeys.liveStatus(sessionId || ""),
+    queryFn: () => sessionService.getSessionLiveStatus(sessionId!),
+    enabled: Boolean(sessionId && isAuthenticated),
+    refetchInterval: stage === "in_room" ? 15000 : 30000,
+  });
 
   const currentSession = useMemo(() => {
     return mySessions.find((s) => s.id === sessionId);
   }, [mySessions, sessionId]);
 
-  const sessionTitle = currentSession?.title || "Buổi học trực tuyến";
-  const className = currentSession?.className || undefined;
+  const sessionTitle = liveStatus?.title || currentSession?.title || "Buổi học trực tuyến";
+  const className = liveStatus?.className || currentSession?.className || undefined;
+
+  // Automatically report verified presence connection & clean disconnect when in_room
+  useEffect(() => {
+    if (stage !== "in_room" || !sessionId) return;
+    const connId = connectionSessionIdRef.current;
+    sessionService.connectSessionPresence(sessionId, connId).catch(() => {});
+
+    return () => {
+      sessionService.leaveSessionPresence(sessionId, connId).catch(() => {});
+    };
+  }, [stage, sessionId]);
 
   // 1. Join Session Mutation
   const joinMutation = useMutation({
     mutationFn: () => sessionService.joinSession(sessionId!),
     onSuccess: (data: JoinSessionResponse) => {
-      // Invalidate relevant queries since teacher join might have started the session
       queryClient.invalidateQueries({ queryKey: sessionKeys.all });
       setJoinData(data);
       setStage("in_room");
@@ -108,7 +128,14 @@ export default function ClassroomPage() {
     joinMutation.mutate();
   };
 
-  const handleLeaveRoom = () => {
+  const handleLeaveRoom = async () => {
+    if (sessionId && stage === "in_room") {
+      try {
+        await sessionService.leaveSessionPresence(sessionId, connectionSessionIdRef.current);
+      } catch {
+        // ignore leave telemetry error
+      }
+    }
     if (isTeacher) {
       navigate(ROUTES.TEACHER.SCHEDULE);
     } else {
@@ -133,10 +160,17 @@ export default function ClassroomPage() {
           actionText: "Xem danh sách lớp",
           actionRoute: ROUTES.CLASSES,
         };
+      case "JOIN_WINDOW_CLOSED":
+        return {
+          title: "Đã quá hạn 20 phút vào lớp lần đầu",
+          desc: "Quy định điểm danh thông minh (TIN-05D): Học viên chỉ được vào lớp lần đầu trong vòng 20 phút đầu kể từ giờ bắt đầu. (Nếu bạn đã vào lớp trước mốc 20 phút và bị rớt mạng, hệ thống sẽ cho phép kết nối lại).",
+          actionText: "Quay lại lịch học",
+          actionRoute: ROUTES.STUDENT.SCHEDULE,
+        };
       case "SESSION_CANCELLED":
         return {
           title: "Buổi học đã bị hủy",
-          desc: "Giảng viên hoặc ban quản trị đã hủy buổi học này.",
+          desc: "Buổi học này đã bị hủy (hoặc tự động hủy do giảng viên vắng mặt sau 30 phút). Học viên không bị tính vắng và sẽ được xếp lịch học bù / bảo vệ quyền lợi.",
           actionText: "Quay lại lịch học",
           actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.STUDENT.SCHEDULE,
         };
@@ -149,8 +183,8 @@ export default function ClassroomPage() {
         };
       case "SESSION_NOT_JOINABLE":
         return {
-          title: "Chưa đến giờ mở phòng học",
-          desc: msg || "Phòng học trực tuyến chỉ mở trước giờ học 15 phút và đóng khi buổi học kết thúc.",
+          title: "Chưa đến giờ mở phòng chờ",
+          desc: msg || "Phòng chờ trực tuyến mở trước giờ bắt đầu 10 phút và đóng khi buổi học kết thúc.",
           actionText: "Quay lại lịch học",
           actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.STUDENT.SCHEDULE,
         };
@@ -191,6 +225,16 @@ export default function ClassroomPage() {
           </Paragraph>
 
           <div className="flex flex-col gap-3">
+            {isTeacher && sessionId && (
+              <Button
+                icon={<WarningOutlined />}
+                onClick={() => setIsIncidentModalOpen(true)}
+                className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40 rounded-xl h-11 font-semibold"
+              >
+                Báo cáo sự cố / Đề xuất học bù
+              </Button>
+            )}
+
             {errorInfo.actionRoute ? (
               <Button
                 type="primary"
@@ -222,6 +266,15 @@ export default function ClassroomPage() {
             </Button>
           </div>
         </div>
+
+        {isTeacher && sessionId && (
+          <TeacherIncidentModal
+            open={isIncidentModalOpen}
+            sessionId={sessionId}
+            sessionTitle={sessionTitle}
+            onClose={() => setIsIncidentModalOpen(false)}
+          />
+        )}
       </div>
     );
   }
@@ -244,7 +297,7 @@ export default function ClassroomPage() {
           </Title>
 
           <Paragraph className="text-slate-400 text-xs mb-6">
-            Buổi học trực tuyến đã hoàn thành và danh sách điểm danh đã được ghi nhận trên hệ thống.
+            Buổi học trực tuyến đã hoàn thành và thời lượng điểm danh (chuẩn 70%) đã được chốt trên hệ thống.
           </Paragraph>
 
           <div className="flex flex-col gap-3">
@@ -268,7 +321,6 @@ export default function ClassroomPage() {
           </div>
         </div>
 
-        {/* Attendance Modal for Teacher */}
         {isTeacher && sessionId && (
           <TeacherAttendanceModal
             open={isAttendanceModalOpen}
@@ -311,11 +363,85 @@ export default function ClassroomPage() {
     );
   }
 
-  // 5. IN_ROOM STAGE: Dual Provider Routing
+  // 5. IN_ROOM STAGE: Dual Provider Routing + Smart Classroom Status Banner
   const effectiveRole: ClassroomRole = joinData.role;
+  const isWaitingRoom = Boolean(liveStatus?.isWaitingRoom || joinData.isWaitingRoom);
+  const isOvertime = Boolean(liveStatus?.isOvertimeGracePeriod);
+  const isInterrupted = liveStatus?.status === "INTERRUPTED";
+  const teacherLateWarning = Boolean(
+    !liveStatus?.teacherPresence?.firstTeachingJoinAt &&
+      (liveStatus?.teacherPresence?.yellowWarningTriggeredAt ||
+        liveStatus?.teacherPresence?.redViolationTriggeredAt)
+  );
 
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-950 overflow-hidden">
+      {/* Smart Classroom Status Bar (TIN-05D + TIN-05E) */}
+      <div className="px-4 py-1.5 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300 z-30">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isWaitingRoom && (
+            <Tag color="cyan" icon={<ClockCircleOutlined />} className="m-0 font-semibold">
+              Phòng chờ mở sớm 10 phút — Thời gian chờ chưa tính vào điểm danh chính thức
+            </Tag>
+          )}
+          {!isWaitingRoom && !isOvertime && !isInterrupted && (
+            <Tag color="green" className="m-0 font-semibold">
+              Đang trong giờ học chính thức (Yêu cầu ≥ 70% thời lượng để tính Có mặt)
+            </Tag>
+          )}
+          {isOvertime && (
+            <Tag color="gold" icon={<WarningOutlined />} className="m-0 font-semibold">
+              Đã hết giờ học theo lịch — Phòng đang trong 30 phút ân hạn trước khi tự động hoàn tất
+            </Tag>
+          )}
+          {isInterrupted && (
+            <Tag color="volcano" icon={<WarningOutlined />} className="m-0 font-semibold">
+              Buổi học tạm gián đoạn do giảng viên mất kết nối quá 30 phút — Thời gian học viên đã học được bảo lưu
+            </Tag>
+          )}
+          {!isTeacher && teacherLateWarning && (
+            <Tag color="warning" className="m-0">
+              Giảng viên đang vào lớp trễ — Hệ thống đang theo dõi tự động
+            </Tag>
+          )}
+          {!isTeacher && joinData.isReconnect && (
+            <Tag color="purple" className="m-0">
+              Đã khôi phục kết nối (Reconnected)
+            </Tag>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {!isTeacher && liveStatus?.myAttendance && (
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">
+                Đã học:{" "}
+                <strong className="text-white">
+                  {Math.floor((liveStatus.myAttendance.scheduledOnlineSeconds || 0) / 60)}p
+                </strong>{" "}
+                ({Math.round(liveStatus.myAttendance.attendancePercentage || 0)}% / 70%)
+              </span>
+              {liveStatus.myAttendance.isLate && (
+                <Tag color="warning" className="m-0 text-[10px]">
+                  Vào muộn &gt; 5p
+                </Tag>
+              )}
+            </div>
+          )}
+
+          {isTeacher && (
+            <Button
+              size="small"
+              icon={<WarningOutlined />}
+              onClick={() => setIsIncidentModalOpen(true)}
+              className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40 rounded-lg text-xs"
+            >
+              Báo cáo sự cố / Học bù
+            </Button>
+          )}
+        </div>
+      </div>
+
       {joinData.provider === "LIVEKIT" && joinData.serverUrl ? (
         /* Real LiveKit Room Connection */
         <LiveKitClassroom
@@ -324,7 +450,7 @@ export default function ClassroomPage() {
           sessionTitle={sessionTitle}
           className={className}
           role={effectiveRole}
-          startDatetime={currentSession?.startDatetime}
+          startDatetime={liveStatus?.startDatetime || currentSession?.startDatetime}
           initialVideoEnabled={mediaOptions.videoEnabled}
           initialAudioEnabled={mediaOptions.audioEnabled}
           onOpenAttendance={isTeacher ? () => setIsAttendanceModalOpen(true) : undefined}
@@ -340,7 +466,7 @@ export default function ClassroomPage() {
             className={className}
             role={effectiveRole}
             participantCount={1}
-            startDatetime={currentSession?.startDatetime}
+            startDatetime={liveStatus?.startDatetime || currentSession?.startDatetime}
             onOpenAttendance={isTeacher ? () => setIsAttendanceModalOpen(true) : undefined}
             onLeaveRoom={handleLeaveRoom}
             onEndSession={isTeacher ? handleEndSession : undefined}
@@ -365,6 +491,16 @@ export default function ClassroomPage() {
           sessionId={sessionId}
           isSessionActive={true}
           onClose={() => setIsAttendanceModalOpen(false)}
+        />
+      )}
+
+      {/* Teacher Incident Modal */}
+      {isTeacher && sessionId && (
+        <TeacherIncidentModal
+          open={isIncidentModalOpen}
+          sessionId={sessionId}
+          sessionTitle={sessionTitle}
+          onClose={() => setIsIncidentModalOpen(false)}
         />
       )}
     </div>

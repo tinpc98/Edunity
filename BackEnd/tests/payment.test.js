@@ -49,6 +49,10 @@ const mockRes = () => {
   return res;
 };
 
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 describe("PAY-01: Gateway Webhook Verification (Fail-Closed & timingSafeEqual)", () => {
   const originalEnv = process.env;
 
@@ -195,9 +199,9 @@ describe("PAY-02: Sandbox Endpoint Protection (Danh sách môi trường cho ph�
     expect(error.statusCode).toBe(403);
   });
 
-  test("PAY-02.3: Chặn sandbox webhook khi cờ ENABLE_PAYMENT_SANDBOX bị thiếu hoặc false", async () => {
+  test("PAY-02.3: Chặn sandbox webhook khi cờ ENABLE_PAYMENT_SANDBOX=false hoặc thiếu NODE_ENV hợp lệ", async () => {
     process.env.NODE_ENV = "development";
-    delete process.env.ENABLE_PAYMENT_SANDBOX;
+    process.env.ENABLE_PAYMENT_SANDBOX = "false";
 
     const req = mockReq({ body: { gatewayReference: "SBX-123", status: "SUCCESS" } });
     const res = mockRes();
@@ -208,6 +212,13 @@ describe("PAY-02: Sandbox Endpoint Protection (Danh sách môi trường cho ph�
     expect(next).toHaveBeenCalled();
     const error = next.mock.calls[0][0];
     expect(error.statusCode).toBe(403);
+
+    delete process.env.NODE_ENV;
+    delete process.env.ENABLE_PAYMENT_SANDBOX;
+    const nextMissingEnv = jest.fn();
+    await paymentController.processWebhook(req, mockRes(), nextMissingEnv);
+    expect(nextMissingEnv).toHaveBeenCalled();
+    expect(nextMissingEnv.mock.calls[0][0].statusCode).toBe(403);
   });
 
   test("PAY-02.4: Chặn payload sandbox không hợp lệ (thiếu status)", async () => {

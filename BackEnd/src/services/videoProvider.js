@@ -35,24 +35,28 @@ const signLiveKitToken = (config, { identity, name, metadata, grant, ttlSeconds 
  * HOST (Teacher) can moderate the room; PARTICIPANT (Student) can publish and subscribe.
  * The token expires when the Session ends (NFR-12).
  */
-const createJoinToken = ({ roomId, sessionId, userId, displayName, role, expiresAt }) => {
+const createJoinToken = ({ roomId, sessionId, userId, displayName, role, expiresAt, firstJoinDeadlineAt = null }) => {
   const config = getLiveKitConfig();
   if (!config) {
     return {
       provider: "EDUNITY_DEV",
       serverUrl: null,
-      accessToken: createRoomToken({ roomId, sessionId, userId, role, expiresAt }),
+      accessToken: createRoomToken({ roomId, sessionId, userId, role, expiresAt, firstJoinDeadlineAt }),
     };
   }
 
-  const ttlSeconds = Math.max(Math.ceil((expiresAt.getTime() - Date.now()) / 1000), 60);
+  const ttlSeconds = Math.max(Math.ceil((expiresAt.getTime() - Date.now()) / 1000), 1);
+  const metadataPayload = { role, sessionId };
+  if (firstJoinDeadlineAt instanceof Date) {
+    metadataPayload.firstJoinDeadlineAt = firstJoinDeadlineAt.toISOString();
+  }
   return {
     provider: "LIVEKIT",
     serverUrl: config.url,
     accessToken: signLiveKitToken(config, {
       identity: userId,
       name: displayName,
-      metadata: JSON.stringify({ role, sessionId }),
+      metadata: JSON.stringify(metadataPayload),
       ttlSeconds,
       grant: {
         room: roomId,
@@ -264,4 +268,57 @@ const processWebhook = (rawBody, parsedBody, authHeader) => {
   return parsedBody;
 };
 
-module.exports = { getProviderName, createJoinToken, closeRoom, startRecording, stopRecording, processWebhook };
+const listRoomParticipants = async (roomId) => {
+  const config = getLiveKitConfig();
+  if (!config || !roomId) return null;
+
+  try {
+    const token = signLiveKitToken(config, {
+      identity: "edunity-backend",
+      grant: { roomAdmin: true, room: roomId },
+      ttlSeconds: 60,
+    });
+    const httpUrl = config.url.replace(/^ws/, "http").replace(/\/+$/, "");
+    const response = await fetch(`${httpUrl}/twirp/livekit.RoomService/ListParticipants`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ room: roomId }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return Array.isArray(data?.participants) ? data.participants : [];
+  } catch (err) {
+    return null;
+  }
+};
+
+const verifyParticipantInRoom = async (roomId, identity) => {
+  if (!roomId || !identity) {
+    return { verified: false, reason: "INVALID_ARGS", participant: null };
+  }
+  const participants = await providerExports.listRoomParticipants(roomId);
+  if (!Array.isArray(participants)) {
+    return { verified: false, reason: "PROVIDER_UNAVAILABLE", participant: null };
+  }
+  const match = participants.find(
+    (p) => p && String(p.identity) === String(identity) && p.state !== "DISCONNECTED"
+  );
+  if (match) {
+    return { verified: true, participant: match };
+  }
+  return { verified: false, reason: "NOT_IN_ROOM", participant: null };
+};
+
+const providerExports = {
+  getProviderName,
+  createJoinToken,
+  closeRoom,
+  startRecording,
+  stopRecording,
+  processWebhook,
+  listRoomParticipants,
+  verifyParticipantInRoom,
+};
+
+module.exports = providerExports;
