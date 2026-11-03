@@ -26,14 +26,12 @@ import { invalidateTeacherVerificationState } from "../../../hooks/useTeacherVer
 import type { TeacherProfile, UpdateTeacherProfilePayload } from "../../../types/profile";
 import type { SubmitVerificationRequest } from "../../../types/teacherVerification";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
-
-const ALLOWED_AVATAR_MIMES = ["image/jpeg", "image/png", "image/webp"];
-const ALLOWED_AVATAR_EXTS = [".jpg", ".jpeg", ".png", ".webp"];
-const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5 MB
-
-const ALLOWED_DOC_MIMES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-const ALLOWED_DOC_EXTS = [".pdf", ".jpg", ".jpeg", ".png", ".webp"];
-const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10 MB
+import {
+  AVATAR_ACCEPT,
+  PRIVATE_DOCUMENT_ACCEPT,
+  validateAvatar,
+  validatePrivateDocument,
+} from "../../../utils/fileValidation";
 
 export default function TeacherProfilePage() {
   const { user, updateUser } = useAuthStore();
@@ -239,18 +237,11 @@ export default function TeacherProfilePage() {
 
   // Pre-validate Avatar
   const avatarUploadProps: UploadProps = {
-    accept: ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp",
+    accept: AVATAR_ACCEPT,
     beforeUpload: (file) => {
-      const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
-      const isAllowedType = ALLOWED_AVATAR_MIMES.includes(file.type) || ALLOWED_AVATAR_EXTS.includes(ext);
-
-      if (!isAllowedType) {
-        message.error("Định dạng tệp không được hỗ trợ. Chỉ chấp nhận tệp JPG, PNG hoặc WebP.");
-        return Upload.LIST_IGNORE;
-      }
-
-      if (file.size > MAX_AVATAR_SIZE) {
-        message.error("Kích thước tệp quá lớn. Vui lòng chọn ảnh đại diện tối đa 5MB.");
+      const error = validateAvatar(file);
+      if (error) {
+        message.error(error);
         return Upload.LIST_IGNORE;
       }
 
@@ -262,14 +253,9 @@ export default function TeacherProfilePage() {
 
   // Pre-validate Private Documents
   const validatePrivateDocFile = (file: File): boolean => {
-    const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
-    const isAllowed = ALLOWED_DOC_MIMES.includes(file.type) || ALLOWED_DOC_EXTS.includes(ext);
-    if (!isAllowed) {
-      message.error(`Tệp "${file.name}" không hợp lệ. Chỉ chấp nhận định dạng PDF, JPG, PNG hoặc WebP.`);
-      return false;
-    }
-    if (file.size > MAX_DOC_SIZE) {
-      message.error(`Tệp "${file.name}" quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Giới hạn tối đa là 10MB.`);
+    const error = validatePrivateDocument(file);
+    if (error) {
+      message.error(error);
       return false;
     }
     return true;
@@ -596,7 +582,7 @@ export default function TeacherProfilePage() {
                   </div>
                 ) : (
                   <Upload
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    accept={PRIVATE_DOCUMENT_ACCEPT}
                     beforeUpload={(file) => {
                       if (validatePrivateDocFile(file)) setIdentityFrontFile(file);
                       return false;
@@ -638,7 +624,7 @@ export default function TeacherProfilePage() {
                   </div>
                 ) : (
                   <Upload
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    accept={PRIVATE_DOCUMENT_ACCEPT}
                     beforeUpload={(file) => {
                       if (validatePrivateDocFile(file)) setIdentityBackFile(file);
                       return false;
@@ -666,7 +652,7 @@ export default function TeacherProfilePage() {
             </p>
 
             <Upload.Dragger
-              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              accept={PRIVATE_DOCUMENT_ACCEPT}
               beforeUpload={(file) => {
                 if (qualificationFiles.length >= 5) {
                   message.warning("Bạn chỉ có thể tải lên tối đa 5 tài liệu chứng chỉ.");

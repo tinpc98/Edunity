@@ -14,6 +14,7 @@ import type { UploadProps } from "antd";
 import { profileService } from "../../../services/profile.service";
 import { useAuthStore } from "../../../stores/auth.store";
 import type { StudentProfile, UpdateStudentProfilePayload } from "../../../types/profile";
+import { AVATAR_ACCEPT, validateAvatar } from "../../../utils/fileValidation";
 
 export default function StudentProfilePage() {
   const { user, updateUser } = useAuthStore();
@@ -114,10 +115,11 @@ export default function StudentProfilePage() {
   };
 
   const uploadProps: UploadProps = {
+    accept: AVATAR_ACCEPT,
     beforeUpload: (file) => {
-      const isImage = file.type.startsWith("image/");
-      if (!isImage) {
-        message.error("Bạn chỉ có thể tải lên file hình ảnh!");
+      const error = validateAvatar(file);
+      if (error) {
+        message.error(error);
         return Upload.LIST_IGNORE;
       }
       updateAvatarMutation.mutate(file);
