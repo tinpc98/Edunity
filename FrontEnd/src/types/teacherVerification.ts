@@ -57,10 +57,9 @@ export interface AdminTeacherVerificationListItem {
 }
 
 export interface Paged<T> {
-  data: T[];
-  paging: {
-    page: number;
-    pageSize: number;
-    total: number;
-  };
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
