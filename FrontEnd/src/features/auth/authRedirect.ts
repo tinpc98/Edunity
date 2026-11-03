@@ -29,8 +29,10 @@ function isRedirectAllowed(path: string, role: UserRole): boolean {
 }
 
 /**
- * Where to go right after a successful login. A Teacher who has never submitted verification
- * documents (UNVERIFIED) is sent to registration step 2 instead of the dashboard.
+ * Where to go right after a successful login:
+ * - TEACHER + UNVERIFIED -> registration step 2 (/register/teacher/qualification)
+ * - TEACHER + REJECTED   -> teacher profile (/teacher/profile) to review reason & resubmit
+ * - TEACHER + PENDING / VERIFIED (or fallback on error) -> teacher dashboard (/teacher)
  */
 export async function resolvePostLoginPath(role: UserRole, redirect: string | null): Promise<string> {
   const safe = getSafeRedirect(redirect);
@@ -40,6 +42,7 @@ export async function resolvePostLoginPath(role: UserRole, redirect: string | nu
     try {
       const verification = await teacherVerificationService.getMyVerification();
       if (verification.verificationStatus === "UNVERIFIED") return ROUTES.AUTH.TEACHER_QUALIFICATION;
+      if (verification.verificationStatus === "REJECTED") return ROUTES.TEACHER.PROFILE;
     } catch {
       // Verification status is optional for routing: fall back to the dashboard
     }
