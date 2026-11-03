@@ -256,13 +256,17 @@ describe("TIN-05C-P1: Safe LiveKit Provider Implementation Test Suite", () => {
       global.fetch = originalFetch;
     }
 
-    // 5. processWebhook
+    // 5. processWebhook (supports Bảo's sha256 checksum raw body contract)
+    const crypto = require("crypto");
     const jwt = require("jsonwebtoken");
     const fakePayload = { event: "egress_ended", egressInfo: { egressId: "eg_999" } };
-    const authHeader = jwt.sign(fakePayload, process.env.LIVEKIT_API_SECRET, {
+    const rawBody = Buffer.from(JSON.stringify(fakePayload));
+    const sha256 = crypto.createHash("sha256").update(rawBody).digest("base64");
+    const authHeader = jwt.sign({ ...fakePayload, sha256 }, process.env.LIVEKIT_API_SECRET, {
+      algorithm: "HS256",
       issuer: process.env.LIVEKIT_API_KEY,
     });
-    const parsed = videoProvider.processWebhook(fakePayload, authHeader);
+    const parsed = videoProvider.processWebhook(rawBody, fakePayload, authHeader);
     expect(parsed).toEqual(fakePayload);
   });
 });

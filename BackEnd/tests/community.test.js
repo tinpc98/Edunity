@@ -317,7 +317,7 @@ describe("File upload and signed URLs", () => {
     const tc17 = await request(app)
       .post("/api/uploads/private")
       .set(as(student))
-      .field("purpose", "RECORDING")
+      .field("purpose", "QUALIFICATION")
       .attach("file", MP4_PAYLOAD, { filename: "session.mp4", contentType: "video/mp4" });
     expect(tc17.statusCode).toBe(400);
     expect(tc17.body.error).toBe("UNSUPPORTED_FILE_TYPE");
@@ -470,7 +470,8 @@ describe("Profile", () => {
     expect((await login("s1@test.com", "newpass1")).statusCode).toBe(200);
     const oldRefresh = await request(app).post("/api/auth/refresh").send({ refreshToken: session.body.data.refreshToken });
     expect(oldRefresh.statusCode).toBe(401);
-    expect(await RefreshToken.countDocuments({ userId: student._id, revokedAt: null })).toBe(1);
+    // the session issued to the device that changed the password + the login above
+    expect(await RefreshToken.countDocuments({ userId: student._id, revokedAt: null })).toBe(2);
   });
 });
 

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Conversation, Message, User, Class } = require("../models");
+const { Conversation, Message, User, Class, Enrollment } = require("../models");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { paged, validationError, parseDate, isBlank } = require("../utils/http");
 const { toUserSummary, getDisplayProfile, PROFILE_SELECT } = require("../utils/userProfile");
@@ -10,6 +10,15 @@ const PREVIEW_LENGTH = 100;
 const RECALLED_PREVIEW = "Tin nhắn đã được thu hồi";
 
 const conversationNotFound = () => new AppError("Conversation not found", "CONVERSATION_NOT_FOUND", 404);
+
+// A Teacher writes to their own students, or answers one who wrote first: not to anyone whose id they obtained
+const assertTeacherMayContact = async (teacherId, studentId) => {
+  const isOwnStudent = await Enrollment.exists({ teacherId, studentId, enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] } });
+  const hasConversation = isOwnStudent || (await Conversation.exists({ participantIds: { $all: [teacherId, studentId], $size: 2 } }));
+  if (!hasConversation) {
+    throw new AppError("You can only message students of your own classes", "MESSAGING_NOT_ALLOWED", 403);
+  }
+};
 
 const getMyConversation = async (userId, conversationId) => {
   if (!mongoose.isValidObjectId(conversationId)) throw conversationNotFound();
@@ -59,6 +68,7 @@ const openConversation = async (user, body) => {
   if (roles !== "STUDENT-TEACHER") {
     throw new AppError("Messaging is only available between a Student and a Teacher", "MESSAGING_NOT_ALLOWED", 403);
   }
+  if (user.role === "TEACHER") await assertTeacherMayContact(user.id, other._id);
 
   let conversationClassId = null;
   if (classId) {

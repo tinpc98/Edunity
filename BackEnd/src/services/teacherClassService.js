@@ -1,9 +1,10 @@
 const mongoose = require("mongoose");
 const { Class, Course, Session, Enrollment, User } = require("../models");
 const { AppError, FORBIDDEN, CLASS_NOT_FOUND } = require("../utils/errors");
-const { paged, validationError, parseDate, isBlank } = require("../utils/http");
+const { paged, validationError, parseDate, isBlank, parseImageUrl } = require("../utils/http");
 const { toNum, toDec, parseAmount } = require("../utils/money");
 const { notifyAdmins } = require("./notificationService");
+const { withoutReviewer } = require("../utils/publicView");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const EDITABLE_STATUSES = ["DRAFT", "REJECTED"]; // BR-47, BR-51
@@ -68,7 +69,7 @@ const applyClassInput = (cls, body) => {
     cls.className = body.className;
   }
   if (body.description !== undefined) cls.description = body.description;
-  if (body.coverImage !== undefined) cls.coverImage = body.coverImage;
+  if (body.coverImage !== undefined) cls.coverImage = parseImageUrl(body.coverImage, "coverImage");
 
   if (body.classType !== undefined) {
     if (!["FREE", "PAID"].includes(body.classType)) throw validationError("classType must be FREE or PAID");
@@ -150,7 +151,7 @@ const updateClass = async (teacherId, classId, body) => {
   if (renamed) {
     await Session.updateMany({ classId: cls._id }, { $set: { className: cls.className } }); // denormalized
   }
-  return cls.toObject();
+  return withoutReviewer(cls.toObject());
 };
 
 // BR-32: Session phải nằm trong thời gian hoạt động của Class (endDate tính đến hết ngày)
@@ -208,13 +209,13 @@ const listMyClasses = async (teacherId, query, paging) => {
     Class.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
     Class.countDocuments(filter),
   ]);
-  return paged(items, total, paging);
+  return paged(items.map(withoutReviewer), total, paging);
 };
 
 const getMyClass = async (teacherId, classId) => {
   const cls = await getOwnClass(teacherId, classId);
   const sessions = await Session.find({ classId: cls._id }).sort({ startDatetime: 1 }).lean();
-  return { ...cls.toObject(), sessions };
+  return { ...withoutReviewer(cls.toObject()), sessions };
 };
 
 // FR-TEA-13 / FR-TEA-14

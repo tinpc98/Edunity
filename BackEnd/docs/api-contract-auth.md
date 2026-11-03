@@ -1,6 +1,6 @@
 # API Contract - Auth (DEV)
 
-*LƯU Ý: `POST /api/auth/dev-login` và token `dev-<userId>` chỉ dành cho DEV/TEST (production trả 404 / 401).
+*LƯU Ý: `POST /api/auth/dev-login` và token `dev-<userId>` chỉ dành cho bộ test tự động `NODE_ENV=test` (mọi môi trường khác trả 404 / 401).
 Đăng nhập thật dùng JWT: `POST /api/auth/login`, `/auth/refresh`, `/auth/logout` — xem `api-contract-platform.md` mục 1.
 `/auth/register` và `/auth/me` dùng chung cho cả hai.*
 

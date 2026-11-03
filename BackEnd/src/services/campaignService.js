@@ -4,6 +4,7 @@ const { AppError } = require("../utils/errors");
 const { paged, validationError, parseDate, isBlank } = require("../utils/http");
 const { toNum, toDec, parseAmount } = require("../utils/money");
 const { audit } = require("./auditService");
+const { toPublic } = require("../utils/publicView");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const PUBLIC_STATUSES = ["OPEN_FOR_FUNDING", "CLOSED"];
@@ -113,7 +114,7 @@ const listCampaigns = async (query, paging) => {
     ScholarshipCampaign.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
     ScholarshipCampaign.countDocuments(filter),
   ]);
-  return paged(items.map(present), total, paging);
+  return paged(items.map(present).map(toPublic), total, paging);
 };
 
 const withDetail = async (campaign) => {
@@ -136,7 +137,7 @@ const withDetail = async (campaign) => {
 const getPublicCampaign = async (campaignId) => {
   const campaign = await getCampaignOrThrow(campaignId);
   if (!PUBLIC_STATUSES.includes(campaign.status)) throw campaignNotFound(); // DRAFT is never public
-  return withDetail(campaign.toObject());
+  return toPublic(await withDetail(campaign.toObject()));
 };
 
 // ---------- Admin (BR-16: Scholarship Campaign chỉ do Admin tạo) ----------

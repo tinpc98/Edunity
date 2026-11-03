@@ -746,7 +746,7 @@ export default function TeacherProfilePage() {
             name="newPassword"
             rules={[
               { required: true, message: "Vui lòng nhập mật khẩu mới" },
-              { min: 6, message: "Mật khẩu phải có ít nhất 6 ký tự" },
+              { min: 8, message: "Mật khẩu phải có ít nhất 8 ký tự" },
             ]}
           >
             <Input.Password size="large" />

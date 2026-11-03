@@ -209,7 +209,10 @@ const getMyEnrollments = async (studentId, page = 1, limit = 20, includeClass = 
 
 const getEnrollmentById = async (studentId, enrollmentId) => {
   if (!mongoose.isValidObjectId(enrollmentId)) throw ENROLLMENT_NOT_FOUND();
-  const enrollment = await Enrollment.findOne({ _id: enrollmentId, studentId }).populate("classId");
+  const enrollment = await Enrollment.findOne({ _id: enrollmentId, studentId }).populate(
+    "classId",
+    "-reviewedBy -reviewedAt -reviewNote -updatedBy -isDeleted -deletedAt -deletedBy"
+  );
   return enrollment;
 };
 
