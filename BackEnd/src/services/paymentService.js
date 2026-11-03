@@ -9,6 +9,7 @@ const { toNum, toDec } = require("../utils/money");
 const { getPendingScholarshipUsages, confirmScholarshipUsage } = require("./settlementService");
 const { notify } = require("./notificationService");
 const {
+  AppError,
   ENROLLMENT_NOT_FOUND,
   ENROLLMENT_EXPIRED,
   PAYMENT_NOT_FOUND,
@@ -28,7 +29,7 @@ const createSandboxPayment = async (studentId, enrollmentId) => {
     throw ENROLLMENT_EXPIRED();
   }
 
-  // Check existing PENDING payment
+  // Kiểm tra Payment trạng thái PENDING đã tồn tại
   const existingPayment = await Payment.findOne({
     enrollmentId: enrollment._id,
     paymentStatus: "PENDING"
@@ -38,12 +39,17 @@ const createSandboxPayment = async (studentId, enrollmentId) => {
     return existingPayment;
   }
 
-  // BR-41 (MIXED): when a Scholarship amount is held for this Enrollment,
-  // the Payment only covers the remaining due; otherwise it is the full tuition.
+  // BR-41 (MIXED): Khi Enrollment có giữ tiền học bổng (Scholarship),
+  // Payment chỉ thanh toán phần còn lại; ngược lại là toàn bộ học phí.
   const { total: scholarshipHeld } = await getPendingScholarshipUsages(enrollment._id);
-  const amount = scholarshipHeld > 0
-    ? toDec(toNum(enrollment.tuitionAmount) - scholarshipHeld)
-    : enrollment.tuitionAmount;
+  const remainingNum = scholarshipHeld > 0
+    ? toNum(enrollment.tuitionAmount) - scholarshipHeld
+    : toNum(enrollment.tuitionAmount);
+
+  if (!Number.isFinite(remainingNum) || remainingNum <= 0) {
+    throw new AppError("No remaining tuition amount to pay", "VALIDATION_ERROR", 400);
+  }
+  const amount = toDec(remainingNum);
 
   const payment = new Payment({
     enrollmentId: enrollment._id,
@@ -60,36 +66,64 @@ const createSandboxPayment = async (studentId, enrollmentId) => {
 };
 
 const processWebhook = async (gatewayReference, status) => {
-  const payment = await Payment.findOne({ gatewayReference });
-  if (!payment) {
-    throw PAYMENT_NOT_FOUND();
-  }
-
-  if (payment.paymentStatus !== "PENDING") {
-    let enrollmentStatus = null;
-    const enrollment = await Enrollment.findById(payment.enrollmentId);
-    if (enrollment) {
-      enrollmentStatus = enrollment.enrollmentStatus;
-    }
-    return {
-      paymentStatus: payment.paymentStatus,
-      enrollmentStatus,
-      result: "IDEMPOTENT"
-    };
-  }
-
   const session = await mongoose.startSession();
   let result = {};
+  let successfulPayerId = null;
 
   try {
     await session.withTransaction(async () => {
       const now = new Date();
 
+      // PAY-03: Cập nhật trạng thái Payment có điều kiện nguyên tử: chỉ chuyển trạng thái nếu đang PENDING
+      const targetPaymentStatus = status === "SUCCESS" ? "COMPLETED" : "FAILED";
+      const updatedPayment = await Payment.findOneAndUpdate(
+        { gatewayReference, paymentStatus: "PENDING" },
+        {
+          $set: {
+            paymentStatus: targetPaymentStatus,
+            ...(status === "SUCCESS" ? { paidAt: now } : {})
+          }
+        },
+        { session, new: true }
+      );
+
+      if (!updatedPayment) {
+        // Payment đã được xử lý trước đó, hoặc không tồn tại
+        const existing = await Payment.findOne({ gatewayReference }).session(session);
+        if (!existing) {
+          throw PAYMENT_NOT_FOUND();
+        }
+
+        // PAY-04: Xử lý webhook SUCCESS đến muộn sau khi đã FAILED
+        if (existing.paymentStatus === "FAILED" && status === "SUCCESS") {
+          // Ghi audit log (đã redact dữ liệu nhạy cảm)
+          console.warn(JSON.stringify({
+            event: "LATE_SUCCESS_AFTER_FAILED",
+            paymentId: existing._id ? existing._id.toString() : null,
+            gatewayReference,
+            timestamp: now.toISOString()
+          }));
+
+          const enrollment = await Enrollment.findById(existing.enrollmentId).session(session);
+          result = {
+            paymentStatus: "FAILED",
+            enrollmentStatus: enrollment ? enrollment.enrollmentStatus : null,
+            result: "LATE_SUCCESS_FLAGGED_FOR_REVIEW"
+          };
+          return;
+        }
+
+        const enrollment = await Enrollment.findById(existing.enrollmentId).session(session);
+        result = {
+          paymentStatus: existing.paymentStatus,
+          enrollmentStatus: enrollment ? enrollment.enrollmentStatus : null,
+          result: "IDEMPOTENT"
+        };
+        return;
+      }
+
       if (status === "FAILED") {
-        payment.paymentStatus = "FAILED";
-        await payment.save({ session });
-        
-        const enrollment = await Enrollment.findById(payment.enrollmentId).session(session);
+        const enrollment = await Enrollment.findById(updatedPayment.enrollmentId).session(session);
         result = {
           paymentStatus: "FAILED",
           enrollmentStatus: enrollment ? enrollment.enrollmentStatus : null,
@@ -99,14 +133,14 @@ const processWebhook = async (gatewayReference, status) => {
       }
 
       if (status === "SUCCESS") {
-        // BR-13 / BR-41: Payment + held ScholarshipUsage (MIXED) must cover the whole tuition
-        const { usages: pendingUsages, total: scholarshipHeld } = await getPendingScholarshipUsages(payment.enrollmentId, session);
-        const totalPaid = toDec(toNum(payment.amount) + scholarshipHeld);
+        // BR-13 / BR-41: Tổng thanh toán (Payment) + phần học bổng tạm giữ (ScholarshipUsage) phải đủ toàn bộ học phí
+        const { usages: pendingUsages, total: scholarshipHeld } = await getPendingScholarshipUsages(updatedPayment.enrollmentId, session);
+        const totalPaid = toDec(toNum(updatedPayment.amount) + scholarshipHeld);
 
-        // Update enrollment with condition
+        // Cập nhật trạng thái Enrollment có điều kiện
         const updateRes = await Enrollment.updateOne(
           {
-            _id: payment.enrollmentId,
+            _id: updatedPayment.enrollmentId,
             enrollmentStatus: "PENDING_PAYMENT",
             holdExpiresAt: { $gt: now },
             $expr: { $lte: ["$tuitionAmount", totalPaid] }
@@ -114,7 +148,7 @@ const processWebhook = async (gatewayReference, status) => {
           {
             $set: {
               enrollmentStatus: "CONFIRMED",
-              amountPaidViaPayment: payment.amount,
+              amountPaidViaPayment: updatedPayment.amount,
               ...(scholarshipHeld > 0 ? { amountPaidViaScholarship: toDec(scholarshipHeld) } : {}),
               holdExpiresAt: null
             }
@@ -123,33 +157,28 @@ const processWebhook = async (gatewayReference, status) => {
         );
 
         if (updateRes.modifiedCount === 1) {
-          // Success update
-          payment.paymentStatus = "COMPLETED";
-          payment.paidAt = now;
-          await payment.save({ session });
+          const enrollment = await Enrollment.findById(updatedPayment.enrollmentId).session(session);
 
-          const enrollment = await Enrollment.findById(payment.enrollmentId).session(session);
-
-          // Create Transaction
+          // Tạo bản ghi Transaction
           const transaction = new Transaction({
             transactionType: "ENROLLMENT_PAYMENT",
-            sourceUserId: payment.payerUserId,
+            sourceUserId: updatedPayment.payerUserId,
             destinationUserId: enrollment.teacherId,
             relatedEnrollmentId: enrollment._id,
-            relatedPaymentId: payment._id,
-            amount: payment.amount,
+            relatedPaymentId: updatedPayment._id,
+            amount: updatedPayment.amount,
             status: "COMPLETED"
           });
           await transaction.save({ session });
 
-          // MIXED: officially record the Scholarship part (Campaign fund, Transaction)
+          // MIXED: chính thức ghi nhận phần học bổng (quỹ Campaign, Transaction)
           for (const usage of pendingUsages) {
             await confirmScholarshipUsage(usage, enrollment, session);
           }
 
-          // Create TeacherEarning (on the whole tuition: Payment + Scholarship part)
+          // Tạo TeacherEarning (trên toàn bộ học phí: phần Payment + phần Scholarship)
           const commissionRate = getSetting("COMMISSION_RATE") || 0.10;
-          const grossAmountNum = Number(payment.amount.toString()) + scholarshipHeld;
+          const grossAmountNum = Number(updatedPayment.amount.toString()) + scholarshipHeld;
           const commissionAmountNum = Math.round(grossAmountNum * commissionRate);
           const netAmountNum = grossAmountNum - commissionAmountNum;
 
@@ -164,33 +193,30 @@ const processWebhook = async (gatewayReference, status) => {
           });
           await earning.save({ session });
 
+          successfulPayerId = updatedPayment.payerUserId;
           result = {
             paymentStatus: "COMPLETED",
             enrollmentStatus: "CONFIRMED",
             result: "PAYMENT_SUCCESS"
           };
         } else {
-          // Late webhook, enrollment already expired or cancelled
-          payment.paymentStatus = "COMPLETED";
-          payment.paidAt = now;
-          await payment.save({ session });
-
+          // Webhook đến muộn, thời gian giữ chỗ của Enrollment đã hết hạn hoặc bị hủy
           const refundTx = new Transaction({
             transactionType: "REFUND",
-            sourceUserId: payment.payerUserId,
-            // no destination needed, returning to source
-            relatedPaymentId: payment._id,
-            amount: payment.amount,
+            sourceUserId: updatedPayment.payerUserId,
+            // Trả lại nguồn, không cần destination
+            relatedPaymentId: updatedPayment._id,
+            amount: updatedPayment.amount,
             status: "PENDING"
           });
           await refundTx.save({ session });
 
-          const currentEnrollment = await Enrollment.findById(payment.enrollmentId).session(session);
+          const currentEnrollment = await Enrollment.findById(updatedPayment.enrollmentId).session(session);
           
           result = {
             paymentStatus: "COMPLETED",
             enrollmentStatus: currentEnrollment ? currentEnrollment.enrollmentStatus : null,
-            result: "LATE_PAYMENT_REFUND_REQUIRED"
+            result: "LATE_PAYMENT_PENDING_REVIEW"
           };
         }
       }
@@ -199,14 +225,14 @@ const processWebhook = async (gatewayReference, status) => {
     session.endSession();
   }
 
-  if (result.result === "PAYMENT_SUCCESS") {
-    await notify(payment.payerUserId, "Thanh toán thành công", "Học phí đã được thanh toán, bạn đã được ghi danh vào lớp.", "ENROLLMENT_CONFIRMED");
+  if (result.result === "PAYMENT_SUCCESS" && successfulPayerId) {
+    await notify(successfulPayerId, "Thanh toán thành công", "Học phí đã được thanh toán, bạn đã được ghi danh vào lớp.", "ENROLLMENT_CONFIRMED");
   }
 
   return result;
 };
 
-// GET /payments/:id — payment status for its payer (or an Admin)
+// GET /payments/:id — xem trạng thái thanh toán cho người trả (hoặc Admin)
 const getPaymentById = async (user, paymentId) => {
   if (!mongoose.isValidObjectId(paymentId)) throw PAYMENT_NOT_FOUND();
 
