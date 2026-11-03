@@ -19,6 +19,7 @@ import StudentScholarshipDetailPage from "../features/student/scholarships/Stude
 import TeacherDiscoveryPage from "../features/teacher/discovery/TeacherDiscoveryPage";
 import TeacherDetailPage from "../features/teacher/discovery/TeacherDetailPage";
 import TeacherLayout from "../components/layout/TeacherLayout";
+import RequireVerifiedTeacher from "../components/guards/RequireVerifiedTeacher";
 import TeacherHomePage from "../features/teacher/home/TeacherHomePage";
 import TeacherClassesPage from "../features/teacher/classes/TeacherClassesPage";
 import CreateTeacherClassPage from "../features/teacher/classes/create/CreateTeacherClassPage";
@@ -209,15 +210,27 @@ const router = createBrowserRouter([
       },
       {
         path: "classes",
-        element: <TeacherClassesPage />,
+        element: (
+          <RequireVerifiedTeacher>
+            <TeacherClassesPage />
+          </RequireVerifiedTeacher>
+        ),
       },
       {
         path: "classes/create",
-        element: <CreateTeacherClassPage />,
+        element: (
+          <RequireVerifiedTeacher>
+            <CreateTeacherClassPage />
+          </RequireVerifiedTeacher>
+        ),
       },
       {
         path: "classes/:classId",
-        element: <TeacherClassDetailPage />,
+        element: (
+          <RequireVerifiedTeacher>
+            <TeacherClassDetailPage />
+          </RequireVerifiedTeacher>
+        ),
       },
       {
         path: "courses",
@@ -225,11 +238,19 @@ const router = createBrowserRouter([
       },
       {
         path: "course-proposals",
-        element: <TeacherCourseProposalsPage />,
+        element: (
+          <RequireVerifiedTeacher>
+            <TeacherCourseProposalsPage />
+          </RequireVerifiedTeacher>
+        ),
       },
       {
         path: "schedule",
-        element: <TeacherSchedulePage />,
+        element: (
+          <RequireVerifiedTeacher>
+            <TeacherSchedulePage />
+          </RequireVerifiedTeacher>
+        ),
       },
       {
         path: "profile",

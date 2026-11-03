@@ -26,7 +26,7 @@ const IMAGE_TYPES = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png
 const PRIVATE_TYPES = { ...IMAGE_TYPES, "application/pdf": "pdf", "video/mp4": "mp4" };
 const MIME_BY_EXTENSION = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf", mp4: "video/mp4" };
 
-const PRIVATE_KEY_PATTERN = /^private\/([a-f0-9]{24})\/[A-Z_]+\/[a-f0-9-]{36}\.(jpg|png|webp|pdf|mp4)$/;
+const PRIVATE_KEY_PATTERN = /^private\/([a-f0-9]{24})\/([A-Z_]+)\/[a-f0-9-]{36}\.(jpg|png|webp|pdf|mp4)$/;
 
 // The declared mimetype comes from the client: check the real content signature too
 const matchesSignature = (buffer, mimeType) => {
@@ -86,7 +86,7 @@ const getBaseUrl = () => (process.env.PUBLIC_BASE_URL || `http://localhost:${pro
 
 const parsePrivateKey = (storageKey) => {
   const match = typeof storageKey === "string" ? storageKey.match(PRIVATE_KEY_PATTERN) : null;
-  return match ? { ownerId: match[1], extension: match[2] } : null;
+  return match ? { ownerId: match[1], purpose: match[2], extension: match[3] } : null;
 };
 
 const exists = async (storageKey) => {

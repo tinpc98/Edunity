@@ -14,6 +14,9 @@ import { useAuthStore } from "../../stores/auth.store";
 import { sessionService, sessionKeys } from "../../services/session.service";
 import type { JoinSessionResponse, ClassroomRole } from "../../types/session";
 import { ROUTES } from "../../routes/routePaths";
+import { TeacherVerificationGateCard } from "../../components/guards/RequireVerifiedTeacher";
+import { useTeacherVerification } from "../../hooks/useTeacherVerification";
+import { getFriendlyErrorMessage } from "../../utils/apiErrorMap";
 
 import ClassroomPreJoin from "./components/ClassroomPreJoin";
 import LiveKitClassroom from "./components/LiveKitClassroom";
@@ -60,6 +63,15 @@ export default function ClassroomPage() {
 
   const isTeacher = user?.role === "TEACHER";
   const userFullName = user?.fullName || (isTeacher ? "Giảng viên" : "Học viên");
+
+  const {
+    verification,
+    isVerified: isVerifiedTeacher,
+    isLoading: isVerificationLoading,
+    isError: isVerificationError,
+    error: verificationError,
+    refetch: refetchVerification,
+  } = useTeacherVerification();
 
   // Query student sessions to find current session metadata if available
   const { data: mySessions = [] } = useQuery({
@@ -123,6 +135,9 @@ export default function ClassroomPage() {
   });
 
   const handleStartJoin = (options: { videoEnabled: boolean; audioEnabled: boolean }) => {
+    if (isTeacher && !isVerifiedTeacher) {
+      return;
+    }
     setMediaOptions(options);
     setStage("joining");
     joinMutation.mutate();
@@ -137,13 +152,16 @@ export default function ClassroomPage() {
       }
     }
     if (isTeacher) {
-      navigate(ROUTES.TEACHER.SCHEDULE);
+      navigate(isVerifiedTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.TEACHER.HOME);
     } else {
       navigate(ROUTES.STUDENT.SCHEDULE);
     }
   };
 
   const handleEndSession = () => {
+    if (isTeacher && !isVerifiedTeacher) {
+      return;
+    }
     endSessionMutation.mutate();
   };
 
@@ -188,6 +206,20 @@ export default function ClassroomPage() {
           actionText: "Quay lại lịch học",
           actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.STUDENT.SCHEDULE,
         };
+      case "TEACHER_NOT_VERIFIED":
+        return {
+          title: "Chưa xác minh hồ sơ giảng viên",
+          desc: "Bạn cần được xác minh hồ sơ giảng viên trước khi mở hoặc điều hành phòng học trực tuyến.",
+          actionText: "Xem hồ sơ giáo viên",
+          actionRoute: ROUTES.TEACHER.PROFILE,
+        };
+      case "CLASS_NOT_ACTIVE":
+        return {
+          title: "Lớp học chưa được kích hoạt",
+          desc: getFriendlyErrorMessage(joinError, "Lớp học chưa được phê duyệt hoặc hiện không trong trạng thái hoạt động để mở phòng học."),
+          actionText: isTeacher ? "Quay lại lớp của tôi" : "Quay lại lịch học",
+          actionRoute: isTeacher ? ROUTES.TEACHER.CLASSES : ROUTES.STUDENT.SCHEDULE,
+        };
       case "FORBIDDEN":
         return {
           title: "Không có quyền truy cập",
@@ -204,6 +236,28 @@ export default function ClassroomPage() {
         };
     }
   };
+
+  if (!isAuthenticated || !user || (user.role !== "STUDENT" && user.role !== "TEACHER")) {
+    return null;
+  }
+
+  // 0. TEACHER VERIFICATION GATE (Fail-closed before any prejoin/join/token/egress)
+  if (isTeacher && !isVerifiedTeacher) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white">
+        <TeacherVerificationGateCard
+          verification={verification}
+          isLoading={isVerificationLoading}
+          isError={isVerificationError}
+          error={verificationError}
+          onRetry={() => {
+            void refetchVerification();
+          }}
+          darkMode
+        />
+      </div>
+    );
+  }
 
   // 1. ERROR STAGE
   if (stage === "error") {

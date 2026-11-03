@@ -28,6 +28,7 @@ import dayjs from "dayjs";
 import { profileService } from "../../../services/profile.service";
 import { useAuthStore } from "../../../stores/auth.store";
 import type { SponsorProfile, UpdateSponsorProfilePayload } from "../../../types/profile";
+import { AVATAR_ACCEPT, validateAvatar } from "../../../utils/fileValidation";
 
 const { TextArea } = Input;
 
@@ -117,14 +118,9 @@ export default function SponsorProfilePage() {
   });
 
   const handleUploadAvatar: UploadProps["beforeUpload"] = (file) => {
-    const isImage = file.type.startsWith("image/");
-    if (!isImage) {
-      message.error("Chỉ chấp nhận tệp hình ảnh (JPG, PNG, WebP)!");
-      return Upload.LIST_IGNORE;
-    }
-    const isLt5M = file.size / 1024 / 1024 < 5;
-    if (!isLt5M) {
-      message.error("Kích thước ảnh phải nhỏ hơn 5MB!");
+    const error = validateAvatar(file);
+    if (error) {
+      message.error(error);
       return Upload.LIST_IGNORE;
     }
     updateAvatarMutation.mutate(file);
@@ -195,7 +191,7 @@ export default function SponsorProfilePage() {
               <Upload
                 beforeUpload={handleUploadAvatar}
                 showUploadList={false}
-                accept="image/*"
+                accept={AVATAR_ACCEPT}
                 disabled={updateAvatarMutation.isPending}
               >
                 <div

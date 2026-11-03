@@ -1,4 +1,4 @@
-import { Button, Typography, Space } from "antd";
+import { Button, Tooltip, Typography, Space } from "antd";
 import { 
   VideoCameraOutlined, 
   InfoCircleOutlined, 
@@ -9,6 +9,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import type { Session } from "../../../../types/session";
 import { formatSessionTimeRange } from "../../../../api/sessionAdapters";
+import { VERIFICATION_REQUIRED_MESSAGE } from "../../../../hooks/useTeacherVerification";
 
 const { Title, Text } = Typography;
 
@@ -16,12 +17,16 @@ interface TeacherWelcomeHeroProps {
   teacherName: string;
   nextSession?: Session;
   todaySessionsCount: number;
+  isVerified?: boolean;
+  verificationMessage?: string;
 }
 
 export default function TeacherWelcomeHero({
   teacherName,
   nextSession,
   todaySessionsCount,
+  isVerified = false,
+  verificationMessage = VERIFICATION_REQUIRED_MESSAGE,
 }: TeacherWelcomeHeroProps) {
   const navigate = useNavigate();
 
@@ -101,22 +106,27 @@ export default function TeacherWelcomeHero({
               </div>
             </div>
             <Space wrap className="pt-0.5 max-w-full">
-              <Button 
-                type="primary" 
-                size="middle" 
-                onClick={() => navigate(`/classroom/${nextSession.id}`)}
-                icon={<VideoCameraOutlined />} 
-                className="bg-indigo-600 shadow-sm shadow-indigo-600/20 rounded-xl px-5 font-semibold cursor-pointer"
-              >
-                Vào lớp Live
-              </Button>
-              <Button 
-                size="middle" 
-                onClick={() => navigate(`/teacher/classes/${nextSession.classId}`)}
-                icon={<InfoCircleOutlined />} 
-                className="rounded-xl bg-white border-transparent shadow-sm hover:text-indigo-600 cursor-pointer" 
-                title="Chi tiết lớp học" 
-              />
+              <Tooltip title={!isVerified ? verificationMessage : undefined}>
+                <Button 
+                  type="primary" 
+                  size="middle" 
+                  disabled={!isVerified}
+                  onClick={() => isVerified && navigate(`/classroom/${nextSession.id}`)}
+                  icon={<VideoCameraOutlined />} 
+                  className="bg-indigo-600 shadow-sm shadow-indigo-600/20 rounded-xl px-5 font-semibold cursor-pointer"
+                >
+                  Vào lớp Live
+                </Button>
+              </Tooltip>
+              <Tooltip title={!isVerified ? verificationMessage : "Chi tiết lớp học"}>
+                <Button 
+                  size="middle" 
+                  disabled={!isVerified}
+                  onClick={() => isVerified && navigate(`/teacher/classes/${nextSession.classId}`)}
+                  icon={<InfoCircleOutlined />} 
+                  className="rounded-xl bg-white border-transparent shadow-sm hover:text-indigo-600 cursor-pointer" 
+                />
+              </Tooltip>
             </Space>
           </div>
         ) : (
@@ -126,14 +136,19 @@ export default function TeacherWelcomeHero({
               <span>Chưa có buổi dạy sắp tới</span>
             </div>
             <Text type="secondary" className="text-[12px]">
-              Hãy kiểm tra thời khóa biểu hoặc tạo lịch buổi học mới trong các lớp đang giảng dạy.
+              {isVerified
+                ? "Hãy kiểm tra thời khóa biểu hoặc tạo lịch buổi học mới trong các lớp đang giảng dạy."
+                : verificationMessage}
             </Text>
-            <Button 
-              onClick={() => navigate("/teacher/schedule")}
-              className="mt-1 rounded-xl bg-white text-indigo-600 border border-gray-200 font-semibold h-8 text-[12px] cursor-pointer"
-            >
-              Xem lịch giảng dạy
-            </Button>
+            <Tooltip title={!isVerified ? verificationMessage : undefined}>
+              <Button 
+                disabled={!isVerified}
+                onClick={() => isVerified && navigate("/teacher/schedule")}
+                className="mt-1 rounded-xl bg-white text-indigo-600 border border-gray-200 font-semibold h-8 text-[12px] cursor-pointer"
+              >
+                Xem lịch giảng dạy
+              </Button>
+            </Tooltip>
           </div>
         )}
       </div>

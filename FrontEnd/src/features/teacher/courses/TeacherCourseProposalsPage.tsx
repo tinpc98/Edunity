@@ -39,6 +39,11 @@ import {
   COURSE_LEVELS,
   COURSE_LEVEL_LABELS,
 } from "../../../types/catalog";
+import {
+  getVerificationGuidanceMessage,
+  useTeacherVerification,
+} from "../../../hooks/useTeacherVerification";
+import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 
 const { TextArea } = Input;
 
@@ -54,6 +59,8 @@ type FormMode = "create" | "edit";
 export default function TeacherCourseProposalsPage() {
   const queryClient = useQueryClient();
   const [messageApi, contextHolder] = message.useMessage();
+  const { isVerified, verificationStatus } = useTeacherVerification();
+  const lockTooltip = getVerificationGuidanceMessage(verificationStatus);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [mode, setMode] = useState<FormMode>("create");
@@ -91,8 +98,8 @@ export default function TeacherCourseProposalsPage() {
       setIsModalOpen(false);
       form.resetFields();
     },
-    onError: (err: any) => {
-      messageApi.error(err.message || "Gửi đề xuất thất bại.");
+    onError: (err: unknown) => {
+      messageApi.error(getFriendlyErrorMessage(err, "Gửi đề xuất thất bại."));
     },
   });
 
@@ -105,12 +112,16 @@ export default function TeacherCourseProposalsPage() {
       setIsModalOpen(false);
       form.resetFields();
     },
-    onError: (err: any) => {
-      messageApi.error(err.message || "Cập nhật thất bại.");
+    onError: (err: unknown) => {
+      messageApi.error(getFriendlyErrorMessage(err, "Cập nhật thất bại."));
     },
   });
 
   const openCreate = () => {
+    if (!isVerified) {
+      messageApi.warning(lockTooltip);
+      return;
+    }
     setMode("create");
     setEditingProposal(null);
     setSelectedCategoryId("");
@@ -119,6 +130,10 @@ export default function TeacherCourseProposalsPage() {
   };
 
   const openEdit = (proposal: CourseProposal) => {
+    if (!isVerified) {
+      messageApi.warning(lockTooltip);
+      return;
+    }
     if (!["PENDING_REVIEW", "NEED_CHANGES"].includes(proposal.status)) {
       messageApi.warning("Đề xuất này không thể chỉnh sửa.");
       return;
@@ -197,10 +212,11 @@ export default function TeacherCourseProposalsPage() {
       width: 100,
       render: (_: any, record: CourseProposal) =>
         ["PENDING_REVIEW", "NEED_CHANGES"].includes(record.status) ? (
-          <Tooltip title="Chỉnh sửa và gửi lại">
+          <Tooltip title={!isVerified ? lockTooltip : "Chỉnh sửa và gửi lại"}>
             <Button
               icon={<EditOutlined />}
               size="small"
+              disabled={!isVerified}
               onClick={() => openEdit(record)}
             />
           </Tooltip>
@@ -222,14 +238,17 @@ export default function TeacherCourseProposalsPage() {
           <h1 className="text-[28px] font-bold text-slate-800 leading-tight">Đề xuất khóa học</h1>
           <p className="text-slate-500 text-sm mt-1">Gửi đề xuất khóa học để Admin xem xét và thêm vào danh mục.</p>
         </div>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={openCreate}
-          className="bg-indigo-600 rounded-xl font-semibold h-[42px]"
-        >
-          Đề xuất mới
-        </Button>
+        <Tooltip title={!isVerified ? lockTooltip : undefined}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            disabled={!isVerified}
+            onClick={openCreate}
+            className="bg-indigo-600 rounded-xl font-semibold h-[42px]"
+          >
+            Đề xuất mới
+          </Button>
+        </Tooltip>
       </div>
 
       {/* Info banner */}
@@ -263,9 +282,17 @@ export default function TeacherCourseProposalsPage() {
               description={
                 <div>
                   <p className="font-semibold text-gray-600 mb-2">Chưa có đề xuất nào</p>
-                  <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} className="bg-indigo-600">
-                    Tạo đề xuất đầu tiên
-                  </Button>
+                  <Tooltip title={!isVerified ? lockTooltip : undefined}>
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      disabled={!isVerified}
+                      onClick={openCreate}
+                      className="bg-indigo-600"
+                    >
+                      Tạo đề xuất đầu tiên
+                    </Button>
+                  </Tooltip>
                 </div>
               }
             />

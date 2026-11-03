@@ -19,6 +19,7 @@ const authenticateJwt = async (token, req, res, next) => {
   const user = mongoose.isValidObjectId(payload.sub) ? await User.findById(payload.sub).lean() : null;
   if (!user || user.isDeleted) return reject(res, 401, "UNAUTHORIZED", "User not found");
   if (BLOCKED_STATUSES.includes(user.status)) return reject(res, 403, "ACCOUNT_BLOCKED", "Account is suspended or banned");
+  if (user.status !== "ACTIVE") return reject(res, 403, "ACCOUNT_NOT_ACTIVE", "Account is not active");
 
   // A password change ends every session: access tokens from before it stop working right away
   if ((payload.tv || 0) !== (user.tokenVersion || 0)) {
@@ -48,6 +49,9 @@ const authenticateForTests = async (req, res, next) => {
   const user = await User.findById(extractedUserId).lean();
   if (user && (user.isDeleted || BLOCKED_STATUSES.includes(user.status))) {
     return reject(res, 403, "ACCOUNT_BLOCKED", "Account is suspended or banned");
+  }
+  if (user && user.status !== "ACTIVE") {
+    return reject(res, 403, "ACCOUNT_NOT_ACTIVE", "Account is not active");
   }
   req.user = user
     ? { id: user._id.toString(), role: user.role }

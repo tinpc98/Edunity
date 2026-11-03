@@ -15,7 +15,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // BR-01: only an ACTIVE, VERIFIED Teacher may create a Class or submit it for approval
 const getVerifiedTeacher = async (teacherId) => {
   const teacher = await User.findById(teacherId);
-  if (!teacher || teacher.role !== "TEACHER") throw FORBIDDEN("Only TEACHER can perform this action");
+  if (!teacher || teacher.isDeleted || teacher.role !== "TEACHER") throw FORBIDDEN("Only TEACHER can perform this action");
   if (teacher.status !== "ACTIVE") throw new AppError("Teacher account is not active", "ACCOUNT_NOT_ACTIVE", 403);
   if (!teacher.teacherProfile || teacher.teacherProfile.verificationStatus !== "VERIFIED") {
     throw new AppError("Teacher must be verified before creating or submitting a class", "TEACHER_NOT_VERIFIED", 403);
@@ -135,6 +135,7 @@ const createClass = async (teacherId, body) => {
 };
 
 const updateClass = async (teacherId, classId, body) => {
+  await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (!EDITABLE_STATUSES.includes(cls.status)) {
     throw new AppError("Only DRAFT or REJECTED classes can be edited", "CLASS_NOT_EDITABLE", 409);
@@ -220,6 +221,7 @@ const getMyClass = async (teacherId, classId) => {
 
 // FR-TEA-13 / FR-TEA-14
 const getClassStudents = async (teacherId, classId, query) => {
+  await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   const statuses = query.status ? String(query.status).split(",") : ["CONFIRMED", "COMPLETED"];
 
@@ -249,6 +251,7 @@ const getClassStudents = async (teacherId, classId, query) => {
  * schedule times are wall-clock times in the platform timezone (default UTC+7).
  */
 const getPlannedSessions = async (teacherId, classId) => {
+  await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (!cls.startDate || !cls.endDate || !cls.schedule || cls.schedule.length === 0) {
     throw validationError("startDate, endDate and schedule are required to plan sessions");

@@ -90,10 +90,18 @@ export default function TeacherPendingPage() {
 
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link to={ROUTES.HOME}><Button>Về trang chủ</Button></Link>
-              {status === "REJECTED" || status === "UNVERIFIED" ? (
-                <Link to={ROUTES.AUTH.TEACHER_QUALIFICATION}><Button type="primary" className="bg-indigo-600">Bổ sung hồ sơ</Button></Link>
+              {status === "REJECTED" ? (
+                <Link to={ROUTES.TEACHER.PROFILE}>
+                  <Button type="primary" danger>Xem lý do và nộp lại hồ sơ</Button>
+                </Link>
+              ) : status === "UNVERIFIED" ? (
+                <Link to={ROUTES.AUTH.TEACHER_QUALIFICATION}>
+                  <Button type="primary" className="bg-indigo-600">Hoàn thiện hồ sơ</Button>
+                </Link>
               ) : (
-                <Link to={ROUTES.TEACHER.HOME}><Button type="primary" className="bg-indigo-600">Vào trang giáo viên</Button></Link>
+                <Link to={ROUTES.TEACHER.HOME}>
+                  <Button type="primary" className="bg-indigo-600">Vào trang giáo viên</Button>
+                </Link>
               )}
             </div>
           </>

@@ -11,16 +11,16 @@ import {
   SearchOutlined, 
   PlusOutlined, 
   DeleteOutlined, 
-  SafetyCertificateOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
 import { courseService } from '../../../../services/course.service';
-import { profileService } from '../../../../services/profile.service';
 import { classService, classKeys } from '../../../../services/class.service';
-import type { TeacherProfile } from '../../../../types/profile';
+import { TeacherVerificationGateCard } from '../../../../components/guards/RequireVerifiedTeacher';
+import { useTeacherVerification } from '../../../../hooks/useTeacherVerification';
+import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import type { Course } from '../../../../types/catalog';
 import type { ScheduleEntry, CreateClassPayload } from '../../../../types/class';
 
@@ -28,11 +28,12 @@ const { Title, Text, Paragraph } = Typography;
 
 export default function CreateTeacherClassPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState(0);
   const [form] = Form.useForm();
   
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(() => searchParams.get('courseId'));
   const [courseSearch, setCourseSearch] = useState<string>('');
 
   // Schedule list
@@ -41,20 +42,21 @@ export default function CreateTeacherClassPage() {
     { dayOfWeek: 4, startTime: "19:00", endTime: "20:30" },
   ]);
 
-  // 1. Teacher Verification Gate
-  const { data: profile, isLoading: isProfileLoading } = useQuery({
-    queryKey: ["myProfile"],
-    queryFn: () => profileService.getMyProfile(),
-    staleTime: 1000 * 60,
-  });
+  // 1. Fail-closed Teacher Verification Gate
+  const {
+    verification,
+    isVerified,
+    isLoading: isVerificationLoading,
+    isError: isVerificationError,
+    error: verificationError,
+    refetch: refetchVerification,
+  } = useTeacherVerification();
 
-  const teacherProfile = profile as TeacherProfile | undefined;
-  const isVerified = teacherProfile?.verificationStatus === "VERIFIED";
-
-  // 2. Real Courses Query from Phase 3
+  // 2. Real Courses Query from Phase 3 (only after verification confirmed)
   const { data: coursesData, isLoading: isCoursesLoading } = useQuery({
     queryKey: ["courses", "active", courseSearch],
     queryFn: () => courseService.searchCourses({ search: courseSearch || undefined, pageSize: 50 }),
+    enabled: isVerified,
     staleTime: 1000 * 60 * 2,
   });
 
@@ -73,8 +75,8 @@ export default function CreateTeacherClassPage() {
       queryClient.invalidateQueries({ queryKey: classKeys.teacherList() });
       navigate(ROUTES.TEACHER.CLASS_DETAIL.replace(":classId", created.id));
     },
-    onError: (err: any) => {
-      message.error(err?.message || "Không thể tạo lớp học. Vui lòng kiểm tra lại thông tin.");
+    onError: (err: unknown) => {
+      message.error(getFriendlyErrorMessage(err, "Không thể tạo lớp học. Vui lòng kiểm tra lại thông tin."));
     },
   });
 
@@ -549,43 +551,26 @@ export default function CreateTeacherClassPage() {
     { title: 'Xác nhận', icon: <CheckCircleOutlined /> },
   ];
 
-  // ---------------- Verified Gate Blocking ----------------
-  if (!isProfileLoading && !isVerified) {
+  // ---------------- Fail-closed Verified Gate Blocking ----------------
+  if (!isVerified) {
     return (
-      <div className="site-container py-10 min-h-[600px] max-w-[800px] mx-auto">
+      <div className="site-container py-6 min-h-[500px] max-w-[800px] mx-auto">
         <Breadcrumb 
           className="mb-4 text-sm"
           items={[
-            { title: <a href={ROUTES.TEACHER.HOME}>Tổng quan</a> },
-            { title: <a href={ROUTES.TEACHER.CLASSES}>Lớp của tôi</a> },
+            { title: <Link to={ROUTES.TEACHER.HOME}>Tổng quan</Link> },
             { title: 'Tạo lớp học mới' },
           ]}
         />
-        <Card className="rounded-2xl border-amber-200 bg-amber-50/40 p-8 text-center shadow-sm">
-          <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-3xl mx-auto mb-4">
-            <SafetyCertificateOutlined />
-          </div>
-          <Title level={3} className="!text-amber-900 !mb-2">
-            Yêu cầu xác minh giáo viên
-          </Title>
-          <Paragraph className="text-gray-600 max-w-[500px] mx-auto mb-6 text-sm">
-            Bạn cần hoàn tất xác minh hồ sơ giáo viên trước khi tạo lớp học trên Edunity.
-            Trạng thái hiện tại: <Tag color="warning" className="font-bold">{teacherProfile?.verificationStatus || "CHƯA XÁC MINH"}</Tag>
-          </Paragraph>
-          <div className="flex justify-center gap-4">
-            <Button size="large" onClick={() => navigate(ROUTES.TEACHER.CLASSES)}>
-              Quay lại danh sách lớp
-            </Button>
-            <Button 
-              type="primary" 
-              size="large" 
-              className="bg-indigo-600 hover:bg-indigo-700"
-              onClick={() => navigate("/teacher/profile")}
-            >
-              Xem hồ sơ xác minh
-            </Button>
-          </div>
-        </Card>
+        <TeacherVerificationGateCard
+          verification={verification}
+          isLoading={isVerificationLoading}
+          isError={isVerificationError}
+          error={verificationError}
+          onRetry={() => {
+            void refetchVerification();
+          }}
+        />
       </div>
     );
   }
@@ -595,8 +580,8 @@ export default function CreateTeacherClassPage() {
       <Breadcrumb 
         className="mb-2 text-sm"
         items={[
-          { title: <a href={ROUTES.TEACHER.HOME}>Tổng quan</a> },
-          { title: <a href={ROUTES.TEACHER.CLASSES}>Lớp của tôi</a> },
+          { title: <Link to={ROUTES.TEACHER.HOME}>Tổng quan</Link> },
+          { title: <Link to={ROUTES.TEACHER.CLASSES}>Lớp của tôi</Link> },
           { title: 'Tạo lớp học mới' },
         ]}
       />

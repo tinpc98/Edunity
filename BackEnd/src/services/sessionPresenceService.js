@@ -258,6 +258,9 @@ const verifyAndRecordClientPresence = async ({
       );
     }
 
+    existingVerifiedOpen.lastHeartbeatAt = refNow;
+    await existingVerifiedOpen.save();
+
     return {
       verified: true,
       deduplicated: true,
@@ -327,7 +330,46 @@ const reconcileSessionWithLiveKit = async (sessionOrId, now = new Date()) => {
     }
   }
 
-  // 1. Reconcile missing join events for participants actively in LiveKit room
+  // 1. Reconcile missing disconnect events for DB-open intervals no longer in LiveKit room
+  // (including when a participant reconnected under a new LiveKit sid after a lost disconnect webhook)
+  const openIntervals = await SessionPresenceInterval.find({
+    sessionId: session._id,
+    disconnectedAt: null,
+  }).lean();
+
+  for (const openInt of openIntervals) {
+    const uid = openInt.userId.toString();
+    const activeP = activeMap.get(uid);
+    const isReplacedConnection =
+      Boolean(activeP && activeP.sid && openInt.connectionSessionId) &&
+      String(activeP.sid) !== String(openInt.connectionSessionId);
+
+    if (!activeP || isReplacedConnection) {
+      let disconnectAtDate = now;
+      if (isReplacedConnection && activeP.joinedAt) {
+        const replacementJoinedAt = new Date(
+          Number(activeP.joinedAt) > 1e12
+            ? Number(activeP.joinedAt)
+            : Number(activeP.joinedAt) * 1000
+        );
+        if (
+          replacementJoinedAt >= new Date(openInt.connectedAt) &&
+          replacementJoinedAt <= now
+        ) {
+          disconnectAtDate = replacementJoinedAt;
+        }
+      }
+      await recordParticipantDisconnected({
+        sessionId: session._id,
+        userId: openInt.userId,
+        connectionSessionId: openInt.connectionSessionId,
+        disconnectedAt: disconnectAtDate,
+        closeReason: "LIVEKIT_RECONCILED_DISCONNECT",
+      });
+    }
+  }
+
+  // 2. Reconcile missing join events for participants actively in LiveKit room
   for (const [identity, p] of activeMap.entries()) {
     if (!mongoose.isValidObjectId(identity)) continue;
     const hasOpen = await SessionPresenceInterval.exists({
@@ -361,25 +403,6 @@ const reconcileSessionWithLiveKit = async (sessionOrId, now = new Date()) => {
           // Ignore join window rejections for unauthorized/late unverified participants
         }
       }
-    }
-  }
-
-  // 2. Reconcile missing disconnect events for DB-open intervals no longer in LiveKit room
-  const openIntervals = await SessionPresenceInterval.find({
-    sessionId: session._id,
-    disconnectedAt: null,
-  }).lean();
-
-  for (const openInt of openIntervals) {
-    const uid = openInt.userId.toString();
-    if (!activeMap.has(uid)) {
-      await recordParticipantDisconnected({
-        sessionId: session._id,
-        userId: openInt.userId,
-        connectionSessionId: openInt.connectionSessionId,
-        disconnectedAt: now,
-        closeReason: "LIVEKIT_RECONCILED_DISCONNECT",
-      });
     }
   }
 
@@ -530,9 +553,13 @@ const recordParticipantConnected = async ({
       updateSet.firstPreOpenJoinAt = connectTime;
     }
     if (!isPreOpen && !attendance?.firstValidTeachingJoin) {
-      const hadPreOpenWait =
-        attendance?.firstPreOpenJoinAt && !attendance?.lastVerifiedDisconnect;
-      const teachingJoinAt = hadPreOpenWait ? session.startDatetime : effectiveTeachingJoin;
+      const preOpenSpanningStart = await SessionPresenceInterval.exists({
+        sessionId: session._id,
+        userId,
+        connectedAt: { $lt: session.startDatetime },
+        $or: [{ disconnectedAt: null }, { disconnectedAt: { $gt: session.startDatetime } }],
+      });
+      const teachingJoinAt = preOpenSpanningStart ? session.startDatetime : effectiveTeachingJoin;
       updateSet.firstValidTeachingJoin = teachingJoinAt;
       updateSet.joinedAt = teachingJoinAt;
       const lateSeconds = Math.max(0, Math.floor((teachingJoinAt.getTime() - startMs) / 1000));
@@ -1615,6 +1642,9 @@ const getSessionLiveStatus = async (user, sessionId) => {
   }
 
   const now = new Date();
+  if (session.status !== "COMPLETED" && session.status !== "CANCELLED") {
+    await reconcileSessionWithLiveKit(session, now);
+  }
   const startMs = new Date(session.startDatetime).getTime();
   const endMs = new Date(session.endDatetime).getTime();
   const preOpenAt = new Date(startMs - PRE_OPEN_BEFORE_MS);

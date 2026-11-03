@@ -1713,5 +1713,134 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
       // Confirm no automatic discipline/financial/contract penalty case was created prior to Admin confirmation
       expect(await TeacherDisciplineCase.countDocuments({ teacherId: teacher._id })).toBe(0);
     });
+
+    it("CASE A (Lost Disconnect Event) & CASE B (Waiting Room Re-Entry at 19:12): Reconciles lost LiveKit disconnect webhooks via scheduler and marks waiting-room re-entry at 19:12 as LATE", async () => {
+      const start = new Date("2026-09-06T19:00:00.000Z");
+      const end = new Date("2026-09-06T21:00:00.000Z"); // 120m = 7200s
+
+      const session = await Session.create({
+        classId: cls._id,
+        className: cls.className,
+        teacherId: teacher._id,
+        title: "Case A & Case B Regression Session",
+        status: "SCHEDULED",
+        meetingRoomId: "room_case_ab_1",
+        startDatetime: start,
+        endDatetime: end,
+      });
+
+      // Teacher connects at 19:00 and stays until 21:00
+      await presenceService.handleLiveKitEvent({
+        id: "evt_ab_teacher_join",
+        event: "participant_joined",
+        createdAt: Math.floor(start.getTime() / 1000),
+        room: { name: "room_case_ab_1" },
+        participant: { identity: String(teacher._id), sid: "PA_teacher_ab" },
+      });
+
+      // CASE A: student1 connects at 19:00, loses network at 19:30, and LiveKit disconnect webhook NEVER arrives
+      await presenceService.handleLiveKitEvent({
+        id: "evt_case_a_s1_join",
+        event: "participant_joined",
+        createdAt: Math.floor(start.getTime() / 1000),
+        room: { name: "room_case_ab_1" },
+        participant: { identity: String(student1._id), sid: "PA_s1_case_a" },
+      });
+
+      // CASE B: student2 connects in waiting room at 18:55, disconnects at 18:57, then reconnects at 19:12 and stays until 21:00
+      await presenceService.handleLiveKitEvent({
+        id: "evt_case_b_s2_wait_join",
+        event: "participant_joined",
+        createdAt: Math.floor(new Date("2026-09-06T18:55:00.000Z").getTime() / 1000),
+        room: { name: "room_case_ab_1" },
+        participant: { identity: String(student2._id), sid: "PA_s2_wait" },
+      });
+      await presenceService.handleLiveKitEvent({
+        id: "evt_case_b_s2_wait_leave",
+        event: "participant_left",
+        createdAt: Math.floor(new Date("2026-09-06T18:57:00.000Z").getTime() / 1000),
+        room: { name: "room_case_ab_1" },
+        participant: { identity: String(student2._id), sid: "PA_s2_wait" },
+      });
+      await presenceService.handleLiveKitEvent({
+        id: "evt_case_b_s2_rejoin_1912",
+        event: "participant_joined",
+        createdAt: Math.floor(new Date("2026-09-06T19:12:00.000Z").getTime() / 1000),
+        room: { name: "room_case_ab_1" },
+        participant: { identity: String(student2._id), sid: "PA_s2_live_1912" },
+      });
+
+      // Verify student2 immediate attendance state at 19:12 is LATE (12m > 5m) and firstValidTeachingJoin is 19:12 (not 18:55 or 19:00)
+      const s2Mid = await SessionAttendance.findOne({
+        sessionId: session._id,
+        studentId: student2._id,
+      }).lean();
+      expect(new Date(s2Mid.firstValidTeachingJoin).toISOString()).toBe("2026-09-06T19:12:00.000Z");
+      expect(new Date(s2Mid.joinedAt).toISOString()).toBe("2026-09-06T19:12:00.000Z");
+      expect(s2Mid.lateArrivalSeconds).toBe(720);
+      expect(s2Mid.isLate).toBe(true);
+      expect(s2Mid.attendanceStatus).toBe("LATE");
+
+      // At 19:30, student1 loses network without any webhook; scheduler runs at 19:30 and reconciles against LiveKit room participants
+      const origListParticipants = videoProvider.listRoomParticipants;
+      videoProvider.listRoomParticipants = async () => [
+        { identity: String(teacher._id), sid: "PA_teacher_ab", state: "ACTIVE" },
+        { identity: String(student2._id), sid: "PA_s2_live_1912", state: "ACTIVE" },
+      ];
+      try {
+        await runSessionLifecycleJob(new Date("2026-09-06T19:30:00.000Z"));
+      } finally {
+        videoProvider.listRoomParticipants = origListParticipants;
+      }
+
+      // Verify student1's open interval was closed at 19:30 by LiveKit reconciliation
+      const s1Interval = await SessionPresenceInterval.findOne({
+        sessionId: session._id,
+        userId: student1._id,
+        connectionSessionId: "PA_s1_case_a",
+      }).lean();
+      expect(s1Interval.disconnectedAt).toBeTruthy();
+      expect(new Date(s1Interval.disconnectedAt).toISOString()).toBe("2026-09-06T19:30:00.000Z");
+      expect(s1Interval.closeReason).toBe("LIVEKIT_RECONCILED_DISCONNECT");
+
+      // Session finishes at 21:00
+      await presenceService.handleLiveKitEvent({
+        id: "evt_case_b_s2_leave_2100",
+        event: "participant_left",
+        createdAt: Math.floor(end.getTime() / 1000),
+        room: { name: "room_case_ab_1" },
+        participant: { identity: String(student2._id), sid: "PA_s2_live_1912" },
+      });
+      await presenceService.handleLiveKitEvent({
+        id: "evt_ab_teacher_leave_2100",
+        event: "participant_left",
+        createdAt: Math.floor(end.getTime() / 1000),
+        room: { name: "room_case_ab_1" },
+        participant: { identity: String(teacher._id), sid: "PA_teacher_ab" },
+      });
+
+      const finalized = await presenceService.finalizeSessionAttendance(session._id, {
+        now: end,
+        forceRecalculate: true,
+      });
+
+      const s1Final = finalized.find((a) => a.studentId.toString() === student1._id.toString());
+      const s2Final = finalized.find((a) => a.studentId.toString() === student2._id.toString());
+
+      // CASE A assertions: student1 only gets 30m (1800s = 25% < 70%) and is ABSENT, never accumulating fake time to 21:00
+      expect(s1Final.scheduledOnlineSeconds).toBe(1800);
+      expect(s1Final.attendancePercentage).toBe(25);
+      expect(s1Final.attendanceStatus).toBe("ABSENT");
+
+      // CASE B assertions: student2 waiting room (120s) is excluded; teaching time is 19:12..21:00 (6480s = 90% >= 70%), marked LATE
+      expect(s2Final.waitingRoomSeconds).toBe(120);
+      expect(s2Final.scheduledOnlineSeconds).toBe(6480);
+      expect(s2Final.rawOnlineSeconds).toBe(6600);
+      expect(s2Final.attendancePercentage).toBe(90);
+      expect(new Date(s2Final.firstValidTeachingJoin).toISOString()).toBe("2026-09-06T19:12:00.000Z");
+      expect(s2Final.lateArrivalSeconds).toBe(720);
+      expect(s2Final.isLate).toBe(true);
+      expect(s2Final.attendanceStatus).toBe("LATE");
+    });
   });
 });

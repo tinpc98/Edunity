@@ -1,17 +1,25 @@
-import { Typography, Button, Card, Row, Col, Tag, Progress } from "antd";
+import { Typography, Button, Card, Row, Col, Tag, Progress, Tooltip } from "antd";
 import { StarFilled, BookOutlined, ArrowRightOutlined, CalendarOutlined, PlusOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { ClassModel } from "../../../../types/class";
 import { deriveScheduleText } from "../../../../api/classAdapters";
+import { VERIFICATION_REQUIRED_MESSAGE } from "../../../../hooks/useTeacherVerification";
 
 const { Title, Text } = Typography;
 
 interface TeachingClassesProps {
   classes: ClassModel[];
   total: number;
+  isVerified?: boolean;
+  verificationMessage?: string;
 }
 
-export default function TeachingClasses({ classes = [], total = 0 }: TeachingClassesProps) {
+export default function TeachingClasses({
+  classes = [],
+  total = 0,
+  isVerified = false,
+  verificationMessage = VERIFICATION_REQUIRED_MESSAGE,
+}: TeachingClassesProps) {
   const navigate = useNavigate();
 
   const getStatusTag = (status: string) => {
@@ -34,13 +42,16 @@ export default function TeachingClasses({ classes = [], total = 0 }: TeachingCla
           <BookOutlined className="text-indigo-600 text-[20px]" />
           <Title level={4} style={{ margin: 0, fontSize: '18px' }}>Lớp đang giảng dạy</Title>
         </div>
-        <Button 
-          type="link" 
-          onClick={() => navigate("/teacher/classes")}
-          className="font-semibold text-indigo-600 p-0 text-[13px] cursor-pointer"
-        >
-          Xem tất cả lớp ({total}) <ArrowRightOutlined className="ml-1" />
-        </Button>
+        <Tooltip title={!isVerified ? verificationMessage : undefined}>
+          <Button 
+            type="link" 
+            disabled={!isVerified}
+            onClick={() => isVerified && navigate("/teacher/classes")}
+            className="font-semibold text-indigo-600 p-0 text-[13px] cursor-pointer"
+          >
+            Xem tất cả lớp ({total}) <ArrowRightOutlined className="ml-1" />
+          </Button>
+        </Tooltip>
       </div>
 
       {displayClasses.length === 0 ? (
@@ -48,16 +59,21 @@ export default function TeachingClasses({ classes = [], total = 0 }: TeachingCla
           <BookOutlined className="text-3xl text-gray-300 mb-2" />
           <Text strong className="text-[14px] text-gray-700">Chưa có lớp học nào</Text>
           <Text type="secondary" className="text-[12px] mt-1">
-            Bắt đầu tạo lớp học đầu tiên của bạn để kết nối với học viên!
+            {isVerified
+              ? "Bắt đầu tạo lớp học đầu tiên của bạn để kết nối với học viên!"
+              : verificationMessage}
           </Text>
-          <Button 
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => navigate("/teacher/classes/create")}
-            className="mt-3 rounded-xl bg-indigo-600 font-semibold h-9 text-[12px] cursor-pointer"
-          >
-            Tạo lớp học mới
-          </Button>
+          <Tooltip title={!isVerified ? verificationMessage : undefined}>
+            <Button 
+              type="primary"
+              icon={<PlusOutlined />}
+              disabled={!isVerified}
+              onClick={() => isVerified && navigate("/teacher/classes/create")}
+              className="mt-3 rounded-xl bg-indigo-600 font-semibold h-9 text-[12px] cursor-pointer"
+            >
+              Tạo lớp học mới
+            </Button>
+          </Tooltip>
         </div>
       ) : (
         <Row gutter={[16, 16]}>
@@ -119,13 +135,16 @@ export default function TeachingClasses({ classes = [], total = 0 }: TeachingCla
                         <strong className="font-bold text-[12px]">{rating}</strong>
                         <Text type="secondary" className="text-[11px]">({reviews})</Text>
                       </div>
-                      <Button 
-                        type="primary" 
-                        onClick={() => navigate(`/teacher/classes/${cls.id}`)}
-                        className="rounded-lg bg-indigo-50 text-indigo-600 font-bold border-0 hover:bg-indigo-600 hover:text-white shadow-none h-7 px-2.5 text-[11px] cursor-pointer"
-                      >
-                        Quản lý lớp
-                      </Button>
+                      <Tooltip title={!isVerified ? verificationMessage : undefined}>
+                        <Button 
+                          type="primary" 
+                          disabled={!isVerified}
+                          onClick={() => isVerified && navigate(`/teacher/classes/${cls.id}`)}
+                          className="rounded-lg bg-indigo-50 text-indigo-600 font-bold border-0 hover:bg-indigo-600 hover:text-white shadow-none h-7 px-2.5 text-[11px] cursor-pointer"
+                        >
+                          Quản lý lớp
+                        </Button>
+                      </Tooltip>
                     </div>
                   </div>
                 </Card>

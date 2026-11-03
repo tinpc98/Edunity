@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
   Typography, Tabs, Breadcrumb, Tag, Button, Row, Col, Card, 
   Modal, Form, Input, InputNumber, DatePicker, Skeleton, Alert, message, List, Popconfirm, Table,
-  Avatar, Empty
+  Avatar, Empty, Tooltip
 } from 'antd';
 import { 
   CalendarOutlined, 
@@ -42,6 +42,11 @@ import {
   SESSION_STATUS_COLORS 
 } from '../../../../types/session';
 import { formatSessionTimeRange } from '../../../../api/sessionAdapters';
+import {
+  getVerificationGuidanceMessage,
+  useTeacherVerification,
+} from '../../../../hooks/useTeacherVerification';
+import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -49,6 +54,8 @@ export default function TeacherClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { isVerified, verificationStatus } = useTeacherVerification();
+  const lockTooltip = getVerificationGuidanceMessage(verificationStatus);
 
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -64,7 +71,7 @@ export default function TeacherClassDetailPage() {
   } = useQuery({
     queryKey: classKeys.teacherStudents(classId!),
     queryFn: () => classService.getClassStudents(classId!),
-    enabled: Boolean(classId),
+    enabled: Boolean(classId && isVerified),
   });
 
   const handleMessageStudent = async (studentId: string | null) => {
@@ -261,8 +268,10 @@ export default function TeacherClassDetailPage() {
     );
   }
 
-  const isEditable = cls.status === 'DRAFT' || cls.status === 'REJECTED';
+  const isEditable = isVerified && (cls.status === 'DRAFT' || cls.status === 'REJECTED');
   const isClassClosed = cls.status === 'COMPLETED' || cls.status === 'CANCELLED';
+  const canManageSessions = isVerified && !isClassClosed && cls.status !== 'PENDING_APPROVAL';
+  const isClassActiveForLive = isVerified && (cls.status === 'OPEN' || cls.status === 'IN_PROGRESS');
   const scheduleDisplay = deriveScheduleText(cls.schedule);
   const progressPercent = cls.capacity > 0 
     ? Math.min(100, Math.round((cls.enrolledCount / cls.capacity) * 100))
@@ -364,8 +373,8 @@ export default function TeacherClassDetailPage() {
     try {
       const list = await sessionService.getSessionAttendance(session.id);
       setAttendanceData(list);
-    } catch (err: any) {
-      message.error(err?.message || "Không thể tải danh sách điểm danh");
+    } catch (err: unknown) {
+      message.error(getFriendlyErrorMessage(err, "Không thể tải danh sách điểm danh"));
     } finally {
       setIsLoadingAttendance(false);
     }
@@ -504,7 +513,7 @@ export default function TeacherClassDetailPage() {
         </div>
         <div className="flex items-center gap-3">
           {/* Auto Plan Button */}
-          {cls.schedule && cls.schedule.length > 0 && cls.startDate && cls.endDate && !isClassClosed && (
+          {cls.schedule && cls.schedule.length > 0 && cls.startDate && cls.endDate && canManageSessions && (
             <Popconfirm
               title="Lập lịch tự động"
               description="Hệ thống sẽ tạo danh sách buổi học tự động dựa trên ngày khai giảng, ngày kết thúc và các ca học cố định. Bạn có muốn tiếp tục?"
@@ -524,7 +533,7 @@ export default function TeacherClassDetailPage() {
           )}
 
           {/* Add Session Button */}
-          {!isClassClosed && (
+          {canManageSessions && (
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -544,7 +553,7 @@ export default function TeacherClassDetailPage() {
           <Paragraph className="text-gray-400 text-sm max-w-md mx-auto mb-6">
             Lớp học cần có ít nhất một buổi học hợp lệ trước khi gửi phê duyệt tới Quản trị viên.
           </Paragraph>
-          {!isClassClosed && (
+          {canManageSessions && (
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -620,20 +629,40 @@ export default function TeacherClassDetailPage() {
                   <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                     {/* Join Classroom button if SCHEDULED or IN_PROGRESS */}
                     {(isScheduled || isInProgress) && (
-                      <Link to={`/classroom/${session.id}`}>
-                        <Button
-                          type="primary"
-                          size="small"
-                          icon={<VideoCameraOutlined />}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold"
+                      isClassActiveForLive ? (
+                        <Link to={`/classroom/${session.id}`}>
+                          <Button
+                            type="primary"
+                            size="small"
+                            icon={<VideoCameraOutlined />}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold"
+                          >
+                            {isInProgress ? "Vào lớp (LIVE)" : "Vào lớp"}
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Tooltip
+                          title={
+                            !isVerified
+                              ? lockTooltip
+                              : "Lớp học cần được Quản trị viên phê duyệt và mở hoạt động trước khi vào phòng học trực tuyến."
+                          }
                         >
-                          {isInProgress ? "Vào lớp (LIVE)" : "Vào lớp"}
-                        </Button>
-                      </Link>
+                          <Button
+                            type="primary"
+                            size="small"
+                            disabled
+                            icon={<VideoCameraOutlined />}
+                            className="rounded-lg text-xs font-semibold"
+                          >
+                            {isInProgress ? "Vào lớp (LIVE)" : "Vào lớp"}
+                          </Button>
+                        </Tooltip>
+                      )
                     )}
 
                     {/* Attendance button if IN_PROGRESS or COMPLETED */}
-                    {(isInProgress || isCompleted) && (
+                    {isVerified && (isInProgress || isCompleted) && (
                       <Button
                         size="small"
                         icon={<TeamOutlined />}
@@ -646,7 +675,7 @@ export default function TeacherClassDetailPage() {
 
 
                     {/* End session button if IN_PROGRESS */}
-                    {isInProgress && (
+                    {isClassActiveForLive && isInProgress && (
                       <Popconfirm
                         title="Kết thúc buổi học"
                         description="Hệ thống sẽ chuyển trạng thái buổi học sang Hoàn thành (COMPLETED) và chốt danh sách điểm danh. Bạn có chắc chắn?"
@@ -668,7 +697,7 @@ export default function TeacherClassDetailPage() {
                     )}
 
                     {/* Edit button if SCHEDULED */}
-                    {isScheduled && (
+                    {canManageSessions && isScheduled && (
                       <Button
                         size="small"
                         icon={<EditOutlined />}
@@ -680,7 +709,7 @@ export default function TeacherClassDetailPage() {
                     )}
 
                     {/* Cancel session if SCHEDULED */}
-                    {isScheduled && (
+                    {canManageSessions && isScheduled && (
                       <Popconfirm
                         title="Hủy buổi học"
                         description="Bạn có chắc chắn muốn hủy buổi học này không? Học viên sẽ thấy trạng thái Đã hủy."
