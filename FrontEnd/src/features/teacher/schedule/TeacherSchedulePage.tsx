@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { 
   Typography, Card, Row, Col, Tag, Button, Select, Radio, 
-  Skeleton, Breadcrumb 
+  Skeleton, Breadcrumb, Tooltip 
 } from 'antd';
 import { 
   CalendarOutlined, 
@@ -20,6 +20,10 @@ import { classService, classKeys } from '../../../services/class.service';
 import type { Session, ScheduleItem } from '../../../types/session';
 import { SESSION_STATUS_LABELS, SESSION_STATUS_COLORS } from '../../../types/session';
 import { deriveScheduleItemsFromSessions, formatSessionTimeRange } from '../../../api/sessionAdapters';
+import {
+  getVerificationGuidanceMessage,
+  useTeacherVerification,
+} from '../../../hooks/useTeacherVerification';
 
 dayjs.extend(isBetween);
 
@@ -29,6 +33,8 @@ type TimeFilter = 'TODAY' | 'WEEK' | 'ALL';
 
 export default function TeacherSchedulePage() {
   const navigate = useNavigate();
+  const { isVerified, verificationStatus } = useTeacherVerification();
+  const lockTooltip = getVerificationGuidanceMessage(verificationStatus);
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('ALL');
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
@@ -44,6 +50,13 @@ export default function TeacherSchedulePage() {
   });
 
   const teacherClasses = classesData?.items || [];
+  const classStatusMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of teacherClasses) {
+      map.set(c.id, c.status);
+    }
+    return map;
+  }, [teacherClasses]);
 
   // 2. Query sessions for each class in parallel to derive the schedule read model
   const { 
@@ -313,17 +326,38 @@ export default function TeacherSchedulePage() {
                   </div>
 
                   <div className="self-end md:self-center shrink-0 flex items-center gap-2">
-                    {(item.status === 'SCHEDULED' || item.status === 'IN_PROGRESS') && (
-                      <Link to={`/classroom/${item.sessionId}`}>
-                        <Button 
-                          type="primary" 
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-xs flex items-center gap-1.5"
+                    {(item.status === 'SCHEDULED' || item.status === 'IN_PROGRESS') && (() => {
+                      const clsStatus = classStatusMap.get(item.classId);
+                      const canJoinRoom = isVerified && (clsStatus === 'OPEN' || clsStatus === 'IN_PROGRESS');
+                      return canJoinRoom ? (
+                        <Link to={`/classroom/${item.sessionId}`}>
+                          <Button 
+                            type="primary" 
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-xs flex items-center gap-1.5"
+                          >
+                            <VideoCameraOutlined />
+                            <span>{item.status === 'IN_PROGRESS' ? 'Vào lớp (LIVE)' : 'Vào lớp'}</span>
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Tooltip
+                          title={
+                            !isVerified
+                              ? lockTooltip
+                              : "Lớp học cần được Quản trị viên phê duyệt và mở hoạt động trước khi vào phòng học trực tuyến."
+                          }
                         >
-                          <VideoCameraOutlined />
-                          <span>{item.status === 'IN_PROGRESS' ? 'Vào lớp (LIVE)' : 'Vào lớp'}</span>
-                        </Button>
-                      </Link>
-                    )}
+                          <Button
+                            type="primary"
+                            disabled
+                            className="rounded-xl font-medium text-xs flex items-center gap-1.5"
+                          >
+                            <VideoCameraOutlined />
+                            <span>{item.status === 'IN_PROGRESS' ? 'Vào lớp (LIVE)' : 'Vào lớp'}</span>
+                          </Button>
+                        </Tooltip>
+                      );
+                    })()}
 
                     <Button 
                       type="default" 

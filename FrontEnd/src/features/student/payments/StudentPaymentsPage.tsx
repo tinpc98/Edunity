@@ -28,11 +28,13 @@ import {
   formatVND,
 } from "../../../types/payment";
 import { ROUTES } from "../../../routes/routePaths";
+import { useAuthStore } from "../../../stores/auth.store";
 
 const { Title, Text } = Typography;
 
 export default function StudentPaymentsPage() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const { user } = useAuthStore();
 
   const {
     data: payments = [],
@@ -40,8 +42,9 @@ export default function StudentPaymentsPage() {
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: paymentKeys.myPayments(),
+    queryKey: paymentKeys.myPayments(user?.userId ?? ""),
     queryFn: () => paymentService.getMyPayments(),
+    enabled: Boolean(user?.userId && user.role === "STUDENT"),
   });
 
   const columns: ColumnsType<Payment> = [

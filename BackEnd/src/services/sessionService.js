@@ -1,15 +1,17 @@
 const mongoose = require("mongoose");
 const crypto = require("crypto");
 const { Class, Session, SessionAttendance, Enrollment, User } = require("../models");
-const { AppError, FORBIDDEN } = require("../utils/errors");
+const { AppError, FORBIDDEN, CLASS_NOT_FOUND } = require("../utils/errors");
 const { validationError, parseDate, isBlank } = require("../utils/http");
 const { getDisplayProfile } = require("../utils/userProfile");
 const videoProvider = require("./videoProvider");
-const { getOwnClass, isSessionWithinClass } = require("./teacherClassService");
+const { getVerifiedTeacher, getOwnClass, isSessionWithinClass } = require("./teacherClassService");
 
 const JOIN_WINDOW_BEFORE_MS = 15 * 60 * 1000; // same join window as GET /me/sessions (canJoin)
 const LATE_AFTER_MS = 15 * 60 * 1000;
 const CLOSED_CLASS_STATUSES = ["COMPLETED", "CANCELLED"];
+const ACTIVE_CLASS_STATUSES = ["OPEN", "IN_PROGRESS"];
+const NOT_DELETED = { isDeleted: { $ne: true } };
 
 const sessionNotFound = () => new AppError("Session not found", "SESSION_NOT_FOUND", 404);
 
@@ -33,9 +35,13 @@ const assertSessionTimes = (cls, startDatetime, endDatetime, label = "session") 
 
 // UC-TEA-03. Accepts one session, or `{ sessions: [...] }` to save the whole session plan at once.
 const createSessions = async (teacherId, classId, body) => {
+  await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (CLOSED_CLASS_STATUSES.includes(cls.status)) {
     throw new AppError("Cannot add sessions to a completed or cancelled class", "CLASS_CLOSED", 409);
+  }
+  if (cls.status === "PENDING_APPROVAL") {
+    throw new AppError("Cannot add sessions while class is pending approval", "CLASS_NOT_EDITABLE", 409);
   }
 
   const isBulk = Array.isArray(body.sessions);
@@ -66,11 +72,19 @@ const createSessions = async (teacherId, classId, body) => {
 };
 
 const updateSession = async (teacherId, sessionId, body) => {
+  await getVerifiedTeacher(teacherId);
   const session = await getOwnSession(teacherId, sessionId);
   if (session.status !== "SCHEDULED") {
     throw new AppError("Only SCHEDULED sessions can be updated", "SESSION_NOT_EDITABLE", 409);
   }
-  const cls = await Class.findById(session.classId);
+  const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED });
+  if (!cls) throw CLASS_NOT_FOUND();
+  if (CLOSED_CLASS_STATUSES.includes(cls.status)) {
+    throw new AppError("Cannot update sessions of a completed or cancelled class", "CLASS_CLOSED", 409);
+  }
+  if (cls.status === "PENDING_APPROVAL") {
+    throw new AppError("Cannot update sessions while class is pending approval", "CLASS_NOT_EDITABLE", 409);
+  }
 
   if (body.title !== undefined) {
     if (isBlank(body.title)) throw validationError("title must not be empty");
@@ -93,9 +107,11 @@ const updateSession = async (teacherId, sessionId, body) => {
 
 // Removing a planned session is only possible while the Class has not been submitted/opened
 const deleteSession = async (teacherId, sessionId) => {
+  await getVerifiedTeacher(teacherId);
   const session = await getOwnSession(teacherId, sessionId);
-  const cls = await Class.findById(session.classId).select("status").lean();
-  if (cls && !["DRAFT", "REJECTED"].includes(cls.status)) {
+  const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).select("status").lean();
+  if (!cls) throw CLASS_NOT_FOUND();
+  if (!["DRAFT", "REJECTED"].includes(cls.status)) {
     throw new AppError("Sessions can only be deleted while the class is DRAFT or REJECTED; cancel it instead", "SESSION_NOT_DELETABLE", 409);
   }
   await session.deleteOne();
@@ -107,6 +123,12 @@ const deleteSession = async (teacherId, sessionId) => {
  * Returns a room id and a short-lived access token — never an external Meet/Zoom URL.
  */
 const joinSession = async (user, sessionId) => {
+  if (user.role === "TEACHER") {
+    await getVerifiedTeacher(user.id);
+  } else if (user.role !== "STUDENT") {
+    throw FORBIDDEN("Only STUDENT or TEACHER can join a session");
+  }
+
   if (!mongoose.isValidObjectId(sessionId)) throw sessionNotFound();
   const session = await Session.findById(sessionId);
   if (!session) throw sessionNotFound();
@@ -117,13 +139,17 @@ const joinSession = async (user, sessionId) => {
       throw FORBIDDEN("You can only start sessions of your own classes");
     }
     role = "HOST";
-  } else if (user.role === "STUDENT") {
+  } else {
     // BR-12: Enrollment phải tồn tại (CONFIRMED) trước khi Join Session
     const enrollment = await Enrollment.exists({ studentId: user.id, classId: session.classId, enrollmentStatus: "CONFIRMED" });
     if (!enrollment) throw new AppError("Not enrolled in this class", "NOT_ENROLLED", 403);
     role = "PARTICIPANT";
-  } else {
-    throw FORBIDDEN("Only STUDENT or TEACHER can join a session");
+  }
+
+  const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).select("status").lean();
+  if (!cls) throw CLASS_NOT_FOUND();
+  if (!ACTIVE_CLASS_STATUSES.includes(cls.status)) {
+    throw new AppError("Class must be approved and active before joining a session", "CLASS_NOT_ACTIVE", 403);
   }
 
   if (session.status === "CANCELLED") throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
@@ -193,7 +219,13 @@ const joinSession = async (user, sessionId) => {
 
 // UC-TEA-05: khi kết thúc Session = COMPLETED, Attendance được cập nhật
 const endSession = async (teacherId, sessionId) => {
+  await getVerifiedTeacher(teacherId);
   const session = await getOwnSession(teacherId, sessionId);
+  const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).select("status").lean();
+  if (!cls) throw CLASS_NOT_FOUND();
+  if (!ACTIVE_CLASS_STATUSES.includes(cls.status)) {
+    throw new AppError("Class must be approved and active to end a session", "CLASS_NOT_ACTIVE", 403);
+  }
   if (session.status !== "IN_PROGRESS") {
     throw new AppError("Only an IN_PROGRESS session can be ended", "SESSION_NOT_IN_PROGRESS", 409);
   }
@@ -228,6 +260,7 @@ const endSession = async (teacherId, sessionId) => {
 
 // FR-TEA-13: attendance list of a session for the owning Teacher
 const getSessionAttendance = async (teacherId, sessionId) => {
+  await getVerifiedTeacher(teacherId);
   const session = await getOwnSession(teacherId, sessionId);
   return SessionAttendance.find({ sessionId: session._id })
     .populate("studentId", "email studentProfile.fullName studentProfile.avatarUrl")

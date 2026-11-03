@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Popover, Badge, Button, Empty, Spin, Typography } from "antd";
 import {
   BellOutlined,
@@ -14,24 +14,27 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { notificationService, notificationKeys } from "../../../services/notification.service";
 import type { NotificationItem } from "../../../types/communication";
+import { useAuthStore } from "../../../stores/auth.store";
 import { ROUTES } from "../../../routes/routePaths";
+import { invalidateTeacherVerificationState } from "../../../hooks/useTeacherVerification";
 
 const { Text } = Typography;
 
-function getNotificationIcon(type: string) {
-  if (type.includes("MESSAGE")) {
+function getNotificationIcon(type?: string) {
+  const safeType = type || "";
+  if (safeType.includes("MESSAGE")) {
     return <MessageOutlined className="text-blue-500 text-base" />;
   }
-  if (type.includes("REVIEW")) {
+  if (safeType.includes("REVIEW")) {
     return <StarOutlined className="text-amber-500 text-base" />;
   }
-  if (type.includes("REPORT")) {
+  if (safeType.includes("REPORT")) {
     return <AlertOutlined className="text-rose-500 text-base" />;
   }
-  if (type.includes("ENROLLMENT") || type.includes("VERIFIED") || type.includes("APPROVED")) {
+  if (safeType.includes("ENROLLMENT") || safeType.includes("VERIFIED") || safeType.includes("APPROVED")) {
     return <CheckCircleOutlined className="text-emerald-500 text-base" />;
   }
-  if (type.includes("SCHOLARSHIP")) {
+  if (safeType.includes("SCHOLARSHIP")) {
     return <TrophyOutlined className="text-indigo-500 text-base" />;
   }
   return <NotificationOutlined className="text-slate-500 text-base" />;
@@ -59,6 +62,7 @@ export const NotificationPopover: React.FC = () => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
 
   // Fetch recent notifications with polling (every 15 seconds)
   const { data, isLoading } = useQuery({
@@ -69,6 +73,23 @@ export const NotificationPopover: React.FC = () => {
 
   const unreadCount = data?.unreadCount ?? 0;
   const items = data?.items ?? [];
+  const syncedVerificationNotificationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (user?.role !== "TEACHER" || items.length === 0) return;
+    const latestVerificationNotif = items.find(
+      (item) =>
+        !item.isRead &&
+        (item.type === "TEACHER_VERIFIED" || item.type === "TEACHER_VERIFICATION_REJECTED")
+    );
+    if (
+      latestVerificationNotif &&
+      syncedVerificationNotificationIdRef.current !== latestVerificationNotif.id
+    ) {
+      syncedVerificationNotificationIdRef.current = latestVerificationNotif.id;
+      void invalidateTeacherVerificationState(queryClient, user.userId);
+    }
+  }, [items, queryClient, user?.role, user?.userId]);
 
   // Mutation: Mark one as read
   const markReadMutation = useMutation({
@@ -92,16 +113,28 @@ export const NotificationPopover: React.FC = () => {
     }
     setOpen(false);
 
+    const notificationType = item.type || "";
+
     // Safe route navigation based on notification type
-    if (item.type.includes("MESSAGE")) {
+    if (
+      notificationType === "TEACHER_VERIFICATION_REJECTED" ||
+      notificationType === "TEACHER_VERIFIED"
+    ) {
+      void invalidateTeacherVerificationState(queryClient, user?.userId);
+      if (!user || user.role === "TEACHER") {
+        navigate(ROUTES.TEACHER.PROFILE);
+      } else {
+        navigate(ROUTES.NOTIFICATIONS);
+      }
+    } else if (notificationType.includes("MESSAGE")) {
       navigate(ROUTES.MESSAGES);
-    } else if (item.type.includes("ENROLLMENT")) {
+    } else if (notificationType.includes("ENROLLMENT")) {
       navigate(ROUTES.STUDENT.ENROLLMENTS);
-    } else if (item.type.includes("SCHOLARSHIP")) {
+    } else if (notificationType.includes("SCHOLARSHIP")) {
       navigate(ROUTES.STUDENT.SCHOLARSHIPS);
-    } else if (item.type.includes("REPORT")) {
+    } else if (notificationType.includes("REPORT")) {
       navigate("/reports");
-    } else if (item.type.includes("REVIEW")) {
+    } else if (notificationType.includes("REVIEW")) {
       navigate("/teacher/reviews");
     } else {
       navigate("/notifications");

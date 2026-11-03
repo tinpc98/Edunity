@@ -10,6 +10,7 @@ import { ROUTES } from "../../routes/routePaths";
 import type { SubmitVerificationRequest } from "../../types/teacherVerification";
 import { getFriendlyErrorMessage } from "../../utils/apiErrorMap";
 import { PRIVATE_DOCUMENT_ACCEPT, validatePrivateDocument } from "../../utils/fileValidation";
+import { invalidateTeacherVerificationState } from "../../hooks/useTeacherVerification";
 
 interface QualificationFormValues {
   qualificationSummary: string;
@@ -81,8 +82,9 @@ export default function TeacherQualificationPage() {
       };
       return teacherVerificationService.submitVerification(payload);
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.setQueryData(["teacherVerification", user?.userId], data);
+      await invalidateTeacherVerificationState(queryClient, user?.userId);
       clearDraft();
       notification.success({
         title: "Hồ sơ đã được gửi",
@@ -137,6 +139,11 @@ export default function TeacherQualificationPage() {
     return <Navigate to={ROUTES.AUTH.TEACHER_PENDING} replace />;
   }
 
+  // Step 2 onboarding is strictly for first-time UNVERIFIED submissions; REJECTED resubmissions happen on /teacher/profile
+  if (verification?.verificationStatus === "REJECTED") {
+    return <Navigate to={ROUTES.TEACHER.PROFILE} replace />;
+  }
+
   return (
     <main className="site-container flex min-h-[calc(100vh-72px)] items-center py-14">
       <section className="mx-auto w-full max-w-[720px] rounded-2xl border border-slate-100 bg-white p-7 shadow-[0_18px_50px_rgba(79,70,229,0.10)] lg:p-9">
@@ -157,28 +164,17 @@ export default function TeacherQualificationPage() {
             action={<Button size="small" onClick={() => refetch()}>Thử lại</Button>}
           />
         ) : (
-          <>
-            {verification?.verificationStatus === "REJECTED" && (
-              <Alert
-                type="warning"
-                showIcon
-                className="mb-6"
-                message="Hồ sơ trước đó chưa được duyệt"
-                description={verification.reviewNote ? `Lý do: ${verification.reviewNote}. Vui lòng bổ sung và gửi lại.` : "Vui lòng bổ sung và gửi lại hồ sơ."}
-              />
-            )}
-
-            <Form
-              form={form}
-              layout="vertical"
-              requiredMark
-              onFinish={(values) => submitMutation.mutate(values)}
-              scrollToFirstError
-              initialValues={{
-                qualificationSummary: verification?.qualificationSummary || draft?.qualificationSummary,
-                biography: verification?.biography || draft?.biography,
-              }}
-            >
+          <Form
+            form={form}
+            layout="vertical"
+            requiredMark
+            onFinish={(values) => submitMutation.mutate(values)}
+            scrollToFirstError
+            initialValues={{
+              qualificationSummary: verification?.qualificationSummary || draft?.qualificationSummary,
+              biography: verification?.biography || draft?.biography,
+            }}
+          >
               <Form.Item label="Tóm tắt chuyên môn" name="qualificationSummary" rules={[{ required: true, whitespace: true, message: "Vui lòng nhập tóm tắt chuyên môn." }]}>
                 <Input placeholder="Ví dụ: Cử nhân Sư phạm Toán - ĐH Sư phạm Hà Nội, 5 năm kinh nghiệm" size="large" />
               </Form.Item>
@@ -232,8 +228,7 @@ export default function TeacherQualificationPage() {
               <p className="mt-4 text-center text-xs text-slate-400">
                 Bạn có thể bổ sung sau tại <Link to={ROUTES.TEACHER.PROFILE} className="font-semibold text-indigo-600">Hồ sơ giáo viên</Link>.
               </p>
-            </Form>
-          </>
+          </Form>
         )}
       </section>
     </main>

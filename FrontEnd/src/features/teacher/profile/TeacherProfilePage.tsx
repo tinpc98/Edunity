@@ -16,22 +16,22 @@ import {
   FileImageOutlined,
   FileOutlined,
   StarFilled,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import type { UploadProps } from "antd";
 import { profileService } from "../../../services/profile.service";
 import { teacherVerificationService } from "../../../services/teacherVerification.service";
 import { useAuthStore } from "../../../stores/auth.store";
+import { invalidateTeacherVerificationState } from "../../../hooks/useTeacherVerification";
 import type { TeacherProfile, UpdateTeacherProfilePayload } from "../../../types/profile";
 import type { SubmitVerificationRequest } from "../../../types/teacherVerification";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
-
-const ALLOWED_AVATAR_MIMES = ["image/jpeg", "image/png", "image/webp"];
-const ALLOWED_AVATAR_EXTS = [".jpg", ".jpeg", ".png", ".webp"];
-const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5 MB
-
-const ALLOWED_DOC_MIMES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-const ALLOWED_DOC_EXTS = [".pdf", ".jpg", ".jpeg", ".png", ".webp"];
-const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10 MB
+import {
+  AVATAR_ACCEPT,
+  PRIVATE_DOCUMENT_ACCEPT,
+  validateAvatar,
+  validatePrivateDocument,
+} from "../../../utils/fileValidation";
 
 export default function TeacherProfilePage() {
   const { user, updateUser } = useAuthStore();
@@ -57,7 +57,13 @@ export default function TeacherProfilePage() {
     enabled: !!user,
   });
 
-  const { data: verificationStatus, isPending: isPendingVerification } = useQuery({
+  const {
+    data: verificationStatus,
+    isPending: isPendingVerification,
+    isError: isErrorVerification,
+    error: errorVerification,
+    refetch: refetchVerification,
+  } = useQuery({
     queryKey: ["teacherVerification", user?.userId],
     queryFn: () => teacherVerificationService.getMyVerification(),
     enabled: !!user,
@@ -68,9 +74,9 @@ export default function TeacherProfilePage() {
   // Profile Update Mutation
   const updateProfileMutation = useMutation({
     mutationFn: (payload: UpdateTeacherProfilePayload) => profileService.updateMyProfile(payload),
-    onSuccess: (updatedProfile) => {
+    onSuccess: async (updatedProfile) => {
       queryClient.setQueryData(["teacherProfile", user?.userId], updatedProfile);
-      queryClient.invalidateQueries({ queryKey: ["teacherProfile"] });
+      await invalidateTeacherVerificationState(queryClient, user?.userId);
       updateUser({ fullName: updatedProfile.fullName });
       setIsEditing(false);
       message.success("Cập nhật thông tin thành công!");
@@ -168,10 +174,9 @@ export default function TeacherProfilePage() {
 
       return teacherVerificationService.submitVerification(payload);
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.setQueryData(["teacherVerification", user?.userId], data);
-      queryClient.invalidateQueries({ queryKey: ["teacherVerification"] });
-      queryClient.invalidateQueries({ queryKey: ["teacherProfile"] });
+      await invalidateTeacherVerificationState(queryClient, user?.userId);
       setIsVerificationModalVisible(false);
       setIdentityFrontFile(null);
       setIdentityBackFile(null);
@@ -232,18 +237,11 @@ export default function TeacherProfilePage() {
 
   // Pre-validate Avatar
   const avatarUploadProps: UploadProps = {
-    accept: ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp",
+    accept: AVATAR_ACCEPT,
     beforeUpload: (file) => {
-      const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
-      const isAllowedType = ALLOWED_AVATAR_MIMES.includes(file.type) || ALLOWED_AVATAR_EXTS.includes(ext);
-
-      if (!isAllowedType) {
-        message.error("Định dạng tệp không được hỗ trợ. Chỉ chấp nhận tệp JPG, PNG hoặc WebP.");
-        return Upload.LIST_IGNORE;
-      }
-
-      if (file.size > MAX_AVATAR_SIZE) {
-        message.error("Kích thước tệp quá lớn. Vui lòng chọn ảnh đại diện tối đa 5MB.");
+      const error = validateAvatar(file);
+      if (error) {
+        message.error(error);
         return Upload.LIST_IGNORE;
       }
 
@@ -255,14 +253,9 @@ export default function TeacherProfilePage() {
 
   // Pre-validate Private Documents
   const validatePrivateDocFile = (file: File): boolean => {
-    const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
-    const isAllowed = ALLOWED_DOC_MIMES.includes(file.type) || ALLOWED_DOC_EXTS.includes(ext);
-    if (!isAllowed) {
-      message.error(`Tệp "${file.name}" không hợp lệ. Chỉ chấp nhận định dạng PDF, JPG, PNG hoặc WebP.`);
-      return false;
-    }
-    if (file.size > MAX_DOC_SIZE) {
-      message.error(`Tệp "${file.name}" quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Giới hạn tối đa là 10MB.`);
+    const error = validatePrivateDocument(file);
+    if (error) {
+      message.error(error);
       return false;
     }
     return true;
@@ -280,6 +273,35 @@ export default function TeacherProfilePage() {
   };
 
   const renderVerificationStatus = () => {
+    if (isErrorVerification && !verificationStatus) {
+      return (
+        <Alert
+          type="warning"
+          showIcon
+          className="rounded-xl"
+          title="Không thể tải trạng thái xác minh giảng viên"
+          description={
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-1">
+              <span className="text-sm text-slate-700">
+                {getFriendlyErrorMessage(
+                  errorVerification,
+                  "Không thể kiểm tra trạng thái xác minh hồ sơ lúc này. Vui lòng thử lại."
+                )}
+              </span>
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                onClick={() => refetchVerification()}
+                className="self-start sm:self-auto shrink-0"
+              >
+                Thử lại
+              </Button>
+            </div>
+          }
+        />
+      );
+    }
+
     const status = verificationStatus?.verificationStatus || profile.verificationStatus || "UNVERIFIED";
 
     if (status === "VERIFIED") {
@@ -560,7 +582,7 @@ export default function TeacherProfilePage() {
                   </div>
                 ) : (
                   <Upload
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    accept={PRIVATE_DOCUMENT_ACCEPT}
                     beforeUpload={(file) => {
                       if (validatePrivateDocFile(file)) setIdentityFrontFile(file);
                       return false;
@@ -602,7 +624,7 @@ export default function TeacherProfilePage() {
                   </div>
                 ) : (
                   <Upload
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    accept={PRIVATE_DOCUMENT_ACCEPT}
                     beforeUpload={(file) => {
                       if (validatePrivateDocFile(file)) setIdentityBackFile(file);
                       return false;
@@ -623,17 +645,17 @@ export default function TeacherProfilePage() {
           <div data-testid="upload-qual" className="mb-5 p-4 rounded-xl bg-slate-50 border border-slate-200">
             <h4 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs">2</span>
-              Bằng cấp / Chứng chỉ chuyên môn (Tối đa 3 tệp) *
+              Bằng cấp / Chứng chỉ chuyên môn (Tối đa 5 tệp) *
             </h4>
             <p className="text-xs text-slate-500 mb-3">
               Bằng tốt nghiệp đại học, chứng chỉ sư phạm hoặc chứng chỉ chuyên môn liên quan.
             </p>
 
             <Upload.Dragger
-              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              accept={PRIVATE_DOCUMENT_ACCEPT}
               beforeUpload={(file) => {
-                if (qualificationFiles.length >= 3) {
-                  message.warning("Bạn chỉ có thể tải lên tối đa 3 tài liệu chứng chỉ.");
+                if (qualificationFiles.length >= 5) {
+                  message.warning("Bạn chỉ có thể tải lên tối đa 5 tài liệu chứng chỉ.");
                   return false;
                 }
                 if (validatePrivateDocFile(file)) {
@@ -646,14 +668,14 @@ export default function TeacherProfilePage() {
               }}
               showUploadList={false}
               multiple
-              disabled={qualificationFiles.length >= 3}
+              disabled={qualificationFiles.length >= 5}
             >
               <p className="ant-upload-drag-icon !mb-1 text-indigo-500"><InboxOutlined /></p>
               <p className="ant-upload-text text-xs font-semibold text-slate-700">
                 Kéo thả hoặc nhấn để chọn tệp bằng cấp (PDF, JPG, PNG, WebP)
               </p>
               <p className="ant-upload-hint text-[11px] text-slate-400">
-                Tối đa 3 tệp, dung lượng tối đa 10MB/tệp
+                Tối đa 5 tệp, dung lượng tối đa 10MB/tệp
               </p>
             </Upload.Dragger>
 

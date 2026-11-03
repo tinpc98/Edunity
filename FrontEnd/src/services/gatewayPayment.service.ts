@@ -10,7 +10,7 @@ import { adaptPayment, adaptPayments } from "../api/paymentAdapters";
 export const paymentKeys = {
   all: ["payments"] as const,
   history: (enrollmentId: string) => ["payments", "history", enrollmentId] as const,
-  myPayments: () => ["payments", "myPayments"] as const,
+  myPayments: (userId: string) => ["payments", "myPayments", userId] as const,
   detail: (id: string) => ["payments", "detail", id] as const,
 };
 

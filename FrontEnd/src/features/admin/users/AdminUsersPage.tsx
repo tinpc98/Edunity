@@ -84,7 +84,7 @@ export default function AdminUsersPage() {
   const [statusForm] = Form.useForm<{ status: SettableUserStatus; reason?: string }>();
 
   // Fetch users list
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: adminUserKeys.list({
       search: appliedSearch || undefined,
       role: roleFilter,
@@ -103,7 +103,13 @@ export default function AdminUsersPage() {
   });
 
   // Fetch single user detail
-  const { data: userDetail, isLoading: isDetailLoading } = useQuery({
+  const {
+    data: userDetail,
+    isLoading: isDetailLoading,
+    isFetching: isDetailFetching,
+    isError: isDetailError,
+    refetch: refetchUserDetail,
+  } = useQuery({
     queryKey: adminUserKeys.detail(selectedUserId!),
     queryFn: () => adminUserService.getUser(selectedUserId!),
     enabled: Boolean(selectedUserId),
@@ -335,25 +341,41 @@ export default function AdminUsersPage() {
 
       {/* Table */}
       <Card className="rounded-2xl shadow-sm border-slate-200/80 bg-white overflow-hidden p-0">
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={data?.items || []}
-          loading={isLoading}
-          pagination={{
-            current: page,
-            pageSize,
-            total: data?.total || 0,
-            showSizeChanger: true,
-            pageSizeOptions: ["10", "20", "50"],
-            onChange: (p, ps) => {
-              setPage(p);
-              setPageSize(ps);
-            },
-            showTotal: (total) => `Tổng cộng ${total} người dùng`,
-          }}
-          scroll={{ x: 800 }}
-        />
+        {isError && (
+          <Alert
+            type="error"
+            showIcon
+            className="m-4"
+            message="Không thể tải danh sách người dùng"
+            description="Vui lòng thử lại. Nếu vấn đề vẫn tiếp diễn, hãy kiểm tra kết nối và thử lại sau."
+            action={
+              <Button size="small" onClick={() => refetch()} loading={isFetching}>
+                Thử lại
+              </Button>
+            }
+          />
+        )}
+        {(!isError || data) && (
+          <Table
+            rowKey="id"
+            columns={columns}
+            dataSource={data?.items || []}
+            loading={isLoading}
+            pagination={{
+              current: page,
+              pageSize,
+              total: data?.total || 0,
+              showSizeChanger: true,
+              pageSizeOptions: ["10", "20", "50"],
+              onChange: (p, ps) => {
+                setPage(p);
+                setPageSize(ps);
+              },
+              showTotal: (total) => `Tổng cộng ${total} người dùng`,
+            }}
+            scroll={{ x: 800 }}
+          />
+        )}
       </Card>
 
       {/* User Detail Drawer */}
@@ -363,7 +385,23 @@ export default function AdminUsersPage() {
         onClose={() => setSelectedUserId(null)}
         width={560}
       >
-        {isDetailLoading || !userDetail ? (
+        {isDetailError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Không thể tải thông tin người dùng"
+            description="Vui lòng thử lại. Nếu vấn đề vẫn tiếp diễn, hãy kiểm tra kết nối và thử lại sau."
+            action={
+              <Button
+                size="small"
+                onClick={() => refetchUserDetail()}
+                loading={isDetailFetching}
+              >
+                Thử lại
+              </Button>
+            }
+          />
+        ) : isDetailLoading || !userDetail ? (
           <div className="py-12 text-center text-slate-400">Đang tải thông tin...</div>
         ) : (
           <div className="space-y-6">

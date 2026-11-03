@@ -14,6 +14,9 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
     if (err.code === "ACCOUNT_BLOCKED") {
       return "Tài khoản của bạn đang bị tạm khóa. Vui lòng liên hệ Edunity để được hỗ trợ.";
     }
+    if (err.code === "ACCOUNT_NOT_ACTIVE") {
+      return "Tài khoản của bạn hiện chưa ở trạng thái hoạt động.";
+    }
 
     if (err.code === "MESSAGING_NOT_ALLOWED") {
       return "Bạn chỉ có thể nhắn tin cho học viên thuộc lớp của mình.";
@@ -47,7 +50,16 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       return "Hồ sơ giáo viên chưa được khởi tạo đầy đủ. Không thể cập nhật ảnh đại diện.";
     }
 
-    // Verification errors
+    // Verification & teaching authorization errors
+    if (err.code === "TEACHER_NOT_VERIFIED") {
+      return "Bạn cần được xác minh hồ sơ giảng viên trước khi sử dụng chức năng này.";
+    }
+    if (err.code === "CLASS_NOT_ACTIVE") {
+      return "Lớp học chưa được phê duyệt hoặc hiện không trong trạng thái hoạt động để mở phòng học.";
+    }
+    if (err.code === "CLASS_NOT_EDITABLE") {
+      return "Lớp học hiện không thể chỉnh sửa ở trạng thái này.";
+    }
     if (err.code === "ALREADY_VERIFIED") {
       return "Hồ sơ của bạn đã được xác minh thành công trước đó.";
     }

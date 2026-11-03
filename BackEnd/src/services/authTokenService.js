@@ -19,6 +19,9 @@ const assertAccountUsable = (user) => {
   if (BLOCKED_STATUSES.includes(user.status)) {
     throw new AppError("Account is suspended or banned", "ACCOUNT_BLOCKED", 403);
   }
+  if (user.status !== "ACTIVE") {
+    throw new AppError("Account is not active", "ACCOUNT_NOT_ACTIVE", 403);
+  }
 };
 
 // The raw refresh token is only returned to the client; the database stores its hash

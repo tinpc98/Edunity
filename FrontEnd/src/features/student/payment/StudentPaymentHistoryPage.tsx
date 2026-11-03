@@ -1,195 +1,198 @@
 import { useQuery } from "@tanstack/react-query";
-import { Table, Tag, Alert } from "antd";
+import { Alert, Button, Empty, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { ReloadOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { paymentService } from "../../../services/payment.service";
 import { useAuthStore } from "../../../stores/auth.store";
-
-export interface StudentPaymentHistoryItem {
-  id: string;
-  enrollmentId: string;
-  payerUserId: string;
-  gateway: string;
-  gatewayReference: string;
-  amount: number;
-  paymentStatus: "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED";
-  paidAt?: string;
-  createdAt: string;
-  updatedAt?: string;
-  errorMessage?: string;
-  className: string;
-  enrollmentStatus: string;
-}
-
-const renderStatus = (status: StudentPaymentHistoryItem["paymentStatus"]) => {
-  switch (status) {
-    case "COMPLETED":
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-600 border border-emerald-100">
-          Thành công
-        </span>
-      );
-    case "PENDING":
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-600 border border-amber-100">
-          Đang xử lý
-        </span>
-      );
-    case "FAILED":
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 text-rose-600 border border-rose-100">
-          Thất bại
-        </span>
-      );
-    case "REFUNDED":
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-          Đã hoàn tiền
-        </span>
-      );
-    default:
-      return <Tag>{status}</Tag>;
-  }
-};
+import { gatewayPaymentService, paymentKeys } from "../../../services/gatewayPayment.service";
+import { FetchError } from "../../../api/apiClient";
+import type { Payment } from "../../../types/payment";
+import {
+  formatVND,
+  PAYMENT_STATUS_COLORS,
+  PAYMENT_STATUS_LABELS,
+} from "../../../types/payment";
 
 export default function StudentPaymentHistoryPage() {
   const { user } = useAuthStore();
+  const userId = user?.userId;
 
-  const { data: payments = [], isLoading, isError } = useQuery({
-    queryKey: ["studentPayments", user?.userId],
-    queryFn: () => {
-      if (!user) throw new Error("No user");
-      return paymentService.getMyPayments(user.userId);
-    },
-    enabled: !!user,
+  const {
+    data: payments = [],
+    error,
+    isError,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: paymentKeys.myPayments(userId ?? ""),
+    queryFn: () => gatewayPaymentService.getMyPayments(),
+    enabled: Boolean(userId && user?.role === "STUDENT"),
   });
 
-  const columns: ColumnsType<StudentPaymentHistoryItem> = [
+  const columns: ColumnsType<Payment> = [
     {
-      title: <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Lớp học</span>,
-      dataIndex: "className",
-      key: "className",
-      width: "32%",
-      render: (text: string) => (
-        <div className="text-[13px] font-semibold text-slate-800 leading-tight max-w-[280px]">
-          {text}
-        </div>
-      ),
-    },
-    {
-      title: <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Mã giao dịch</span>,
+      title: "Mã giao dịch",
       dataIndex: "gatewayReference",
       key: "gatewayReference",
-      width: "18%",
-      render: (text: string) => (
-        <div className="text-[12px] text-slate-500 font-mono tracking-tight truncate">
-          {text}
-        </div>
+      width: 190,
+      render: (reference: string) => (
+        <span className="font-mono text-xs text-slate-600 break-all">{reference}</span>
       ),
     },
     {
-      title: <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Số tiền</span>,
+      title: "Lớp học",
+      dataIndex: "className",
+      key: "className",
+      width: 220,
+      render: (className: string) => (
+        <span className="font-medium text-slate-800">{className}</span>
+      ),
+    },
+    {
+      title: "Cổng thanh toán",
+      dataIndex: "gateway",
+      key: "gateway",
+      width: 150,
+      render: (gateway: string) => (
+        <Tag color="blue" className="uppercase">
+          {gateway}
+        </Tag>
+      ),
+    },
+    {
+      title: "Số tiền",
       dataIndex: "amount",
       key: "amount",
-      width: "15%",
-      render: (val: number | string) => {
-        const num = typeof val === "string" ? parseFloat(val) : val;
-        return (
-          <div className="text-[13px] font-semibold text-slate-800">
-            {num.toLocaleString("vi-VN")} ₫
-          </div>
-        );
-      },
+      width: 140,
+      align: "right",
+      render: (amount: number) => (
+        <span className="font-semibold text-slate-800">{formatVND(amount)}</span>
+      ),
     },
     {
-      title: <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Thời gian</span>,
+      title: "Trạng thái",
+      dataIndex: "paymentStatus",
+      key: "paymentStatus",
+      width: 140,
+      render: (status: Payment["paymentStatus"]) => (
+        <Tag color={PAYMENT_STATUS_COLORS[status]}>
+          {PAYMENT_STATUS_LABELS[status]}
+        </Tag>
+      ),
+    },
+    {
+      title: "Thời gian tạo",
       dataIndex: "createdAt",
       key: "createdAt",
-      width: "19%",
-      render: (val: string) => (
-        <div className="flex flex-col text-[12px] text-slate-600">
-          <span className="font-medium text-slate-700">{dayjs(val).format("DD/MM/YYYY")}</span>
-          <span className="text-slate-400">{dayjs(val).format("HH:mm")}</span>
+      width: 160,
+      render: (createdAt: string) => (
+        <div className="text-xs text-slate-600">
+          <div>{dayjs(createdAt).format("DD/MM/YYYY")}</div>
+          <div className="text-slate-400">{dayjs(createdAt).format("HH:mm")}</div>
         </div>
       ),
     },
     {
-      title: <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Trạng thái</span>,
-      dataIndex: "paymentStatus",
-      key: "paymentStatus",
-      width: "16%",
-      render: (status: StudentPaymentHistoryItem["paymentStatus"]) => renderStatus(status),
+      title: "Thời gian thanh toán",
+      dataIndex: "paidAt",
+      key: "paidAt",
+      width: 170,
+      render: (paidAt?: string) =>
+        paidAt ? (
+          <div className="text-xs text-slate-600">
+            <div>{dayjs(paidAt).format("DD/MM/YYYY")}</div>
+            <div className="text-slate-400">{dayjs(paidAt).format("HH:mm")}</div>
+          </div>
+        ) : null,
     },
   ];
 
-  if (!user) return null;
+  if (!userId || user?.role !== "STUDENT") return null;
 
-  if (isError) {
-    return (
-      <div className="max-w-[1040px] mx-auto">
-        <Alert message="Lỗi tải dữ liệu" description="Vui lòng thử lại sau" type="error" />
-      </div>
-    );
-  }
+  const errorDescription =
+    error instanceof FetchError && error.status === 403
+      ? "Tài khoản hiện tại không có quyền xem lịch sử thanh toán."
+      : error instanceof FetchError && error.status === 401
+        ? "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại."
+        : "Không thể tải lịch sử thanh toán. Vui lòng kiểm tra kết nối và thử lại.";
 
   return (
-    <div className="max-w-[1040px] mx-auto space-y-4 sm:space-y-5">
-      {/* Header */}
-      <div>
-        <div className="text-[12px] font-medium text-slate-400 mb-1">
-          Tài khoản / <span className="text-indigo-600">Lịch sử thanh toán</span>
+    <div className="max-w-[1200px] mx-auto space-y-4 sm:space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <div className="text-[12px] font-medium text-slate-400 mb-1">
+            Tài khoản / <span className="text-indigo-600">Lịch sử thanh toán</span>
+          </div>
+          <h1 className="text-[28px] font-bold text-slate-800 leading-tight">
+            Lịch sử thanh toán
+          </h1>
+          <p className="text-[14px] text-slate-500 mt-0.5">
+            Theo dõi các giao dịch thanh toán lớp học của bạn.
+          </p>
         </div>
-        <h1 className="text-[28px] font-bold text-slate-800 leading-tight">Lịch sử thanh toán</h1>
-        <p className="text-[14px] text-slate-500 mt-0.5">Theo dõi các giao dịch thanh toán lớp học của bạn.</p>
+        <Button
+          icon={<ReloadOutlined spin={isFetching} />}
+          onClick={() => refetch()}
+          disabled={isLoading}
+        >
+          Làm mới
+        </Button>
       </div>
 
-      {/* Main Card */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="p-5 sm:px-6 border-b border-slate-100 flex items-center gap-3">
           <h2 className="text-[15px] font-bold text-slate-800">Tất cả giao dịch</h2>
-          {!isLoading && payments.length > 0 && (
+          {!isLoading && !isError && payments.length > 0 && (
             <span className="text-[12px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
               {payments.length}
             </span>
           )}
         </div>
-        
-        <div className="w-full overflow-x-auto">
-          <Table
-            columns={columns}
-            dataSource={payments}
-            rowKey="id"
-            loading={isLoading}
-            pagination={false}
-            className="min-w-[800px]"
-            locale={{
-              emptyText: (
-                <div className="py-12 flex flex-col items-center justify-center text-center">
-                  <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M19 5H5C3.89543 5 3 5.89543 3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V7C21 5.89543 20.1046 5 19 5Z" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M3 7L12 13L21 7" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <h3 className="text-[15px] font-bold text-slate-700 mb-1">Chưa có giao dịch nào</h3>
-                  <p className="text-[13px] text-slate-500 max-w-sm">Những giao dịch thanh toán lớp học của bạn sẽ xuất hiện tại đây.</p>
-                </div>
-              )
-            }}
-            components={{
-              header: {
-                cell: (props: any) => (
-                  <th {...props} className={`${props.className} bg-slate-50/50 border-b border-slate-100 px-4 py-3`} />
-                )
-              },
-              body: {
-                cell: (props: any) => (
-                  <td {...props} className={`${props.className} border-b border-slate-50 px-4 py-4`} />
-                )
+
+        {isError ? (
+          <div className="p-5 sm:p-6">
+            <Alert
+              type="error"
+              showIcon
+              message="Lỗi tải dữ liệu"
+              description={errorDescription}
+              action={
+                <Button size="small" onClick={() => refetch()} loading={isFetching}>
+                  Thử lại
+                </Button>
               }
-            }}
-          />
-        </div>
+            />
+          </div>
+        ) : (
+          <div className="w-full overflow-x-auto">
+            <Table<Payment>
+              columns={columns}
+              dataSource={payments}
+              rowKey="id"
+              loading={isLoading}
+              scroll={{ x: 1100 }}
+              pagination={{
+                pageSize: 10,
+                showTotal: (total) => `Tổng cộng ${total} giao dịch`,
+              }}
+              locale={{
+                emptyText: (
+                  <Empty
+                    description={
+                      <div className="space-y-1">
+                        <p className="font-medium text-slate-600">Chưa có giao dịch nào</p>
+                        <p className="text-xs text-slate-400">
+                          Các giao dịch thanh toán lớp học của bạn sẽ xuất hiện tại đây.
+                        </p>
+                      </div>
+                    }
+                  />
+                ),
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
