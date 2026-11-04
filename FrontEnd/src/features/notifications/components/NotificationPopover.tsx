@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Popover, Badge, Button, Empty, Spin, Typography } from "antd";
 import {
   BellOutlined,
@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { notificationService, notificationKeys } from "../../../services/notification.service";
 import type { NotificationItem } from "../../../types/communication";
 import { useAuthStore } from "../../../stores/auth.store";
-import { ROUTES } from "../../../routes/routePaths";
+import { getNotificationRoute } from "../notificationRoute";
 import { invalidateTeacherVerificationState } from "../../../hooks/useTeacherVerification";
 
 const { Text } = Typography;
@@ -69,10 +69,12 @@ export const NotificationPopover: React.FC = () => {
     queryKey: notificationKeys.list({ page: 1, pageSize: 8 }),
     queryFn: () => notificationService.getMyNotifications({ page: 1, pageSize: 8 }),
     refetchInterval: 15000,
+    // No polling while the tab is hidden; react-query refetches on focus
+    refetchIntervalInBackground: false,
   });
 
   const unreadCount = data?.unreadCount ?? 0;
-  const items = data?.items ?? [];
+  const items = useMemo(() => data?.items ?? [], [data]);
   const syncedVerificationNotificationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -113,32 +115,11 @@ export const NotificationPopover: React.FC = () => {
     }
     setOpen(false);
 
-    const notificationType = item.type || "";
-
-    // Safe route navigation based on notification type
-    if (
-      notificationType === "TEACHER_VERIFICATION_REJECTED" ||
-      notificationType === "TEACHER_VERIFIED"
-    ) {
+    if (item.type === "TEACHER_VERIFICATION_REJECTED" || item.type === "TEACHER_VERIFIED") {
       void invalidateTeacherVerificationState(queryClient, user?.userId);
-      if (!user || user.role === "TEACHER") {
-        navigate(ROUTES.TEACHER.PROFILE);
-      } else {
-        navigate(ROUTES.NOTIFICATIONS);
-      }
-    } else if (notificationType.includes("MESSAGE")) {
-      navigate(ROUTES.MESSAGES);
-    } else if (notificationType.includes("ENROLLMENT")) {
-      navigate(ROUTES.STUDENT.ENROLLMENTS);
-    } else if (notificationType.includes("SCHOLARSHIP")) {
-      navigate(ROUTES.STUDENT.SCHOLARSHIPS);
-    } else if (notificationType.includes("REPORT")) {
-      navigate("/reports");
-    } else if (notificationType.includes("REVIEW")) {
-      navigate("/teacher/reviews");
-    } else {
-      navigate("/notifications");
     }
+
+    navigate(getNotificationRoute(item.type, user?.role));
   };
 
   const content = (

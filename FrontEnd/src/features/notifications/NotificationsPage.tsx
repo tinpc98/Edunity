@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Tabs, Button, Pagination, Empty, Spin, Typography, Card, Tag } from "antd";
 import {
   CheckOutlined,
@@ -16,6 +16,7 @@ import { notificationService, notificationKeys } from "../../services/notificati
 import type { NotificationItem } from "../../types/communication";
 import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
+import { getNotificationRoute, getNotificationLabel } from "./notificationRoute";
 import { invalidateTeacherVerificationState } from "../../hooks/useTeacherVerification";
 
 const { Title, Text } = Typography;
@@ -79,30 +80,16 @@ export const NotificationsPage: React.FC = () => {
       markReadMutation.mutate(item.id);
     }
 
-    const notificationType = item.type || "";
-
-    if (
-      notificationType === "TEACHER_VERIFICATION_REJECTED" ||
-      notificationType === "TEACHER_VERIFIED"
-    ) {
+    if (item.type === "TEACHER_VERIFICATION_REJECTED" || item.type === "TEACHER_VERIFIED") {
       void invalidateTeacherVerificationState(queryClient, user?.userId);
-      if (!user || user.role === "TEACHER") {
-        navigate(ROUTES.TEACHER.PROFILE);
-      }
-    } else if (notificationType.includes("MESSAGE")) {
-      navigate(ROUTES.MESSAGES);
-    } else if (notificationType.includes("ENROLLMENT")) {
-      navigate(ROUTES.STUDENT.ENROLLMENTS);
-    } else if (notificationType.includes("SCHOLARSHIP")) {
-      navigate(ROUTES.STUDENT.SCHOLARSHIPS);
-    } else if (notificationType.includes("REPORT")) {
-      navigate("/reports");
-    } else if (notificationType.includes("REVIEW")) {
-      navigate("/teacher/reviews");
     }
+
+    const target = getNotificationRoute(item.type, user?.role);
+    // Already on the notifications page: nothing to navigate to
+    if (target !== ROUTES.NOTIFICATIONS) navigate(target);
   };
 
-  const items = data?.items ?? [];
+  const items = useMemo(() => data?.items ?? [], [data]);
   const total = data?.total ?? 0;
   const unreadCount = data?.unreadCount ?? 0;
   const syncedVerificationNotificationIdRef = useRef<string | null>(null);
@@ -241,7 +228,7 @@ export const NotificationsPage: React.FC = () => {
 
                   <div className="mt-2 flex items-center justify-between">
                     <Tag className="text-[11px] font-normal border-0 bg-slate-100 text-slate-600">
-                      {item.type}
+                      {getNotificationLabel(item.type)}
                     </Tag>
                     {!item.isRead && (
                       <Button

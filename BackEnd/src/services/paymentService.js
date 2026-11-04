@@ -7,7 +7,7 @@ const TeacherEarning = require("../models/TeacherEarning");
 const { getSetting } = require("../utils/settings");
 const { toNum, toDec } = require("../utils/money");
 const { getPendingScholarshipUsages, confirmScholarshipUsage } = require("./settlementService");
-const { notify } = require("./notificationService");
+const { notify, notifyTeacherOfEnrollment } = require("./notificationService");
 const {
   AppError,
   ENROLLMENT_NOT_FOUND,
@@ -69,6 +69,8 @@ const processWebhook = async (gatewayReference, status) => {
   const session = await mongoose.startSession();
   let result = {};
   let successfulPayerId = null;
+  let failedPayerId = null;
+  let affectedEnrollmentId = null;
 
   try {
     await session.withTransaction(async () => {
@@ -84,7 +86,7 @@ const processWebhook = async (gatewayReference, status) => {
             ...(status === "SUCCESS" ? { paidAt: now } : {})
           }
         },
-        { session, new: true }
+        { session, returnDocument: "after" }
       );
 
       if (!updatedPayment) {
@@ -123,6 +125,8 @@ const processWebhook = async (gatewayReference, status) => {
       }
 
       if (status === "FAILED") {
+        failedPayerId = updatedPayment.payerUserId;
+        affectedEnrollmentId = updatedPayment.enrollmentId;
         const enrollment = await Enrollment.findById(updatedPayment.enrollmentId).session(session);
         result = {
           paymentStatus: "FAILED",
@@ -194,6 +198,7 @@ const processWebhook = async (gatewayReference, status) => {
           await earning.save({ session });
 
           successfulPayerId = updatedPayment.payerUserId;
+          affectedEnrollmentId = updatedPayment.enrollmentId;
           result = {
             paymentStatus: "COMPLETED",
             enrollmentStatus: "CONFIRMED",
@@ -227,6 +232,15 @@ const processWebhook = async (gatewayReference, status) => {
 
   if (result.result === "PAYMENT_SUCCESS" && successfulPayerId) {
     await notify(successfulPayerId, "Thanh toán thành công", "Học phí đã được thanh toán, bạn đã được ghi danh vào lớp.", "ENROLLMENT_CONFIRMED");
+    await notifyTeacherOfEnrollment(affectedEnrollmentId);
+  }
+  if (result.result === "PAYMENT_FAILED" && failedPayerId) {
+    await notify(
+      failedPayerId,
+      "Thanh toán chưa thành công",
+      "Giao dịch học phí chưa thành công. Chỗ của bạn vẫn được giữ đến hết thời hạn, vui lòng thử thanh toán lại.",
+      "PAYMENT_FAILED"
+    );
   }
 
   return result;

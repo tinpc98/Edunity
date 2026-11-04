@@ -7,6 +7,7 @@ import {
 import "@livekit/components-styles";
 import ClassroomHeader from "./ClassroomHeader";
 import type { ClassroomRole } from "../../../types/session";
+import type { SessionControl } from "./ClassroomHeader";
 
 interface LiveKitClassroomProps {
   serverUrl: string;
@@ -21,6 +22,7 @@ interface LiveKitClassroomProps {
   onLeaveRoom: () => void;
   onEndSession?: () => void;
   isEndingSession?: boolean;
+  sessionControl?: SessionControl;
 }
 
 function ClassroomInner({
@@ -32,6 +34,7 @@ function ClassroomInner({
   onLeaveRoom,
   onEndSession,
   isEndingSession,
+  sessionControl,
 }: Omit<LiveKitClassroomProps, "serverUrl" | "token" | "initialVideoEnabled" | "initialAudioEnabled">) {
   const participants = useParticipants();
 
@@ -47,6 +50,7 @@ function ClassroomInner({
         onLeaveRoom={onLeaveRoom}
         onEndSession={onEndSession}
         isEndingSession={isEndingSession}
+        sessionControl={sessionControl}
       />
       <div className="flex-1 overflow-hidden relative">
         <VideoConference />
@@ -77,6 +81,7 @@ export default function LiveKitClassroom(props: LiveKitClassroomProps) {
         onLeaveRoom={props.onLeaveRoom}
         onEndSession={props.onEndSession}
         isEndingSession={props.isEndingSession}
+        sessionControl={props.sessionControl}
       />
     </LiveKitRoom>
   );

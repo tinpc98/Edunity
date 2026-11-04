@@ -38,8 +38,10 @@ exports.getMyPayments = async (req, res, next) => {
 
 exports.getRecording = async (req, res, next) => {
   try {
-    if (req.user.role !== "STUDENT") throw new AppError("Only STUDENT can access", "FORBIDDEN", 403);
-    const result = await studentService.getRecording(req.user.id, req.params.id);
+    if (!["STUDENT", "TEACHER", "ADMIN"].includes(req.user.role)) {
+      throw new AppError("Only STUDENT, TEACHER or ADMIN can access", "FORBIDDEN", 403);
+    }
+    const result = await studentService.getRecording(req.user, req.params.id);
     res.json({ success: true, data: result });
   } catch (err) {
     next(err);

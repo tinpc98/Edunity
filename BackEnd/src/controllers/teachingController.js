@@ -20,6 +20,7 @@ exports.getPlannedSessions = handle((req) => teacherClasses.getPlannedSessions(r
 exports.createSessions = handle((req) => sessions.createSessions(req.user.id, req.params.classId, body(req)), 201);
 exports.updateSession = handle((req) => sessions.updateSession(req.user.id, req.params.id, body(req)));
 exports.deleteSession = handle((req) => sessions.deleteSession(req.user.id, req.params.id));
+exports.startSession = handle((req) => sessions.startSession(req.user.id, req.params.id));
 exports.endSession = handle((req) => sessions.endSession(req.user.id, req.params.id));
 exports.getSessionAttendance = handle((req) => sessions.getSessionAttendance(req.user.id, req.params.id));
 
@@ -30,11 +31,23 @@ exports.livekitWebhook = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     const videoProvider = require("../services/videoProvider");
     if (!authHeader) return res.status(401).json({ success: false, error: "UNAUTHORIZED" });
-    const event = videoProvider.processWebhook(req.rawBody, req.body, authHeader);
-    await sessions.handleLiveKitWebhook(event);
+    let event;
+    try {
+      event = videoProvider.processWebhook(req.rawBody, req.body, authHeader);
+    } catch (err) {
+      // Only a signature/checksum failure is an authentication error
+      return res.status(401).json({ success: false, error: "UNAUTHORIZED" });
+    }
+    try {
+      await sessions.handleLiveKitWebhook(event);
+    } catch (err) {
+      // Processing failures are server errors: logged, and a 5xx lets LiveKit retry the delivery
+      console.error(`[livekitWebhook] Failed to process ${event?.event || "event"}:`, err.message);
+      return res.status(500).json({ success: false, error: "WEBHOOK_PROCESSING_FAILED" });
+    }
     res.status(200).send("OK");
   } catch (err) {
-    res.status(401).json({ success: false, error: "UNAUTHORIZED" });
+    next(err);
   }
 };
 

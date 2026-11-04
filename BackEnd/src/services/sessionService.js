@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const crypto = require("crypto");
 const { Class, Session, SessionAttendance, Enrollment, User } = require("../models");
 const { AppError, FORBIDDEN, CLASS_NOT_FOUND } = require("../utils/errors");
 const { validationError, parseDate, isBlank } = require("../utils/http");
@@ -29,13 +28,60 @@ const getOwnSession = async (teacherId, sessionId) => {
   return session;
 };
 
-const assertSessionTimes = (cls, startDatetime, endDatetime, label = "session") => {
+const assertSessionTimes = (cls, startDatetime, endDatetime, label = "session", now = new Date()) => {
   if (!startDatetime || !endDatetime) throw validationError(`${label}: startDatetime and endDatetime are required`);
   if (startDatetime >= endDatetime) throw validationError(`${label}: startDatetime must be before endDatetime`);
+  if (startDatetime <= now) {
+    throw new AppError(`${label}: session must start in the future`, "SESSION_IN_PAST", 400);
+  }
   if (!isSessionWithinClass(cls, startDatetime, endDatetime)) {
     throw new AppError(`${label}: session must be within the class start/end date`, "SESSION_OUT_OF_CLASS_RANGE", 400); // BR-32
   }
 };
+
+/**
+ * A Teacher teaches one Session at a time: the new time ranges may not overlap each other nor any non-cancelled
+ * Session of the same Teacher (in any of their classes).
+ */
+const assertNoTeacherOverlap = async (teacherId, ranges, excludeSessionId = null) => {
+  const sorted = [...ranges].sort((a, b) => a.startDatetime - b.startDatetime);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].startDatetime < sorted[i - 1].endDatetime) {
+      throw new AppError(
+        `${sorted[i].label} overlaps ${sorted[i - 1].label}`,
+        "SESSION_TIME_CONFLICT",
+        409
+      );
+    }
+  }
+  for (const range of ranges) {
+    const filter = {
+      teacherId,
+      status: { $ne: "CANCELLED" },
+      startDatetime: { $lt: range.endDatetime },
+      endDatetime: { $gt: range.startDatetime },
+    };
+    if (excludeSessionId) filter._id = { $ne: excludeSessionId };
+    const conflict = await Session.findOne(filter).select("title className startDatetime").lean();
+    if (conflict) {
+      throw new AppError(
+        `${range.label} overlaps "${conflict.title}" (${conflict.className}) at ${conflict.startDatetime.toISOString()}`,
+        "SESSION_TIME_CONFLICT",
+        409
+      );
+    }
+  }
+};
+
+// Once a class is open, students have enrolled (and paid) for its published schedule: it changes only through a
+// reschedule request reviewed by an Admin, which notifies the students and handles refunds.
+const SCHEDULE_LOCKED_CLASS_STATUSES = ["OPEN", "IN_PROGRESS"];
+const scheduleLocked = () =>
+  new AppError(
+    "The schedule of an open class can only be changed through a reschedule request",
+    "RESCHEDULE_REQUIRED",
+    409
+  );
 
 // UC-TEA-03. Accepts one session, or `{ sessions: [...] }` to save the whole session plan at once.
 const createSessions = async (teacherId, classId, body) => {
@@ -47,17 +93,19 @@ const createSessions = async (teacherId, classId, body) => {
   if (cls.status === "PENDING_APPROVAL") {
     throw new AppError("Cannot add sessions while class is pending approval", "CLASS_NOT_EDITABLE", 409);
   }
+  if (SCHEDULE_LOCKED_CLASS_STATUSES.includes(cls.status)) throw scheduleLocked();
 
   const isBulk = Array.isArray(body.sessions);
   const inputs = isBulk ? body.sessions : [body];
   if (inputs.length === 0) throw validationError("sessions must not be empty");
 
+  const now = new Date();
   const docs = inputs.map((input, index) => {
     const label = isBulk ? `sessions[${index}]` : "session";
     if (!input || isBlank(input.title)) throw validationError(`${label}: title is required`); // BR-52
     const startDatetime = parseDate(input.startDatetime, "startDatetime");
     const endDatetime = parseDate(input.endDatetime, "endDatetime");
-    assertSessionTimes(cls, startDatetime, endDatetime, label);
+    assertSessionTimes(cls, startDatetime, endDatetime, label, now);
     return {
       classId: cls._id,
       className: cls.className,
@@ -69,6 +117,10 @@ const createSessions = async (teacherId, classId, body) => {
       status: "SCHEDULED",
     };
   });
+  await assertNoTeacherOverlap(
+    cls.teacherId,
+    docs.map((doc, index) => ({ ...doc, label: isBulk ? `sessions[${index}]` : "session" }))
+  );
 
   const created = await Session.insertMany(docs);
   const result = created.map((doc) => doc.toObject());
@@ -90,6 +142,10 @@ const updateSession = async (teacherId, sessionId, body) => {
     throw new AppError("Cannot update sessions while class is pending approval", "CLASS_NOT_EDITABLE", 409);
   }
 
+  const changesSchedule =
+    body.startDatetime !== undefined || body.endDatetime !== undefined || body.status !== undefined;
+  if (changesSchedule && SCHEDULE_LOCKED_CLASS_STATUSES.includes(cls.status)) throw scheduleLocked();
+
   if (body.title !== undefined) {
     if (isBlank(body.title)) throw validationError("title must not be empty");
     session.title = body.title;
@@ -99,10 +155,17 @@ const updateSession = async (teacherId, sessionId, body) => {
   if (body.endDatetime !== undefined) session.endDatetime = parseDate(body.endDatetime, "endDatetime");
   if (body.startDatetime !== undefined || body.endDatetime !== undefined) {
     assertSessionTimes(cls || {}, session.startDatetime, session.endDatetime);
+    await assertNoTeacherOverlap(
+      session.teacherId,
+      [{ startDatetime: session.startDatetime, endDatetime: session.endDatetime, label: "session" }],
+      session._id
+    );
   }
   if (body.status !== undefined) {
     if (body.status !== "CANCELLED") throw validationError("status can only be changed to CANCELLED");
     session.status = "CANCELLED";
+    session.roomState = "CANCELLED";
+    session.lifecycleState = "CANCELLED";
   }
 
   await session.save();
@@ -158,11 +221,19 @@ const joinSession = async (user, sessionId) => {
 
   if (session.status === "CANCELLED") throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
   if (session.status === "COMPLETED") throw new AppError("Session has ended", "SESSION_ENDED", 409);
+  if (session.status === "INTERRUPTED" && session.roomState === "ENDED") {
+    throw new AppError("Session has ended", "SESSION_ENDED", 409);
+  }
 
   // BR-14: Session Room chi truy cap duoc trong thoi gian cho phep
   const now = new Date();
   const windowStart = new Date(session.startDatetime.getTime() - JOIN_WINDOW_BEFORE_MS);
-  if (now < windowStart || now > session.endDatetime) {
+  // The Teacher keeps access during the post-end grace period (overtime) of a running Session
+  const joinWindowEnd =
+    role === "HOST" && ["IN_PROGRESS", "INTERRUPTED"].includes(session.status)
+      ? new Date(session.endDatetime.getTime() + presenceService.POST_END_GRACE_PERIOD_MS)
+      : session.endDatetime;
+  if (now < windowStart || now > joinWindowEnd) {
     throw new AppError(
       `Session is not joinable now. Starts at ${session.startDatetime.toISOString()}`,
       "SESSION_NOT_JOINABLE",
@@ -178,168 +249,25 @@ const joinSession = async (user, sessionId) => {
   const isWaitingRoomWindow = nowMs < startMs;
 
   if (role === "HOST") {
-    if (isWaitingRoomWindow) {
-      // Pre-open Waiting Room (10m before startDatetime): open waiting room without starting recording yet
-      await Session.updateOne(
-        { _id: session._id, status: "SCHEDULED" },
-        {
-          $set: {
-            meetingRoomId: session.meetingRoomId,
-            roomState: "WAITING",
-            lifecycleState: "WAITING",
-            preOpenedAt: session.preOpenedAt || now,
-            "teacherPresence.firstPreOpenJoinAt": session.teacherPresence?.firstPreOpenJoinAt || now,
-            "teacherPresence.lastConnectedAt": now,
-            "teacherPresence.isCurrentlyConnected": true,
-          },
-        }
-      );
+    // Entering the room never starts teaching. The Teacher checks camera/microphone in the WAITING room and presses
+    // "Bắt đầu buổi học" (POST /teacher/sessions/:id/start), which starts the recording and then IN_PROGRESS.
+    if (session.status === "SCHEDULED" || session.status === "WAITING") {
+      const setFields = {
+        status: "WAITING",
+        meetingRoomId: session.meetingRoomId,
+        roomState: "WAITING",
+        lifecycleState: "WAITING",
+        preOpenedAt: session.preOpenedAt || now,
+        "teacherPresence.lastConnectedAt": now,
+      };
+      if (isWaitingRoomWindow) {
+        setFields["teacherPresence.firstPreOpenJoinAt"] = session.teacherPresence?.firstPreOpenJoinAt || now;
+        setFields["teacherPresence.isCurrentlyConnected"] = true;
+      }
+      await Session.updateOne({ _id: session._id, status: { $in: ["SCHEDULED", "WAITING"] } }, { $set: setFields });
+      session.status = "WAITING";
       session.roomState = "WAITING";
       session.lifecycleState = "WAITING";
-    } else if (session.status === "SCHEDULED" || session.status === "WAITING") {
-      // TIN-05B-FIX (BUG-TIN05B-02): Atomic conditional transition for Teacher Start
-      // Only ONE concurrent request can transition SCHEDULED/WAITING -> IN_PROGRESS and start recording
-      const storageKey = `private/${user.id}/RECORDING/${crypto.randomUUID()}.mp4`;
-      const expectedPriorStatus = session.status === "WAITING" ? "WAITING" : "SCHEDULED";
-      const transitioned = await Session.findOneAndUpdate(
-        { _id: session._id, status: expectedPriorStatus },
-        {
-          $set: {
-            status: "IN_PROGRESS",
-            roomState: "LIVE",
-            lifecycleState: "IN_PROGRESS",
-            actualStartAt: session.actualStartAt || now,
-            meetingRoomId: session.meetingRoomId,
-            "teacherPresence.firstTeachingJoinAt": session.teacherPresence?.firstTeachingJoinAt || now,
-            "teacherPresence.lastConnectedAt": now,
-            "teacherPresence.isCurrentlyConnected": true,
-            "teacherPresence.currentAbsenceStartedAt": null,
-          },
-        },
-        { returnDocument: "after" }
-      );
-
-      if (transitioned) {
-        // This request won the atomic transition to start LiveKit recording
-        const egressId = await videoProvider.startRecording(session.meetingRoomId, storageKey);
-        const recordingData = {
-          providerRecordingId: egressId || null,
-          storageKey: storageKey,
-          status: egressId ? "PROCESSING" : "FAILED",
-          failureReason: egressId ? null : "Failed to start LiveKit egress",
-        };
-
-        // TIN-05C-P2: Bounded retry to save recording metadata with safe compensation
-        let metadataSaved = false;
-        let lastSaveError = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            const updateRes = await Session.updateOne(
-              { _id: session._id },
-              { $set: { recording: recordingData } }
-            );
-            if (updateRes.matchedCount === 0) {
-              throw new AppError("Session no longer exists", "SESSION_NOT_FOUND", 404);
-            }
-            metadataSaved = true;
-            break;
-          } catch (saveErr) {
-            lastSaveError = saveErr;
-            if (saveErr instanceof AppError || saveErr.statusCode || attempt === 2) {
-              break;
-            }
-            await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
-          }
-        }
-
-        if (!metadataSaved) {
-          // Safe compensation: ONLY if this request created an Egress (egressId != null)
-          if (egressId) {
-            let canVerify = false;
-            let isPersisted = false;
-
-            try {
-              // Read back Session.recording to verify actual persistence outcome
-              const checkDoc = await Session.findById(session._id).select("recording").lean();
-              canVerify = true;
-              if (checkDoc && checkDoc.recording && checkDoc.recording.providerRecordingId === egressId) {
-                isPersisted = true;
-              }
-            } catch (readErr) {
-              // MongoDB unreachable or query failed -> UNKNOWN WRITE OUTCOME
-              canVerify = false;
-            }
-
-            if (canVerify && !isPersisted) {
-              // CONFIRMED NOT PERSISTED: safe to stop only the specific Egress owned by this request
-              try {
-                const compRes = await videoProvider.stopRecording(egressId);
-                if (compRes?.reason === "ALREADY_TERMINAL_VERIFIED") {
-                  console.info(`[Session Compensation] Egress ${egressId} is already terminal.`);
-                } else if (compRes?.reason === "STOP_REQUEST_ACCEPTED") {
-                  console.info(`[Session Compensation] Stop request accepted for egress ${egressId}.`);
-                } else if (compRes?.reason === "OUTCOME_UNKNOWN") {
-                  console.warn(`[Session Compensation] OUTCOME_UNKNOWN for egress ${egressId}. Needs reconciliation.`, {
-                    code: compRes.code,
-                  });
-                } else if (compRes?.reason === "RPC_FAILED") {
-                  console.warn(`[Session Compensation] stopRecording RPC failed for egress ${egressId}:`, {
-                    code: compRes.code,
-                    statusCode: compRes.statusCode,
-                  });
-                } else if (compRes?.reason === "PROVIDER_NOT_CONFIGURED") {
-                  console.warn(`[Session Compensation] Provider not configured; egress ${egressId} cleanup unverified.`);
-                } else if (compRes?.reason === "INVALID_EGRESS_ID") {
-                  console.warn(`[Session Compensation] Invalid egress ID provided: ${egressId}`);
-                }
-              } catch (compErr) {
-                console.warn(`[Session Compensation] Unexpected error stopping egress ${egressId}:`, compErr.message);
-              }
-            } else if (!canVerify) {
-              // UNKNOWN WRITE OUTCOME: DB query failed, cannot verify persistence -> do NOT blind-stop
-              console.warn(
-                `[Session Compensation] UNKNOWN_WRITE_OUTCOME for egress ${egressId}: Failed to verify DB persistence status. Blind-stop prevented.`,
-                {
-                  sessionId: session._id?.toString(),
-                  egressId,
-                  saveError: lastSaveError?.message,
-                }
-              );
-            } else if (canVerify && isPersisted) {
-              // Metadata was actually persisted despite updateOne reporting error -> do NOT stopRecording!
-              console.info(`[Session Compensation] Metadata confirmed persisted for egress ${egressId}; stopRecording skipped.`);
-            }
-          }
-
-          // Never hide or swallow the original save error
-          throw lastSaveError;
-        }
-
-        // TIN-05B-FINAL (Start vs End race): If session was COMPLETED in the meantime, do not issue host token
-        const currentInDb = await Session.findById(session._id).select("status").lean();
-        if (currentInDb && (currentInDb.status === "COMPLETED" || currentInDb.status === "CANCELLED")) {
-          session.status = currentInDb.status;
-          session.recording = recordingData;
-          if (currentInDb.status === "COMPLETED") throw new AppError("Session has ended", "SESSION_ENDED", 409);
-          if (currentInDb.status === "CANCELLED") throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
-        }
-
-        session.status = "IN_PROGRESS";
-        session.roomState = "LIVE";
-        session.lifecycleState = "IN_PROGRESS";
-        session.recording = recordingData;
-      } else {
-        // Another concurrent Teacher Join request already transitioned the session
-        const refreshed = await Session.findById(session._id).lean();
-        if (!refreshed || refreshed.status === "COMPLETED") {
-          throw new AppError("Session has ended", "SESSION_ENDED", 409);
-        }
-        if (refreshed.status === "CANCELLED") {
-          throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
-        }
-        session.status = refreshed.status;
-        session.recording = refreshed.recording;
-      }
     } else if (session.status === "INTERRUPTED") {
       // Teacher reconnecting to an INTERRUPTED session before endDatetime
       await Session.updateOne(
@@ -470,7 +398,11 @@ const joinSession = async (user, sessionId) => {
     }
   }
 
-  const expiresAt = session.endDatetime; // NFR-12: token het han khi buoi hoc ket thuc
+  // NFR-12: token het han khi buoi hoc ket thuc; Teacher: het grace period de co the day qua gio
+  const expiresAt =
+    role === "HOST"
+      ? new Date(session.endDatetime.getTime() + presenceService.POST_END_GRACE_PERIOD_MS)
+      : session.endDatetime;
   const firstJoinDeadlineAt =
     role === "PARTICIPANT" && !hasVerifiedPriorJoin
       ? new Date(Math.min(endMs, startMs + STUDENT_FIRST_JOIN_DEADLINE_SECONDS * 1000))
@@ -501,6 +433,49 @@ const joinSession = async (user, sessionId) => {
     isWaitingRoom: isWaitingRoomWindow,
     isReconnect: role === "PARTICIPANT" ? hasVerifiedPriorJoin : false,
   };
+};
+
+/**
+ * "Bắt đầu buổi học": WAITING → IN_PROGRESS with the recording started first (see presenceService.beginTeaching).
+ * Allowed from the pre-open window until the scheduled end, only by the owning Teacher, and — when a video provider
+ * is configured — only while the Teacher is actually in the room (trusted LiveKit state, not a client claim).
+ */
+const startSession = async (teacherId, sessionId) => {
+  await getVerifiedTeacher(teacherId);
+  const session = await getOwnSession(teacherId, sessionId);
+  const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).select("status").lean();
+  if (!cls) throw CLASS_NOT_FOUND();
+  if (!ACTIVE_CLASS_STATUSES.includes(cls.status)) {
+    throw new AppError("Class must be approved and active to start a session", "CLASS_NOT_ACTIVE", 403);
+  }
+  if (session.status === "IN_PROGRESS") {
+    throw new AppError("Session has already started", "SESSION_ALREADY_STARTED", 409);
+  }
+  if (!["SCHEDULED", "WAITING"].includes(session.status)) {
+    throw new AppError("Only a SCHEDULED or WAITING session can be started", "SESSION_NOT_STARTABLE", 409);
+  }
+
+  const now = new Date();
+  const windowStart = new Date(session.startDatetime.getTime() - JOIN_WINDOW_BEFORE_MS);
+  if (now < windowStart || now > session.endDatetime) {
+    throw new AppError("Session can only be started during its scheduled time", "SESSION_NOT_STARTABLE", 409);
+  }
+
+  if (videoProvider.getProviderName() === "LIVEKIT") {
+    const roomId = session.meetingRoomId || `room_${session._id}`;
+    const presence = await videoProvider.verifyParticipantInRoom(roomId, teacherId.toString());
+    if (!presence.verified) {
+      throw new AppError(
+        presence.reason === "PROVIDER_UNAVAILABLE"
+          ? "Cannot reach the video provider to confirm you are in the room; please retry"
+          : "Join the classroom before starting the session",
+        presence.reason === "PROVIDER_UNAVAILABLE" ? "VIDEO_PROVIDER_UNAVAILABLE" : "TEACHER_NOT_IN_ROOM",
+        presence.reason === "PROVIDER_UNAVAILABLE" ? 503 : 409
+      );
+    }
+  }
+
+  return presenceService.beginTeaching(session._id, { startedBy: "TEACHER", now });
 };
 
 // UC-TEA-05: khi kết thúc Session = COMPLETED, Attendance được cập nhật
@@ -605,7 +580,15 @@ const endSession = async (teacherId, sessionId) => {
     absentCount = recomputed.filter((a) => a.attendanceStatus === "ABSENT").length;
   }
 
-  // 7. Tac dung phu ngoai vi: Dong phong LiveKit SAU KHI DB transaction da commit thanh cong.
+  // 7. Dung recording truoc khi dong phong, de Egress ket thuc dung cach va webhook egress_ended
+  // chuyen recording sang AVAILABLE/FAILED. Best effort: loi provider khong lam hong ket qua end session.
+  try {
+    await presenceService.stopActiveRecordingSegment(sessionDoc, "SESSION_ENDED");
+  } catch (err) {
+    console.error(`[endSession] Failed to stop recording for session ${sessionDoc._id}:`, err.message);
+  }
+
+  // 8. Tac dung phu ngoai vi: Dong phong LiveKit SAU KHI DB transaction da commit thanh cong.
   // Best effort: Loi mang LiveKit khong lam rollback DB va khong nem loi unhandled.
   await videoProvider.closeRoom(sessionDoc.meetingRoomId);
 
@@ -660,4 +643,4 @@ const handleLiveKitWebhook = async (event) => {
   }
 };
 
-module.exports = { createSessions, updateSession, deleteSession, joinSession, endSession, getSessionAttendance, handleLiveKitWebhook };
+module.exports = { createSessions, updateSession, deleteSession, joinSession, startSession, endSession, getSessionAttendance, handleLiveKitWebhook };

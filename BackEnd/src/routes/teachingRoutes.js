@@ -23,6 +23,7 @@ router.get("/teacher/classes/:id/planned-sessions", teacher, controller.getPlann
 router.post("/teacher/classes/:classId/sessions", teacher, controller.createSessions);
 router.patch("/teacher/sessions/:id", teacher, controller.updateSession);
 router.delete("/teacher/sessions/:id", teacher, controller.deleteSession);
+router.post("/teacher/sessions/:id/start", teacher, controller.startSession);
 router.post("/teacher/sessions/:id/end", teacher, controller.endSession);
 router.get("/teacher/sessions/:id/attendance", teacher, controller.getSessionAttendance);
 

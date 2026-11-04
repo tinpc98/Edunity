@@ -471,6 +471,11 @@ describe("Teacher Access Control by verificationStatus (P0-01, P1-01..P1-05)", (
         .set(bearer("verified"));
       expect(hostJoin.statusCode).toBe(200);
       expect(hostJoin.body.data.role).toBe("HOST");
+      expect(startSpy).toHaveBeenCalledTimes(0); // joining only opens the room
+      const started = await request(app)
+        .post(`/api/teacher/sessions/${sess._id}/start`)
+        .set(bearer("verified"));
+      expect(started.statusCode).toBe(200);
       expect(startSpy).toHaveBeenCalledTimes(1);
 
       const studentJoin = await request(app)

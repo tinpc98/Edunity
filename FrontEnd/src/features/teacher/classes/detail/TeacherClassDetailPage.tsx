@@ -50,6 +50,16 @@ import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 
 const { Title, Text, Paragraph } = Typography;
 
+// Scheduling rules enforced by the backend (C02-C04), in the teacher's language
+const SESSION_ERROR_MESSAGES: Record<string, string> = {
+  SESSION_TIME_CONFLICT: "Thời gian buổi học bị trùng với một buổi học khác của bạn.",
+  SESSION_IN_PAST: "Không thể xếp buổi học vào thời điểm đã qua.",
+  RESCHEDULE_REQUIRED: "Lớp đã mở tuyển sinh: muốn đổi giờ hoặc hủy buổi học, hãy gửi yêu cầu dời lịch để quản trị viên duyệt.",
+  SESSION_OUT_OF_CLASS_RANGE: "Buổi học phải nằm trong thời gian khai giảng - kết thúc của lớp.",
+};
+const sessionErrorMessage = (err: any, fallback: string) =>
+  SESSION_ERROR_MESSAGES[err?.code] || err?.message || fallback;
+
 export default function TeacherClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
@@ -157,7 +167,7 @@ export default function TeacherClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
     },
     onError: (err: any) => {
-      message.error(err?.message || "Không thể tạo buổi học.");
+      message.error(sessionErrorMessage(err, "Không thể tạo buổi học."));
     },
   });
 
@@ -183,7 +193,7 @@ export default function TeacherClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
     },
     onError: (err: any) => {
-      message.error(err?.message || "Không thể lập lịch tự động.");
+      message.error(sessionErrorMessage(err, "Không thể lập lịch tự động."));
     },
   });
 
@@ -199,7 +209,7 @@ export default function TeacherClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
     },
     onError: (err: any) => {
-      message.error(err?.message || "Không thể cập nhật buổi học.");
+      message.error(sessionErrorMessage(err, "Không thể cập nhật buổi học."));
     },
   });
 
@@ -212,7 +222,7 @@ export default function TeacherClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
     },
     onError: (err: any) => {
-      message.error(err?.message || "Không thể hủy buổi học.");
+      message.error(sessionErrorMessage(err, "Không thể hủy buổi học."));
     },
   });
 

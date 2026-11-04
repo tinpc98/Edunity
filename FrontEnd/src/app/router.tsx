@@ -46,6 +46,7 @@ import AdminCatalogPage from "../features/admin/catalog/AdminCatalogPage";
 import AdminCourseProposalsPage from "../features/admin/catalog/AdminCourseProposalsPage";
 import AdminPaymentsPage from "../features/admin/finance/AdminPaymentsPage";
 import AdminTransactionsPage from "../features/admin/finance/AdminTransactionsPage";
+import AdminPayoutsPage from "../features/admin/finance/AdminPayoutsPage";
 import { AdminReportsPage } from "../features/admin/reports/AdminReportsPage";
 import SponsorLayout from "../components/layout/SponsorLayout";
 import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
@@ -329,6 +330,10 @@ const router = createBrowserRouter([
       {
         path: "transactions",
         element: <AdminTransactionsPage />,
+      },
+      {
+        path: "payouts",
+        element: <AdminPayoutsPage />,
       },
       {
         path: "reports",

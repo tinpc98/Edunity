@@ -102,32 +102,8 @@ export const enrollmentService = {
     return res.items;
   },
 
-  /**
-   * Compatibility wrapper for existing hooks:
-   */
-  async createOrGetPendingEnrollment(payload: { classId: string; studentId?: string }): Promise<Enrollment> {
-    return this.createEnrollment(payload.classId);
-  },
-
   async createFreeEnrollment(payload: { classId: string; studentId?: string }): Promise<Enrollment> {
     return this.createEnrollment(payload.classId);
   },
-
-  async updateEnrollmentStatus(
-    enrollmentId: string,
-    status: Enrollment["enrollmentStatus"],
-    amountPaid?: number
-  ): Promise<Enrollment> {
-    const enrollment = await this.getEnrollmentById(enrollmentId);
-    return {
-      ...enrollment,
-      enrollmentStatus: status,
-      amountPaidViaPayment: amountPaid ?? enrollment.amountPaidViaPayment,
-    };
-  },
 };
-
-export function saveClassEnrolledCountIncrement(_classId: string): void {
-  // Mock compatibility stub for payment service
-}
 

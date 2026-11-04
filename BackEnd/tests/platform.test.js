@@ -447,12 +447,19 @@ describe("Teacher verification, class approval and classroom", () => {
       .send({ title: "Quá hạn", startDatetime: new Date(Date.now() + 60 * DAY), endDatetime: new Date(Date.now() + 60 * DAY + 3600000) });
     expect(outOfRange.body.error).toBe("SESSION_OUT_OF_CLASS_RANGE");
 
+    // C04: a session cannot be scheduled in the past
+    const inPast = await request(app)
+      .post(`/api/teacher/classes/${classId}/sessions`)
+      .set(as(newTeacher))
+      .send({ title: "Đã qua", startDatetime: start, endDatetime: end });
+    expect(inPast.body.error).toBe("SESSION_IN_PAST");
+
     const sessions = await request(app)
       .post(`/api/teacher/classes/${classId}/sessions`)
       .set(as(newTeacher))
       .send({
         sessions: [
-          { title: "Buổi 1 - Số tự nhiên", startDatetime: start, endDatetime: end },
+          { title: "Buổi 1 - Số tự nhiên", startDatetime: new Date(Date.now() + DAY), endDatetime: new Date(Date.now() + DAY + 3600000) },
           { title: "Buổi 2 - Phân số", startDatetime: new Date(Date.now() + 7 * DAY), endDatetime: new Date(Date.now() + 7 * DAY + 7200000) },
         ],
       });
@@ -522,6 +529,8 @@ describe("Teacher verification, class approval and classroom", () => {
     expect(early.body.error).toBe("REVIEW_NOT_ALLOWED");
 
     // Join: BR-12 not enrolled, BR-15 not owner
+    // Time passes: session 1 is now running (moved directly, the API only schedules future sessions)
+    await Session.updateOne({ _id: sessionId }, { $set: { startDatetime: start, endDatetime: end } });
     const stranger = await request(app).post(`/api/sessions/${sessionId}/join`).set(as(student2));
     expect(stranger.body.error).toBe("NOT_ENROLLED");
     const wrongTeacher = await request(app).post(`/api/sessions/${sessionId}/join`).set(as(teacher));
@@ -533,6 +542,10 @@ describe("Teacher verification, class approval and classroom", () => {
     expect(host.statusCode).toBe(200);
     expect(host.body.data.role).toBe("HOST");
     expect(host.body.data.joinUrl).toBeUndefined();
+    // Entering the room opens it; teaching starts on "Bắt đầu buổi học"
+    expect((await Session.findById(sessionId)).status).toBe("WAITING");
+    const started = await request(app).post(`/api/teacher/sessions/${sessionId}/start`).set(as(newTeacher));
+    expect(started.statusCode).toBe(200);
     expect((await Session.findById(sessionId)).status).toBe("IN_PROGRESS");
 
     const participant = await request(app).post(`/api/sessions/${sessionId}/join`).set(as(student));

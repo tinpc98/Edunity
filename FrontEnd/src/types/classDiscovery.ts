@@ -71,7 +71,7 @@ export type TimeOfDay = "MORNING" | "AFTERNOON" | "EVENING";
  */
 export type SessionStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
-export type RecordingStatus = "PROCESSING" | "AVAILABLE" | "FAILED";
+export type RecordingStatus = "RECORDING" | "PROCESSING" | "AVAILABLE" | "FAILED" | "EXPIRED";
 
 export interface SessionRecording {
   providerRecordingId?: string | null;

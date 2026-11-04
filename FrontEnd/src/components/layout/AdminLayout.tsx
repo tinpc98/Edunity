@@ -82,6 +82,11 @@ const adminMenuItems = [
         icon: <FileTextOutlined className="text-[18px]" />,
         label: <Link to={ROUTES.ADMIN.TRANSACTIONS}>Giao dịch</Link>,
       },
+      {
+        key: ROUTES.ADMIN.PAYOUTS,
+        icon: <WalletOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.ADMIN.PAYOUTS}>Rút tiền giáo viên</Link>,
+      },
     ]
   },
   {

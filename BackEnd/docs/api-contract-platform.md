@@ -154,13 +154,17 @@ Body tạo/sửa Class:
 |---|---|---|---|
 | GET | `/classes/:classId/sessions` | — | Đã có |
 | POST | `/teacher/classes/:classId/sessions` | Teacher | Tạo 1 Session, hoặc nhiều Session với `{ "sessions": [...] }` |
-| PATCH | `/teacher/sessions/:id` | Teacher | Sửa Session `SCHEDULED`; `{ "status": "CANCELLED" }` để hủy buổi |
+| PATCH | `/teacher/sessions/:id` | Teacher | Sửa Session `SCHEDULED`; `{ "status": "CANCELLED" }` để hủy buổi. Lớp `OPEN`/`IN_PROGRESS`: chỉ sửa tiêu đề/mô tả — đổi giờ/hủy → `409 RESCHEDULE_REQUIRED` (dùng yêu cầu dời lịch) |
 | DELETE | `/teacher/sessions/:id` | Teacher | Xóa buổi trong kế hoạch, chỉ khi Class `DRAFT` / `REJECTED` |
 | POST | `/sessions/:id/join` | Student / Teacher | Lấy room token |
-| POST | `/teacher/sessions/:id/end` | Teacher | Kết thúc buổi → `COMPLETED`, chốt điểm danh |
+| POST | `/teacher/sessions/:id/start` | Teacher | "Bắt đầu buổi học": bật ghi hình rồi `WAITING` → `IN_PROGRESS` |
+| POST | `/teacher/sessions/:id/end` | Teacher | Kết thúc buổi → `COMPLETED`, dừng ghi hình (→ `PROCESSING`), chốt điểm danh |
+| GET | `/sessions/:id/recording` | Student / Teacher / Admin | Link phát bản ghi (có hạn) khi `AVAILABLE` |
 | GET | `/teacher/sessions/:id/attendance` | Teacher | Danh sách điểm danh |
 
 Body Session: `{ "title": "Buổi 1 - Số tự nhiên", "description": "...", "startDatetime": "...", "endDatetime": "..." }`.
+Quy tắc: `startDatetime` phải ở tương lai (`400 SESSION_IN_PAST`); không trùng giờ với Session khác của cùng Teacher
+(`409 SESSION_TIME_CONFLICT`); không thêm Session vào lớp `OPEN`/`IN_PROGRESS` (`409 RESCHEDULE_REQUIRED`).
 
 **POST `/sessions/:id/join`** — response:
 ```json
@@ -182,8 +186,21 @@ Body Session: `{ "title": "Buổi 1 - Số tự nhiên", "description": "...", "
   `room.connect(serverUrl, accessToken)`. HOST có quyền quản trị phòng; cả hai đều bật được mic/camera.
 - `provider = "EDUNITY_DEV"` (`serverUrl = null`): backend chưa cấu hình `LIVEKIT_*`, token chỉ dùng để thử luồng join.
 - Khi Teacher gọi `/teacher/sessions/:id/end`, phòng LiveKit bị đóng và mọi người bị ngắt kết nối.
-- Cửa sổ vào lớp: từ 15 phút trước `startDatetime` đến `endDatetime`. Token hết hạn tại `expiresAt`.
-- Teacher join lần đầu → Session chuyển `IN_PROGRESS`. Student join → ghi nhận điểm danh (`PRESENT` / `LATE`).
+- Cửa sổ vào lớp: từ 10 phút trước `startDatetime` đến `endDatetime`. Token hết hạn tại `expiresAt`.
+- Teacher join chỉ **mở phòng** (`WAITING`): kiểm tra camera/micro, chưa ghi hình. Student join → ghi nhận điểm danh (`PRESENT` / `LATE`).
+- Teacher (HOST) vào lại được trong 30 phút sau `endDatetime` khi buổi đang diễn ra (dạy quá giờ); token HOST hết hạn tương ứng.
+
+**POST `/teacher/sessions/:id/start`** — luồng ghi hình:
+- Chỉ Teacher chủ buổi, Session `SCHEDULED`/`WAITING`, từ 10 phút trước giờ học đến `endDatetime`. Khi đã cấu hình LiveKit,
+  Teacher phải đang ở trong phòng (`409 TEACHER_NOT_IN_ROOM`, `503 VIDEO_PROVIDER_UNAVAILABLE`).
+- Ghi hình được bật **trước** (thử lại tối đa 3 lần). Nếu ghi hình là bắt buộc (`RECORDING_REQUIRED`, mặc định khi có LiveKit) mà không bật được:
+  `503 RECORDING_START_FAILED`, Session giữ `WAITING`, Teacher + Admin nhận thông báo, có thể bấm lại.
+- Thành công: Session `IN_PROGRESS`, `recording.status = RECORDING`. Ghi hình **không dừng khi Teacher rớt mạng**; chỉ dừng khi
+  kết thúc, tự hoàn tất, hoặc `INTERRUPTED` (vắng 30 phút).
+- Nếu Teacher đã ở trong phòng mà chưa bấm bắt đầu, hệ thống tự bắt đầu sau `SESSION_AUTO_START_AFTER_MINUTES` (mặc định 10) phút.
+- Vòng đời bản ghi: `RECORDING` → `PROCESSING` (đã dừng) → `AVAILABLE` | `FAILED` (webhook `egress_ended`; quá
+  `RECORDING_PROCESSING_TIMEOUT_HOURS` thì `FAILED`) → `EXPIRED` sau `RECORDING_RETENTION_DAYS` (mặc định 90 ngày, file bị xoá).
+- Quyền xem bản ghi: Teacher chủ buổi, Admin, Student có Enrollment `CONFIRMED`/`COMPLETED`.
 - Lỗi: `403 NOT_ENROLLED`, `409 SESSION_NOT_JOINABLE`, `409 SESSION_CANCELLED`, `409 SESSION_ENDED`, `404 SESSION_NOT_FOUND`.
 - `GET /sessions/:id/join` (Student) vẫn dùng được và trả về cùng dữ liệu như trên — không còn `joinUrl`.
 

@@ -63,6 +63,33 @@ const notifyAdmins = async (title, content, type, options = {}) => {
 const notifyAdminsOnce = async (title, content, type, dedupeKey, sessionId = null) =>
   notifyAdmins(title, content, type, { dedupeKey, sessionId });
 
+/**
+ * Tells the Teacher that a student is now enrolled (free enrollment, completed payment or scholarship payment).
+ * Looks the enrollment up itself so callers only pass the id. Best effort, like every notification.
+ */
+const notifyTeacherOfEnrollment = async (enrollmentId) => {
+  try {
+    if (!enrollmentId) return;
+    const Enrollment = require("../models/Enrollment");
+    const enrollment = await Enrollment.findById(enrollmentId)
+      .populate("classId", "className")
+      .populate("studentId", "studentProfile.fullName email")
+      .lean();
+    if (!enrollment || !enrollment.teacherId) return;
+    const studentName = enrollment.studentId?.studentProfile?.fullName || enrollment.studentId?.email || "Một học viên";
+    const className = enrollment.classId?.className || "lớp học";
+    await notify(
+      enrollment.teacherId,
+      "Có học viên mới đăng ký",
+      `${studentName} vừa đăng ký lớp "${className}".`,
+      "NEW_ENROLLMENT",
+      { dedupeKey: `enrollment:${enrollment._id}:teacher:new` }
+    );
+  } catch (err) {
+    console.error("Failed to notify teacher of enrollment:", err.message);
+  }
+};
+
 const getMyNotifications = async (userId, paging, unreadOnly) => {
   const filter = { userId };
   if (unreadOnly) filter.isRead = false;
@@ -94,6 +121,7 @@ const markAllAsRead = async (userId) => {
 
 module.exports = {
   notify,
+  notifyTeacherOfEnrollment,
   notifyOnce,
   notifyAdmins,
   notifyAdminsOnce,

@@ -129,8 +129,8 @@ export default function EnrollmentPage() {
           type="info"
           showIcon
           icon={<InfoCircleOutlined className="text-indigo-600" />}
-          message="Hệ thống đăng ký đang trong giai đoạn kết nối cổng thanh toán"
-          description="Tính năng Checkout / Payment và xử lý Enrollment chính thức nằm ngoài phạm vi sprint hiện tại (Out of scope). Yêu cầu đăng ký đã được ghi nhận vào hệ thống mock."
+          message="Hoàn tất đăng ký tại trang lớp học"
+          description="Nhấn Xem lại thông tin lớp để đăng ký: lớp miễn phí được ghi danh ngay, lớp có phí được giữ chỗ trong thời gian thanh toán (thanh toán trực tiếp hoặc bằng học bổng)."
           className="mb-6 rounded-xl"
         />
 

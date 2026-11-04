@@ -121,7 +121,36 @@ export default function ClassroomPage() {
     },
   });
 
-  // 2. Teacher End Session Mutation
+  // 2. Teacher Start Session Mutation: recording starts first; a mandatory recording failure keeps the room WAITING
+  const startSessionMutation = useMutation({
+    mutationFn: () => sessionService.startSession(sessionId!),
+    onSuccess: () => {
+      message.success("Buổi học đã bắt đầu. Hệ thống đang ghi hình.");
+      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+    },
+    onError: (err: any) => {
+      const byCode: Record<string, string> = {
+        RECORDING_START_FAILED:
+          "Không bật được ghi hình nên buổi học chưa bắt đầu. Vui lòng thử lại; quản trị viên đã được thông báo.",
+        TEACHER_NOT_IN_ROOM: "Bạn cần kết nối vào phòng học trước khi bắt đầu buổi học.",
+        VIDEO_PROVIDER_UNAVAILABLE: "Không kết nối được máy chủ video. Vui lòng thử lại sau ít phút.",
+        SESSION_ALREADY_STARTED: "Buổi học đã được bắt đầu.",
+      };
+      message.error(byCode[err?.code] || err?.message || "Không thể bắt đầu buổi học.");
+      queryClient.invalidateQueries({ queryKey: sessionKeys.liveStatus(sessionId || "") });
+    },
+  });
+
+  const sessionStatus = liveStatus?.status;
+  const canEndSession = isTeacher && (sessionStatus === "IN_PROGRESS" || sessionStatus === "INTERRUPTED");
+  const sessionControl = {
+    status: sessionStatus,
+    recordingStatus: liveStatus?.recording?.status ?? null,
+    onStart: isTeacher && isVerifiedTeacher ? () => startSessionMutation.mutate() : undefined,
+    isStarting: startSessionMutation.isPending,
+  };
+
+  // 3. Teacher End Session Mutation
   const endSessionMutation = useMutation({
     mutationFn: () => sessionService.endSession(sessionId!),
     onSuccess: () => {
@@ -509,8 +538,9 @@ export default function ClassroomPage() {
           initialAudioEnabled={mediaOptions.audioEnabled}
           onOpenAttendance={isTeacher ? () => setIsAttendanceModalOpen(true) : undefined}
           onLeaveRoom={handleLeaveRoom}
-          onEndSession={isTeacher ? handleEndSession : undefined}
+          onEndSession={canEndSession ? handleEndSession : undefined}
           isEndingSession={endSessionMutation.isPending}
+          sessionControl={sessionControl}
         />
       ) : (
         /* Fallback / Local Dev Mode (EDUNITY_DEV) */
@@ -523,8 +553,9 @@ export default function ClassroomPage() {
             startDatetime={liveStatus?.startDatetime || currentSession?.startDatetime}
             onOpenAttendance={isTeacher ? () => setIsAttendanceModalOpen(true) : undefined}
             onLeaveRoom={handleLeaveRoom}
-            onEndSession={isTeacher ? handleEndSession : undefined}
+            onEndSession={canEndSession ? handleEndSession : undefined}
             isEndingSession={endSessionMutation.isPending}
+            sessionControl={sessionControl}
           />
           <DevClassroom
             userFullName={userFullName}
@@ -532,7 +563,7 @@ export default function ClassroomPage() {
             initialVideoEnabled={mediaOptions.videoEnabled}
             initialAudioEnabled={mediaOptions.audioEnabled}
             onLeaveRoom={handleLeaveRoom}
-            onEndSession={isTeacher ? handleEndSession : undefined}
+            onEndSession={canEndSession ? handleEndSession : undefined}
             isEndingSession={endSessionMutation.isPending}
           />
         </div>

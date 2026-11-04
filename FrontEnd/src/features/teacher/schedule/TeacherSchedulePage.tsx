@@ -60,7 +60,7 @@ export default function TeacherSchedulePage() {
     queryFn: () => sessionService.getTeacherDisciplineOverview(),
   });
 
-  const teacherClasses = classesData?.items || [];
+  const teacherClasses = useMemo(() => classesData?.items || [], [classesData]);
   const classStatusMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const c of teacherClasses) {

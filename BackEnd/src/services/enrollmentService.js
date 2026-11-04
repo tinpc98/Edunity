@@ -14,6 +14,7 @@ const {
   ENROLLMENT_NOT_CANCELLABLE
 } = require("../utils/errors");
 const { releaseReservation } = require("./reservationService");
+const { notify, notifyTeacherOfEnrollment } = require("./notificationService");
 
 const createEnrollment = async (studentId, classId, retried = false) => {
   if (!mongoose.isValidObjectId(classId) || !mongoose.isValidObjectId(studentId)) {
@@ -137,6 +138,17 @@ const createEnrollment = async (studentId, classId, retried = false) => {
       }
     });
 
+    // A FREE class is confirmed immediately: tell the student and the teacher
+    if (newEnrollment && newEnrollment.enrollmentStatus === "CONFIRMED") {
+      const cls = await Class.findById(newEnrollment.classId).select("className").lean();
+      await notify(
+        studentId,
+        "Đăng ký lớp thành công",
+        `Bạn đã được ghi danh vào lớp "${cls ? cls.className : ""}".`,
+        "ENROLLMENT_CONFIRMED"
+      );
+      await notifyTeacherOfEnrollment(newEnrollment._id);
+    }
     return newEnrollment;
   } catch (err) {
     // Concurrent request lost the race at the DB unique-index level (both passed the
