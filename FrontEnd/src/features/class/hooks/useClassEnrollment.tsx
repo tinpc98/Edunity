@@ -8,6 +8,8 @@ import { sessionKeys } from "../../../services/session.service";
 import { FetchError } from "../../../api/apiClient";
 import { ROUTES } from "../../../routes/routePaths";
 import FreeEnrollmentModal from "../components/FreeEnrollmentModal";
+import EnrollmentConfirmModal from "../components/EnrollmentConfirmModal";
+import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
 
 export interface EnrollableClassTarget {
   id: string;
@@ -17,6 +19,7 @@ export interface EnrollableClassTarget {
   teacherName?: string;
   scheduleText?: string;
   classType: "FREE" | "PAID" | string;
+  formattedPrice?: string;
   canEnroll?: boolean;
 }
 
@@ -27,6 +30,10 @@ export function useClassEnrollment() {
   const { user, isAuthenticated } = useAuthStore();
 
   const [freeClassTarget, setFreeClassTarget] = useState<EnrollableClassTarget | null>(null);
+  // PAID: the same confirmation as the class page (scholarship or direct payment), opened from the card
+  // Kept mounted after closing: the dialog shows its own success message once the confirmation closes
+  const [paidClassTarget, setPaidClassTarget] = useState<ClassDiscoveryItem | null>(null);
+  const [paidModalOpen, setPaidModalOpen] = useState(false);
 
   // Query existing student enrollments to derive confirmed enrollment state
   const { data: studentEnrollmentsData } = useQuery({
@@ -129,7 +136,7 @@ export function useClassEnrollment() {
     },
   });
 
-  const handleEnrollClass = (target: EnrollableClassTarget) => {
+  const handleEnrollClass = (target: ClassDiscoveryItem) => {
     if (target.canEnroll === false) return;
 
     // 1. Authentication check
@@ -165,12 +172,12 @@ export function useClassEnrollment() {
       return;
     }
 
-    // 5. Branch by classType. PAID classes are registered on the class page, the one place that offers both
-    // direct payment and scholarship payment (a single registration flow instead of two diverging ones).
+    // 5. Confirmation dialog: FREE enrolls at once; PAID offers scholarship or direct payment (seat hold + checkout)
     if (target.classType === "FREE") {
       setFreeClassTarget(target);
     } else {
-      navigate(`/classes/${target.id}`);
+      setPaidClassTarget(target);
+      setPaidModalOpen(true);
     }
   };
 
@@ -192,6 +199,10 @@ export function useClassEnrollment() {
     />
   );
 
+  const paidEnrollModal = paidClassTarget ? (
+    <EnrollmentConfirmModal item={paidClassTarget} open={paidModalOpen} onClose={() => setPaidModalOpen(false)} />
+  ) : null;
+
   return {
     handleEnrollClass,
     isEnrolled,
@@ -199,5 +210,6 @@ export function useClassEnrollment() {
     isEnrolling: freeEnrollMutation.isPending,
     enrollingClassId: freeEnrollMutation.variables?.classId,
     freeEnrollModal,
+    paidEnrollModal,
   };
 }

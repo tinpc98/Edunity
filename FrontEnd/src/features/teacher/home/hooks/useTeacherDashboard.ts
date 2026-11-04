@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useNow } from "../../../../hooks/useNow";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "../../../../stores/auth.store";
 import { profileService } from "../../../../services/profile.service";
@@ -95,14 +96,14 @@ export function useTeacherDashboard() {
   }, [allSessions]);
 
   // Nearest upcoming / ongoing session
+  const now = useNow();
   const nextSession = useMemo(() => {
-    const now = Date.now();
     return allSessions.find((s) => {
       if (s.status === "CANCELLED" || s.status === "COMPLETED") return false;
       const end = new Date(s.endDatetime).getTime();
       return end >= now;
     });
-  }, [allSessions]);
+  }, [allSessions, now]);
 
   // Revenue computations
   const earningsSummary = earningsQuery.data?.summary;

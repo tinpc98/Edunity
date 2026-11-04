@@ -130,7 +130,7 @@ export default function TeacherSchedulePage() {
   const stats = useMemo(() => {
     const today = dayjs();
     const todayCount = scheduleItems.filter((s) => dayjs(s.startDatetime).isSame(today, 'day')).length;
-    const inProgressCount = scheduleItems.filter((s) => s.status === 'IN_PROGRESS' || s.status === 'WAITING').length;
+    const inProgressCount = scheduleItems.filter((s) => s.status === 'IN_PROGRESS').length;
     const scheduledCount = scheduleItems.filter((s) => s.status === 'SCHEDULED').length;
     const completedCount = scheduleItems.filter((s) => s.status === 'COMPLETED').length;
 
@@ -337,7 +337,7 @@ export default function TeacherSchedulePage() {
         <div className="flex flex-col gap-3.5">
           {filteredSchedule.map((item) => {
             const isToday = dayjs(item.startDatetime).isSame(dayjs(), 'day');
-            const isInProgress = item.status === 'IN_PROGRESS' || item.status === 'WAITING';
+            const isInProgress = item.status === 'IN_PROGRESS';
 
             return (
               <Card 

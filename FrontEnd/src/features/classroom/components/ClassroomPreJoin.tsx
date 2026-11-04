@@ -32,9 +32,12 @@ export default function ClassroomPreJoin({
   onJoin,
   onBack,
 }: ClassroomPreJoinProps) {
-  const [videoEnabled, setVideoEnabled] = useState<boolean>(true);
-  const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
-  const [deviceError, setDeviceError] = useState<string | null>(null);
+  const mediaSupported = typeof navigator !== "undefined" && Boolean(navigator.mediaDevices);
+  const [videoEnabled, setVideoEnabled] = useState<boolean>(mediaSupported);
+  const [audioEnabled, setAudioEnabled] = useState<boolean>(mediaSupported);
+  const [deviceError, setDeviceError] = useState<string | null>(
+    mediaSupported ? null : "Trình duyệt không hỗ trợ truy cập thiết bị nghe nhìn trực tiếp."
+  );
   const [stream, setStream] = useState<MediaStream | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -71,22 +74,15 @@ export default function ClassroomPreJoin({
       }
     }
 
-    if (typeof navigator !== "undefined" && navigator.mediaDevices) {
-      initMedia();
-    } else {
-
-
-      setVideoEnabled(false);
-      setAudioEnabled(false);
-      setDeviceError("Trình duyệt không hỗ trợ truy cập thiết bị nghe nhìn trực tiếp.");
-    }
+    // Unsupported browsers start with media off and the error set (initial state above)
+    if (mediaSupported) initMedia();
 
     return () => {
       if (activeStream) {
         activeStream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, []);
+  }, [mediaSupported]);
 
   // Update track enabled state
   useEffect(() => {
@@ -207,7 +203,7 @@ export default function ClassroomPreJoin({
           <Alert
             type="warning"
             showIcon
-            message={deviceError}
+            message={<span className="text-amber-200">{deviceError}</span>}
             className="mb-6 rounded-2xl bg-amber-950/40 border-amber-900 text-amber-300 text-xs"
           />
         )}
@@ -216,8 +212,14 @@ export default function ClassroomPreJoin({
         <Alert
           type="info"
           showIcon
-          message="Buổi học sẽ được ghi hình"
-          description="Ghi hình bắt đầu khi giáo viên nhấn Bắt đầu buổi học và kéo dài đến khi buổi học kết thúc. Bản ghi chỉ dành cho giáo viên, học viên của lớp và quản trị viên, được lưu trữ có thời hạn."
+          // antd renders Alert text in its own dark color, unreadable on this dark card: set the colors on the content
+          message={<span className="font-semibold text-indigo-100">Buổi học sẽ được ghi hình</span>}
+          description={
+            <span className="text-indigo-200/90">
+              Ghi hình bắt đầu khi giáo viên nhấn Bắt đầu buổi học và kéo dài đến khi buổi học kết thúc. Bản ghi chỉ dành
+              cho giáo viên, học viên của lớp và quản trị viên, được lưu trữ có thời hạn.
+            </span>
+          }
           className="mb-6 rounded-2xl bg-indigo-950/40 border-indigo-900 text-indigo-200 text-xs"
         />
 

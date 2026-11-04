@@ -13,6 +13,8 @@ interface FreeEnrollmentModalProps {
   loading: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** PAID classes only: open the class page, where a scholarship can be applied */
+  onViewDetail?: () => void;
 }
 
 export default function FreeEnrollmentModal({
@@ -21,8 +23,10 @@ export default function FreeEnrollmentModal({
   loading,
   onConfirm,
   onCancel,
+  onViewDetail,
 }: FreeEnrollmentModalProps) {
   if (!classItem) return null;
+  const isFree = classItem.classType === "FREE";
 
   const displayTitle = classItem.className || classItem.title;
 
@@ -37,8 +41,8 @@ export default function FreeEnrollmentModal({
       title={
         <div className="flex items-center gap-2 text-base font-bold text-slate-900 pb-2 border-b border-slate-100">
           <span>Xác nhận đăng ký lớp</span>
-          <Tag color="green" className="text-[11px] font-bold border-none px-2 py-0.5">
-            MIỄN PHÍ
+          <Tag color={isFree ? "green" : "blue"} className="text-[11px] font-bold border-none px-2 py-0.5">
+            {isFree ? "MIỄN PHÍ" : "CÓ PHÍ"}
           </Tag>
         </div>
       }
@@ -79,7 +83,9 @@ export default function FreeEnrollmentModal({
 
           <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between text-xs">
             <span className="text-slate-500 font-medium">Học phí:</span>
-            <span className="font-bold text-emerald-600 text-sm">Miễn phí</span>
+            <span className={`font-bold text-sm ${isFree ? "text-emerald-600" : "text-indigo-600"}`}>
+              {isFree ? "Miễn phí" : classItem.formattedPrice || "Có phí"}
+            </span>
           </div>
         </div>
 
@@ -87,6 +93,19 @@ export default function FreeEnrollmentModal({
         <p className="text-xs text-slate-600 font-medium text-center">
           Bạn có chắc chắn muốn đăng ký tham gia lớp học này?
         </p>
+        {!isFree && (
+          <p className="text-xs text-slate-500 text-center -mt-2">
+            Chỗ của bạn được giữ trong 15 phút để thanh toán trực tiếp.
+            {onViewDetail && (
+              <>
+                {" "}Muốn dùng học bổng?{" "}
+                <button type="button" onClick={onViewDetail} className="text-indigo-600 font-semibold hover:underline">
+                  Xem chi tiết lớp
+                </button>
+              </>
+            )}
+          </p>
+        )}
 
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
@@ -106,7 +125,7 @@ export default function FreeEnrollmentModal({
             icon={<CheckCircleOutlined />}
             className="bg-indigo-600 hover:bg-indigo-700 rounded-lg text-xs font-semibold h-9 px-5 shadow-xs border-none"
           >
-            Xác nhận đăng ký
+            {isFree ? "Xác nhận đăng ký" : "Đăng ký & thanh toán"}
           </Button>
         </div>
       </div>
