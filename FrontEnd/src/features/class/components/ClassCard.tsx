@@ -21,6 +21,7 @@ export default function ClassCard({ item }: ClassCardProps) {
     isEnrolling,
     enrollingClassId,
     isEnrolled,
+    getPendingEnrollmentId,
     freeEnrollModal,
   } = useClassEnrollment();
 
@@ -198,6 +199,18 @@ export default function ClassCard({ item }: ClassCardProps) {
                 className="flex-1 text-xs font-semibold rounded h-8 bg-emerald-50 text-emerald-700 border-emerald-200"
               >
                 Đã đăng ký
+              </Button>
+            ) : getPendingEnrollmentId(id) ? (
+              <Button
+                type="primary"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/checkout/${getPendingEnrollmentId(id)}`);
+                }}
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-xs font-semibold rounded h-8 shadow-sm border-none"
+              >
+                Tiếp tục thanh toán
               </Button>
             ) : canEnroll ? (
               <Button

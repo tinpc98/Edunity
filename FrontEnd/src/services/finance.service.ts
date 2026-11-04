@@ -12,8 +12,31 @@ import {
   adaptTeacherEarnings,
 } from "../api/paymentAdapters";
 
+export type PayoutStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "REJECTED";
+
+export interface Payout {
+  id: string;
+  teacherId: string;
+  teacherName?: string | null;
+  teacherEmail?: string | null;
+  amount: string;
+  status: PayoutStatus;
+  bankAccountSnapshot: { bankName: string; accountNumber: string; accountHolderName: string };
+  requestedAt: string;
+  processedAt?: string | null;
+  reviewNote?: string | null;
+}
+
+export interface PayoutRequestPayload {
+  bankName: string;
+  accountNumber: string;
+  accountHolderName: string;
+}
+
 export const financeKeys = {
   all: ["finance"] as const,
+  teacherPayouts: () => ["finance", "teacherPayouts"] as const,
+  adminPayouts: (page = 1, status?: string) => ["finance", "adminPayouts", page, status] as const,
   teacherEarnings: () => ["finance", "teacherEarnings"] as const,
   adminPayments: (page = 1, limit = 20, status?: string) =>
     ["finance", "adminPayments", page, limit, status] as const,
@@ -22,6 +45,33 @@ export const financeKeys = {
 };
 
 export const financeService = {
+  /** Teacher: payout requests. GET /api/teacher/payouts */
+  async getMyPayouts(): Promise<Payout[]> {
+    return apiClient<Payout[]>(`/teacher/payouts`);
+  },
+
+  /** Teacher: request a payout of every AVAILABLE earning. POST /api/teacher/payouts */
+  async requestPayout(payload: PayoutRequestPayload): Promise<Payout> {
+    return apiClient<Payout>(`/teacher/payouts`, { method: "POST", body: JSON.stringify(payload) });
+  },
+
+  /** Admin: payout queue. GET /api/admin/payouts */
+  async getAdminPayouts(page = 1, status?: string): Promise<{ items: Payout[]; total: number; page: number; totalPages: number }> {
+    const query = new URLSearchParams({ page: String(page), pageSize: "20" });
+    if (status && status !== "ALL") query.set("status", status);
+    return apiClient(`/admin/payouts?${query.toString()}`);
+  },
+
+  /** Admin: bank transfer done. POST /api/admin/payouts/:id/complete */
+  async completePayout(id: string, note?: string): Promise<Payout> {
+    return apiClient<Payout>(`/admin/payouts/${id}/complete`, { method: "POST", body: JSON.stringify({ note }) });
+  },
+
+  /** Admin: reject (earnings are released for a new request). POST /api/admin/payouts/:id/reject */
+  async rejectPayout(id: string, note: string): Promise<Payout> {
+    return apiClient<Payout>(`/admin/payouts/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) });
+  },
+
   /**
    * Teacher: Get teacher's earnings breakdown and aggregated summary.
    * GET /api/teacher/earnings

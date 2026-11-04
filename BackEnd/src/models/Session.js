@@ -36,20 +36,24 @@ const recordingSchema = new Schema(
   {
     providerRecordingId: { type: String, default: null }, // ID recording từ Video Provider (nếu có)
     storageKey: { type: String, default: null }, // private storage key — không lưu public URL
-    status: { type: String, enum: ["PROCESSING", "AVAILABLE", "FAILED"], default: "PROCESSING" },
+    status: { type: String, enum: ["RECORDING", "PROCESSING", "AVAILABLE", "FAILED", "EXPIRED"], default: "PROCESSING" },
     durationSeconds: { type: Number, default: null, min: 0 },
     availableAt: { type: Date, default: null }, // thời điểm chuyển sang AVAILABLE
     failureReason: { type: String, default: null }, // lý do khi status = FAILED
+    startedAt: { type: Date, default: null },
+    stoppedAt: { type: Date, default: null },
+    expiredAt: { type: Date, default: null }, // file đã bị xoá theo chính sách lưu trữ (status = EXPIRED)
   },
   { _id: false }
 );
+// Vòng đời: RECORDING (đang ghi) → PROCESSING (đã dừng, Egress đang xuất file) → AVAILABLE | FAILED → EXPIRED
 
 const recordingSegmentSchema = new Schema(
   {
     segmentIndex: { type: Number, required: true, min: 1 },
     providerRecordingId: { type: String, default: null },
     storageKey: { type: String, default: null },
-    status: { type: String, enum: ["PROCESSING", "AVAILABLE", "FAILED"], default: "PROCESSING" },
+    status: { type: String, enum: ["RECORDING", "PROCESSING", "AVAILABLE", "FAILED", "EXPIRED"], default: "PROCESSING" },
     startedAt: { type: Date, default: null },
     stoppedAt: { type: Date, default: null },
     availableAt: { type: Date, default: null },

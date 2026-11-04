@@ -237,7 +237,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         expect(studentWaitJoin.body.data.isWaitingRoom).toBe(true);
 
         const reloadedWait = await Session.findById(sessionWait._id).lean();
-        expect(reloadedWait.status).toBe("SCHEDULED");
+        expect(reloadedWait.status).toBe("WAITING");
         expect(reloadedWait.roomState).toBe("WAITING");
         expect(reloadedWait.recording).toBeNull();
 
@@ -785,6 +785,8 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         connectionSessionId: "t_seg_1",
         connectedAt: new Date("2026-07-02T19:00:00.000Z"),
       });
+      // Teaching starts on "Bắt đầu buổi học" (recording first, then IN_PROGRESS)
+      await presenceService.beginTeaching(session._id, { now: new Date("2026-07-02T19:00:00.000Z") });
 
       // F1: Teacher disconnects at 19:20, reconnects at 19:30 (10m absence < 30m) -> session stays IN_PROGRESS
       await presenceService.recordParticipantDisconnected({
@@ -1222,6 +1224,8 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         connectionSessionId: "t_overtime",
         connectedAt: start,
       });
+      // Teaching starts on "Bắt đầu buổi học" (recording first, then IN_PROGRESS)
+      await presenceService.beginTeaching(session._id, { now: start });
       await presenceService.recordParticipantConnected({
         sessionId: session._id,
         userId: student1._id,
@@ -1305,6 +1309,8 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
           connectedAt: start,
           source: "LIVEKIT_WEBHOOK",
         });
+        // Teaching starts on "Bắt đầu buổi học" (recording first, then IN_PROGRESS)
+        await presenceService.beginTeaching(session._id, { now: start });
         await presenceService.recordParticipantConnected({
           sessionId: session._id,
           userId: student1._id,
@@ -1319,7 +1325,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         const at30m = await Session.findById(session._id).lean();
         expect(at30m.status).toBe("IN_PROGRESS");
         expect(at30m.roomState).toBe("GRACE_PERIOD");
-        expect(at30m.recording.status).toBe("PROCESSING");
+        expect(at30m.recording.status).toBe("RECORDING");
         expect(at30m.recordingSegments[0].stoppedAt).toBeNull();
         expect(at30m.attendanceFinalizedAt).toBeNull();
 
@@ -1334,7 +1340,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         await runSessionLifecycleJob(new Date("2026-09-01T22:00:00.000Z"));
         const at60m = await Session.findById(session._id).lean();
         expect(at60m.status).toBe("IN_PROGRESS");
-        expect(at60m.recording.status).toBe("PROCESSING");
+        expect(at60m.recording.status).toBe("RECORDING");
         expect(at60m.recordingSegments[0].stoppedAt).toBeNull();
         expect(at60m.attendanceFinalizedAt).toBeNull();
 
@@ -1371,6 +1377,8 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         connectedAt: start,
         source: "LIVEKIT_WEBHOOK",
       });
+      // Teaching starts on "Bắt đầu buổi học" (recording first, then IN_PROGRESS)
+      await presenceService.beginTeaching(session._id, { now: start });
       await presenceService.recordParticipantConnected({
         sessionId: session._id,
         userId: student1._id,
@@ -1445,6 +1453,8 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         connectedAt: start,
         source: "LIVEKIT_WEBHOOK",
       });
+      // Teaching starts on "Bắt đầu buổi học" (recording first, then IN_PROGRESS)
+      await presenceService.beginTeaching(sessionE._id, { now: start });
       await presenceService.recordParticipantDisconnected({
         sessionId: sessionE._id,
         userId: teacher._id,
@@ -1490,6 +1500,8 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         connectedAt: start,
         source: "LIVEKIT_WEBHOOK",
       });
+      // Teaching starts on "Bắt đầu buổi học" (recording first, then IN_PROGRESS)
+      await presenceService.beginTeaching(sessionF._id, { now: start });
       await presenceService.recordParticipantDisconnected({
         sessionId: sessionF._id,
         userId: teacher._id,

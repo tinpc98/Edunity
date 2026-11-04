@@ -28,7 +28,17 @@ function formatRecordingDate(isoString: string): string {
   }
 }
 
-function getNoRecordingMessage(status: SessionStatus): string {
+function getNoRecordingMessage(status: SessionStatus, recordingStatus?: string | null): string {
+  switch (recordingStatus) {
+    case "RECORDING":
+      return "Buổi học đang được ghi hình. Bản ghi sẽ có sau khi buổi học kết thúc.";
+    case "PROCESSING":
+      return "Bản ghi đang được xử lý, vui lòng quay lại sau ít phút.";
+    case "FAILED":
+      return "Bản ghi của buổi học này bị lỗi và không thể phát.";
+    case "EXPIRED":
+      return "Bản ghi đã hết thời hạn lưu trữ và đã được xoá.";
+  }
   switch (status) {
     case "IN_PROGRESS":
       return "Bản ghi sẽ có sau khi buổi học kết thúc.";
@@ -188,7 +198,7 @@ export default function SessionDetailModal({
           ) : (
             /* 4B. Neutral No-Recording Message */
             <p className="text-sm text-slate-500 font-normal m-0 py-1">
-              {getNoRecordingMessage(session.status)}
+              {getNoRecordingMessage(session.status, recording?.status)}
             </p>
           )}
         </div>

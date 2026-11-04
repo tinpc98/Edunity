@@ -4,10 +4,11 @@ export const LOGO_URL = "https://lh3.googleusercontent.com/aida-public/AB6AXuB8J
 export const HERO_BANNER_URL = "https://lh3.googleusercontent.com/aida-public/AB6AXuA6MkSB_fYEquFuNn8hfzOPN_A0gMncQ46DgAvEvRy53XdlqtgsdauRRaoWH3rQRHChbeL3oXl9LwyHM9SVdimVKlxLsGVQwizadBDYJLmdj4JcK7bHz0L1p5WN87MbAqorprypZVNXzKV1ALsUGuxgaj7Q1JJskioORHVKVl9D3k18t89yVvp2VU5PqdCxS80GQ65-b26JRwR9kpOhk1dDXK6W2Ojc3YbQXPtKZIylQCPVyLNrdWXu";
 
 export const STATS_ITEMS: StatItem[] = [
-  { icon: "ShieldCheck", title: "Giáo Viên Uy Tín", desc: "100% Thạc sĩ & Chuyên gia" },
-  { icon: "Video", title: "Live HD Không Lag", desc: "Bảng tương tác số 2 chiều" },
-  { icon: "Users", title: "Lớp Học Nhỏ", desc: "Tối đa 8 - 15 học viên/lớp" },
-  { icon: "Star", title: "4.9 / 5 Đánh Giá", desc: "Hơn 45.000 học sinh tin chọn" }
+  // Only claims the platform actually guarantees: no invented figures
+  { icon: "ShieldCheck", title: "Giáo Viên Được Xác Minh", desc: "Hồ sơ & bằng cấp được kiểm duyệt" },
+  { icon: "Video", title: "Lớp Học Trực Tuyến", desc: "Học trực tiếp, có bản ghi xem lại" },
+  { icon: "Users", title: "Lớp Học Nhỏ", desc: "Sĩ số giới hạn theo từng lớp" },
+  { icon: "Star", title: "Đánh Giá Minh Bạch", desc: "Chỉ học viên đã học mới được đánh giá" }
 ];
 
 export const TESTIMONIALS: Testimonial[] = [

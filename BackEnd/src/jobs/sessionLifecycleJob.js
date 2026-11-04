@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const { Session } = require("../models");
 const presenceService = require("../services/sessionPresenceService");
 const incidentService = require("../services/sessionIncidentService");
+const { runExclusive } = require("./jobLock");
 
 let isRunning = false;
 
@@ -29,6 +30,9 @@ const runSessionLifecycleJob = async (referenceNow = new Date()) => {
   try {
     const candidateSessions = await Session.find({
       status: { $in: ["SCHEDULED", "WAITING", "IN_PROGRESS", "INTERRUPTED"] },
+      // An INTERRUPTED session that has been closed out keeps its status for the incident record but is final:
+      // re-evaluating it every minute would only repeat side effects and starve newer sessions of the 200 slots.
+      roomState: { $ne: "ENDED" },
       startDatetime: { $lte: preOpenHorizon },
     })
       .select("_id")
@@ -64,7 +68,8 @@ const runSessionLifecycleJob = async (referenceNow = new Date()) => {
 const startSessionLifecycleJob = () => {
   // Run every minute to evaluate session lifecycle milestones
   cron.schedule("* * * * *", () => {
-    runSessionLifecycleJob();
+    // With several backend instances only one runs the job (H03)
+    runExclusive("sessionLifecycle", 55 * 1000, () => runSessionLifecycleJob());
   });
   console.log("Smart Session Lifecycle Job started.");
 };

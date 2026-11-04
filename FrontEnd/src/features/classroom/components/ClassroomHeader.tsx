@@ -7,8 +7,17 @@ import {
   TeamOutlined,
   ClockCircleOutlined,
   VideoCameraOutlined,
+  PlayCircleOutlined,
 } from "@ant-design/icons";
 import type { ClassroomRole } from "../../../types/session";
+
+/** Teaching state of the Session as reported by live-status, and the Teacher's "Bắt đầu buổi học" action */
+export interface SessionControl {
+  status?: string;
+  recordingStatus?: string | null;
+  onStart?: () => void;
+  isStarting?: boolean;
+}
 
 interface ClassroomHeaderProps {
   sessionTitle: string;
@@ -20,6 +29,7 @@ interface ClassroomHeaderProps {
   onLeaveRoom: () => void;
   onEndSession?: () => void;
   isEndingSession?: boolean;
+  sessionControl?: SessionControl;
 }
 
 export default function ClassroomHeader({
@@ -32,8 +42,12 @@ export default function ClassroomHeader({
   onLeaveRoom,
   onEndSession,
   isEndingSession,
+  sessionControl,
 }: ClassroomHeaderProps) {
   const isTeacher = role === "HOST";
+  const status = sessionControl?.status;
+  const isWaiting = status === "SCHEDULED" || status === "WAITING";
+  const isRecording = sessionControl?.recordingStatus === "RECORDING";
 
   // Real-time elapsed time calculation
   const [elapsedTime, setElapsedTime] = useState<string>("00:00");
@@ -76,10 +90,24 @@ export default function ClassroomHeader({
             <span className="font-bold text-sm md:text-base text-slate-100 truncate max-w-[200px] md:max-w-xs">
               {sessionTitle}
             </span>
-            <Tag color="error" className="m-0 font-bold text-[10px] tracking-wider uppercase px-2 py-0 border-0 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-              LIVE
-            </Tag>
+            {isWaiting ? (
+              <Tag color="gold" className="m-0 font-bold text-[10px] tracking-wider uppercase px-2 py-0 border-0">
+                Phòng chờ
+              </Tag>
+            ) : (
+              <Tag color="error" className="m-0 font-bold text-[10px] tracking-wider uppercase px-2 py-0 border-0 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                LIVE
+              </Tag>
+            )}
+            {isRecording && (
+              <Tooltip title="Buổi học đang được ghi hình. Bản ghi chỉ dành cho giáo viên, học viên của lớp và quản trị viên.">
+                <Tag color="red" className="m-0 font-semibold text-[10px] px-2 py-0 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  Đang ghi hình
+                </Tag>
+              </Tooltip>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
@@ -122,6 +150,28 @@ export default function ClassroomHeader({
         >
           <span className="hidden sm:inline">Rời phòng</span>
         </Button>
+
+        {/* Teacher-only: start teaching (starts the recording first) */}
+        {isTeacher && isWaiting && sessionControl?.onStart && (
+          <Popconfirm
+            title="Bắt đầu buổi học?"
+            description="Hệ thống sẽ bật ghi hình và chuyển buổi học sang trạng thái đang diễn ra. Ghi hình chạy đến khi kết thúc buổi học."
+            onConfirm={sessionControl.onStart}
+            okText="Bắt đầu"
+            cancelText="Hủy"
+            okButtonProps={{ loading: sessionControl.isStarting }}
+          >
+            <Button
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              loading={sessionControl.isStarting}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs font-semibold border-none"
+            >
+              <span className="hidden sm:inline">Bắt đầu buổi học</span>
+              <span className="sm:hidden">Bắt đầu</span>
+            </Button>
+          </Popconfirm>
+        )}
 
         {/* Teacher-only: End Session for Everyone */}
         {isTeacher && onEndSession && (

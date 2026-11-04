@@ -4,6 +4,8 @@ import { App as AntdApp, Button } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "../../../stores/auth.store";
 import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
+import { sessionKeys } from "../../../services/session.service";
+import { FetchError } from "../../../api/apiClient";
 import { ROUTES } from "../../../routes/routePaths";
 import FreeEnrollmentModal from "../components/FreeEnrollmentModal";
 
@@ -44,21 +46,50 @@ export function useClassEnrollment() {
     );
   };
 
-  // 1. PAID Class Enrollment Mutation -> navigates to Checkout
-  const paidEnrollMutation = useMutation({
-    mutationFn: (payload: { classId: string; studentId: string }) =>
-      enrollmentService.createOrGetPendingEnrollment(payload),
-    onSuccess: (enrollment) => {
-      navigate(`/checkout/${enrollment.id}`);
-    },
-    onError: (error: Error) => {
-      notification.error({
-        message: "Không thể tiếp tục đăng ký",
-        description: error.message || "Đã xảy ra lỗi khi tạo đơn đăng ký.",
+  // A PAID enrollment still holding its seat: the card offers "Tiếp tục thanh toán" instead of a new registration
+  const getPendingEnrollmentId = (classId: string): string | null => {
+    const pending = studentEnrollments?.find(
+      (e) =>
+        e.classId === classId &&
+        e.enrollmentStatus === "PENDING_PAYMENT" &&
+        (!e.holdExpiresAt || new Date(e.holdExpiresAt).getTime() > Date.now())
+    );
+    return pending ? pending.id : null;
+  };
+
+  // Seats, the student's enrollment list and their schedule all change after an enrollment
+  const refreshAfterEnrollment = (classId: string) => {
+    queryClient.invalidateQueries({ queryKey: enrollmentKeys.all });
+    queryClient.invalidateQueries({ queryKey: enrollmentKeys.availability(classId) });
+    queryClient.invalidateQueries({ queryKey: ["classDetail", classId] });
+    queryClient.invalidateQueries({ queryKey: ["classDiscovery"] });
+    queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+  };
+
+  /**
+   * The backend answers DUPLICATE_ENROLLMENT with the existing enrollment: a PENDING_PAYMENT hold is resumed
+   * at checkout instead of being reported as an error. Returns true when the error was handled.
+   */
+  const handleDuplicateEnrollment = (error: unknown, classId: string): boolean => {
+    if (!(error instanceof FetchError) || error.code !== "DUPLICATE_ENROLLMENT") return false;
+    const details = (error.details || {}) as { existingEnrollmentId?: string; enrollmentStatus?: string };
+    refreshAfterEnrollment(classId);
+    if (details.enrollmentStatus === "PENDING_PAYMENT" && details.existingEnrollmentId) {
+      notification.info({
+        message: "Bạn đang có đơn đăng ký chờ thanh toán",
+        description: "Chuyển tới trang thanh toán để hoàn tất đăng ký.",
         placement: "topRight",
       });
-    },
-  });
+      navigate(`/checkout/${details.existingEnrollmentId}`);
+      return true;
+    }
+    notification.info({
+      message: "Đã đăng ký lớp",
+      description: "Bạn đã đăng ký lớp học này trước đó. Vui lòng kiểm tra trong mục Học tập của tôi.",
+      placement: "topRight",
+    });
+    return true;
+  };
 
   // 2. FREE Class Enrollment Mutation -> directly CONFIRMED without Payment/Checkout
   const freeEnrollMutation = useMutation({
@@ -67,10 +98,7 @@ export function useClassEnrollment() {
     onSuccess: (enrollment) => {
       setFreeClassTarget(null);
 
-      // Invalidate relevant server state queries
-      queryClient.invalidateQueries({ queryKey: ["studentEnrollments", user?.userId] });
-      queryClient.invalidateQueries({ queryKey: ["classDetail", enrollment.classId] });
-      queryClient.invalidateQueries({ queryKey: ["classDiscovery"] });
+      refreshAfterEnrollment(enrollment.classId);
 
       // Immediate success feedback with link to My Learning
       notification.success({
@@ -90,7 +118,9 @@ export function useClassEnrollment() {
         placement: "topRight",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables) => {
+      setFreeClassTarget(null);
+      if (handleDuplicateEnrollment(error, variables.classId)) return;
       notification.error({
         message: "Đăng ký không thành công",
         description: error.message || "Đã xảy ra lỗi khi xác nhận đăng ký lớp học miễn phí.",
@@ -128,16 +158,19 @@ export function useClassEnrollment() {
       return;
     }
 
-    // 4. Branch by classType: FREE vs PAID
+    // 4. A seat already held for this student: resume its checkout
+    const pendingId = getPendingEnrollmentId(target.id);
+    if (pendingId) {
+      navigate(`/checkout/${pendingId}`);
+      return;
+    }
+
+    // 5. Branch by classType. PAID classes are registered on the class page, the one place that offers both
+    // direct payment and scholarship payment (a single registration flow instead of two diverging ones).
     if (target.classType === "FREE") {
-      // Open confirmation modal (NO checkout, NO payment)
       setFreeClassTarget(target);
     } else {
-      // PAID flow: create/reuse PENDING_PAYMENT -> Checkout
-      paidEnrollMutation.mutate({
-        classId: target.id,
-        studentId: user.userId,
-      });
+      navigate(`/classes/${target.id}`);
     }
   };
 
@@ -162,9 +195,9 @@ export function useClassEnrollment() {
   return {
     handleEnrollClass,
     isEnrolled,
-    isEnrolling: paidEnrollMutation.isPending || freeEnrollMutation.isPending,
-    enrollingClassId:
-      paidEnrollMutation.variables?.classId || freeEnrollMutation.variables?.classId,
+    getPendingEnrollmentId,
+    isEnrolling: freeEnrollMutation.isPending,
+    enrollingClassId: freeEnrollMutation.variables?.classId,
     freeEnrollModal,
   };
 }

@@ -106,11 +106,42 @@ const sumIntervalsSeconds = (intervals = []) => {
  * - The teacher is present / starting the teaching period,
  * - No active PROCESSING recording segment is currently running.
  */
+const RECORDING_START_ATTEMPTS = 3;
+const RECORDING_RETRY_DELAY_MS = 200;
+
+// RECORDING is the live state; PROCESSING without stoppedAt is the pre-RECORDING legacy representation
+const isActiveRecordingEntry = (entry) =>
+  Boolean(entry) && ["RECORDING", "PROCESSING"].includes(entry.status) && !entry.stoppedAt;
+
+/**
+ * Starts an Egress with bounded retries. A missing LiveKit configuration is not retried: it cannot succeed.
+ * Returns { egressId, error }.
+ */
+const startEgressWithRetry = async (roomId, storageKey) => {
+  let error = null;
+  for (let attempt = 1; attempt <= RECORDING_START_ATTEMPTS; attempt++) {
+    const egressId = await videoProvider.startRecording(roomId, storageKey);
+    if (egressId) return { egressId, error: null };
+    error =
+      (typeof videoProvider.getLastStartRecordingError === "function" && videoProvider.getLastStartRecordingError()) ||
+      "Failed to start LiveKit egress";
+    if (error === "LiveKit is not configured") break;
+    if (attempt < RECORDING_START_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, RECORDING_RETRY_DELAY_MS * attempt));
+    }
+  }
+  return { egressId: null, error };
+};
+
+/**
+ * Starts a recording segment unless one is already running. Used when the Teacher starts the Session and when a
+ * Teacher resumes an INTERRUPTED Session. A failure is never silent: the Teacher and Admins are notified and the
+ * caller receives { ok: false, error } to decide whether the Session may proceed.
+ */
 const startTeachingRecordingSegmentIfNeeded = async (sessionDoc, teacherId) => {
   const segments = Array.isArray(sessionDoc.recordingSegments) ? sessionDoc.recordingSegments : [];
-  const activeSegment = segments.find((s) => s.status === "PROCESSING" && !s.stoppedAt);
-  if (activeSegment) {
-    return sessionDoc.recording;
+  if (segments.some(isActiveRecordingEntry) || isActiveRecordingEntry(sessionDoc.recording)) {
+    return { ok: true, recording: sessionDoc.recording, alreadyRunning: true };
   }
 
   if (!sessionDoc.meetingRoomId) {
@@ -118,74 +149,170 @@ const startTeachingRecordingSegmentIfNeeded = async (sessionDoc, teacherId) => {
   }
 
   const storageKey = `private/${teacherId}/RECORDING/${crypto.randomUUID()}.mp4`;
-  const egressId = await videoProvider.startRecording(sessionDoc.meetingRoomId, storageKey);
+  const { egressId, error } = await startEgressWithRetry(sessionDoc.meetingRoomId, storageKey);
+  if (!egressId && error === "LiveKit is not configured") {
+    // Local/dev deployment without a video provider: there is nothing to record and nothing failed
+    return { ok: false, unavailable: true, recording: sessionDoc.recording || null, error };
+  }
   const now = new Date();
-  const recordingData = {
-    providerRecordingId: egressId || null,
-    storageKey,
-    status: egressId ? "PROCESSING" : "FAILED",
-    failureReason: egressId ? null : "Failed to start LiveKit egress",
-  };
+  const failureReason = egressId ? null : error;
 
-  const nextSegmentIndex = segments.length + 1;
   const newSegment = {
-    segmentIndex: nextSegmentIndex,
+    segmentIndex: segments.length + 1,
     providerRecordingId: egressId || null,
     storageKey,
-    status: egressId ? "PROCESSING" : "FAILED",
+    status: egressId ? "RECORDING" : "FAILED",
     startedAt: now,
     stoppedAt: egressId ? null : now,
-    failureReason: egressId ? null : "Failed to start LiveKit egress",
+    failureReason,
   };
+
+  // `recording` is what playback reads: it follows the newest segment that actually records, and only falls back
+  // to a FAILED entry when there is nothing better to show
+  const keepPrevious = !egressId && sessionDoc.recording && sessionDoc.recording.status !== "FAILED";
+  const recordingData = keepPrevious
+    ? sessionDoc.recording
+    : {
+        providerRecordingId: egressId || null,
+        storageKey,
+        status: egressId ? "RECORDING" : "FAILED",
+        failureReason,
+        startedAt: now,
+        stoppedAt: egressId ? null : now,
+      };
 
   await Session.updateOne(
     { _id: sessionDoc._id },
     {
-      $set: { recording: recordingData },
+      $set: { recording: recordingData, meetingRoomId: sessionDoc.meetingRoomId },
       $push: { recordingSegments: newSegment },
     }
   );
 
   sessionDoc.recording = recordingData;
   sessionDoc.recordingSegments = [...segments, newSegment];
-  return recordingData;
+
+  if (!egressId) {
+    await notifyOnce(
+      sessionDoc.teacherId,
+      "Không thể bật ghi hình buổi học",
+      `Hệ thống chưa bật được ghi hình cho buổi học "${sessionDoc.title}". Vui lòng thử lại; nếu vẫn lỗi, liên hệ quản trị viên.`,
+      "SESSION_RECORDING_START_FAILED",
+      `session:${sessionDoc._id}:teacher:recording_start_failed:${newSegment.segmentIndex}`,
+      sessionDoc._id
+    );
+    await notifyAdminsOnce(
+      "Lỗi khởi động ghi hình buổi học",
+      `Buổi học "${sessionDoc.title}" (${sessionDoc.className}) không bật được ghi hình: ${failureReason}`,
+      "ADMIN_RECORDING_START_FAILED",
+      `session:${sessionDoc._id}:admin:recording_start_failed:${newSegment.segmentIndex}`,
+      sessionDoc._id
+    );
+  }
+
+  return { ok: Boolean(egressId), recording: recordingData, error: failureReason };
 };
 
 /**
  * Stops the active LiveKit recording segment (if any) when the teacher leaves or the session ends.
  */
+// How long a Teacher may sit in the room after the start time before the system starts teaching itself
+const getAutoStartAfterMs = () => (Number(process.env.SESSION_AUTO_START_AFTER_MINUTES) || 10) * 60 * 1000;
+
+const STARTABLE_STATUSES = ["SCHEDULED", "WAITING"];
+
+/**
+ * SCHEDULED/WAITING → IN_PROGRESS, recording first (startSession and the lifecycle auto-start).
+ * When recording is mandatory and cannot start, the Session is NOT started: RECORDING_START_FAILED is thrown
+ * and the Session stays WAITING so the Teacher can retry. Never reports a recording that is not running.
+ */
+const beginTeaching = async (sessionId, { startedBy = "TEACHER", now = new Date() } = {}) => {
+  const session = await Session.findById(sessionId);
+  if (!session) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
+  if (!STARTABLE_STATUSES.includes(session.status)) {
+    throw new AppError("Only a SCHEDULED or WAITING session can be started", "SESSION_NOT_STARTABLE", 409);
+  }
+  if (!session.meetingRoomId) session.meetingRoomId = `room_${session._id}`;
+
+  const recording = await startTeachingRecordingSegmentIfNeeded(session, session.teacherId);
+  if (!recording.ok && !recording.unavailable && videoProvider.isRecordingRequired()) {
+    throw new AppError(
+      `Recording could not be started, so the session was not started: ${recording.error || "unknown error"}`,
+      "RECORDING_START_FAILED",
+      503
+    );
+  }
+
+  const tp = session.teacherPresence || {};
+  const updated = await Session.findOneAndUpdate(
+    { _id: session._id, status: { $in: STARTABLE_STATUSES } },
+    {
+      $set: {
+        status: "IN_PROGRESS",
+        roomState: now.getTime() > session.endDatetime.getTime() ? "GRACE_PERIOD" : "LIVE",
+        lifecycleState: "IN_PROGRESS",
+        actualStartAt: session.actualStartAt || now,
+        meetingRoomId: session.meetingRoomId,
+        "teacherPresence.firstTeachingJoinAt": tp.firstTeachingJoinAt || now,
+      },
+    },
+    { returnDocument: "after" }
+  ).lean();
+
+  if (!updated) {
+    // Lost a race against another start/end: the Egress this call started must not keep running on its own
+    if (recording.ok && !recording.alreadyRunning) await stopActiveRecordingSegment(session, "START_RACE_LOST");
+    throw new AppError("Session has already been started or ended", "SESSION_NOT_STARTABLE", 409);
+  }
+
+  return { ...updated, startedBy };
+};
+
+/**
+ * Stops every running Egress of the Session (end, auto-completion, or interruption). Entries move from RECORDING to
+ * PROCESSING; the egress_ended webhook then makes them AVAILABLE or FAILED.
+ * The Teacher merely disconnecting does NOT call this: the recording keeps running until the Session ends.
+ */
 const stopActiveRecordingSegment = async (sessionDoc, stopReason = "SESSION_ENDED") => {
   const current = await Session.findById(sessionDoc._id).lean();
   if (!current) return null;
 
-  const activeEgressId =
-    current.recording?.status === "PROCESSING" ? current.recording.providerRecordingId : null;
-  if (activeEgressId) {
+  const segments = Array.isArray(current.recordingSegments) ? current.recordingSegments : [];
+  const egressIds = new Set();
+  for (const entry of [current.recording, ...segments]) {
+    if (isActiveRecordingEntry(entry) && entry.providerRecordingId) egressIds.add(entry.providerRecordingId);
+  }
+  for (const egressId of egressIds) {
     try {
-      await videoProvider.stopRecording(activeEgressId);
+      await videoProvider.stopRecording(egressId);
     } catch (err) {
-      console.warn(`[Recording] stopRecording failed for ${activeEgressId}:`, err.message);
+      console.warn(`[Recording] stopRecording failed for ${egressId}:`, err.message);
     }
   }
 
   const now = new Date();
-  if (Array.isArray(current.recordingSegments) && current.recordingSegments.length > 0) {
-    const updatedSegments = current.recordingSegments.map((seg) => {
-      if (seg.status === "PROCESSING" && !seg.stoppedAt) {
-        const durationSeconds = seg.startedAt
-          ? Math.max(0, Math.round((now.getTime() - new Date(seg.startedAt).getTime()) / 1000))
-          : 0;
-        return {
-          ...seg,
-          stoppedAt: now,
-          durationSeconds,
-          failureReason:
-            stopReason === "TEACHER_LEFT_EARLY" ? "Stopped due to teacher absence" : seg.failureReason,
-        };
-      }
-      return seg;
-    });
-    await Session.updateOne({ _id: current._id }, { $set: { recordingSegments: updatedSegments } });
+  const close = (entry) => {
+    const durationSeconds = entry.startedAt
+      ? Math.max(0, Math.round((now.getTime() - new Date(entry.startedAt).getTime()) / 1000))
+      : entry.durationSeconds ?? null;
+    return {
+      ...entry,
+      status: "PROCESSING",
+      stoppedAt: now,
+      durationSeconds,
+      failureReason: stopReason === "TEACHER_LEFT_EARLY" ? "Stopped due to teacher absence" : entry.failureReason,
+    };
+  };
+
+  const update = {};
+  if (segments.some(isActiveRecordingEntry)) {
+    update.recordingSegments = segments.map((seg) => (isActiveRecordingEntry(seg) ? close(seg) : seg));
+  }
+  if (isActiveRecordingEntry(current.recording)) {
+    update.recording = close(current.recording);
+  }
+  if (Object.keys(update).length) {
+    await Session.updateOne({ _id: current._id }, { $set: update });
   }
 
   return true;
@@ -585,14 +712,12 @@ const recordParticipantConnected = async ({
     tp.isCurrentlyConnected = true;
     tp.lastConnectedAt = connectTime;
 
+    // Being in the room only opens it: teaching (IN_PROGRESS + recording) starts when the Teacher presses
+    // "Bắt đầu buổi học" (startSession) or when the lifecycle job auto-starts it. See startSession.
     if (connectMs < startMs) {
       if (!tp.firstPreOpenJoinAt) tp.firstPreOpenJoinAt = connectTime;
-      if (session.status === "SCHEDULED") {
-        session.roomState = "WAITING";
-        session.lifecycleState = "WAITING";
-        if (!session.preOpenedAt) session.preOpenedAt = connectTime;
-      }
     } else {
+      // Lateness milestones are measured from the Teacher's first presence in the room after the start time
       if (!tp.firstTeachingJoinAt) tp.firstTeachingJoinAt = connectTime;
       if (tp.currentAbsenceStartedAt) {
         const absenceSec = Math.max(
@@ -602,26 +727,29 @@ const recordParticipantConnected = async ({
         tp.maxContinuousAbsenceSeconds = Math.max(tp.maxContinuousAbsenceSeconds || 0, absenceSec);
         tp.currentAbsenceStartedAt = null;
       }
+    }
 
-      if (
-        session.status === "SCHEDULED" ||
-        session.status === "WAITING" ||
-        session.status === "INTERRUPTED"
-      ) {
-        session.status = "IN_PROGRESS";
-        session.roomState = connectMs > endMs ? "GRACE_PERIOD" : "LIVE";
-        session.lifecycleState = "IN_PROGRESS";
-        if (!session.actualStartAt) session.actualStartAt = connectTime;
-      } else if (session.status === "IN_PROGRESS") {
-        session.roomState = connectMs > endMs ? "GRACE_PERIOD" : "LIVE";
-      }
+    let resumedFromInterruption = false;
+    if (session.status === "SCHEDULED" || session.status === "WAITING") {
+      session.status = "WAITING";
+      session.roomState = "WAITING";
+      session.lifecycleState = "WAITING";
+      if (!session.preOpenedAt) session.preOpenedAt = connectTime;
+    } else if (session.status === "INTERRUPTED" && session.roomState !== "ENDED" && connectMs >= startMs) {
+      // A Teacher returning to an INTERRUPTED Session resumes teaching; the interruption stays on record
+      session.status = "IN_PROGRESS";
+      session.roomState = connectMs > endMs ? "GRACE_PERIOD" : "LIVE";
+      session.lifecycleState = "IN_PROGRESS";
+      resumedFromInterruption = true;
+    } else if (session.status === "IN_PROGRESS") {
+      session.roomState = connectMs > endMs ? "GRACE_PERIOD" : "LIVE";
     }
 
     session.teacherPresence = tp;
     await session.save();
 
-    // Start recording if we are in the teaching/overtime period and teacher is connected
-    if (connectMs >= startMs && session.status === "IN_PROGRESS") {
+    // The recording of a running Session is stopped only by an interruption: resuming restarts it
+    if (resumedFromInterruption) {
       await startTeachingRecordingSegmentIfNeeded(session, userId);
     }
   } else {
@@ -749,10 +877,8 @@ const recordParticipantDisconnected = async ({
 
     session.teacherPresence = tp;
     await session.save();
-
-    if (!remainingOpen) {
-      await stopActiveRecordingSegment(session, "TEACHER_DISCONNECTED");
-    }
+    // The recording is NOT stopped here: a Teacher's network drop must not split the recording. It stops when the
+    // Session ends, is auto-completed, or is INTERRUPTED after 30 minutes of continuous absence.
   }
 
   return {
@@ -1213,10 +1339,19 @@ const handleLiveKitEvent = async (event) => {
     if (!session) return { handled: false };
 
     const isSuccess = status === 3 || status === "EGRESS_COMPLETE";
+    // LiveKit reports the file duration in nanoseconds (as a string or bigint)
+    const fileResult = (event.egressInfo.fileResults || [])[0] || event.egressInfo.file || null;
+    const durationNs = fileResult && fileResult.duration != null ? Number(fileResult.duration) : NaN;
+    const durationSeconds = Number.isFinite(durationNs) && durationNs > 0 ? Math.round(durationNs / 1e9) : null;
+    const wasAlreadyFinal = session.recording && ["AVAILABLE", "FAILED", "EXPIRED"].includes(session.recording.status);
+
     if (session.recording && session.recording.providerRecordingId === egressId) {
+      session.recording.stoppedAt = session.recording.stoppedAt || eventTime;
+      if (durationSeconds !== null) session.recording.durationSeconds = durationSeconds;
       if (isSuccess) {
         session.recording.status = "AVAILABLE";
         session.recording.availableAt = eventTime;
+        session.recording.failureReason = null;
       } else {
         session.recording.status = "FAILED";
         session.recording.failureReason = error || "Egress failed";
@@ -1231,6 +1366,7 @@ const handleLiveKitEvent = async (event) => {
             status: isSuccess ? "AVAILABLE" : "FAILED",
             availableAt: isSuccess ? eventTime : null,
             stoppedAt: seg.stoppedAt || eventTime,
+            durationSeconds: durationSeconds ?? seg.durationSeconds ?? null,
             failureReason: isSuccess ? null : error || "Egress failed",
           };
         }
@@ -1239,6 +1375,47 @@ const handleLiveKitEvent = async (event) => {
     }
 
     await session.save();
+
+    const isPlaybackRecording = session.recording && session.recording.providerRecordingId === egressId;
+    if (isPlaybackRecording && !wasAlreadyFinal) {
+      if (isSuccess) {
+        const enrollments = await Enrollment.find({
+          classId: session.classId,
+          enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
+        })
+          .select("studentId")
+          .lean();
+        const recipients = [session.teacherId, ...enrollments.map((e) => e.studentId)];
+        await Promise.all(
+          recipients.map((userId) =>
+            notifyOnce(
+              userId,
+              "Bản ghi buổi học đã sẵn sàng",
+              `Bạn có thể xem lại buổi học "${session.title}".`,
+              "SESSION_RECORDING_AVAILABLE",
+              `session:${session._id}:recording_available:${egressId}:${userId}`,
+              session._id
+            )
+          )
+        );
+      } else {
+        await notifyOnce(
+          session.teacherId,
+          "Bản ghi buổi học bị lỗi",
+          `Bản ghi của buổi học "${session.title}" xử lý không thành công.`,
+          "SESSION_RECORDING_FAILED",
+          `session:${session._id}:recording_failed:${egressId}`,
+          session._id
+        );
+        await notifyAdminsOnce(
+          "Bản ghi buổi học bị lỗi",
+          `Bản ghi buổi "${session.title}" (${session.className}) thất bại: ${error || "Egress failed"}`,
+          "ADMIN_RECORDING_FAILED",
+          `session:${session._id}:admin:recording_failed:${egressId}`,
+          session._id
+        );
+      }
+    }
     return { handled: true };
   }
 
@@ -1253,6 +1430,10 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
   const session = await Session.findById(sessionId);
   if (!session) return null;
   if (session.status === "COMPLETED" || session.status === "CANCELLED") {
+    return session.toObject();
+  }
+  // INTERRUPTED + ENDED is terminal: attendance is finalized and the room is closed
+  if (session.status === "INTERRUPTED" && session.roomState === "ENDED") {
     return session.toObject();
   }
 
@@ -1290,12 +1471,31 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
 
   // 1. Pre-open waiting room window (startDatetime - 10 minutes <= now < startDatetime)
   if (nowMs >= preOpenMs && nowMs < startMs) {
-    if (session.roomState === "NOT_OPEN") {
+    if (session.roomState === "NOT_OPEN" || session.status === "SCHEDULED") {
+      if (session.status === "SCHEDULED") session.status = "WAITING";
       session.roomState = "WAITING";
       session.lifecycleState = "WAITING";
       if (!session.preOpenedAt) session.preOpenedAt = now;
       if (!session.meetingRoomId) session.meetingRoomId = `room_${session._id}`;
       await session.save();
+
+      const recordingNotice = videoProvider.isRecordingRequired()
+        ? " Buổi học sẽ được ghi hình từ khi giáo viên bắt đầu giảng dạy; bản ghi chỉ dành cho giáo viên, học viên của lớp và quản trị viên."
+        : "";
+      await notifyOnce(
+        session.teacherId,
+        "Phòng học đã mở",
+        `Phòng học của buổi "${session.title}" đã mở. Bạn có thể vào kiểm tra camera, micro trước giờ học và nhấn "Bắt đầu buổi học" khi sẵn sàng.${recordingNotice}`,
+        "SESSION_ROOM_OPENED",
+        `session:${session._id}:teacher:room_opened`,
+        session._id
+      );
+      await notifyAllStudents(
+        "Buổi học sắp bắt đầu",
+        `Phòng học của buổi "${session.title}" đã mở, buổi học bắt đầu sau ít phút nữa.${recordingNotice}`,
+        "SESSION_ROOM_OPENED",
+        "room_opened"
+      );
     }
     return session.toObject();
   }
@@ -1316,17 +1516,37 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
       Boolean(teacherOpenInterval) ||
       Boolean(tp.isCurrentlyConnected && !tp.currentAbsenceStartedAt);
 
-    // If teacher connected during pre-open and is still connected at startDatetime -> transition to IN_PROGRESS
-    if (isTeacherActuallyConnected && !tp.firstTeachingJoinAt && nowMs <= endMs) {
-      tp.firstTeachingJoinAt = session.startDatetime;
-      tp.isCurrentlyConnected = true;
-      session.status = "IN_PROGRESS";
-      session.roomState = "LIVE";
-      session.lifecycleState = "IN_PROGRESS";
-      if (!session.actualStartAt) session.actualStartAt = session.startDatetime;
-      session.teacherPresence = tp;
-      await session.save();
-      await startTeachingRecordingSegmentIfNeeded(session, session.teacherId);
+    // Teacher in the room but teaching not started: lateness is measured from the room presence; if the Teacher
+    // still has not pressed "Bắt đầu buổi học" AUTO_START_AFTER_MS after the start, the system starts it.
+    if (
+      (session.status === "SCHEDULED" || session.status === "WAITING") &&
+      isTeacherActuallyConnected &&
+      nowMs <= endMs
+    ) {
+      if (!tp.firstTeachingJoinAt) {
+        tp.firstTeachingJoinAt = session.startDatetime;
+        tp.isCurrentlyConnected = true;
+        session.teacherPresence = tp;
+        await session.save();
+      }
+      const presentSinceMs = Math.max(startMs, new Date(tp.firstTeachingJoinAt).getTime());
+      if (nowMs - presentSinceMs >= getAutoStartAfterMs()) {
+        try {
+          await beginTeaching(session._id, { startedBy: "SYSTEM", now });
+          await notifyOnce(
+            session.teacherId,
+            "Hệ thống đã tự động bắt đầu buổi học",
+            `Buổi học "${session.title}" đã được tự động bắt đầu vì bạn đã ở trong phòng nhưng chưa nhấn "Bắt đầu buổi học".`,
+            "SESSION_AUTO_STARTED",
+            `session:${session._id}:teacher:auto_started`,
+            session._id
+          );
+        } catch (err) {
+          console.error(`[sessionLifecycle] Auto-start failed for session ${session._id}:`, err.message);
+        }
+        const refreshed = await Session.findById(session._id).lean();
+        return refreshed;
+      }
     }
 
     const teacherHasJoinedTeaching = Boolean(tp.firstTeachingJoinAt);
@@ -1707,6 +1927,7 @@ module.exports = {
   intersectIntervals,
   sumIntervalsSeconds,
   startTeachingRecordingSegmentIfNeeded,
+  beginTeaching,
   stopActiveRecordingSegment,
   verifyAndRecordClientPresence,
   reconcileSessionWithLiveKit,

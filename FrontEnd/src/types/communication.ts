@@ -25,6 +25,7 @@ export interface ApiNotification {
   type?: NotificationType;
   isRead: boolean;
   readAt?: string | null;
+  sessionId?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -37,6 +38,7 @@ export interface NotificationItem {
   type: string;
   isRead: boolean;
   readAt: string | null;
+  sessionId: string | null;
   createdAt: string;
 }
 

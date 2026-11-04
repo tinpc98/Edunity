@@ -39,3 +39,17 @@ Lấy danh sách các khoản thanh toán. Phân trang, có thể lọc theo `st
 
 ## 3. GET /api/admin/transactions
 Lấy danh sách các giao dịch dòng tiền (nạp/rút/hoàn tiền). Phân trang, có thể lọc theo `type`, `status`. (Chỉ ADMIN)
+
+## Rút tiền của Teacher (Payout)
+
+Thu nhập (`TeacherEarning`) là `PENDING` khi học viên thanh toán và chuyển `AVAILABLE` khi lớp `COMPLETED`
+(job bảo trì). Duyệt hoàn phí một buổi (`/admin/session-refund-reviews/:id/review` với `APPROVED_FOR_PAYMENT_TEAM`)
+tạo giao dịch `REFUND` = học phí / số buổi và trừ tương ứng vào thu nhập chưa chi trả.
+
+| Method | Endpoint | Actor | Mô tả |
+|---|---|---|---|
+| GET | `/teacher/payouts` | Teacher | Lịch sử yêu cầu rút tiền |
+| POST | `/teacher/payouts` | Teacher | `{ bankName, accountNumber, accountHolderName }` → rút toàn bộ thu nhập `AVAILABLE`. `409 PAYOUT_ALREADY_PENDING`, `409 NO_AVAILABLE_EARNINGS` |
+| GET | `/admin/payouts?status=` | Admin | Hàng đợi yêu cầu rút tiền |
+| POST | `/admin/payouts/:id/complete` | Admin | Đã chuyển khoản → `COMPLETED`, thu nhập `PAID_OUT`, ghi giao dịch `TEACHER_PAYOUT` |
+| POST | `/admin/payouts/:id/reject` | Admin | `{ note }` bắt buộc → `REJECTED`, thu nhập được trả lại để yêu cầu lại |

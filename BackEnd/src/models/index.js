@@ -31,4 +31,5 @@ module.exports = {
   TeacherIncidentReport: require("./TeacherIncidentReport"),
   SessionRescheduleRequest: require("./SessionRescheduleRequest"),
   SessionRefundReview: require("./SessionRefundReview"),
+  JobLock: require("./JobLock"),
 };

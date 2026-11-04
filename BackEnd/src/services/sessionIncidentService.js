@@ -16,6 +16,7 @@ const { AppError, FORBIDDEN } = require("../utils/errors");
 const { validationError, parseDate, isBlank, paged } = require("../utils/http");
 const storageService = require("./storageService");
 const { notifyOnce, notifyAdminsOnce } = require("./notificationService");
+const { issueSessionRefund } = require("./settlementService");
 
 const SEVERITY_RANK = {
   YELLOW: 1,
@@ -89,7 +90,7 @@ const createSafeRefundReviewsForSession = async (
   const enrollmentIds = enrollments.map((e) => e._id);
   const payments = await Payment.find({
     enrollmentId: { $in: enrollmentIds },
-    paymentStatus: "SUCCESS",
+    paymentStatus: "COMPLETED", // Payment has no SUCCESS status: COMPLETED is a successful payment
   })
     .select("_id enrollmentId amount")
     .lean();
@@ -101,9 +102,8 @@ const createSafeRefundReviewsForSession = async (
   for (const enrollment of enrollments) {
     const payment = paymentByEnrollment.get(enrollment._id.toString());
     const paidAmount =
-      enrollment.paidAmount != null
-        ? Number(enrollment.paidAmount.toString())
-        : null;
+      Number((enrollment.amountPaidViaPayment || 0).toString()) +
+      Number((enrollment.amountPaidViaScholarship || 0).toString());
 
     const doc = await SessionRefundReview.findOneAndUpdate(
       { sessionId: session._id, enrollmentId: enrollment._id },
@@ -117,12 +117,13 @@ const createSafeRefundReviewsForSession = async (
           enrollmentId: enrollment._id,
           paymentId: payment?._id || null,
           paidAmountSnapshot: paidAmount,
-          scholarshipAppliedSnapshot: Boolean(enrollment.scholarshipApplied),
+          scholarshipAppliedSnapshot: Number((enrollment.amountPaidViaScholarship || 0).toString()) > 0,
+          // A review already decided by an Admin is never reopened by a repeated trigger (no double refund)
+          status: "NEEDS_FINANCIAL_REVIEW",
+          earningReconciliationStatus: "HOLD_RECOMMENDED",
         },
         $set: {
           triggerReason,
-          status: "NEEDS_FINANCIAL_REVIEW",
-          earningReconciliationStatus: "HOLD_RECOMMENDED",
         },
       },
       { upsert: true, returnDocument: "after" },
@@ -1452,18 +1453,52 @@ const reviewRefundCase = async (adminId, refundReviewId, body) => {
     );
   }
 
-  doc.status = status;
-  if (status === "APPROVED_FOR_PAYMENT_TEAM") {
-    doc.earningReconciliationStatus = "PENDING_PAYMENT_TEAM_REVIEW";
-  } else if (status === "RESCHEDULED_WAIVED") {
-    doc.earningReconciliationStatus = "CLEARED_AFTER_MAKEUP";
-  } else {
-    doc.earningReconciliationStatus = "RESOLVED";
+  // A decision is final: re-approving would issue a second refund
+  if (doc.status !== "NEEDS_FINANCIAL_REVIEW") {
+    throw new AppError("Refund review has already been decided", "REFUND_REVIEW_ALREADY_DECIDED", 409);
   }
-  doc.reviewedBy = adminId;
-  doc.reviewedAt = new Date();
-  doc.reviewNote = body?.note || null;
-  await doc.save();
+
+  const dbSession = await mongoose.startSession();
+  let refund = null;
+  try {
+    await dbSession.withTransaction(async () => {
+      const current = await SessionRefundReview.findOne({ _id: doc._id, status: "NEEDS_FINANCIAL_REVIEW" }).session(dbSession);
+      if (!current) {
+        throw new AppError("Refund review has already been decided", "REFUND_REVIEW_ALREADY_DECIDED", 409);
+      }
+      current.status = status;
+      if (status === "APPROVED_FOR_PAYMENT_TEAM") {
+        refund = await issueSessionRefund(current, dbSession);
+        current.refundAmount = refund.refundAmount;
+        current.refundTransactionId = refund.transaction ? refund.transaction._id : null;
+        // Earning already paid out: the deduction must be reconciled by hand
+        current.earningReconciliationStatus =
+          refund.refundAmount > 0 && !refund.earningAdjusted ? "PENDING_PAYMENT_TEAM_REVIEW" : "RESOLVED";
+      } else if (status === "RESCHEDULED_WAIVED") {
+        current.earningReconciliationStatus = "CLEARED_AFTER_MAKEUP";
+      } else {
+        current.earningReconciliationStatus = "RESOLVED";
+      }
+      current.reviewedBy = adminId;
+      current.reviewedAt = new Date();
+      current.reviewNote = body?.note || null;
+      await current.save({ session: dbSession });
+      Object.assign(doc, current.toObject());
+    });
+  } finally {
+    await dbSession.endSession();
+  }
+
+  if (refund && refund.refundAmount > 0) {
+    await notifyOnce(
+      doc.studentId,
+      "Yêu cầu hoàn phí buổi học đã được duyệt",
+      `Bạn được hoàn ${refund.refundAmount.toLocaleString("vi-VN")}đ cho buổi học bị ảnh hưởng. Khoản hoàn sẽ được chuyển trong thời gian xử lý của bộ phận thanh toán.`,
+      "SESSION_REFUND_APPROVED",
+      `refund_review:${doc._id}:student:approved`,
+      doc.sessionId
+    );
+  }
 
   await logAudit({
     actorId: adminId,

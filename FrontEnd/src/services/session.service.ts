@@ -12,6 +12,16 @@ import type {
   SubmitIncidentReportPayload,
   RequestReschedulePayload,
 } from "../types/session";
+import type { RecordingStatus } from "../types/classDiscovery";
+
+export interface SessionRecordingPlayback {
+  sessionId: string;
+  status: RecordingStatus;
+  durationSeconds: number | null;
+  availableAt: string | null;
+  playbackUrl: string | null;
+  expiresAt: string | null;
+}
 import { adaptSession, adaptSessions } from "../api/sessionAdapters";
 
 export const sessionKeys = {
@@ -93,6 +103,14 @@ export const sessionService = {
    * Teacher: End an IN_PROGRESS session (marks as COMPLETED).
    * POST /api/teacher/sessions/:id/end
    */
+  /**
+   * Teacher: "Bắt đầu buổi học". Starts the recording, then WAITING → IN_PROGRESS.
+   * POST /api/teacher/sessions/:id/start
+   */
+  async startSession(sessionId: string): Promise<ApiSession> {
+    return apiClient<ApiSession>(`/teacher/sessions/${sessionId}/start`, { method: "POST" });
+  },
+
   async endSession(sessionId: string): Promise<Session> {
     const data = await apiClient<ApiSession>(`/teacher/sessions/${sessionId}/end`, {
       method: "POST",
@@ -138,6 +156,14 @@ export const sessionService = {
     return apiClient<JoinSessionResponse>(`/sessions/${sessionId}/join`, {
       method: "POST",
     });
+  },
+
+  /**
+   * Playback of a Session recording. playbackUrl is a short-lived signed URL, null until the recording is AVAILABLE.
+   * GET /api/sessions/:id/recording
+   */
+  async getSessionRecording(sessionId: string): Promise<SessionRecordingPlayback> {
+    return apiClient<SessionRecordingPlayback>(`/sessions/${sessionId}/recording`);
   },
 
   /**

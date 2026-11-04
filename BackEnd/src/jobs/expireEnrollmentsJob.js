@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const cron = require("node-cron");
 const Enrollment = require("../models/Enrollment");
 const { releaseReservation } = require("../services/reservationService");
+const { runExclusive } = require("./jobLock");
+const { notify } = require("../services/notificationService");
 
 let isRunning = false;
 
@@ -10,7 +12,21 @@ let isRunning = false;
  * Returns true if successful or already processed (idempotent), false if failed.
  */
 const expireEnrollmentTransaction = async (enrollmentId) => {
-  return await releaseReservation(enrollmentId, "EXPIRED");
+  const released = await releaseReservation(enrollmentId, "EXPIRED");
+  if (released) {
+    // Tell the student their seat was released, so a lost checkout is not discovered only at the class page
+    const enrollment = await Enrollment.findById(enrollmentId).populate("classId", "className").lean();
+    if (enrollment && enrollment.enrollmentStatus === "EXPIRED") {
+      await notify(
+        enrollment.studentId,
+        "Hết thời gian giữ chỗ",
+        `Đơn đăng ký lớp "${enrollment.classId?.className || ""}" đã hết thời gian thanh toán và chỗ đã được trả lại. Bạn có thể đăng ký lại nếu lớp còn chỗ.`,
+        "ENROLLMENT_EXPIRED",
+        { dedupeKey: `enrollment:${enrollmentId}:expired` }
+      );
+    }
+  }
+  return released;
 };
 
 /**
@@ -46,7 +62,8 @@ const runJob = async () => {
 const startJob = () => {
   // Run every 1 minute
   cron.schedule("* * * * *", () => {
-    runJob();
+    // With several backend instances only one runs the job (H03)
+    runExclusive("expireEnrollments", 55 * 1000, runJob);
   });
   console.log("Expire Enrollments Job started.");
 };

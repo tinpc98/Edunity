@@ -21,6 +21,7 @@ export function adaptNotification(api: ApiNotification): NotificationItem {
     type: api.type || "SYSTEM",
     isRead: Boolean(api.isRead),
     readAt: api.readAt || null,
+    sessionId: api.sessionId || null,
     createdAt: api.createdAt,
   };
 }

@@ -3,7 +3,7 @@ const { Class, Enrollment, Payment, Scholarship, ScholarshipCampaign, Scholarshi
 const { AppError, ENROLLMENT_NOT_FOUND, ENROLLMENT_EXPIRED } = require("../utils/errors");
 const { toNum, toDec } = require("../utils/money");
 const { confirmScholarshipUsage, createTeacherEarning } = require("./settlementService");
-const { notify } = require("./notificationService");
+const { notify, notifyTeacherOfEnrollment } = require("./notificationService");
 
 const includesId = (ids, id) => (ids || []).some((item) => item.toString() === id.toString());
 
@@ -128,7 +128,7 @@ const payWithScholarship = async (studentId, enrollmentId, scholarshipId) => {
       const deducted = await Scholarship.findOneAndUpdate(
         { _id: scholarship._id, status: "ACTIVE", remainingAmount: { $gte: amountDec } },
         { $inc: { remainingAmount: toDec(-scholarshipAmount) } },
-        { session, new: true }
+        { session, returnDocument: "after" }
       );
       if (!deducted) throw scholarshipUnavailable("Scholarship balance is no longer available");
 
@@ -173,6 +173,7 @@ const payWithScholarship = async (studentId, enrollmentId, scholarshipId) => {
 
   if (isFullyCovered) {
     await notify(studentId, "Đăng ký lớp thành công", `Học bổng đã thanh toán toàn bộ học phí lớp "${cls.className}".`, "ENROLLMENT_CONFIRMED");
+    await notifyTeacherOfEnrollment(enrollment._id);
   }
 
   const current = await Enrollment.findById(enrollment._id).lean();

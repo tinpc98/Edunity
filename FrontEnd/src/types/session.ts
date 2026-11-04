@@ -24,7 +24,7 @@ export interface SessionContent {
 export interface SessionRecording {
   providerRecordingId?: string | null;
   storageKey?: string | null;
-  status: 'PROCESSING' | 'AVAILABLE' | 'FAILED';
+  status: 'RECORDING' | 'PROCESSING' | 'AVAILABLE' | 'FAILED' | 'EXPIRED';
   durationSeconds?: number | null;
   availableAt?: string | null;
   failureReason?: string | null;
@@ -183,6 +183,8 @@ export interface SessionLiveStatusResponse {
     earlyLeaveTriggeredAt?: string | null;
     overtimeRemindedAt?: string | null;
   };
+  recording?: SessionRecording | null;
+  recordingSegmentsCount?: number;
   myAttendance?: {
     attendanceStatus: string;
     attendancePercentage: number;

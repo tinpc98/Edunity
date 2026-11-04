@@ -99,14 +99,34 @@ const closeRoom = async (roomId) => {
   }
 };
 
+/**
+ * Where the Egress writes the file. LIVEKIT_EGRESS_OUTPUT_DIR is the directory, as seen from the Egress container,
+ * that is the same volume the backend mounts as STORAGE_DIR: the file then lands at STORAGE_DIR/<storageKey>, where
+ * the signed download route can serve it. Without it the Egress writes a relative path the backend cannot read.
+ */
+const getEgressFilepath = (storageKey) => {
+  const dir = (process.env.LIVEKIT_EGRESS_OUTPUT_DIR || "").replace(/\/+$/, "");
+  return dir ? `${dir}/${storageKey}` : storageKey;
+};
+
+// Recording needs LiveKit; RECORDING_REQUIRED=false lets a deployment run classes without it
+const isRecordingRequired = () => Boolean(getLiveKitConfig()) && process.env.RECORDING_REQUIRED !== "false";
+
+let lastStartRecordingError = null;
+const getLastStartRecordingError = () => lastStartRecordingError;
+
 const startRecording = async (roomId, storageKey) => {
   const config = getLiveKitConfig();
-  if (!config || !roomId || !storageKey) return null;
+  lastStartRecordingError = null;
+  if (!config || !roomId || !storageKey) {
+    lastStartRecordingError = config ? "Missing room or storage key" : "LiveKit is not configured";
+    return null;
+  }
 
   try {
     const egressClient = new EgressClient(config.url, config.apiKey, config.apiSecret);
     const fileOutput = new EncodedFileOutput({
-      filepath: storageKey
+      filepath: getEgressFilepath(storageKey),
     });
     
     const info = await egressClient.startRoomCompositeEgress(roomId, {
@@ -115,6 +135,7 @@ const startRecording = async (roomId, storageKey) => {
     return info.egressId;
   } catch (err) {
     console.error("Failed to start LiveKit recording:", err.message);
+    lastStartRecordingError = err.message;
     return null;
   }
 };
@@ -316,6 +337,8 @@ const providerExports = {
   closeRoom,
   startRecording,
   stopRecording,
+  isRecordingRequired,
+  getLastStartRecordingError,
   processWebhook,
   listRoomParticipants,
   verifyParticipantInRoom,

@@ -642,6 +642,9 @@ describe("Video provider", () => {
     expect(participantToken.video).toMatchObject({ room: host.body.data.roomId, roomJoin: true, roomAdmin: false });
     expect(participantToken.exp).toBeLessThanOrEqual(Math.ceil(session.endDatetime.getTime() / 1000) + 1);
 
+    // The room was only opened by joining; the provider is unreachable here, so mark teaching as started directly
+    expect((await Session.findById(session._id)).status).toBe("WAITING");
+    await Session.updateOne({ _id: session._id }, { $set: { status: "IN_PROGRESS" } });
     // ending the session still succeeds when the provider cannot be reached
     const ended = await request(app).post(`/api/teacher/sessions/${session._id}/end`).set(as(teacher));
     expect(ended.body.data.status).toBe("COMPLETED");

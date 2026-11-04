@@ -68,4 +68,54 @@ const createTeacherEarning = async (enrollment, grossAmountNum, session) => {
   );
 };
 
-module.exports = { getPendingScholarshipUsages, confirmScholarshipUsage, createTeacherEarning };
+
+/**
+ * F03: refund of one Session to one student, issued when an Admin approves a SessionRefundReview.
+ * - Amount: the student's tuition divided by the class's number of sessions, capped by what was actually paid.
+ * - Ledger: a REFUND Transaction (PENDING until the payment team / gateway executes the transfer).
+ * - Teacher: the matching TeacherEarning is reduced by the refunded gross amount (commission recomputed) unless it has
+ *   already been paid out, in which case the review is left for manual reconciliation.
+ * Returns { refundAmount, transaction, earningAdjusted }.
+ */
+const issueSessionRefund = async (review, session) => {
+  const { Enrollment, Session } = require("../models");
+  const enrollment = await Enrollment.findById(review.enrollmentId).session(session || null);
+  if (!enrollment) return { refundAmount: 0, transaction: null, earningAdjusted: false };
+
+  const paid = toNum(enrollment.amountPaidViaPayment) + toNum(enrollment.amountPaidViaScholarship);
+  const sessionCount = Math.max(1, await Session.countDocuments({ classId: enrollment.classId }).session(session || null));
+  const refundAmount = Math.min(paid, Math.round(toNum(enrollment.tuitionAmount) / sessionCount));
+  if (refundAmount <= 0) return { refundAmount: 0, transaction: null, earningAdjusted: false };
+
+  const [transaction] = await Transaction.create(
+    [
+      {
+        transactionType: "REFUND",
+        sourceUserId: enrollment.teacherId,
+        destinationUserId: enrollment.studentId,
+        relatedEnrollmentId: enrollment._id,
+        relatedPaymentId: review.paymentId || null,
+        amount: toDec(refundAmount),
+        status: "PENDING",
+      },
+    ],
+    { session }
+  );
+
+  let earningAdjusted = false;
+  const earning = await TeacherEarning.findOne({ enrollmentId: enrollment._id }).session(session || null);
+  if (earning && earning.status !== "PAID_OUT") {
+    const gross = Math.max(0, toNum(earning.grossAmount) - refundAmount);
+    const commissionRate = getSetting("COMMISSION_RATE") || 0.1;
+    const commission = Math.round(gross * commissionRate);
+    earning.grossAmount = toDec(gross);
+    earning.commissionAmount = toDec(commission);
+    earning.netAmount = toDec(gross - commission);
+    await earning.save({ session });
+    earningAdjusted = true;
+  }
+
+  return { refundAmount, transaction, earningAdjusted };
+};
+
+module.exports = { getPendingScholarshipUsages, confirmScholarshipUsage, createTeacherEarning, issueSessionRefund };

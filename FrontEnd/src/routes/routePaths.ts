@@ -68,6 +68,7 @@ export const ROUTES = {
     SCHOLARSHIP_APPLICATION_REVIEW: "/admin/scholarship-applications/:applicationId",
     PAYMENTS: "/admin/payments",
     TRANSACTIONS: "/admin/transactions",
+    PAYOUTS: "/admin/payouts",
     REPORTS: "/admin/reports",
     REPORT_DETAIL: "/admin/reports/:reportId",
   },

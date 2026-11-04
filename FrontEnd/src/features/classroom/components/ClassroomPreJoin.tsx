@@ -212,6 +212,15 @@ export default function ClassroomPreJoin({
           />
         )}
 
+        {/* Recording notice: participants are told before entering that the lesson is recorded */}
+        <Alert
+          type="info"
+          showIcon
+          message="Buổi học sẽ được ghi hình"
+          description="Ghi hình bắt đầu khi giáo viên nhấn Bắt đầu buổi học và kéo dài đến khi buổi học kết thúc. Bản ghi chỉ dành cho giáo viên, học viên của lớp và quản trị viên, được lưu trữ có thời hạn."
+          className="mb-6 rounded-2xl bg-indigo-950/40 border-indigo-900 text-indigo-200 text-xs"
+        />
+
         {/* Join CTA */}
         <div className="flex flex-col sm:flex-row items-center gap-3">
           <Button

@@ -22,6 +22,7 @@ import {
   BankOutlined,
 } from "@ant-design/icons";
 import { financeService, financeKeys } from "../../../services/finance.service";
+import TeacherPayoutSection from "./TeacherPayoutSection";
 import type { TeacherEarningItem, TeacherEarningStatus } from "../../../types/payment";
 import {
   TEACHER_EARNING_STATUS_LABELS,
@@ -243,6 +244,9 @@ export default function TeacherRevenuePage() {
           </Card>
         </Col>
       </Row>
+
+      {/* Payouts (F02) */}
+      <TeacherPayoutSection available={Number(summary.available) || 0} />
 
       {/* Earnings Table */}
       <Card className="rounded-2xl border-slate-200/80 shadow-xs overflow-hidden">

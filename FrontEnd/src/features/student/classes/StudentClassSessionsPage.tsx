@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Skeleton } from "antd";
+import { App as AntdApp, Button, Skeleton } from "antd";
 import {
   UserOutlined,
   CalendarOutlined,
@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from "../../../stores/auth.store";
 import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
 import { classDiscoveryService } from "../../../services/classDiscovery.service";
+import { sessionService } from "../../../services/session.service";
 import { ROUTES } from "../../../routes/routePaths";
 import type { ClassDiscoveryItem, SessionEntity } from "../../../types/classDiscovery";
 import SessionDetailModal, { type SessionWithNumber } from "./components/SessionDetailModal";
@@ -60,6 +61,26 @@ export default function StudentClassSessionsPage() {
   const { user } = useAuthStore();
 
   const [selectedSession, setSelectedSession] = useState<SessionWithNumber | null>(null);
+  const { message } = AntdApp.useApp();
+
+  // The playback URL is signed and short-lived, so it is fetched on click rather than with the session list
+  const handleWatchRecording = async (session: SessionWithNumber) => {
+    const hide = message.loading("Đang mở bản ghi...", 0);
+    try {
+      const recording = await sessionService.getSessionRecording(session._id);
+      if (recording.status === "AVAILABLE" && recording.playbackUrl) {
+        window.open(recording.playbackUrl, "_blank", "noopener,noreferrer");
+      } else if (recording.status === "FAILED") {
+        message.error("Bản ghi của buổi học này bị lỗi và không thể phát.");
+      } else {
+        message.info("Bản ghi đang được xử lý, vui lòng quay lại sau.");
+      }
+    } catch (err) {
+      message.error((err as Error)?.message || "Không thể mở bản ghi buổi học.");
+    } finally {
+      hide();
+    }
+  };
 
   // 1. Fetch authenticated student enrollments to verify access
   const { data: enrollmentsData, isLoading: isLoadingEnrollments } = useQuery({
@@ -67,7 +88,7 @@ export default function StudentClassSessionsPage() {
     queryFn: () => enrollmentService.getMyEnrollments(1, 100, "class"),
     enabled: Boolean(user?.userId && user?.role === "STUDENT"),
   });
-  const enrollments = enrollmentsData?.items || [];
+  const enrollments = useMemo(() => enrollmentsData?.items || [], [enrollmentsData]);
 
   // Check valid confirmed learning enrollment
   const hasAccess = useMemo(() => {
@@ -398,6 +419,7 @@ export default function StudentClassSessionsPage() {
         open={Boolean(selectedSession)}
         session={selectedSession}
         onClose={() => setSelectedSession(null)}
+        onWatchRecording={handleWatchRecording}
       />
     </div>
   );

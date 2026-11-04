@@ -74,7 +74,11 @@ class StudentService {
       };
     });
   }
-  async getRecording(studentId, sessionId) {
+  /**
+   * Who may watch a recording: an Admin, the Teacher who owns the Session, and a Student whose enrollment in the
+   * class is CONFIRMED or COMPLETED (a finished class must not lock its students out of the replays).
+   */
+  async getRecording(user, sessionId) {
     const mongoose = require("mongoose");
     const { AppError, FORBIDDEN } = require("../utils/errors");
     const storageService = require("./storageService");
@@ -83,8 +87,16 @@ class StudentService {
     const session = await Session.findById(sessionId).lean();
     if (!session) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
     
-    const enrollment = await Enrollment.exists({ studentId, classId: session.classId, enrollmentStatus: "CONFIRMED" });
-    if (!enrollment) throw FORBIDDEN("Not enrolled in this class");
+    if (user.role === "TEACHER") {
+      if (session.teacherId.toString() !== user.id.toString()) throw FORBIDDEN("Not the teacher of this session");
+    } else if (user.role !== "ADMIN") {
+      const enrollment = await Enrollment.exists({
+        studentId: user.id,
+        classId: session.classId,
+        enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
+      });
+      if (!enrollment) throw FORBIDDEN("Not enrolled in this class");
+    }
     
     if (!session.recording) throw new AppError("No recording available", "RECORDING_NOT_FOUND", 404);
     

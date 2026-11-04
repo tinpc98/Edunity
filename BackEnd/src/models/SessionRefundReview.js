@@ -48,6 +48,9 @@ const sessionRefundReviewSchema = new Schema(
       default:
         "Course-level vs single-session refund calculation and TeacherEarning adjustment require Chau (Payment/Earnings) and Admin approval.",
     },
+    // Set when the Admin approves: the per-session refund owed to the student and its ledger entry
+    refundAmount: { type: Number, default: null },
+    refundTransactionId: { type: Schema.Types.ObjectId, ref: "Transaction", default: null },
     reviewedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     reviewedAt: { type: Date, default: null },
     reviewNote: { type: String, default: null },

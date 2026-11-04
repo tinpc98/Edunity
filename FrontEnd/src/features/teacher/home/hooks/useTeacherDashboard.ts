@@ -26,7 +26,7 @@ export function useTeacherDashboard() {
     enabled: Boolean(user),
   });
 
-  const classes = classesQuery.data?.items || [];
+  const classes = useMemo(() => classesQuery.data?.items || [], [classesQuery.data]);
   const classesTotal = classesQuery.data?.total || classes.length;
 
   // 3. Earnings for revenue KPIs and monthly chart
@@ -106,7 +106,7 @@ export function useTeacherDashboard() {
 
   // Revenue computations
   const earningsSummary = earningsQuery.data?.summary;
-  const earningsItems = earningsQuery.data?.items || [];
+  const earningsItems = useMemo(() => earningsQuery.data?.items || [], [earningsQuery.data]);
   const totalNetRevenue = earningsSummary?.totalNet ? parseFloat(String(earningsSummary.totalNet)) : 0;
   const totalGrossRevenue = earningsSummary?.totalGross ? parseFloat(String(earningsSummary.totalGross)) : 0;
   const totalCommission = earningsSummary?.totalCommission ? parseFloat(String(earningsSummary.totalCommission)) : 0;
