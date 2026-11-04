@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useHoldCountdown } from "../../../hooks/useHoldCountdown";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -45,26 +46,7 @@ function HoldCountdownBadge({
   holdExpiresAt: string | null | undefined;
   onExpire?: () => void;
 }) {
-  const [timeLeft, setTimeLeft] = useState<number>(0);
-
-  useEffect(() => {
-    if (!holdExpiresAt) {
-      setTimeLeft(0);
-      return;
-    }
-    const target = new Date(holdExpiresAt).getTime();
-    const update = () => {
-      const now = Date.now();
-      const diff = Math.max(0, Math.floor((target - now) / 1000));
-      setTimeLeft(diff);
-      if (diff <= 0 && onExpire) {
-        onExpire();
-      }
-    };
-    update();
-    const timer = setInterval(update, 1000);
-    return () => clearInterval(timer);
-  }, [holdExpiresAt]);
+  const { timeLeft } = useHoldCountdown(holdExpiresAt, onExpire);
 
   if (!holdExpiresAt) return null;
 

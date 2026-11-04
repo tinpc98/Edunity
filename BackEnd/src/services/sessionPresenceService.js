@@ -818,7 +818,10 @@ const recordParticipantDisconnected = async ({
       await interval.save();
       if (!updatedInterval) updatedInterval = interval;
     }
-  } else if (connectionSessionId) {
+  } else if (connectionSessionId && closeReason !== "LEAVE_API") {
+    // An out-of-order webhook disconnect is kept as a zero-length interval. A client "leave" with no open interval
+    // (its connect was never verified, or a second leave for the same tab) has nothing to close.
+    // Concurrent duplicates hit the unique (sessionId, userId, connectionSessionId) index: that is not an error.
     updatedInterval = await SessionPresenceInterval.create({
       sessionId: session._id,
       classId: session.classId,
@@ -831,6 +834,9 @@ const recordParticipantDisconnected = async ({
       source: "LIVEKIT_WEBHOOK",
       closeReason: "OUT_OF_ORDER_DISCONNECT",
       processedEventIds: eventId ? [eventId] : [],
+    }).catch((err) => {
+      if (err?.code === 11000) return null;
+      throw err;
     });
   }
 

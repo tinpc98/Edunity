@@ -1,3 +1,4 @@
+import { useNow } from "../../../../hooks/useNow";
 import { Card, Typography, List, Avatar, Button } from "antd";
 import { MessageOutlined, UserOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
@@ -11,11 +12,11 @@ interface RecentMessagesProps {
 
 export default function RecentMessages({ conversations = [] }: RecentMessagesProps) {
   const navigate = useNavigate();
+  const now = useNow();
 
   const formatRelativeTime = (isoString?: string | null) => {
     if (!isoString) return "";
     try {
-      const now = Date.now();
       const past = new Date(isoString).getTime();
       const diffMs = now - past;
       const diffMins = Math.floor(diffMs / (60 * 1000));

@@ -1,3 +1,4 @@
+import { useNow } from "../../../hooks/useNow";
 import { useQuery } from "@tanstack/react-query";
 import {
   Typography,
@@ -27,6 +28,7 @@ import { ROUTES } from "../../../routes/routePaths";
 const { Title, Text } = Typography;
 
 export default function StudentScholarshipsPage() {
+  const now = useNow();
   const { data: scholarships, isLoading, isError, refetch } = useQuery({
     queryKey: scholarshipKeys.myList(),
     queryFn: () => scholarshipService.getMyScholarships(),
@@ -101,7 +103,7 @@ export default function StudentScholarshipsPage() {
               ? Math.min(100, Math.round((sch.usedAmount / sch.allocatedAmount) * 100))
               : 0;
 
-            const isExpired = new Date(sch.expiresAt).getTime() < Date.now();
+            const isExpired = new Date(sch.expiresAt).getTime() < now;
 
             return (
               <Card

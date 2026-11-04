@@ -23,6 +23,7 @@ export default function ClassCard({ item }: ClassCardProps) {
     isEnrolled,
     getPendingEnrollmentId,
     freeEnrollModal,
+    paidEnrollModal,
   } = useClassEnrollment();
 
   const {
@@ -240,7 +241,11 @@ export default function ClassCard({ item }: ClassCardProps) {
           </div>
         </div>
       </div>
-      {freeEnrollModal}
+      {/* Modals render in a portal, but React still bubbles their clicks to this card, which opens the class page */}
+      <div onClick={(e) => e.stopPropagation()}>
+        {freeEnrollModal}
+        {paidEnrollModal}
+      </div>
     </div>
   );
 }

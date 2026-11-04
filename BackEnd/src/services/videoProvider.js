@@ -12,7 +12,11 @@ const { EgressClient, EncodedFileOutput, EgressStatus } = require("livekit-serve
  * so the join flow can still be exercised end to end.
  */
 const getLiveKitConfig = () => {
-  const { LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = process.env;
+  // Values pasted into .env often carry quotes or stray spaces; either one makes LiveKit reject the token as invalid
+  const clean = (v) => (v || "").trim().replace(/^["']|["']$/g, "").trim();
+  const LIVEKIT_URL = clean(process.env.LIVEKIT_URL);
+  const LIVEKIT_API_KEY = clean(process.env.LIVEKIT_API_KEY);
+  const LIVEKIT_API_SECRET = clean(process.env.LIVEKIT_API_SECRET);
   if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) return null;
   return { url: LIVEKIT_URL, apiKey: LIVEKIT_API_KEY, apiSecret: LIVEKIT_API_SECRET };
 };

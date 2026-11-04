@@ -4,9 +4,10 @@ import { getMe } from "../../services/auth.service";
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isHydrating, setIsHydrating] = useState(true);
-  const { isAuthenticated, accessToken, setAuth, logout } = useAuthStore();
 
   useEffect(() => {
+    // Runs once on mount, so it reads the store snapshot instead of subscribing to it
+    const { isAuthenticated, accessToken, setAuth, logout } = useAuthStore.getState();
     const hydrate = async () => {
       // If store says authenticated but we need to verify with Backend
       if (isAuthenticated && accessToken) {

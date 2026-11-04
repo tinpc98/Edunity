@@ -47,7 +47,9 @@ export default function ClassroomPage() {
 
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState<boolean>(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState<boolean>(false);
-  const connectionSessionIdRef = useRef<string>(`ui_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  // One id per mounted classroom page (one browser tab); generated once, outside of render
+  const [connectionSessionId] = useState(() => `ui_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const connectionSessionIdRef = useRef<string>(connectionSessionId);
 
   // Authenticated user check
   useEffect(() => {
@@ -100,9 +102,20 @@ export default function ClassroomPage() {
   useEffect(() => {
     if (stage !== "in_room" || !sessionId) return;
     const connId = connectionSessionIdRef.current;
-    sessionService.connectSessionPresence(sessionId, connId).catch(() => {});
+    // The backend verifies presence against the LiveKit room, and the media connection is established a moment after
+    // this stage begins: an early call is rejected with 403 UNVERIFIED_LIVEKIT_PRESENCE. Retry until it is verified.
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tryConnect = (attempt: number) => {
+      sessionService.connectSessionPresence(sessionId, connId).catch(() => {
+        if (!cancelled && attempt < 10) timer = setTimeout(() => tryConnect(attempt + 1), 3000);
+      });
+    };
+    timer = setTimeout(() => tryConnect(1), 1500);
 
     return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
       sessionService.leaveSessionPresence(sessionId, connId).catch(() => {});
     };
   }, [stage, sessionId]);
@@ -142,6 +155,10 @@ export default function ClassroomPage() {
   });
 
   const sessionStatus = liveStatus?.status;
+  // The backend does not close the LiveKit room when the Teacher ends the session: participants still inside would stay
+  // in an empty room. The live status poll (every 15s) moves them to the ended screen instead.
+  const sessionClosedRemotely =
+    stage === "in_room" && (sessionStatus === "COMPLETED" || sessionStatus === "CANCELLED");
   const canEndSession = isTeacher && (sessionStatus === "IN_PROGRESS" || sessionStatus === "INTERRUPTED");
   const sessionControl = {
     status: sessionStatus,
@@ -173,13 +190,8 @@ export default function ClassroomPage() {
   };
 
   const handleLeaveRoom = async () => {
-    if (sessionId && stage === "in_room") {
-      try {
-        await sessionService.leaveSessionPresence(sessionId, connectionSessionIdRef.current);
-      } catch {
-        // ignore leave telemetry error
-      }
-    }
+    // The presence "leave" is sent by the in_room effect cleanup when the page unmounts; sending it here as well
+    // produced two concurrent leaves for the same connection.
     if (isTeacher) {
       navigate(isVerifiedTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.TEACHER.HOME);
     } else {
@@ -363,7 +375,7 @@ export default function ClassroomPage() {
   }
 
   // 2. ENDED STAGE (Teacher finished session or student was notified)
-  if (stage === "ended") {
+  if (stage === "ended" || sessionClosedRemotely) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center shadow-2xl">

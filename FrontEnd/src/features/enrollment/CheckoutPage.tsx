@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Breadcrumb, Button, Alert, Tag, Skeleton, message, Popconfirm } from "antd";
@@ -60,11 +60,16 @@ export default function CheckoutPage() {
     },
   });
 
+  // Requested once per enrollment: a failed request is not retried in a loop (the user can reload)
+  const { mutate: createPayment } = createPaymentMutation;
+  const paymentRequestedFor = useRef<string | null>(null);
   useEffect(() => {
     if (enrollment && enrollment.enrollmentStatus === "PENDING_PAYMENT" && !paymentData) {
-      createPaymentMutation.mutate(enrollment.id);
+      if (paymentRequestedFor.current === enrollment.id) return;
+      paymentRequestedFor.current = enrollment.id;
+      createPayment(enrollment.id);
     }
-  }, [enrollment?.id, enrollment?.enrollmentStatus]);
+  }, [enrollment, paymentData, createPayment]);
 
   // 4. Countdown timer derived strictly from persisted holdExpiresAt
   const [now, setNow] = useState(() => Date.now());
@@ -98,7 +103,7 @@ export default function CheckoutPage() {
     ) {
       navigate(`/checkout/${enrollment.id}/success`, { replace: true });
     }
-  }, [enrollment?.enrollmentStatus, enrollment?.id, navigate]);
+  }, [enrollment, navigate]);
 
   // 5. Trigger Sandbox Webhook (SUCCESS simulation)
   const successWebhookMutation = useMutation({

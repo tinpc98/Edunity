@@ -152,6 +152,28 @@ export default function TeacherClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: classKeys.teacherList() });
     },
     onError: (err: any) => {
+      if (err?.code === "CLASS_INCOMPLETE") {
+        const labels: Record<string, string> = {
+          description: "mô tả lớp",
+          enrollmentStart: "ngày mở đăng ký",
+          enrollmentEnd: "ngày đóng đăng ký",
+          startDate: "ngày khai giảng",
+          endDate: "ngày kết thúc",
+          schedule: "lịch học cố định",
+          sessions: "ít nhất 1 buổi học (tab Buổi học)",
+        };
+        const missing: string[] = Array.isArray(err?.details?.missing) ? err.details.missing : [];
+        message.error(
+          missing.length
+            ? `Lớp chưa đủ thông tin để gửi duyệt. Còn thiếu: ${missing.map((m) => labels[m] || m).join(", ")}.`
+            : "Lớp chưa đủ thông tin để gửi duyệt."
+        );
+        return;
+      }
+      if (err?.code === "SESSION_OUT_OF_CLASS_RANGE") {
+        message.error("Có buổi học nằm ngoài khoảng ngày khai giảng – kết thúc của lớp.");
+        return;
+      }
       message.error(err?.message || "Không thể gửi duyệt lớp học.");
     },
   });

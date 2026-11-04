@@ -1,3 +1,4 @@
+import { useNow } from "../../../../hooks/useNow";
 import { Typography, Timeline } from "antd";
 import { ClockCircleOutlined, CheckCircleOutlined, GiftOutlined, WarningOutlined, HistoryOutlined, BookOutlined, UserOutlined } from "@ant-design/icons";
 import type { AdminDashboardActivity } from "../../../../types/adminDashboard";
@@ -9,6 +10,7 @@ interface RecentActivitiesProps {
 }
 
 export default function RecentActivities({ activities = [] }: RecentActivitiesProps) {
+  const now = useNow();
   const getActionConfig = (action: string) => {
     if (action.includes("TEACHER")) {
       return {
@@ -61,7 +63,6 @@ export default function RecentActivities({ activities = [] }: RecentActivitiesPr
   const formatRelativeTime = (isoString?: string) => {
     if (!isoString) return "";
     try {
-      const now = Date.now();
       const past = new Date(isoString).getTime();
       const diffMs = now - past;
       const diffMins = Math.floor(diffMs / (60 * 1000));
