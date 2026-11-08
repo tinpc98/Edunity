@@ -64,9 +64,9 @@ Lấy danh sách các buổi học (Session) thuộc các lớp mà Student đã
 ```
 *(canJoin = true nếu hiện tại nằm trong khoảng từ 15 phút trước giờ bắt đầu đến lúc kết thúc).*
 
-## 3. GET /api/sessions/:id/join
-Lấy thông tin vào lớp. Chỉ lấy được khi `canJoin = true` và `enrollmentStatus = CONFIRMED`.
-Trả về cùng dữ liệu với `POST /api/sessions/:id/join` (room token), không trả URL Meet/Zoom.
+## 3. POST /api/sessions/:id/join (Và chặn GET 405 METHOD_NOT_ALLOWED)
+Lấy thông tin và token bảo mật vào phòng học LiveKit. Chỉ lấy được khi `canJoin = true` và `enrollmentStatus = CONFIRMED`.
+*(LƯU Ý: Theo `BUG-TIN03-01`, lệnh gọi `GET /api/sessions/:id/join` và `GET /api/student/sessions/:id/join` bị từ chối với HTTP 405 `METHOD_NOT_ALLOWED` để bảo vệ tính nguyên tử của điểm danh và tạo phòng. Bắt buộc dùng `POST`).*
 
 **Response (200 OK)**
 ```json
@@ -75,6 +75,8 @@ Trả về cùng dữ liệu với `POST /api/sessions/:id/join` (room token), k
   "data": {
     "sessionId": "66def...",
     "roomId": "room_66def...",
+    "provider": "LIVEKIT",
+    "serverUrl": "wss://...",
     "accessToken": "<token tạm thời>",
     "role": "PARTICIPANT",
     "expiresAt": "2024-10-01T10:00:00.000Z"
@@ -82,7 +84,9 @@ Trả về cùng dữ liệu với `POST /api/sessions/:id/join` (room token), k
 }
 ```
 **Lỗi phổ biến:**
+- `405 METHOD_NOT_ALLOWED`: Gọi phương thức GET thay vì POST.
 - `403 NOT_ENROLLED`: Chưa đăng ký hoặc chưa thanh toán xong.
+- `403 JOIN_WINDOW_CLOSED`: Học viên vào muộn quá 20 phút đầu giờ học.
 - `409 SESSION_NOT_JOINABLE`: Ngoài khung giờ cho phép vào lớp.
 - `409 SESSION_CANCELLED` / `409 SESSION_ENDED`: Buổi học đã hủy hoặc đã kết thúc.
 - `404 SESSION_NOT_FOUND`: Không tìm thấy buổi học.
