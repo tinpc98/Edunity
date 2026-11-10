@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
-const { GRADE_LEVELS } = require("./constants");
+const { GRADE_LEVELS, COURSE_LEVELS } = require("./constants");
 const { softDeletePlugin, reviewablePlugin } = require("./plugins");
 
 const scheduleEntrySchema = new Schema(
@@ -21,6 +21,7 @@ const classSchema = new Schema(
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
     subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
     gradeLevel: { type: String, enum: GRADE_LEVELS, default: null },
+    level: { type: String, enum: COURSE_LEVELS, default: null },
 
     className: { type: String, required: true, trim: true },
     description: String, // BR-52: mô tả tổng quan riêng của Class

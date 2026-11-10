@@ -32,7 +32,7 @@ curriculumUnitSchema.index(
   { syllabusVersionId: 1, unitOrder: 1 },
   {
     unique: true,
-    partialFilterExpression: { isDeleted: { $ne: true } },
+    partialFilterExpression: { isDeleted: false },
   }
 );
 curriculumUnitSchema.index({ courseId: 1, syllabusVersionId: 1 });

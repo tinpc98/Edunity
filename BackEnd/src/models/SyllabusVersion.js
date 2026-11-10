@@ -43,7 +43,7 @@ syllabusVersionSchema.index(
   { courseId: 1 },
   {
     unique: true,
-    partialFilterExpression: { status: "PUBLISHED", isDeleted: { $ne: true } },
+    partialFilterExpression: { status: "PUBLISHED", isDeleted: false },
   }
 );
 syllabusVersionSchema.index({ courseId: 1, status: 1 });

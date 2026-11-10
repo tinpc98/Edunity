@@ -3,6 +3,25 @@ const { Class, Course, Session, Enrollment, User } = require("../models");
 const { AppError, FORBIDDEN, CLASS_NOT_FOUND } = require("../utils/errors");
 const { paged, validationError, parseDate, isBlank, parseImageUrl } = require("../utils/http");
 const { toNum, toDec, parseAmount } = require("../utils/money");
+const { computePlannedOccurrences, parseDateTimeInZone, validateTimeZone } = require("../utils/timezone");
+const catalog = require("./courseCatalogService");
+const {
+  validateClassGate,
+  assertCourseAlignment,
+  assertApprovedAuthorization,
+  assertPricingPolicyGate,
+  assertTeacherContractGate,
+} = (() => {
+  const gate = require("./classCreationGateService");
+  const tea07 = require("./teacherSubjectAuthorizationService");
+  return {
+    validateClassGate: gate.validateClassGate,
+    assertCourseAlignment: gate.assertCourseAlignment,
+    assertPricingPolicyGate: gate.assertPricingPolicyGate,
+    assertTeacherContractGate: gate.assertTeacherContractGate,
+    assertApprovedAuthorization: tea07.assertApprovedAuthorization,
+  };
+})();
 const { notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
 
@@ -87,8 +106,9 @@ const applyClassInput = (cls, body) => {
     cls.capacity = capacity;
   }
 
+  const timeZone = validateTimeZone(body.timezone);
   for (const field of DATE_FIELDS) {
-    if (body[field] !== undefined) cls[field] = parseDate(body[field], field);
+    if (body[field] !== undefined) cls[field] = parseDateTimeInZone(body[field], field, timeZone);
   }
   if (body.schedule !== undefined) cls.schedule = parseSchedule(body.schedule);
 
@@ -108,16 +128,17 @@ const applyClassInput = (cls, body) => {
   }
 };
 
-// categoryId, subjectId và gradeLevel được lấy theo Course đã chọn (UC-TEA-02 bước 3)
+// categoryId, subjectId, gradeLevel và level được lấy theo Course đã chọn (UC-TEA-02 bước 3 / CUR-10)
 const applyCourse = (cls, course) => {
   cls.courseId = course._id;
   cls.courseTitle = course.title;
   cls.categoryId = course.categoryId;
   cls.subjectId = course.subjectId;
-  cls.gradeLevel = course.gradeLevel;
+  cls.gradeLevel = course.gradeLevel || null;
+  cls.level = course.level ? catalog.resolveLevel(course.level) : null;
 };
 
-const createClass = async (teacherId, body) => {
+const createClass = async (teacherId, body = {}, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   if (!body.courseId) throw validationError("courseId is required");
   const course = await getActiveCourse(body.courseId);
@@ -130,22 +151,50 @@ const createClass = async (teacherId, body) => {
   });
   applyCourse(cls, course);
   applyClassInput(cls, body);
+
+  await validateClassGate({
+    teacher,
+    course,
+    cls,
+    body,
+    mode: "CREATE",
+    pricingPolicyVerifier: options.pricingPolicyVerifier,
+    contractVerifier: options.contractVerifier,
+  });
+
   await cls.save();
   return cls.toObject();
 };
 
-const updateClass = async (teacherId, classId, body) => {
-  await getVerifiedTeacher(teacherId);
+const updateClass = async (teacherId, classId, body = {}, options = {}) => {
+  const teacher = await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (!EDITABLE_STATUSES.includes(cls.status)) {
     throw new AppError("Only DRAFT or REJECTED classes can be edited", "CLASS_NOT_EDITABLE", 409);
   }
 
-  if (body.courseId !== undefined && body.courseId !== cls.courseId.toString()) {
-    applyCourse(cls, await getActiveCourse(body.courseId));
-  }
+  const switchingCourse = body.courseId !== undefined && String(body.courseId) !== String(cls.courseId);
+  const course = await getActiveCourse(switchingCourse ? body.courseId : cls.courseId);
+
   const renamed = body.className !== undefined && body.className !== cls.className;
+  if (switchingCourse) {
+    applyCourse(cls, course);
+  }
   applyClassInput(cls, body);
+
+  await validateClassGate({
+    teacher,
+    course,
+    cls,
+    body,
+    mode: "UPDATE",
+    pricingPolicyVerifier: options.pricingPolicyVerifier,
+    contractVerifier: options.contractVerifier,
+  });
+
+  if (!cls.level && course.level) {
+    cls.level = catalog.resolveLevel(course.level);
+  }
   cls.updatedBy = teacherId;
   await cls.save();
 
@@ -162,13 +211,22 @@ const isSessionWithinClass = (cls, startDatetime, endDatetime) => {
   return true;
 };
 
-// BR-48 / BR-49: submit a completed Class for Admin approval
-const submitClass = async (teacherId, classId) => {
-  await getVerifiedTeacher(teacherId);
+// BR-48 / BR-49 / CUR-10: submit a completed Class for Admin approval
+const submitClass = async (teacherId, classId, options = {}) => {
+  const teacher = await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (!EDITABLE_STATUSES.includes(cls.status)) {
     throw new AppError("Only DRAFT or REJECTED classes can be submitted", "CLASS_NOT_SUBMITTABLE", 409);
   }
+
+  const course = await getActiveCourse(cls.courseId);
+  const alignment = await assertCourseAlignment({ course, cls });
+  await assertApprovedAuthorization({
+    teacherId: teacher._id,
+    subjectId: course.subjectId,
+    gradeLevel: alignment.gradeLevel,
+    level: alignment.level,
+  });
 
   const missing = [];
   if (isBlank(cls.description)) missing.push("description");
@@ -192,9 +250,21 @@ const submitClass = async (teacherId, classId) => {
     });
   }
 
+  await assertPricingPolicyGate({
+    teacher,
+    course,
+    cls,
+    totalSessions: sessions.length,
+    pricingPolicyVerifier: options.pricingPolicyVerifier,
+  });
+  await assertTeacherContractGate({
+    teacher,
+    contractVerifier: options.contractVerifier,
+  });
+
   const updated = await Class.findOneAndUpdate(
     { _id: cls._id, status: { $in: EDITABLE_STATUSES } },
-    { $set: { status: "PENDING_APPROVAL", updatedBy: teacherId } },
+    { $set: { status: "PENDING_APPROVAL", level: alignment.level, updatedBy: teacherId } },
     { returnDocument: "after" }
   ).lean();
   if (!updated) throw new AppError("Only DRAFT or REJECTED classes can be submitted", "CLASS_NOT_SUBMITTABLE", 409);
@@ -247,38 +317,18 @@ const getClassStudents = async (teacherId, classId, query) => {
 };
 
 /**
- * UC-TEA-02 bước 15: planned session occurrences derived from startDate, endDate and schedule.
- * schedule times are wall-clock times in the platform timezone (default UTC+7).
+ * UC-TEA-02 bước 15 / CUR-11: planned session occurrences derived from startDate, endDate and schedule.
+ * schedule times are wall-clock times in Asia/Ho_Chi_Minh (or specified IANA timezone), normalized to UTC.
  */
-const getPlannedSessions = async (teacherId, classId) => {
+const getPlannedSessions = async (teacherId, classId, query = {}) => {
   await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (!cls.startDate || !cls.endDate || !cls.schedule || cls.schedule.length === 0) {
     throw validationError("startDate, endDate and schedule are required to plan sessions");
   }
 
-  const offsetMs = (parseInt(process.env.APP_TZ_OFFSET_MINUTES, 10) || 420) * 60 * 1000;
-  const toUtc = (localDay, time) => {
-    const [hours, minutes] = time.split(":").map(Number);
-    return new Date(localDay + (hours * 60 + minutes) * 60 * 1000 - offsetMs);
-  };
-  const localMidnight = (date) => Math.floor((date.getTime() + offsetMs) / DAY_MS) * DAY_MS;
-
-  const planned = [];
-  const lastDay = localMidnight(cls.endDate);
-  for (let day = localMidnight(cls.startDate); day <= lastDay && planned.length < 366; day += DAY_MS) {
-    const dayOfWeek = new Date(day).getUTCDay();
-    for (const entry of cls.schedule) {
-      if (entry.dayOfWeek !== dayOfWeek) continue;
-      planned.push({
-        dayOfWeek,
-        startDatetime: toUtc(day, entry.startTime),
-        endDatetime: toUtc(day, entry.endTime),
-      });
-    }
-  }
-
-  planned.sort((a, b) => a.startDatetime - b.startDatetime);
+  const timeZone = validateTimeZone(query.timezone);
+  const planned = computePlannedOccurrences(cls, { timeZone, maxOccurrences: 366 });
   return planned.map((item, index) => ({ index: index + 1, ...item }));
 };
 

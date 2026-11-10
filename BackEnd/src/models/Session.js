@@ -102,6 +102,12 @@ const sessionSchema = new Schema(
     teacherId: { type: Schema.Types.ObjectId, ref: "User", required: true }, // denormalized
 
     title: { type: String, required: true, trim: true },
+    sessionNumber: { type: Number, min: 1, default: null },
+    scheduleSource: {
+      type: String,
+      enum: ["MANUAL", "SCHEDULE_GENERATED", "MAKEUP"],
+      default: "MANUAL",
+    },
     description: String, // mô tả/tổng quan buổi học
 
     contents: { type: [sessionContentSchema], default: [] },
@@ -165,6 +171,7 @@ const sessionSchema = new Schema(
 );
 
 sessionSchema.index({ classId: 1, startDatetime: 1 });
+sessionSchema.index({ classId: 1, sessionNumber: 1 });
 sessionSchema.index({ teacherId: 1, startDatetime: 1 });
 sessionSchema.index({ status: 1, startDatetime: 1, endDatetime: 1 });
 

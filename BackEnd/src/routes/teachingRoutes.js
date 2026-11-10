@@ -10,6 +10,11 @@ const student = [authMiddleware, requireRole("STUDENT")];
 const classroomMember = [authMiddleware, requireRole("STUDENT", "TEACHER")];
 const anyAuthenticatedRole = [authMiddleware, requireRole("STUDENT", "TEACHER", "ADMIN")];
 
+// Teacher — subject authorizations (TEA-07)
+router.get("/teacher/subject-authorizations", teacher, controller.listMySubjectAuthorizations);
+router.post("/teacher/subject-authorizations", teacher, controller.requestSubjectAuthorization);
+router.get("/teacher/subject-authorizations/:id", teacher, controller.getMySubjectAuthorization);
+
 // Teacher — classes
 router.get("/teacher/classes", teacher, controller.listMyClasses);
 router.post("/teacher/classes", teacher, controller.createClass);
@@ -20,6 +25,7 @@ router.get("/teacher/classes/:id/students", teacher, controller.getClassStudents
 router.get("/teacher/classes/:id/planned-sessions", teacher, controller.getPlannedSessions);
 
 // Teacher — sessions
+router.post("/teacher/classes/:classId/sessions/generate", teacher, controller.generateSessions);
 router.post("/teacher/classes/:classId/sessions", teacher, controller.createSessions);
 router.patch("/teacher/sessions/:id", teacher, controller.updateSession);
 router.delete("/teacher/sessions/:id", teacher, controller.deleteSession);
@@ -44,6 +50,13 @@ router.post("/teacher/sessions/:id/reschedule-requests", teacher, controller.req
 
 // Student — reschedule confirmation (TIN-05E)
 router.post("/student/reschedule-requests/:id/respond", student, controller.respondToRescheduleAsStudent);
+
+// Admin — subject authorizations (TEA-07)
+router.get("/admin/subject-authorizations", admin, controller.adminListSubjectAuthorizations);
+router.post("/admin/subject-authorizations", admin, controller.adminCreateSubjectAuthorization);
+router.get("/admin/subject-authorizations/:id", admin, controller.adminGetSubjectAuthorization);
+router.post("/admin/subject-authorizations/:id/approve", admin, controller.approveSubjectAuthorization);
+router.post("/admin/subject-authorizations/:id/suspend", admin, controller.suspendSubjectAuthorization);
 
 // Admin — class approval & Smart Classroom / Incident / Discipline / Reschedule / Refund review (TIN-05E)
 router.get("/admin/classes/pending", admin, controller.listPendingClasses);

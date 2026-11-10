@@ -1,11 +1,46 @@
 const teacherClasses = require("../services/teacherClassService");
 const adminClasses = require("../services/adminClassService");
 const sessions = require("../services/sessionService");
+const teacherSubjectAuths = require("../services/teacherSubjectAuthorizationService");
 const presenceService = require("../services/sessionPresenceService");
 const incidentService = require("../services/sessionIncidentService");
 const { handle, parsePaging } = require("../utils/http");
 
 const body = (req) => req.body || {};
+const idempotencyKeyOf = (req) => {
+  const val = typeof req.get === "function" ? req.get("idempotency-key") : req.headers && req.headers["idempotency-key"];
+  return val !== undefined ? val : undefined;
+};
+
+// Teacher — subject authorizations (TEA-07)
+exports.requestSubjectAuthorization = handle(
+  (req) => teacherSubjectAuths.requestAuthorization(req.user.id, body(req)),
+  201
+);
+exports.listMySubjectAuthorizations = handle((req) =>
+  teacherSubjectAuths.listMyAuthorizations(req.user.id, req.query, parsePaging(req.query))
+);
+exports.getMySubjectAuthorization = handle((req) =>
+  teacherSubjectAuths.getMyAuthorization(req.user.id, req.params.id)
+);
+
+// Admin — subject authorizations (TEA-07)
+exports.adminListSubjectAuthorizations = handle((req) =>
+  teacherSubjectAuths.adminListAuthorizations(req.query, parsePaging(req.query))
+);
+exports.adminGetSubjectAuthorization = handle((req) =>
+  teacherSubjectAuths.adminGetAuthorization(req.params.id)
+);
+exports.adminCreateSubjectAuthorization = handle(
+  (req) => teacherSubjectAuths.adminCreateAuthorization(req.user.id, body(req)),
+  201
+);
+exports.approveSubjectAuthorization = handle((req) =>
+  teacherSubjectAuths.approveAuthorization(req.user.id, req.params.id, body(req))
+);
+exports.suspendSubjectAuthorization = handle((req) =>
+  teacherSubjectAuths.suspendAuthorization(req.user.id, req.params.id, body(req))
+);
 
 // Teacher — classes
 exports.createClass = handle((req) => teacherClasses.createClass(req.user.id, body(req)), 201);
@@ -14,10 +49,20 @@ exports.submitClass = handle((req) => teacherClasses.submitClass(req.user.id, re
 exports.listMyClasses = handle((req) => teacherClasses.listMyClasses(req.user.id, req.query, parsePaging(req.query)));
 exports.getMyClass = handle((req) => teacherClasses.getMyClass(req.user.id, req.params.id));
 exports.getClassStudents = handle((req) => teacherClasses.getClassStudents(req.user.id, req.params.id, req.query));
-exports.getPlannedSessions = handle((req) => teacherClasses.getPlannedSessions(req.user.id, req.params.id));
+exports.getPlannedSessions = handle((req) => teacherClasses.getPlannedSessions(req.user.id, req.params.id, req.query));
 
-// Teacher — sessions
-exports.createSessions = handle((req) => sessions.createSessions(req.user.id, req.params.classId, body(req)), 201);
+// Teacher — sessions (CUR-11 transactional schedule & generation)
+exports.createSessions = handle(
+  (req) => sessions.createSessions(req.user.id, req.params.classId, body(req), { idempotencyKey: idempotencyKeyOf(req) }),
+  201
+);
+exports.generateSessions = handle(
+  (req) =>
+    sessions.generateSessionsFromSchedule(req.user.id, req.params.classId, body(req), {
+      idempotencyKey: idempotencyKeyOf(req),
+    }),
+  201
+);
 exports.updateSession = handle((req) => sessions.updateSession(req.user.id, req.params.id, body(req)));
 exports.deleteSession = handle((req) => sessions.deleteSession(req.user.id, req.params.id));
 exports.startSession = handle((req) => sessions.startSession(req.user.id, req.params.id));

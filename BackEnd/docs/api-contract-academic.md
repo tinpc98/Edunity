@@ -61,6 +61,9 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `INVALID_GRADE_LEVEL` | Khối lớp không hợp lệ theo chuẩn Bộ GD&ĐT (BR-43) |
 | | `GRADE_LEVEL_CATEGORY_MISMATCH` | Khối lớp không nằm trong `allowedGradeLevels` của Chuyên mục (BR-44/45) |
 | | `SUBJECT_CATEGORY_MISMATCH` | Môn học không thuộc về Chuyên mục đã chọn |
+| | `COURSE_ATTRIBUTE_MISMATCH` | Thuộc tính môn/danh mục/khối lớp/trình độ truyền lên không khớp Course (`CUR-10`) |
+| | `COURSE_LEVEL_REQUIRED` | Khóa học chưa cấu hình `level` hợp lệ để mở lớp |
+| | `GRADE_LEVEL_REQUIRED` | Thiếu `gradeLevel` cho danh mục có ràng buộc khối lớp (`TEA-07`) |
 | | `CLASS_INCOMPLETE` | Lớp học chưa đủ thông tin bắt buộc khi bấm gửi duyệt (`details.missing`) |
 | | `SESSION_OUT_OF_CLASS_RANGE` | Lịch buổi học nằm ngoài khoảng `startDate` đến `endDate` của Lớp học |
 | **401 Unauthorized** | `UNAUTHORIZED` | Thiếu token xác thực, token không hợp lệ hoặc sai chữ ký webhook |
@@ -69,6 +72,12 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `ACCOUNT_BLOCKED` | Tài khoản đang ở trạng thái `SUSPENDED` hoặc `BANNED` |
 | | `ACCOUNT_NOT_ACTIVE` | Tài khoản chưa kích hoạt |
 | | `TEACHER_NOT_VERIFIED` | Giảng viên chưa được Admin duyệt hồ sơ `VERIFIED` |
+| | `SUBJECT_AUTHORIZATION_REQUIRED` | Giảng viên chưa có quyền giảng dạy `APPROVED` cho `(subjectId, gradeLevel, level)` (`TEA-07`/`CUR-10`) |
+| | `SUBJECT_AUTHORIZATION_PENDING` | Quyền giảng dạy đang ở trạng thái `PENDING`, chưa được duyệt |
+| | `SUBJECT_AUTHORIZATION_SUSPENDED` | Quyền giảng dạy đã bị Admin tạm đình chỉ (`SUSPENDED`) |
+| | `TEACHER_CONTRACT_NOT_FOUND` | Giảng viên chưa có hợp đồng giảng dạy (`TEA-12` khi port contract sẵn sàng) |
+| | `TEACHER_CONTRACT_NOT_ACTIVE` | Hợp đồng giảng dạy không ở trạng thái `ACTIVE` |
+| | `TEACHER_CONTRACT_EXPIRED` | Hợp đồng giảng dạy đã hết hạn |
 | | `NOT_ENROLLED` | Học viên chưa có đơn đăng ký `CONFIRMED` cho lớp học |
 | | `JOIN_WINDOW_CLOSED` | Học viên vào trễ quá 20 phút đầu giờ của buổi học |
 | **404 Not Found** | `CATEGORY_NOT_FOUND` | Không tìm thấy Chuyên mục |
@@ -76,6 +85,7 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `COURSE_NOT_FOUND` | Không tìm thấy Khóa học |
 | | `SYLLABUS_VERSION_NOT_FOUND` | Không tìm thấy Phiên bản giáo trình (hoặc không thuộc Khóa học) |
 | | `CURRICULUM_UNIT_NOT_FOUND` | Không tìm thấy Đơn vị bài học trong Phiên bản giáo trình |
+| | `SUBJECT_AUTHORIZATION_NOT_FOUND` | Không tìm thấy hồ sơ cấp quyền giảng dạy (`TEA-07`) |
 | | `CLASS_NOT_FOUND` | Không tìm thấy Lớp học |
 | | `SESSION_NOT_FOUND` | Không tìm thấy Buổi học |
 | | `CAMPAIGN_NOT_FOUND` | Không tìm thấy Chiến dịch học bổng |
@@ -83,6 +93,9 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `SCHOLARSHIP_NOT_FOUND` | Không tìm thấy Học bổng của học viên |
 | **405 Method Not Allowed** | `METHOD_NOT_ALLOWED` | Gọi phương thức HTTP bị cấm (ví dụ: `GET /api/sessions/:id/join`) |
 | **409 Conflict** | `DUPLICATE_CATEGORY / SUBJECT / COURSE` | Trùng lặp tên thực thể trong cùng cấp danh mục |
+| | `DUPLICATE_SUBJECT_AUTHORIZATION` | Trùng quyền giảng dạy `(teacherId, subjectId, gradeLevel, level)` (`TEA-07`) |
+| | `IDEMPOTENCY_KEY_CONFLICT` | Dùng lại `Idempotency-Key` với payload tạo/sinh lịch khác trước đó (`CUR-11`) |
+| | `SESSION_TIME_CONFLICT` | Trùng giờ dạy với buổi học khác của giảng viên hoặc tự trùng trong batch |
 | | `DUPLICATE_SLUG` | Trùng lặp đường dẫn tĩnh SEO |
 | | `SYLLABUS_VERSION_IMMUTABLE` | Phiên bản giáo trình đã `PUBLISHED`/`ARCHIVED` bị khóa bất biến, không thể chỉnh sửa |
 | | `SYLLABUS_VERSION_CONFLICT` | Xung đột số thứ tự phiên bản giáo trình đồng thời |
@@ -102,6 +115,8 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | **429 Too Many Requests** | `RATE_LIMITED` | Vượt tần suất gọi API cho phép (tin nhắn, upload) |
 | **503 Service Unavailable** | `VIDEO_PROVIDER_UNAVAILABLE` | Lỗi kết nối dịch vụ LiveKit Server |
 | | `RECORDING_START_FAILED` | Không thể khởi động phiên ghi hình bài giảng |
+| | `PRICING_POLICY_DEPENDENCY_BLOCKED` | Cổng kiểm tra chính sách giá (`CUR-07` `CoursePricingPolicy`) chưa sẵn sàng (fail-closed) |
+| | `CONTRACT_DEPENDENCY_BLOCKED` | Cổng xác minh hợp đồng giảng viên `ACTIVE` (`TEA-12` của Bảo) chưa sẵn sàng (fail-closed, không thay thế bằng `VERIFIED`) |
 
 ---
 
@@ -145,21 +160,30 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 | **CUR** | `POST` | `/api/admin/course-proposals/:id/approve` | `ADMIN` | Transaction tạo Course trong catalog |
 | **CUR** | `POST` | `/api/admin/course-proposals/:id/reject` | `ADMIN` | Từ chối đề xuất khóa học |
 | **CUR** | `POST` | `/api/admin/course-proposals/:id/request-changes` | `ADMIN` | Yêu cầu sửa đổi kèm `reviewNote` |
+| **LMS** | `GET` | `/api/teacher/subject-authorizations` | `TEACHER` | Danh sách quyền giảng dạy của chính giảng viên đăng nhập (`TEA-07`) |
+| **LMS** | `POST` | `/api/teacher/subject-authorizations` | `TEACHER` | Gửi yêu cầu cấp quyền dạy theo môn/khối/trình độ (`PENDING`) |
+| **LMS** | `GET` | `/api/teacher/subject-authorizations/:id` | `TEACHER` | Xem chi tiết quyền giảng dạy của chính mình (chống IDOR) |
+| **LMS** | `GET` | `/api/admin/subject-authorizations` | `ADMIN` | Danh sách hồ sơ phân quyền giảng dạy |
+| **LMS** | `POST` | `/api/admin/subject-authorizations` | `ADMIN` | Admin cấp trực tiếp hoặc tạo quyền giảng dạy |
+| **LMS** | `GET` | `/api/admin/subject-authorizations/:id` | `ADMIN` | Chi tiết hồ sơ phân quyền giảng dạy |
+| **LMS** | `POST` | `/api/admin/subject-authorizations/:id/approve` | `ADMIN` | Duyệt / khôi phục quyền giảng dạy (`APPROVED`) + AuditLog |
+| **LMS** | `POST` | `/api/admin/subject-authorizations/:id/suspend` | `ADMIN` | Tạm đình chỉ quyền giảng dạy (`SUSPENDED`) kèm lý do + AuditLog |
 | **LMS** | `GET` | `/api/classes` | Public | Chỉ trả lớp `OPEN`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED` |
 | **LMS** | `GET` | `/api/classes/:id` | Public | Chi tiết lớp học + hồ sơ giảng viên |
 | **LMS** | `GET` | `/api/classes/:id/sessions` | Public | Danh sách buổi học công khai |
 | **LMS** | `GET` | `/api/teacher/classes` | `TEACHER` | Lớp của giảng viên đăng nhập |
-| **LMS** | `POST` | `/api/teacher/classes` | `TEACHER` | Yêu cầu Giảng viên `VERIFIED` |
+| **LMS** | `POST` | `/api/teacher/classes` | `TEACHER` | Yêu cầu `VERIFIED` + `TEA-07 APPROVED` + `Course` khớp + `CUR-07` + `TEA-12 ACTIVE` (`CUR-10`) |
 | **LMS** | `GET` | `/api/teacher/classes/:id` | `TEACHER` | Chi tiết lớp của tôi + sessions |
-| **LMS** | `PATCH` | `/api/teacher/classes/:id` | `TEACHER` | Chỉ sửa khi `DRAFT` hoặc `REJECTED` |
-| **LMS** | `POST` | `/api/teacher/classes/:id/submit` | `TEACHER` | Kiểm tra đủ điều kiện completeness |
+| **LMS** | `PATCH` | `/api/teacher/classes/:id` | `TEACHER` | Chỉ sửa khi `DRAFT` hoặc `REJECTED` + cổng `CUR-10` |
+| **LMS** | `POST` | `/api/teacher/classes/:id/submit` | `TEACHER` | Kiểm tra đầy đủ thông tin + cổng `CUR-10` |
 | **LMS** | `GET` | `/api/teacher/classes/:id/students` | `TEACHER` | Xem học viên lớp của mình |
-| **LMS** | `GET` | `/api/teacher/classes/:id/planned-sessions`| `TEACHER`| Dự kiến lịch từ schedule |
+| **LMS** | `GET` | `/api/teacher/classes/:id/planned-sessions`| `TEACHER`| Dự kiến lịch từ schedule theo múi giờ `Asia/Ho_Chi_Minh` $\rightarrow$ UTC |
 | **LMS** | `GET` | `/api/admin/classes/pending` | `ADMIN` | Danh sách lớp chờ phê duyệt |
 | **LMS** | `GET` | `/api/admin/classes/:id` | `ADMIN` | Xem chi tiết lớp để duyệt |
 | **LMS** | `POST` | `/api/admin/classes/:id/approve` | `ADMIN` | Phê duyệt mở lớp (`OPEN`) |
 | **LMS** | `POST` | `/api/admin/classes/:id/reject` | `ADMIN` | Từ chối mở lớp |
-| **LMS** | `POST` | `/api/teacher/classes/:classId/sessions` | `TEACHER` | Thêm buổi học vào kế hoạch lớp |
+| **LMS** | `POST` | `/api/teacher/classes/:classId/sessions/generate` | `TEACHER` | Sinh & lưu hàng loạt buổi học từ `Class.schedule` trong transaction + khóa giáo viên (`Idempotency-Key`, `Asia/Ho_Chi_Minh` $\rightarrow$ UTC) (`CUR-11`) |
+| **LMS** | `POST` | `/api/teacher/classes/:classId/sessions` | `TEACHER` | Thêm buổi học vào kế hoạch lớp trong transaction + khóa giáo viên (`Idempotency-Key`) |
 | **LMS** | `PATCH` | `/api/teacher/sessions/:id` | `TEACHER` | Sửa thông tin buổi học |
 | **LMS** | `DELETE`| `/api/teacher/sessions/:id` | `TEACHER` | Xóa buổi (chỉ khi lớp `DRAFT`/`REJECTED`) |
 | **LMS** | `POST` | `/api/teacher/sessions/:id/start` | `TEACHER` | Bắt đầu dạy, bật ghi hình LiveKit |
