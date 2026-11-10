@@ -5,6 +5,7 @@ import type {
   RegisterPayload,
   RegisterResponse,
   TeacherRegisterRequest,
+  SponsorRegisterRequest,
   AuthUser,
 } from "../types/auth";
 
@@ -34,6 +35,21 @@ export function registerTeacher(payload: TeacherRegisterRequest): Promise<Regist
       email: payload.email,
       password: payload.password,
       role: "TEACHER",
+    }),
+  });
+}
+
+/** POST /api/auth/register with role SPONSOR; the account is ACTIVE right away. */
+export function registerSponsor(payload: SponsorRegisterRequest): Promise<RegisterResponse> {
+  return apiClient<RegisterResponse>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({
+      fullName: payload.fullName,
+      email: payload.email,
+      password: payload.password,
+      role: "SPONSOR",
+      sponsorType: payload.sponsorType,
+      ...(payload.sponsorType === "ORGANIZATION" ? { organizationName: payload.organizationName } : {}),
     }),
   });
 }
