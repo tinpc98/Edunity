@@ -1,6 +1,35 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const { softDeletePlugin } = require("./plugins");
+const { CHECKLIST_ITEM_MODES } = require("./constants");
+
+const checklistItemSchema = new Schema(
+  {
+    code: { type: String, required: true, trim: true, uppercase: true },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, trim: true, default: "" },
+    required: { type: Boolean, default: true },
+    acceptedMode: { type: String, enum: CHECKLIST_ITEM_MODES, default: "EITHER" },
+    acceptedDocumentTypes: {
+      type: [String],
+      default: ["SCHOLARSHIP_PROOF"],
+    },
+    maxFiles: { type: Number, default: 5, min: 1, max: 20 },
+    order: { type: Number, default: 1, min: 1 },
+  },
+  { _id: false }
+);
+
+const dossierPolicySchema = new Schema(
+  {
+    requireGuardianInfo: { type: Boolean, default: false },
+    requireSchoolInfo: { type: Boolean, default: false },
+    allowPaperDossier: { type: Boolean, default: true },
+    allowDraftSave: { type: Boolean, default: true },
+    requireGuardianConsentForMinor: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
 
 const scopeSchema = new Schema(
   {
@@ -20,6 +49,8 @@ const scholarshipCampaignSchema = new Schema(
     description: String,
     eligibilityCriteria: String,
     scope: scopeSchema,
+    documentChecklist: { type: [checklistItemSchema], default: [] },
+    dossierPolicy: { type: dossierPolicySchema, default: () => ({}) },
 
     targetBudget: { type: Schema.Types.Decimal128, required: true },
     fundedAmount: { type: Schema.Types.Decimal128, default: 0 },

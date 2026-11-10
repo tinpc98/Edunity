@@ -90,7 +90,13 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `SESSION_NOT_FOUND` | Không tìm thấy Buổi học |
 | | `CAMPAIGN_NOT_FOUND` | Không tìm thấy Chiến dịch học bổng |
 | | `APPLICATION_NOT_FOUND` | Không tìm thấy Hồ sơ xin cấp học bổng |
+| | `DOCUMENT_NOT_FOUND` | Không tìm thấy tài liệu xác minh trong hồ sơ |
+| | `PAPER_RECEIPT_NOT_FOUND` | Không tìm thấy biên nhận hồ sơ bản giấy (`AID-04`) |
 | | `SCHOLARSHIP_NOT_FOUND` | Không tìm thấy Học bổng của học viên |
+| **400 Bad Request** | `DOSSIER_INCOMPLETE` | Hồ sơ học bổng thiếu `guardianInfo`, `schoolInfo` hoặc `statement` (`AID-01`) |
+| | `PAPER_DOSSIER_NOT_ALLOWED` | Chiến dịch không cho phép nộp bản giấy |
+| | `INVALID_CHECKLIST_ITEM_CODE` | Mã checklist không thuộc chiến dịch |
+| **403 Forbidden** | `GUARDIAN_CONSENT_REQUIRED` | Thiếu đồng thuận người giám hộ (`AID-08`) khi chiến dịch bật kiểm tra consent |
 | **405 Method Not Allowed** | `METHOD_NOT_ALLOWED` | Gọi phương thức HTTP bị cấm (ví dụ: `GET /api/sessions/:id/join`) |
 | **409 Conflict** | `DUPLICATE_CATEGORY / SUBJECT / COURSE` | Trùng lặp tên thực thể trong cùng cấp danh mục |
 | | `DUPLICATE_SUBJECT_AUTHORIZATION` | Trùng quyền giảng dạy `(teacherId, subjectId, gradeLevel, level)` (`TEA-07`) |
@@ -108,6 +114,16 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `CLASS_SCHEDULE_CONFLICT` | Lịch dạy bù bị trùng với buổi khác của Lớp học |
 | | `DUPLICATE_RESCHEDULE_REQUEST` | Buổi học đã có yêu cầu dời lịch đang chờ duyệt |
 | | `DUPLICATE_APPLICATION` | Học viên đã có hồ sơ đang xử lý cho Chiến dịch này |
+| | `DOSSIER_CHECKLIST_INCOMPLETE` | Hồ sơ chưa đáp ứng đủ mục checklist bắt buộc (online và/hoặc bản giấy) |
+| | `DUPLICATE_PAPER_RECEIPT` | Hồ sơ đã có biên nhận bản giấy đang hoạt động (`AID-04`) |
+| | `DUPLICATE_TRACKING_NUMBER` | Trùng mã vận đơn bưu điện đang hoạt động |
+| | `DUPLICATE_RECEIPT_CODE` | Trùng mã biên nhận bản giấy |
+| | `APPLICATION_LINK_MISMATCH` | Sai lệch chiến dịch/học viên/mã hồ sơ khi liên kết bản giấy |
+| | `APPLICATION_LINK_REQUIRED` | Biên nhận bản giấy chưa liên kết tới `ScholarshipApplication` |
+| | `INVALID_PAPER_RECEIPT_STATUS` | Chuyển trạng thái biên nhận bản giấy không hợp lệ hoặc đã chốt |
+| | `PAPER_RECEIPT_DISCREPANCY_UNRESOLVED` | Biên nhận bản giấy đang có sai lệch chưa xử lý |
+| | `RECONCILIATION_HAS_UNRESOLVED_ITEMS` | Có mục bản giấy bị `MISSING`/`MISMATCH`/`DAMAGED` khi chốt `RECONCILED` |
+| | `PAPER_CHECKLIST_INCOMPLETE` | Thiếu mục bản giấy bắt buộc `MATCHED` khi chốt `RECONCILED` |
 | | `CAMPAIGN_NOT_ACCEPTING_APPLICATIONS`| Nộp đơn ngoài thời hạn nhận hồ sơ của Chiến dịch |
 | | `CAMPAIGN_FUND_UNAVAILABLE` | Quỹ khả dụng của Chiến dịch không đủ giải ngân |
 | | `SCHOLARSHIP_NOT_USABLE` | Học bổng đã hết hạn, hết số dư hoặc không hợp lệ |
@@ -117,6 +133,7 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `RECORDING_START_FAILED` | Không thể khởi động phiên ghi hình bài giảng |
 | | `PRICING_POLICY_DEPENDENCY_BLOCKED` | Cổng kiểm tra chính sách giá (`CUR-07` `CoursePricingPolicy`) chưa sẵn sàng (fail-closed) |
 | | `CONTRACT_DEPENDENCY_BLOCKED` | Cổng xác minh hợp đồng giảng viên `ACTIVE` (`TEA-12` của Bảo) chưa sẵn sàng (fail-closed, không thay thế bằng `VERIFIED`) |
+| | `CONSENT_DEPENDENCY_BLOCKED` | Cổng xác minh đồng thuận người giám hộ (`AID-08` của Bảo) chưa sẵn sàng (fail-closed khi campaign bật `requireGuardianConsentForMinor`) |
 
 ---
 
@@ -225,15 +242,32 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 | **AID** | `GET` | `/api/sponsor/contributions` | `SPONSOR` | Lịch sử tài trợ của tôi |
 | **AID** | `GET` | `/api/sponsor/campaigns/:id/impact` | `SPONSOR` | Báo cáo tác động tổng hợp của chiến dịch |
 | **AID** | `POST` | `/api/campaigns/:id/applications` | `STUDENT` | Nộp hồ sơ xin cấp học bổng |
-| **AID** | `GET` | `/api/me/scholarship-applications` | `STUDENT` | Xem hồ sơ học bổng của tôi |
+| **AID** | `POST` | `/api/campaigns/:id/dossiers` | `STUDENT` | Tạo/nộp hồ sơ phi tài chính (`DRAFT` hoặc `SUBMITTED`, bắt buộc `guardianInfo`, `schoolInfo`, checklist) (`AID-01`) |
+| **AID** | `GET` | `/api/campaigns/:id/checklist` | `STUDENT`, `ADMIN` | Xem cấu hình `documentChecklist` & `dossierPolicy` của chiến dịch (`AID-01`) |
+| **AID** | `PUT` | `/api/admin/campaigns/:id/checklist` | `ADMIN` | Cập nhật `documentChecklist` & `dossierPolicy` khi chiến dịch đang `DRAFT` (`AID-01`) |
+| **AID** | `GET` | `/api/me/scholarship-applications` | `STUDENT` | Xem hồ sơ học bổng của tôi (ẩn ID nhân viên duyệt) |
+| **AID** | `GET` | `/api/me/scholarship-applications/:id` | `STUDENT` | Xem chi tiết hồ sơ của tôi kèm signed URL & tóm tắt bản giấy đã ẩn ID staff (`AID-01`) |
+| **AID** | `GET` | `/api/me/scholarship-applications/:id/paper-receipts` | `STUDENT` | Xem trạng thái biên nhận hồ sơ bản giấy của chính mình (ẩn ID staff) (`AID-04`) |
+| **AID** | `PATCH` | `/api/me/scholarship-dossiers/:id` | `STUDENT` | Cập nhật hồ sơ khi `DRAFT` hoặc `NEED_MORE_INFORMATION` (`AID-01`) |
+| **AID** | `POST` | `/api/me/scholarship-dossiers/:id/submit` | `STUDENT` | Gửi hồ sơ `DRAFT` sang `SUBMITTED` (`AID-01`) |
+| **AID** | `POST` | `/api/me/scholarship-dossiers/:id/withdraw` | `STUDENT` | Rút hồ sơ khi chưa duyệt hoàn tất (`AID-01`) |
 | **AID** | `POST` | `/api/me/scholarship-applications/:id/resubmit`| `STUDENT`| Bổ sung minh chứng hồ sơ |
 | **AID** | `GET` | `/api/me/scholarships` | `STUDENT` | Danh sách học bổng đã được cấp |
 | **AID** | `POST` | `/api/enrollments/:id/scholarship-payment` | `STUDENT` | Thanh toán học phí bằng học bổng |
 | **AID** | `GET` | `/api/admin/scholarship-applications` | `ADMIN` | Danh sách hồ sơ xin cấp học bổng |
-| **AID** | `GET` | `/api/admin/scholarship-applications/:id` | `ADMIN` | Xem hồ sơ và file minh chứng có link ký số |
-| **AID** | `POST` | `/api/admin/scholarship-applications/:id/approve`| `ADMIN`| Duyệt cấp học bổng |
+| **AID** | `GET` | `/api/admin/scholarship-applications/:id` | `ADMIN` | Xem hồ sơ, guardianInfo, schoolInfo, checklist và file minh chứng có link ký số |
+| **AID** | `POST` | `/api/admin/scholarship-applications/:id/verify-dossier` | `ADMIN` | Xác minh & duyệt hồ sơ phi tài chính (`DOSSIER_VERIFIED`) — KHÔNG tự cấp quỹ/giao dịch (`AID-01`) |
+| **AID** | `PATCH` | `/api/admin/scholarship-applications/:id/documents/:documentId/review` | `ADMIN` | Duyệt/từ chối từng minh chứng online (`APPROVED`/`REJECTED`) |
+| **AID** | `POST` | `/api/admin/scholarship-applications/:id/approve`| `ADMIN`| Luồng cấp học bổng gộp cũ (tương thích ngược; phân tách với `AID-06` của Tin) |
 | **AID** | `POST` | `/api/admin/scholarship-applications/:id/reject` | `ADMIN` | Từ chối hồ sơ |
 | **AID** | `POST` | `/api/admin/scholarship-applications/:id/request-information`| `ADMIN`| Yêu cầu bổ sung thông tin |
+| **AID** | `POST` | `/api/admin/paper-dossiers` | `ADMIN` | Tiếp nhận biên nhận hồ sơ bản giấy bưu điện (`PaperDossierReceipt`) (`AID-04`) |
+| **AID** | `GET` | `/api/admin/paper-dossiers` | `ADMIN` | Danh sách biên nhận hồ sơ bản giấy (`AID-04`) |
+| **AID** | `GET` | `/api/admin/paper-dossiers/:id` | `ADMIN` | Chi tiết biên nhận bản giấy + lịch sử tiếp nhận/đối chiếu (`AID-04`) |
+| **AID** | `POST` | `/api/admin/paper-dossiers/:id/link` | `ADMIN` | Liên kết biên nhận bản giấy với `ScholarshipApplication` (`AID-04`) |
+| **AID** | `POST` | `/api/admin/paper-dossiers/:id/reconcile` | `ADMIN` | Đối chiếu từng mục checklist bản giấy (`IN_RECONCILIATION`/`DISCREPANCY`/`RECONCILED`) (`AID-04`) |
+| **AID** | `POST` | `/api/admin/paper-dossiers/:id/reject` | `ADMIN` | Từ chối biên nhận bản giấy (`REJECTED`) (`AID-04`) |
+| **AID** | `POST` | `/api/admin/paper-dossiers/:id/cancel` | `ADMIN` | Hủy biên nhận bản giấy nhập sai (`CANCELLED`) (`AID-04`) |
 
 ---
 
@@ -481,17 +515,35 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 
 ---
 
+#### A03. Hồ sơ học bổng phi tài chính (`AID-01` — `POST /api/campaigns/:id/dossiers` & `POST /api/admin/scholarship-applications/:id/verify-dossier`)
+- **Student tạo/nộp (`POST /api/campaigns/:id/dossiers`):** Bắt buộc `guardianInfo`, `schoolInfo`, `statement`, `submissionMode` (`ONLINE` / `PAPER` / `HYBRID`) và các chứng từ `storageKey` riêng tư theo `documentChecklist` của Campaign (hoặc `saveAsDraft: true` để lưu nháp `DRAFT`, sau đó bổ sung qua `PATCH /api/me/scholarship-dossiers/:id` và nộp qua `POST /api/me/scholarship-dossiers/:id/submit`).
+- **Admin xác minh phi tài chính (`POST /api/admin/scholarship-applications/:id/verify-dossier`):** Kiểm tra đầy đủ `guardianInfo`, `schoolInfo`, checklist online + biên nhận bản giấy đã `RECONCILED`, chuyển trạng thái sang `DOSSIER_VERIFIED` — **tuyệt đối không** tạo `Scholarship`, không tăng `allocatedAmount`, không sinh `Transaction`.
+
+#### A04. Tiếp nhận & Đối chiếu Hồ sơ Bản giấy (`AID-04` — `/api/admin/paper-dossiers*`)
+- **Intake (`POST /api/admin/paper-dossiers`):** Lưu `PaperDossierReceipt` gồm `receiptCode`, `postalInfo` (`deliveryMethod`, `carrierName`, `trackingNumber`, `senderName`, `senderPhone`, `sentAt`, `postmarkDate`, `packageCondition`), `receivedBy`, `receivedAt`, `history[]` (`RECEIPT_LOGGED`), liên kết `applicationId` hoặc `applicationCode`.
+- **Liên kết & Đối chiếu (`POST /api/admin/paper-dossiers/:id/link`, `/reconcile`, `/reject`, `/cancel`):** Đối chiếu từng mục theo `documentChecklist` của chiến dịch (`MATCHED`, `MISSING`, `MISMATCH`, `DAMAGED`, `NOT_APPLICABLE`), chuyển `IN_RECONCILIATION` $\rightarrow$ `RECONCILED` / `DISCREPANCY`, đồng bộ `checklistProgress` trên `ScholarshipApplication` và ghi append-only `history[]` + `AuditLog`.
+- **Student tra cứu (`GET /api/me/scholarship-applications/:id/paper-receipts`):** Chỉ chủ hồ sơ xem được trạng thái tiếp nhận/đối chiếu đã ẩn toàn bộ `receivedBy`, `reconciledBy`, `verifiedBy`, `actorAdminId`.
+
+---
+
 ## 4. TƯƠNG THÍCH DỮ LIỆU CŨ VÀ RANH GIỚI LIÊN NHÓM
 
 1. **Ranh giới tài chính an toàn với Châu (Payment / Sponsor / Scholarship):**
    - Khi buổi học bị hủy do lỗi giảng viên hoặc học viên từ chối lịch học bù, LMS chỉ tạo bản ghi `SessionRefundReview` với trạng thái `HOLD_RECOMMENDED`.
    - Tuyệt đối không tự ý cập nhật `Payment`, `Transaction` hay `TeacherEarning`. Mọi thao tác hoàn tiền thực tế phải do quản trị viên tài chính xử lý.
 
-2. **Ranh giới bảo mật & JWT với Bảo (Auth & Security):**
-   - Không can thiệp cấu trúc token JWT hay cơ chế phân quyền RBAC sẵn có.
+2. **Ranh giới tài chính & học bổng phi tài chính với Tin (`AID-06` & Financial Allocation):**
+   - `AID-01` (`POST /api/admin/scholarship-applications/:id/verify-dossier`) và `AID-04` (`PaperDossierReceipt`) chỉ thực hiện tiếp nhận, đối chiếu checklist, xác minh thông tin người giám hộ/trường lớp và chuyển hồ sơ sang `DOSSIER_VERIFIED`.
+   - Tuyệt đối KHÔNG tự tạo `Scholarship`, KHÔNG tăng `ScholarshipCampaign.allocatedAmount`, và KHÔNG sinh bản ghi `Transaction` hay `ScholarshipUsage` trong luồng xác minh phi tài chính.
+   - Quyết định cấp quỹ (`AID-06`) tiếp tục do phân hệ tài chính của Tin đảm nhiệm ở giai đoạn tiếp theo (dựa trên trạng thái `DOSSIER_VERIFIED`), trong khi endpoint cũ `POST /api/admin/scholarship-applications/:id/approve` được giữ nguyên để tương thích ngược.
+
+3. **Ranh giới bảo mật, JWT, Consent & Storage với Bảo (`AID-08` & `NFR-04`):**
+   - Không can thiệp cấu trúc token JWT, `User`, `storageService`, `fileController` hay cơ chế RBAC sẵn có.
+   - Tài liệu minh chứng chỉ lưu `storageKey` riêng tư (`POST /api/uploads/private`, `purpose = SCHOLARSHIP_PROOF`) và chỉ cấp signed URL tạm thời cho chủ sở hữu (`STUDENT`) hoặc `ADMIN`. Thông tin `guardianInfo`, `schoolInfo`, tài liệu riêng tư và ID nhân viên (`reviewedBy`, `receivedBy`, `reconciledBy`, `actorAdminId`) bị ẩn khỏi công khai và khỏi tài khoản học sinh.
+   - Phụ thuộc `AID-08` (Guardian Consent của Bảo) được kết nối qua cổng fail-closed tại `scholarshipDossierGateService` (`503 CONSENT_DEPENDENCY_BLOCKED` nếu campaign bật `dossierPolicy.requireGuardianConsentForMinor = true` khi chưa tích hợp module consent chính thức); `guardianInfo` của `AID-01` không thay thế cho consent pháp lý `AID-08`.
    - Khi chuyển sang môi trường Production kết nối Cổng thanh toán thật, Bảo sẽ hỗ trợ cấu hình `req.rawBody` để xác thực chữ ký HMAC.
 
-3. **Ghi chú tích hợp giao diện với Băng (Frontend):**
+4. **Ghi chú tích hợp giao diện với Băng (Frontend):**
    - Số tiền luôn ở định dạng chuỗi số (`string`).
    - Phân trang luôn bao gồm `items`, `total`, `page`, `pageSize`, `totalPages`.
    - Tuyệt đối không gọi `GET /api/sessions/:id/join`. Bắt buộc dùng `POST /api/sessions/:id/join` để nhận LiveKit room token.

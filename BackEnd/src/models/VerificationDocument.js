@@ -16,6 +16,10 @@ const verificationDocumentSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     applicationId: { type: Schema.Types.ObjectId, ref: "ScholarshipApplication", default: null },
+    checklistItemCode: { type: String, trim: true, uppercase: true, default: null },
+    title: { type: String, trim: true, default: null },
+    submissionSource: { type: String, enum: ["ONLINE_UPLOAD", "PAPER_SCAN"], default: "ONLINE_UPLOAD" },
+    paperReceiptId: { type: Schema.Types.ObjectId, ref: "PaperDossierReceipt", default: null },
 
     documentType: { type: String, enum: ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF"], required: true },
     // IDENTITY (CCCD) => 2 phần tử (FRONT + BACK); các loại khác thường chỉ có 1 phần tử (SINGLE).
@@ -40,6 +44,7 @@ const verificationDocumentSchema = new Schema(
 
 verificationDocumentSchema.index({ userId: 1, documentType: 1 });
 verificationDocumentSchema.index({ applicationId: 1 });
+verificationDocumentSchema.index({ applicationId: 1, checklistItemCode: 1 });
 verificationDocumentSchema.index({ status: 1 });
 
 module.exports = mongoose.model("VerificationDocument", verificationDocumentSchema);

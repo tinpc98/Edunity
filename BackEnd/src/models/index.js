@@ -22,6 +22,7 @@ module.exports = {
   ScholarshipCampaign: require("./ScholarshipCampaign"),
   SponsorContribution: require("./SponsorContribution"),
   ScholarshipApplication: require("./ScholarshipApplication"),
+  PaperDossierReceipt: require("./PaperDossierReceipt"),
   Scholarship: require("./Scholarship"),
   ScholarshipUsage: require("./ScholarshipUsage"),
   VerificationDocument: require("./VerificationDocument"),

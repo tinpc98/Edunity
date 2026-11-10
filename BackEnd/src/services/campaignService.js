@@ -5,13 +5,21 @@ const { paged, validationError, parseDate, isBlank } = require("../utils/http");
 const { toNum, toDec, parseAmount } = require("../utils/money");
 const { audit } = require("./auditService");
 const { toPublic } = require("../utils/publicView");
+const { parseChecklistDefinition, parseDossierPolicy } = require("./scholarshipDossierGateService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const PUBLIC_STATUSES = ["OPEN_FOR_FUNDING", "CLOSED"];
 const DATE_FIELDS = ["fundingStart", "fundingEnd", "applicationStart", "applicationEnd"];
 const TEXT_FIELDS = ["description", "eligibilityCriteria"];
-// Once published, the money rules and the scope Sponsors/Students relied on can no longer change
-const LOCKED_AFTER_PUBLISH = ["targetBudget", "expectedSlots", "awardAmountPerStudent", "scope"];
+// Once published, the money rules, checklist and the scope Sponsors/Students relied on can no longer change
+const LOCKED_AFTER_PUBLISH = [
+  "targetBudget",
+  "expectedSlots",
+  "awardAmountPerStudent",
+  "scope",
+  "documentChecklist",
+  "dossierPolicy",
+];
 const SCOPE_MODELS = { categoryIds: Category, subjectIds: Subject, courseIds: Course };
 
 const campaignNotFound = () => new AppError("Campaign not found", "CAMPAIGN_NOT_FOUND", 404);
@@ -84,6 +92,12 @@ const applyInput = async (campaign, body) => {
     if (body[field] !== undefined) campaign[field] = parseDate(body[field], field);
   }
   if (body.scope !== undefined) campaign.scope = await parseScope(body.scope);
+  if (body.documentChecklist !== undefined) {
+    campaign.documentChecklist = parseChecklistDefinition(body.documentChecklist);
+  }
+  if (body.dossierPolicy !== undefined) {
+    campaign.dossierPolicy = parseDossierPolicy(body.dossierPolicy, campaign.dossierPolicy);
+  }
 
   // UC-ADM-03: System validate budget, slots và award amount
   const missing = ["title", "targetBudget", "expectedSlots", "awardAmountPerStudent"].filter(
@@ -230,6 +244,67 @@ const changeStatus = async (adminId, campaignId, from, to, action) => {
 const publishCampaign = (adminId, campaignId) => changeStatus(adminId, campaignId, "DRAFT", "OPEN_FOR_FUNDING", "CAMPAIGN_PUBLISHED");
 const closeCampaign = (adminId, campaignId) => changeStatus(adminId, campaignId, "OPEN_FOR_FUNDING", "CLOSED", "CAMPAIGN_CLOSED");
 
+const getCampaignChecklist = async (campaignId, viewerRole) => {
+  const campaign = await getCampaignOrThrow(campaignId);
+  if (viewerRole !== "ADMIN" && !PUBLIC_STATUSES.includes(campaign.status)) {
+    throw campaignNotFound();
+  }
+  return {
+    campaignId: campaign._id.toString(),
+    title: campaign.title,
+    status: campaign.status,
+    documentChecklist: campaign.documentChecklist || [],
+    dossierPolicy: campaign.dossierPolicy || {
+      requireGuardianInfo: false,
+      requireSchoolInfo: false,
+      allowPaperDossier: true,
+      allowDraftSave: true,
+      requireGuardianConsentForMinor: false,
+    },
+  };
+};
+
+const updateCampaignChecklist = async (adminId, campaignId, body) => {
+  const campaign = await getCampaignOrThrow(campaignId);
+  if (campaign.status === "CLOSED") {
+    throw new AppError("A closed campaign cannot be updated", "CAMPAIGN_CLOSED", 409);
+  }
+  if (campaign.status !== "DRAFT") {
+    throw Object.assign(
+      new AppError("Checklist and dossier policy cannot be changed after the campaign is published", "CAMPAIGN_FIELD_LOCKED", 409),
+      { details: { fields: ["documentChecklist", "dossierPolicy"] } }
+    );
+  }
+
+  if (body.documentChecklist === undefined && body.dossierPolicy === undefined) {
+    throw validationError("documentChecklist or dossierPolicy is required");
+  }
+
+  const beforeChecklistCount = Array.isArray(campaign.documentChecklist) ? campaign.documentChecklist.length : 0;
+  if (body.documentChecklist !== undefined) {
+    campaign.documentChecklist = parseChecklistDefinition(body.documentChecklist);
+  }
+  if (body.dossierPolicy !== undefined) {
+    campaign.dossierPolicy = parseDossierPolicy(body.dossierPolicy, campaign.dossierPolicy);
+  }
+  campaign.updatedBy = adminId;
+  await campaign.save();
+
+  await audit({
+    actorAdminId: adminId,
+    action: "CAMPAIGN_CHECKLIST_UPDATED",
+    targetType: "ScholarshipCampaign",
+    targetId: campaign._id,
+    beforeState: { checklistCount: beforeChecklistCount },
+    afterState: {
+      checklistCount: campaign.documentChecklist.length,
+      dossierPolicy: campaign.dossierPolicy,
+    },
+  });
+
+  return getCampaignChecklist(campaign._id, "ADMIN");
+};
+
 module.exports = {
   getCampaignOrThrow,
   isAcceptingFunding,
@@ -237,6 +312,8 @@ module.exports = {
   present,
   listCampaigns,
   getPublicCampaign,
+  getCampaignChecklist,
+  updateCampaignChecklist,
   adminListCampaigns,
   adminGetCampaign,
   createCampaign,
