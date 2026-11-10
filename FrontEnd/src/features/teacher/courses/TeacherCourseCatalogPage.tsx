@@ -80,7 +80,8 @@ export default function TeacherCourseCatalogPage() {
     staleTime: 60_000,
   });
 
-  const courses = coursesData?.items || [];
+  // Only ACTIVE courses are eligible for Teacher class creation
+  const courses = (coursesData?.items || []).filter((c) => c.status === "ACTIVE");
   const total = coursesData?.total || 0;
 
   return (

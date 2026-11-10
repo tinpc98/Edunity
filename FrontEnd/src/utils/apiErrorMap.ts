@@ -79,6 +79,53 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       return "Không tìm thấy tệp tài liệu trên hệ thống.";
     }
 
+    // Catalog, Course & CourseProposal errors
+    if (err.code === "DUPLICATE_CATEGORY") {
+      return "Danh mục với tên này đã tồn tại. Vui lòng chọn tên danh mục khác.";
+    }
+    if (err.code === "DUPLICATE_SUBJECT") {
+      return "Môn học với tên này đã tồn tại trong danh mục đã chọn. Vui lòng chọn tên môn học khác.";
+    }
+    if (err.code === "DUPLICATE_COURSE") {
+      return "Khóa học với tên này đã tồn tại trong môn học đã chọn. Vui lòng đặt tên khóa học khác.";
+    }
+    if (err.code === "DUPLICATE_SLUG") {
+      return "Đường dẫn tĩnh (slug) đã tồn tại. Vui lòng đổi tên hoặc nhập slug khác.";
+    }
+    if (err.code === "GRADE_LEVEL_CATEGORY_MISMATCH") {
+      return "Khối lớp đã chọn không thuộc phạm vi khối lớp của danh mục này. Vui lòng chọn lại khối lớp phù hợp.";
+    }
+    if (err.code === "INVALID_GRADE_LEVEL") {
+      return "Khối lớp không hợp lệ. Vui lòng chọn khối lớp theo danh sách chuẩn.";
+    }
+    if (err.code === "SUBJECT_CATEGORY_MISMATCH") {
+      return "Môn học đã chọn không thuộc danh mục tương ứng. Vui lòng chọn lại môn học.";
+    }
+    if (err.code === "COURSE_PROPOSAL_NOT_PENDING") {
+      return "Đề xuất khóa học này không còn ở trạng thái chờ duyệt. Vui lòng làm mới danh sách.";
+    }
+    if (err.code === "COURSE_PROPOSAL_NOT_EDITABLE") {
+      return "Đề xuất khóa học này hiện không thể chỉnh sửa.";
+    }
+    if (err.code === "COURSE_PROPOSAL_NOT_FOUND") {
+      return "Không tìm thấy đề xuất khóa học yêu cầu.";
+    }
+    if (err.code === "COURSE_NOT_FOUND") {
+      return "Không tìm thấy khóa học hoặc khóa học đã tạm ngưng hoạt động.";
+    }
+    if (err.code === "COURSE_HAS_DEPENDENCIES") {
+      return "Khóa học đã có lớp học hoặc dữ liệu nghiệp vụ liên quan nên không thể xóa. Vui lòng chuyển khóa học sang trạng thái Tạm ngưng (INACTIVE).";
+    }
+    if (err.code === "COURSE_NOT_ACTIVE") {
+      return "Khóa học này hiện không ở trạng thái Hoạt động (ACTIVE) nên không thể sử dụng để tạo hoặc duyệt lớp học mới.";
+    }
+    if (err.code === "CATEGORY_NOT_FOUND") {
+      return "Không tìm thấy danh mục yêu cầu.";
+    }
+    if (err.code === "SUBJECT_NOT_FOUND") {
+      return "Không tìm thấy môn học yêu cầu.";
+    }
+
     // Status codes
     if (err.status === 401) {
       return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";

@@ -133,6 +133,8 @@ export interface ClassDiscoveryItem {
   scheduleText: string;
   scheduleDays?: string;
   scheduleTime?: string;
+  /** Raw weekly slots; empty when the teacher has not set a schedule */
+  schedule?: ScheduleEntry[];
   timeOfDay: TimeOfDay;
   ratingAverage: number;
   ratingCount: number;
