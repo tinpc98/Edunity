@@ -29,12 +29,25 @@ export function deriveScheduleText(schedule?: { dayOfWeek: number; startTime: st
   return `${days} • ${time}`;
 }
 
+/**
+ * One line per weekly slot, Monday first, each with its own time range
+ * (unlike deriveScheduleDaysAndTime which only shows the first slot's time). Empty when no schedule.
+ */
+export function formatScheduleEntries(schedule?: { dayOfWeek: number; startTime: string; endTime: string }[]): string[] {
+  if (!schedule || schedule.length === 0) return [];
+  const mondayFirst = (day: number) => (day === 0 ? 7 : day);
+  return [...schedule]
+    .sort((a, b) => mondayFirst(a.dayOfWeek) - mondayFirst(b.dayOfWeek) || a.startTime.localeCompare(b.startTime))
+    .map((s) => `${DAY_NAMES[s.dayOfWeek] || `Thứ ${s.dayOfWeek}`} · ${s.startTime} – ${s.endTime}`);
+}
+
 export function deriveScheduleDaysAndTime(schedule?: { dayOfWeek: number; startTime: string; endTime: string }[]): {
   days: string;
   time: string;
 } {
   if (!schedule || schedule.length === 0) {
-    return { days: "Linh hoạt", time: "08:30 – 10:30" };
+    // No schedule yet: return empty values rather than a made-up time slot
+    return { days: "", time: "" };
   }
   const days = schedule.map((s) => DAY_NAMES[s.dayOfWeek] || `Thứ ${s.dayOfWeek}`).join(" & ");
   const time = `${schedule[0].startTime} – ${schedule[0].endTime}`;
@@ -203,6 +216,7 @@ export function adaptClassModelToDiscoveryItem(cls: ClassModel): ClassDiscoveryI
     scheduleText,
     scheduleDays,
     scheduleTime,
+    schedule: cls.schedule || [],
     timeOfDay,
     ratingAverage: cls.ratingAverage,
     ratingCount: cls.ratingCount,
