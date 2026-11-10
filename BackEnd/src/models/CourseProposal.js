@@ -17,6 +17,7 @@ const courseProposalSchema = new Schema(
     gradeLevel: { type: String, enum: GRADE_LEVELS, default: null }, // BR-44: chọn từ select box, không nhập tự do
     prerequisites: String,
     estimatedDuration: String,
+    curriculumReference: { type: String, trim: true, default: null },
 
     status: {
       type: String,

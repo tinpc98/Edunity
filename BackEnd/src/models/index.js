@@ -5,6 +5,8 @@ module.exports = {
   Subject: require("./Subject"),
   Course: require("./Course"),
   CourseProposal: require("./CourseProposal"),
+  SyllabusVersion: require("./SyllabusVersion"),
+  CurriculumUnit: require("./CurriculumUnit"),
   Class: require("./Class"),
   Session: require("./Session"),
   SessionAttendance: require("./SessionAttendance"),

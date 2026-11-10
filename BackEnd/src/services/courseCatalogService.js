@@ -9,7 +9,7 @@ const { allowedGradeLevelsForCategory, resolveGradeLevel } = require("../utils/g
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const STATUSES = ["ACTIVE", "INACTIVE"];
-const COURSE_TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites"];
+const COURSE_TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "curriculumReference"];
 
 const presentCategory = (category) => ({
   ...category,
@@ -32,10 +32,18 @@ const resolveStatus = (status) => {
   return status;
 };
 
+const normalizeLevel = (rawLevel) => {
+  if (rawLevel === undefined || rawLevel === null || rawLevel === "") return undefined;
+  const upper = String(rawLevel).trim().toUpperCase();
+  if (upper === "BASIC") return "BEGINNER";
+  return upper;
+};
+
 const resolveLevel = (level) => {
-  if (level === undefined || level === null || level === "") return undefined;
-  if (!COURSE_LEVELS.includes(level)) throw validationError(`level must be one of ${COURSE_LEVELS.join(", ")}`);
-  return level;
+  const normalized = normalizeLevel(level);
+  if (normalized === undefined) return undefined;
+  if (!COURSE_LEVELS.includes(normalized)) throw validationError(`level must be one of ${COURSE_LEVELS.join(", ")}`);
+  return normalized;
 };
 
 const getCategoryOrThrow = async (categoryId) => {
@@ -174,7 +182,7 @@ const searchCourses = async (query, paging) => {
 
   if (query.search) {
     const pattern = { $regex: escapeRegex(query.search), $options: "i" };
-    filter.$or = [{ title: pattern }, { description: pattern }];
+    filter.$or = [{ title: pattern }, { description: pattern }, { curriculumReference: pattern }];
   }
   for (const field of ["categoryId", "subjectId"]) {
     if (query[field]) {
@@ -190,6 +198,9 @@ const searchCourses = async (query, paging) => {
     filter.gradeLevel = query.gradeLevel;
   }
   if (query.level) filter.level = resolveLevel(query.level);
+  if (query.curriculumReference) {
+    filter.curriculumReference = { $regex: escapeRegex(query.curriculumReference.trim()), $options: "i" };
+  }
 
   const [items, total] = await Promise.all([
     Course.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
@@ -265,6 +276,14 @@ const updateCourse = async (adminId, courseId, body) => {
   const course = await getCourseOrThrow(courseId);
   const category = await getCategoryOrThrow(course.categoryId);
 
+  if (body.syllabus !== undefined && course.publishedSyllabusVersionId && body.syllabus !== course.syllabus) {
+    throw new AppError(
+      "Course syllabus is governed by an immutable published SyllabusVersion; create a new DRAFT SyllabusVersion instead",
+      "SYLLABUS_VERSION_IMMUTABLE",
+      409
+    );
+  }
+
   if (body.title !== undefined) {
     if (isBlank(body.title)) throw validationError("title must not be empty");
     await assertCourseTitleAvailable(course.subjectId, body.title, course._id);
@@ -301,4 +320,6 @@ module.exports = {
   insertCourse,
   createCourse,
   updateCourse,
+  normalizeLevel,
+  resolveLevel,
 };

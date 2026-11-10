@@ -1,5 +1,6 @@
 const catalog = require("../services/courseCatalogService");
 const proposals = require("../services/courseProposalService");
+const syllabusService = require("../services/syllabusService");
 const { handle, parsePaging } = require("../utils/http");
 
 const body = (req) => req.body || {};
@@ -33,3 +34,31 @@ exports.adminGetProposal = handle((req) => proposals.adminGetProposal(req.params
 exports.approveProposal = handle((req) => proposals.approveProposal(req.user.id, req.params.id, body(req)));
 exports.rejectProposal = handle((req) => proposals.rejectProposal(req.user.id, req.params.id, body(req)));
 exports.requestProposalChanges = handle((req) => proposals.requestProposalChanges(req.user.id, req.params.id, body(req)));
+
+// Syllabus Versions & Curriculum Units (CUR-02)
+exports.getCoursePublishedSyllabus = handle((req) => syllabusService.getPublishedSyllabus(req.params.id));
+exports.listSyllabusVersions = handle((req) => syllabusService.listVersions(req.params.id));
+exports.createSyllabusVersion = handle((req) => syllabusService.createDraftVersion(req.user.id, req.params.id, body(req)), 201);
+exports.getSyllabusVersion = handle((req) => syllabusService.getVersionDetail(req.params.id, req.params.versionId));
+exports.updateSyllabusVersion = handle((req) =>
+  syllabusService.updateDraftVersion(req.user.id, req.params.id, req.params.versionId, body(req))
+);
+exports.publishSyllabusVersion = handle((req) =>
+  syllabusService.publishVersion(req.user.id, req.params.id, req.params.versionId)
+);
+exports.archiveSyllabusVersion = handle((req) =>
+  syllabusService.archiveVersion(req.user.id, req.params.id, req.params.versionId)
+);
+exports.addCurriculumUnit = handle(
+  (req) => syllabusService.addUnit(req.user.id, req.params.id, req.params.versionId, body(req)),
+  201
+);
+exports.updateCurriculumUnit = handle((req) =>
+  syllabusService.updateUnit(req.user.id, req.params.id, req.params.versionId, req.params.unitId, body(req))
+);
+exports.deleteCurriculumUnit = handle((req) =>
+  syllabusService.deleteUnit(req.user.id, req.params.id, req.params.versionId, req.params.unitId)
+);
+exports.reorderCurriculumUnits = handle((req) =>
+  syllabusService.reorderUnits(req.user.id, req.params.id, req.params.versionId, body(req))
+);

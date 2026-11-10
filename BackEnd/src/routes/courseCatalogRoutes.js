@@ -35,4 +35,17 @@ router.post("/admin/course-proposals/:id/approve", admin, controller.approveProp
 router.post("/admin/course-proposals/:id/reject", admin, controller.rejectProposal);
 router.post("/admin/course-proposals/:id/request-changes", admin, controller.requestProposalChanges);
 
+// Syllabus Versions & Curriculum Units (CUR-02)
+router.get("/courses/:id/syllabus", controller.getCoursePublishedSyllabus);
+router.get("/admin/courses/:id/syllabus-versions", admin, controller.listSyllabusVersions);
+router.post("/admin/courses/:id/syllabus-versions", admin, controller.createSyllabusVersion);
+router.get("/admin/courses/:id/syllabus-versions/:versionId", admin, controller.getSyllabusVersion);
+router.patch("/admin/courses/:id/syllabus-versions/:versionId", admin, controller.updateSyllabusVersion);
+router.post("/admin/courses/:id/syllabus-versions/:versionId/publish", admin, controller.publishSyllabusVersion);
+router.post("/admin/courses/:id/syllabus-versions/:versionId/archive", admin, controller.archiveSyllabusVersion);
+router.put("/admin/courses/:id/syllabus-versions/:versionId/units/reorder", admin, controller.reorderCurriculumUnits);
+router.post("/admin/courses/:id/syllabus-versions/:versionId/units", admin, controller.addCurriculumUnit);
+router.patch("/admin/courses/:id/syllabus-versions/:versionId/units/:unitId", admin, controller.updateCurriculumUnit);
+router.delete("/admin/courses/:id/syllabus-versions/:versionId/units/:unitId", admin, controller.deleteCurriculumUnit);
+
 module.exports = router;

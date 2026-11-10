@@ -74,6 +74,8 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | **404 Not Found** | `CATEGORY_NOT_FOUND` | Không tìm thấy Chuyên mục |
 | | `SUBJECT_NOT_FOUND` | Không tìm thấy Môn học |
 | | `COURSE_NOT_FOUND` | Không tìm thấy Khóa học |
+| | `SYLLABUS_VERSION_NOT_FOUND` | Không tìm thấy Phiên bản giáo trình (hoặc không thuộc Khóa học) |
+| | `CURRICULUM_UNIT_NOT_FOUND` | Không tìm thấy Đơn vị bài học trong Phiên bản giáo trình |
 | | `CLASS_NOT_FOUND` | Không tìm thấy Lớp học |
 | | `SESSION_NOT_FOUND` | Không tìm thấy Buổi học |
 | | `CAMPAIGN_NOT_FOUND` | Không tìm thấy Chiến dịch học bổng |
@@ -82,6 +84,11 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | **405 Method Not Allowed** | `METHOD_NOT_ALLOWED` | Gọi phương thức HTTP bị cấm (ví dụ: `GET /api/sessions/:id/join`) |
 | **409 Conflict** | `DUPLICATE_CATEGORY / SUBJECT / COURSE` | Trùng lặp tên thực thể trong cùng cấp danh mục |
 | | `DUPLICATE_SLUG` | Trùng lặp đường dẫn tĩnh SEO |
+| | `SYLLABUS_VERSION_IMMUTABLE` | Phiên bản giáo trình đã `PUBLISHED`/`ARCHIVED` bị khóa bất biến, không thể chỉnh sửa |
+| | `SYLLABUS_VERSION_CONFLICT` | Xung đột số thứ tự phiên bản giáo trình đồng thời |
+| | `SYLLABUS_PUBLISH_CONFLICT` | Xung đột publish phiên bản giáo trình đồng thời trên cùng khóa học |
+| | `SYLLABUS_VERSION_ALREADY_PUBLISHED` | Phiên bản giáo trình đã ở trạng thái `PUBLISHED` |
+| | `DUPLICATE_UNIT_ORDER` | Trùng `unitOrder` trong cùng Phiên bản giáo trình |
 | | `CLASS_NOT_EDITABLE` | Lớp học không ở trạng thái `DRAFT` hoặc `REJECTED` |
 | | `RESCHEDULE_REQUIRED` | Không được sửa ngày giờ trực tiếp khi lớp đang `OPEN`/`IN_PROGRESS` |
 | | `TEACHER_SCHEDULE_CONFLICT` | Lịch dạy bù bị trùng với buổi khác của Giảng viên |
@@ -117,8 +124,19 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 | **CUR** | `GET` | `/api/courses` | Public | Tìm kiếm khóa học công khai (`ACTIVE`) |
 | **CUR** | `GET` | `/api/courses/:id` | Public | Chi tiết khóa học + số lớp đang `OPEN` |
 | **CUR** | `GET` | `/api/courses/:id/classes` | Public | Danh sách lớp `OPEN` của khóa học |
+| **CUR** | `GET` | `/api/courses/:id/syllabus` | Public | Giáo trình đã `PUBLISHED` + `CurriculumUnit` (hoặc fallback `Course.syllabus`) |
 | **CUR** | `POST` | `/api/admin/courses` | `ADMIN` | Toàn quyền tạo Khóa học |
-| **CUR** | `PATCH` | `/api/admin/courses/:id` | `ADMIN` | Toàn quyền sửa Khóa học |
+| **CUR** | `PATCH` | `/api/admin/courses/:id` | `ADMIN` | Toàn quyền sửa Khóa học (khóa sửa `syllabus` nếu đã có `publishedSyllabusVersionId`) |
+| **CUR** | `GET` | `/api/admin/courses/:id/syllabus-versions` | `ADMIN` | Danh sách tất cả phiên bản giáo trình của Khóa học |
+| **CUR** | `POST` | `/api/admin/courses/:id/syllabus-versions` | `ADMIN` | Tạo phiên bản `DRAFT` mới (từ đầu hoặc clone từ version cũ) |
+| **CUR** | `GET` | `/api/admin/courses/:id/syllabus-versions/:versionId` | `ADMIN` | Xem chi tiết một phiên bản giáo trình và danh sách bài học |
+| **CUR** | `PATCH` | `/api/admin/courses/:id/syllabus-versions/:versionId` | `ADMIN` | Cập nhật tiêu đề/tóm tắt phiên bản `DRAFT` |
+| **CUR** | `POST` | `/api/admin/courses/:id/syllabus-versions/:versionId/publish` | `ADMIN` | Publish `DRAFT` $\rightarrow$ `PUBLISHED` và archive bản cũ (transaction) |
+| **CUR** | `POST` | `/api/admin/courses/:id/syllabus-versions/:versionId/archive` | `ADMIN` | Đưa phiên bản sang trạng thái `ARCHIVED` bất biến |
+| **CUR** | `POST` | `/api/admin/courses/:id/syllabus-versions/:versionId/units` | `ADMIN` | Thêm `CurriculumUnit` vào phiên bản `DRAFT` |
+| **CUR** | `PATCH` | `/api/admin/courses/:id/syllabus-versions/:versionId/units/:unitId` | `ADMIN` | Sửa `CurriculumUnit` trong phiên bản `DRAFT` |
+| **CUR** | `DELETE` | `/api/admin/courses/:id/syllabus-versions/:versionId/units/:unitId` | `ADMIN` | Soft-delete `CurriculumUnit` trong phiên bản `DRAFT` |
+| **CUR** | `PUT` | `/api/admin/courses/:id/syllabus-versions/:versionId/units/reorder` | `ADMIN` | Sắp xếp lại `unitOrder` của phiên bản `DRAFT` |
 | **CUR** | `POST` | `/api/teacher/course-proposals` | `TEACHER` | Yêu cầu `verificationStatus = "VERIFIED"` |
 | **CUR** | `GET` | `/api/teacher/course-proposals` | `TEACHER` | Chỉ xem đề xuất do chính mình tạo |
 | **CUR** | `PATCH` | `/api/teacher/course-proposals/:id` | `TEACHER` | Chỉ sửa khi `PENDING_REVIEW` hoặc `NEED_CHANGES` |
@@ -232,6 +250,7 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
   "syllabus": "Tuần 1-4: Tứ giác nội tiếp; Tuần 5-8: Góc tạo bởi tiếp tuyến và dây cung",
   "level": "ADVANCED",
   "gradeLevel": "GRADE_9",
+  "curriculumReference": "Cánh Diều",
   "estimatedDuration": "8 tuần"
 }
 ```
@@ -247,6 +266,7 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
     "title": "Toán hình học không gian 9 nâng cao",
     "level": "ADVANCED",
     "gradeLevel": "GRADE_9",
+    "curriculumReference": "Cánh Diều",
     "status": "PENDING_REVIEW",
     "createdAt": "2026-11-07T15:00:00.000Z"
   }
@@ -263,6 +283,37 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
   }
 }
 ```
+
+#### C03. Lấy giáo trình công khai & Quản lý Phiên bản Giáo trình (`CUR-02`)
+- **Public (`GET /api/courses/:id/syllabus`):** Trả về phiên bản `PUBLISHED` cùng danh sách `CurriculumUnit` đã ẩn thông tin nội bộ (`publishedBy`, `createdBy`). Nếu khóa học chưa có phiên bản giáo trình, fallback sang `legacySyllabus` (`Course.syllabus`).
+```json
+{
+  "success": true,
+  "data": {
+    "courseId": "66b1a2c3d4e5f6a7b8c9d033",
+    "courseTitle": "Toán 10 – Nền tảng Đại số và Hình học",
+    "source": "VERSIONED",
+    "version": {
+      "id": "66d4e5f6a7b8c9d0e1f2a401",
+      "versionNumber": 1,
+      "title": "Giáo trình Toán 10 v1",
+      "status": "PUBLISHED",
+      "publishedAt": "2026-11-09T10:00:00.000Z"
+    },
+    "units": [
+      {
+        "id": "66d4e5f6a7b8c9d0e1f2a501",
+        "unitOrder": 1,
+        "title": "Mệnh đề và Tập hợp",
+        "durationMinutes": 90,
+        "topics": ["Mệnh đề", "Tập hợp và phép toán"]
+      }
+    ],
+    "legacySyllabus": "1. Mệnh đề và Tập hợp"
+  }
+}
+```
+- **Admin Publish (`POST /api/admin/courses/:id/syllabus-versions/:versionId/publish`):** Chuyển `DRAFT` $\rightarrow$ `PUBLISHED` trong transaction (archive bản cũ nếu có, đồng bộ `Course.publishedSyllabusVersionId` và `Course.syllabus`). Bản đã `PUBLISHED` hoặc `ARCHIVED` trả lỗi `409 SYLLABUS_VERSION_IMMUTABLE` khi cố chỉnh sửa nội dung.
 
 ---
 

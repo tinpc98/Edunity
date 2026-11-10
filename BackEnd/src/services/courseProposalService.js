@@ -10,7 +10,7 @@ const { notify, notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
 const { getVerifiedTeacher } = require("./teacherClassService");
 
-const TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "estimatedDuration"];
+const TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "estimatedDuration", "curriculumReference"];
 const STATUSES = ["PENDING_REVIEW", "NEED_CHANGES", "APPROVED", "REJECTED"];
 
 const getActiveTeacher = async (teacherId) => {
@@ -39,15 +39,13 @@ const buildProposalData = async (data) => {
   if (subject.categoryId.toString() !== category._id.toString()) {
     throw new AppError("Subject does not belong to the selected category", "SUBJECT_CATEGORY_MISMATCH", 400);
   }
-  if (data.level !== undefined && data.level !== null && data.level !== "" && !COURSE_LEVELS.includes(data.level)) {
-    throw validationError(`level must be one of ${COURSE_LEVELS.join(", ")}`);
-  }
+  const level = catalog.resolveLevel(data.level);
 
   const proposal = {
     categoryId: category._id,
     subjectId: subject._id,
     title: data.title,
-    level: data.level || undefined,
+    level,
     gradeLevel: resolveGradeLevel(category, data.gradeLevel),
   };
   for (const field of TEXT_FIELDS) proposal[field] = data[field];
@@ -154,6 +152,7 @@ const approveProposal = async (adminId, proposalId, body) => {
   const subject = await catalog.getSubjectOrThrow(proposal.subjectId);
   const data = proposal.toObject();
   if (body.gradeLevel !== undefined) data.gradeLevel = body.gradeLevel;
+  if (body.curriculumReference !== undefined) data.curriculumReference = body.curriculumReference;
 
   const session = await mongoose.startSession();
   let course;
