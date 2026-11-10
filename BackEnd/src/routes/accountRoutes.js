@@ -6,11 +6,18 @@ const requireRole = require("../middlewares/requireRole");
 const router = express.Router();
 const admin = [authMiddleware, requireRole("ADMIN")];
 const teacher = [authMiddleware, requireRole("TEACHER")];
+const student = [authMiddleware, requireRole("STUDENT")];
+const anyLmsRole = [authMiddleware, requireRole("STUDENT", "TEACHER", "ADMIN")];
 
 // Reviews
-router.post("/classes/:id/reviews", authMiddleware, requireRole("STUDENT"), controller.createReview);
+router.post("/classes/:id/reviews", student, controller.createReview);
 router.get("/classes/:id/reviews", controller.getClassReviews);
 router.get("/teachers/:id/reviews", controller.getTeacherReviews);
+router.post("/sessions/:id/reviews", student, controller.createSessionReview);
+router.get("/sessions/:id/reviews", anyLmsRole, controller.getSessionReviews);
+router.get("/classes/:id/session-reviews", anyLmsRole, controller.getClassSessionReviews);
+router.get("/me/reviews", student, controller.getMyReviews);
+router.delete("/admin/session-reviews/:id", admin, controller.adminDeleteSessionReview);
 
 // Teacher verification (BR-01)
 router.post("/teacher/verification", teacher, controller.submitVerification);

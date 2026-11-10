@@ -114,6 +114,20 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `CLASS_SCHEDULE_CONFLICT` | Lịch dạy bù bị trùng với buổi khác của Lớp học |
 | | `DUPLICATE_RESCHEDULE_REQUEST` | Buổi học đã có yêu cầu dời lịch đang chờ duyệt |
 | | `DUPLICATE_APPLICATION` | Học viên đã có hồ sơ đang xử lý cho Chiến dịch này |
+| | `MAX_ATTEMPTS_EXCEEDED` | Vượt quá số lượt nộp bài tập / làm bài kiểm tra tối đa cấu hình |
+| | `LATE_SUBMISSION_NOT_ALLOWED` | Đã quá hạn nộp bài và bài tập không cho phép nộp muộn |
+| | `ASSIGNMENT_CLOSED` | Bài tập đã đóng, không nhận thêm bài nộp |
+| | `ASSIGNMENT_HAS_SUBMISSIONS` | Không thể xóa hoặc đổi thang điểm khi đã có bài nộp |
+| | `ALREADY_GRADED` | Bài nộp đã có điểm; cần gọi API regrade kèm lý do (`reason`) |
+| | `GRADE_HISTORY_IMMUTABLE` | Không được sửa hoặc xóa bản ghi nhật ký điểm `GradeHistory` (`append-only`) |
+| | `ASSESSMENT_NOT_EDITABLE` | Không thể chỉnh sửa cấu trúc/câu hỏi sau khi `PUBLISHED` hoặc `ARCHIVED` |
+| | `ATTEMPT_ALREADY_IN_PROGRESS` | Học viên đang có lượt làm bài `IN_PROGRESS` chưa kết thúc |
+| | `ATTEMPT_ALREADY_SUBMITTED` | Lượt làm bài đã nộp trước đó |
+| | `ATTEMPT_EXPIRED` | Đã hết thời gian làm bài (`expiresAt`) |
+| | `PLACEMENT_ATTEMPT_NOT_GRADED` | Chưa thể sinh `PlacementResult` khi `Attempt` chưa đạt trạng thái `GRADED` |
+| | `PLACEMENT_BAND_NOT_CONFIGURED` | Chưa cấu hình dải điểm phân loại đầu vào khớp với tỷ lệ điểm |
+| | `SESSION_REVIEW_NOT_OPEN` | Chỉ được đánh giá buổi học sau khi `Session` hoàn thành (`COMPLETED`) |
+| | `DUPLICATE_REVIEW` | Học viên đã đánh giá lớp/buổi học này rồi |
 | | `DOSSIER_CHECKLIST_INCOMPLETE` | Hồ sơ chưa đáp ứng đủ mục checklist bắt buộc (online và/hoặc bản giấy) |
 | | `DUPLICATE_PAPER_RECEIPT` | Hồ sơ đã có biên nhận bản giấy đang hoạt động (`AID-04`) |
 | | `DUPLICATE_TRACKING_NUMBER` | Trùng mã vận đơn bưu điện đang hoạt động |
@@ -227,8 +241,34 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 | **LMS** | `POST` | `/api/admin/reschedule-requests/:id/review` | `ADMIN` | Phê duyệt tạo buổi học bù |
 | **LMS** | `POST` | `/api/admin/session-refund-reviews/:id/review`| `ADMIN`| Xem xét hoàn tiền an toàn liên nhóm |
 | **LMS** | `POST` | `/api/classes/:id/reviews` | `STUDENT` | Đã học và có ít nhất 1 buổi `COMPLETED` |
-| **LMS** | `GET` | `/api/classes/:id/reviews` | Public | Đánh giá của lớp học |
+| **LMS** | `GET` | `/api/classes/:id/reviews` | Public | Đánh giá của lớp học (`Review` + tóm tắt `SessionReview`) |
 | **LMS** | `GET` | `/api/teachers/:id/reviews` | Public | Đánh giá của giảng viên |
+| **LMS** | `POST` | `/api/sessions/:id/reviews` | `STUDENT` | Đã học thật qua `SessionAttendance` + buổi đã `COMPLETED` (`LMS-10`) |
+| **LMS** | `GET` | `/api/sessions/:id/reviews` | `STUDENT`, `TEACHER`, `ADMIN` | Danh sách đánh giá buổi học (theo quyền lớp) (`LMS-10`) |
+| **LMS** | `GET` | `/api/classes/:id/session-reviews` | `STUDENT`, `TEACHER`, `ADMIN` | Danh sách đánh giá các buổi trong lớp (`LMS-10`) |
+| **LMS** | `GET` | `/api/me/reviews` | `STUDENT` | Lịch sử đánh giá lớp và buổi học của tôi (`LMS-10`) |
+| **LMS** | `DELETE` | `/api/admin/session-reviews/:id` | `ADMIN` | Soft-delete đánh giá buổi học vi phạm + `AuditLog` |
+| **LMS** | `GET` | `/api/learning-resources/:id` | `STUDENT`, `TEACHER`, `ADMIN` | Xem chi tiết học liệu (ẩn `storageKey` với Student) (`LMS-03`) |
+| **LMS** | `GET` | `/api/learning-resources/:id/download-url` | `STUDENT`, `TEACHER`, `ADMIN` | Cấp signed URL tải học liệu sau khi kiểm tra RBAC/Enrollment (`LMS-03`) |
+| **LMS** | `GET` | `/api/courses/:courseId/learning-resources` | `STUDENT`, `TEACHER`, `ADMIN` | Học liệu cấp Khóa học (`LMS-03`) |
+| **LMS** | `GET` | `/api/classes/:classId/learning-resources` | `STUDENT`, `TEACHER`, `ADMIN` | Học liệu cấp Lớp học (`LMS-03`) |
+| **LMS** | `GET` | `/api/sessions/:sessionId/learning-resources` | `STUDENT`, `TEACHER`, `ADMIN` | Học liệu buổi học (kết hợp `LearningResource` + `Session.contents` chưa migrate) (`LMS-03`) |
+| **LMS** | `GET` | `/api/me/learning-resources` | `STUDENT` | Danh sách học liệu từ các lớp đã đăng ký (`LMS-03`) |
+| **LMS** | `GET`/`POST` | `/api/teacher/learning-resources` | `TEACHER` | Tạo/xem học liệu cho Lớp/Buổi của chính mình (`LMS-03`) |
+| **LMS** | `PATCH`/`DELETE` | `/api/teacher/learning-resources/:id` | `TEACHER` | Sửa/xóa mềm học liệu lớp mình phụ trách (`LMS-03`) |
+| **LMS** | `POST` | `/api/teacher/sessions/:sessionId/learning-resources/migrate` | `TEACHER` | Di trú idempotent từ `Session.contents` mà giữ nguyên dữ liệu gốc (`LMS-03`) |
+| **LMS** | `GET`/`POST`/`PATCH`/`DELETE` | `/api/admin/learning-resources*` | `ADMIN` | Quản trị học liệu toàn hệ thống + migrate theo buổi (`LMS-03`) |
+| **LMS** | `POST` | `/api/teacher/classes/:classId/assignments` | `TEACHER` | Tạo bài tập trong lớp phụ trách (`LMS-05`) |
+| **LMS** | `GET`/`PATCH`/`DELETE`/`POST publish|close` | `/api/teacher/assignments/:id*` | `TEACHER` | Quản lý vòng đời bài tập & xem bài nộp (`LMS-05`) |
+| **LMS** | `GET` | `/api/me/assignments*` & `/api/me/classes/:classId/assignments` | `STUDENT` | Xem bài tập và trạng thái `open`/`submitted`/`late`/`graded` (`LMS-05`) |
+| **LMS** | `POST` | `/api/me/assignments/:id/submissions` | `STUDENT` | Nộp bài (`CONFIRMED` enrollment, idempotent, kiểm `storageKey`, không tự trừ điểm trễ) (`LMS-05`) |
+| **LMS** | `POST`/`PATCH` | `/api/teacher/submissions/:id/grade` & `POST .../regrade` | `TEACHER` | Chấm/sửa điểm kèm `reason`, ghi `GradeHistory` `append-only` (`LMS-07`) |
+| **LMS** | `GET` | `/api/teacher|admin/submissions/:id/grade-history` | `TEACHER` / `ADMIN` | Xem lịch sử thay đổi điểm bất biến (`LMS-07`) |
+| **LMS** | `GET` | `/api/me/grades` & `/api/me/submissions/:id/grade` | `STUDENT` | Xem điểm và nhận xét của chính mình (ẩn staff ID nội bộ) (`LMS-07`) |
+| **LMS** | `GET`/`POST`/`PATCH`/`DELETE` | `/api/teacher|admin/assessments*` & `/questions*` | `TEACHER` / `ADMIN` | Quản lý bài kiểm tra, ngân hàng câu hỏi và chấm tự luận (`LMS-08`) |
+| **LMS** | `GET`/`POST` | `/api/me/assessments*` & `/api/me/attempts*` | `STUDENT` | Làm & nộp bài kiểm tra (ẩn đáp án đúng, chống tạo trùng attempt/kết quả) (`LMS-08`) |
+| **LMS** | `GET`/`POST` | `/api/me/placement-assessments` & `/api/me/placement-results*` | `STUDENT` | Làm bài đầu vào thực tế và nhận `PlacementResult` + khóa học gợi ý (`LMS-01`) |
+| **LMS** | `GET` | `/api/admin/placement-results` | `ADMIN` | Tra cứu kết quả đánh giá đầu vào (`LMS-01`) |
 | **AID** | `GET` | `/api/campaigns` | Public | Chiến dịch `OPEN_FOR_FUNDING` hoặc `CLOSED` |
 | **AID** | `GET` | `/api/campaigns/:id` | Public | Chi tiết chiến dịch công khai |
 | **AID** | `GET` | `/api/admin/campaigns` | `ADMIN` | Quản trị mọi chiến dịch (kể cả `DRAFT`) |
@@ -547,4 +587,21 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
    - Số tiền luôn ở định dạng chuỗi số (`string`).
    - Phân trang luôn bao gồm `items`, `total`, `page`, `pageSize`, `totalPages`.
    - Tuyệt đối không gọi `GET /api/sessions/:id/join`. Bắt buộc dùng `POST /api/sessions/:id/join` để nhận LiveKit room token.
+
+---
+
+## 5. GHI CHÚ KIẾN TRÚC & BẢO LƯU DỮ LIỆU CORE LMS (GIAI ĐOẠN 4)
+
+1. **`LMS-03` (`LearningResource` & `Session.contents[]`):**
+   - Mô hình mới lưu `LearningResource` độc lập theo scope `COURSE`/`CLASS`/`SESSION`. Khi đọc `GET /api/sessions/:sessionId/learning-resources`, backend tự hợp nhất cả bản ghi mới và các phần tử `Session.contents[]` chưa migrate.
+   - API migrate (`/api/teacher|admin/sessions/:sessionId/learning-resources/migrate`) sao chép idempotent bằng khóa unique partial `{ "legacySessionContent.sessionId": 1, "legacySessionContent.contentItemId": 1 }` và **tuyệt đối không xóa `Session.contents[]`**.
+   - **Phụ thuộc `storageService` (Bảo):** Upload qua `/api/uploads/private` hiện chỉ whitelist `["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF", "INCIDENT_EVIDENCE"]`; cần Bảo bổ sung `LEARNING_RESOURCE` và `ASSIGNMENT_SUBMISSION` nếu FE tách purpose riêng.
+
+2. **`LMS-05` & `LMS-07` (`Assignment`, `Submission`, `Grade`, `GradeHistory`):**
+   - Nộp muộn (`allowLateSubmission: true`) chỉ gắn `isLate: true`, `lateSeconds` và `status: "late"`; **không tự trừ điểm** vì chưa có chính sách trừ điểm chính thức từ Business.
+   - `GradeHistory` khóa bất biến bằng Mongoose `pre` hooks (`GRADE_HISTORY_IMMUTABLE`) và không tồn tại endpoint chỉnh sửa/xóa.
+
+3. **`LMS-10` (Tách `Review` cấp lớp và `SessionReview` cấp buổi học):**
+   - `Review` giữ nguyên ràng buộc `enrollmentId` unique (`1 review / enrollment` cấp lớp) để tương thích 100% với `G0-02.3.1`..`G0-02.3.3` và dữ liệu cũ.
+   - Đánh giá buổi học dùng collection mới `SessionReview` với unique index `{ sessionId: 1, studentId: 1 }`, xác minh tham gia thật qua `SessionAttendance` (`PRESENT`/`LATE`/`EXCUSED` hoặc `hasVerifiedConnection: true`), `Session` `COMPLETED`, và `Enrollment`, đồng thời **không tự phát sinh kỷ luật hay trừ thù lao giảng viên**.
 
