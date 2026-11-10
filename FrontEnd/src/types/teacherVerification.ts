@@ -10,11 +10,18 @@ export interface VerificationFile {
   urlExpiresAt?: string;
 }
 
+export type VerificationDocumentStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+/** One submitted document. Backend returns every submission (newest first), each reviewed as a batch. */
 export interface VerificationDocument {
+  _id?: string;
   documentType: DocumentType;
   files: VerificationFile[];
-  status?: "PENDING" | "APPROVED" | "REJECTED";
-  reviewedNote?: string;
+  status?: VerificationDocumentStatus;
+  reviewNote?: string | null;
+  reviewedAt?: string | null;
+  uploadedAt?: string;
+  createdAt?: string;
 }
 
 export interface TeacherVerificationStatus {

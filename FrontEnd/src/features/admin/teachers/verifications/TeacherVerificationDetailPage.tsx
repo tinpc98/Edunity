@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Typography, Breadcrumb, Button, Card, Row, Col, Avatar, Tag, Divider, Form, Input, message, Modal, Skeleton } from 'antd';
+import { Typography, Breadcrumb, Button, Card, Row, Col, Avatar, Tag, Divider, Form, Input, message, Modal, Skeleton, Alert } from 'antd';
 import { 
   SafetyCertificateOutlined,
   UserOutlined,
@@ -15,8 +15,18 @@ import { ROUTES } from '../../../../routes/routePaths';
 import { teacherVerificationService } from '../../../../services/teacherVerification.service';
 import PrivateDocumentCard from '../../../../components/common/PrivateDocumentCard';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
+import type { VerificationStatus } from '../../../../types/teacherVerification';
+import VerificationHistoryCard from './components/VerificationHistoryCard';
+import { groupVerificationSubmissions } from './verificationSubmissions';
 
 const { Title, Paragraph } = Typography;
+
+const STATUS_LABELS: Record<VerificationStatus, string> = {
+  UNVERIFIED: 'Chưa nộp hồ sơ',
+  PENDING: 'Chờ duyệt',
+  VERIFIED: 'Đã xác minh',
+  REJECTED: 'Từ chối',
+};
 
 export default function TeacherVerificationDetailPage() {
   const { teacherId } = useParams();
@@ -67,10 +77,15 @@ export default function TeacherVerificationDetailPage() {
     return <div className="p-10 text-red-500">Không tìm thấy thông tin xác minh.</div>;
   }
 
-  const identityDoc = teacher.documents?.find(d => d.documentType === 'IDENTITY');
-  const qualificationDoc = teacher.documents?.find(d => d.documentType === 'QUALIFICATION');
+  // Every submission round is returned (newest first); the cards above show only the latest round
+  const submissions = groupVerificationSubmissions(teacher.documents ?? []);
+  const latestDocuments = submissions[0]?.documents ?? [];
+  const identityDoc = latestDocuments.find(d => d.documentType === 'IDENTITY');
+  const qualificationDoc = latestDocuments.find(d => d.documentType === 'QUALIFICATION');
 
   const status = teacher.verificationStatus;
+  // A pending round that follows earlier rounds is a resubmission after rejection
+  const previousSubmission = status === 'PENDING' && submissions.length > 1 ? submissions[1] : undefined;
 
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
@@ -93,6 +108,7 @@ export default function TeacherVerificationDetailPage() {
               {status === 'PENDING' && <Tag color="processing" className="!m-0 rounded font-bold">Chờ duyệt</Tag>}
               {status === 'VERIFIED' && <Tag color="success" className="!m-0 rounded font-bold">Đã xác minh</Tag>}
               {status === 'REJECTED' && <Tag color="error" className="!m-0 rounded font-bold">Từ chối</Tag>}
+              {status === 'UNVERIFIED' && <Tag className="!m-0 rounded font-bold">Chưa nộp hồ sơ</Tag>}
             </div>
             <div className="text-gray-500 font-medium mt-2 flex flex-wrap gap-4">
               <span className="flex items-center gap-1.5"><SolutionOutlined /> Chuyên môn: <strong className="text-gray-800">{teacher.qualificationSummary || 'Chưa cập nhật'}</strong></span>
@@ -165,6 +181,8 @@ export default function TeacherVerificationDetailPage() {
             )}
           </Card>
 
+          <VerificationHistoryCard submissions={submissions} />
+
         </Col>
 
         {/* RIGHT COLUMN - ACTIONS */}
@@ -175,9 +193,23 @@ export default function TeacherVerificationDetailPage() {
                 <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-lg"><CheckSquareFilled /></div>
                 <div>
                   <Title level={5} className="!m-0 text-gray-900">Biên bản thẩm định</Title>
-                  <div className="text-xs text-gray-500 mt-1">Trạng thái hiện tại: {status}</div>
+                  <div className="text-xs text-gray-500 mt-1">Trạng thái hiện tại: {STATUS_LABELS[status] ?? status}</div>
                 </div>
               </div>
+
+              {previousSubmission && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  className="!mb-4 rounded-xl"
+                  title={`Hồ sơ nộp lại (lần ${submissions.length})`}
+                  description={
+                    previousSubmission.reviewNote
+                      ? `Lý do từ chối lần trước: ${previousSubmission.reviewNote}`
+                      : 'Xem chi tiết các lần nộp trước ở mục Lịch sử nộp & xét duyệt.'
+                  }
+                />
+              )}
 
               {teacher.reviewNote && (
                 <div className="flex flex-col gap-3 bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4">
@@ -205,7 +237,7 @@ export default function TeacherVerificationDetailPage() {
         footer={null}
       >
         <Form form={form} layout="vertical" onFinish={(values) => rejectMutation.mutate(values)}>
-          <Form.Item label="Lý do từ chối (Gửi cho giáo viên)" name="reviewNote" rules={[{ required: true }]}>
+          <Form.Item label="Lý do từ chối (Gửi cho giáo viên)" name="reviewNote" rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập lý do để gửi cho giáo viên.' }]}>
             <Input.TextArea rows={4} placeholder="Vui lòng cung cấp CCCD rõ nét hơn..." />
           </Form.Item>
           <div className="flex justify-end gap-3">
