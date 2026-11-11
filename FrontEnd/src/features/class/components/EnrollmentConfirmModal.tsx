@@ -12,6 +12,7 @@ import { useAuthStore } from "../../../stores/auth.store";
 import { ROUTES } from "../../../routes/routePaths";
 import type { Enrollment } from "../../../types/enrollment";
 import { formatVND } from "../../../types/payment";
+import { formatScheduleEntries } from "../../../api/classAdapters";
 
 interface EnrollmentConfirmModalProps {
   item: ClassDiscoveryItem;
@@ -142,7 +143,7 @@ export default function EnrollmentConfirmModal({ item, open, onClose }: Enrollme
           </div>
           <div className="text-slate-600 flex items-center gap-2">
             <ClockCircleOutlined className="text-indigo-600" />
-            <span>Lịch học: <strong>{item.scheduleDays} · {item.scheduleTime}</strong></span>
+            <span>Lịch học: <strong>{formatScheduleEntries(item.schedule).join(", ") || "Đang cập nhật"}</strong></span>
           </div>
           <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
             <span className="text-slate-500 font-medium">Học phí:</span>

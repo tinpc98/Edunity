@@ -7,6 +7,18 @@ export interface RegisterPayload {
   role: "STUDENT";
 }
 
+export type SponsorType = "INDIVIDUAL" | "ORGANIZATION";
+
+/** POST /api/auth/register with role SPONSOR. fullName is stored as sponsorProfile.representativeName. */
+export interface SponsorRegisterRequest {
+  fullName: string;
+  email: string;
+  password: string;
+  sponsorType: SponsorType;
+  /** Only sent for ORGANIZATION */
+  organizationName?: string;
+}
+
 /** POST /api/auth/register response (same shape for every registrable role). */
 export interface RegisterResponse {
   userId: string;

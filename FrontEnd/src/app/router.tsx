@@ -61,6 +61,7 @@ import RegisterPage from "../features/auth/RegisterPage";
 import TeacherRegisterPage from "../features/auth/TeacherRegisterPage";
 import TeacherQualificationPage from "../features/auth/TeacherQualificationPage";
 import TeacherPendingPage from "../features/auth/TeacherPendingPage";
+import SponsorRegisterPage from "../features/auth/SponsorRegisterPage";
 import { ROUTES } from "../routes/routePaths";
 import ClassDetailPage from "../features/class/ClassDetailPage";
 import CoursesPage from "../features/course/CoursesPage";
@@ -152,6 +153,10 @@ const router = createBrowserRouter([
       {
         path: ROUTES.AUTH.TEACHER_PENDING,
         element: <TeacherPendingPage />,
+      },
+      {
+        path: ROUTES.AUTH.SPONSOR_REGISTER,
+        element: <SponsorRegisterPage />,
       },
       {
         path: ROUTES.CAMPAIGNS,

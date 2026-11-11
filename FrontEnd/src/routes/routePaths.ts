@@ -25,6 +25,7 @@ export const ROUTES = {
     TEACHER_REGISTER: "/register/teacher",
     TEACHER_QUALIFICATION: "/register/teacher/qualification",
     TEACHER_PENDING: "/register/teacher/pending",
+    SPONSOR_REGISTER: "/register/sponsor",
   },
   NOTIFICATIONS: "/notifications",
   MESSAGES: "/messages",

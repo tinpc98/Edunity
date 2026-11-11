@@ -7,6 +7,7 @@ import ClassSessionsTab from "./components/ClassSessionsTab";
 import ClassTeacherTab from "./components/ClassTeacherTab";
 import ClassRegistrationCard from "./components/ClassRegistrationCard";
 import { ClassReviewsTab } from "./components/ClassReviewsTab";
+import ClassCurriculumTab from "./components/ClassCurriculumTab";
 
 export default function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -56,6 +57,21 @@ export default function ClassDetailPage() {
       ),
     },
     {
+      key: "curriculum",
+      label: (
+        <span className="text-sm font-semibold px-1">
+          Lộ trình & Mục tiêu
+        </span>
+      ),
+      children: (
+        <ClassCurriculumTab
+          item={item}
+          sessionCount={sessions.length}
+          isSessionsLoading={isSessionsLoading}
+        />
+      ),
+    },
+    {
       key: "teacher",
       label: (
         <span className="text-sm font-semibold px-1">
@@ -102,7 +118,10 @@ export default function ClassDetailPage() {
 
         {/* Right Side: Sticky Registration Card */}
         <div className="lg:col-span-4 sticky top-24">
-          <ClassRegistrationCard item={item} />
+          <ClassRegistrationCard
+            item={item}
+            sessionCount={isSessionsLoading ? undefined : sessions.length}
+          />
         </div>
       </div>
     </div>
