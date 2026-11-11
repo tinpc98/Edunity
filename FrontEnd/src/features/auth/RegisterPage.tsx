@@ -193,6 +193,9 @@ export default function RegisterPage() {
               <p className="mt-3 text-xs text-slate-400">
                 Bạn là giáo viên? <Link to={ROUTES.AUTH.TEACHER_REGISTER} className="font-semibold text-indigo-600 hover:text-indigo-700">Đăng ký trở thành giáo viên</Link>
               </p>
+              <p className="mt-2 text-xs text-slate-400">
+                Bạn muốn ủng hộ học bổng? <Link to={ROUTES.AUTH.SPONSOR_REGISTER} className="font-semibold text-indigo-600 hover:text-indigo-700">Đăng ký nhà tài trợ</Link>
+              </p>
             </div>
           </section>
         </div>

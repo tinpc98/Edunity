@@ -20,6 +20,15 @@ export type CourseLevel = (typeof COURSE_LEVELS)[number];
 export const CATALOG_STATUSES = ["ACTIVE", "INACTIVE"] as const;
 export type CatalogStatus = (typeof CATALOG_STATUSES)[number];
 
+export const COURSE_STATUSES = ["DRAFT", "ACTIVE", "INACTIVE"] as const;
+export type CourseStatus = (typeof COURSE_STATUSES)[number];
+
+export const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
+  DRAFT: "Bản nháp",
+  ACTIVE: "Hoạt động",
+  INACTIVE: "Tạm ngưng",
+};
+
 export const PROPOSAL_STATUSES = ["PENDING_REVIEW", "NEED_CHANGES", "APPROVED", "REJECTED"] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 
@@ -101,7 +110,7 @@ export interface ApiCourse {
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
-  status: CatalogStatus;
+  status: CourseStatus;
   sourceProposalId?: string | null;
   /** Only present in GET /courses/:id */
   openClassCount?: number;
@@ -185,7 +194,7 @@ export interface Course {
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
-  status: CatalogStatus;
+  status: CourseStatus;
   sourceProposalId?: string | null;
   openClassCount?: number;
   createdAt: string;
@@ -264,6 +273,7 @@ export interface CreateCoursePayload {
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
+  status?: "DRAFT";
 }
 
 export interface UpdateCoursePayload {
@@ -274,7 +284,7 @@ export interface UpdateCoursePayload {
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
-  status?: CatalogStatus;
+  status?: CourseStatus;
 }
 
 export interface CreateProposalPayload {

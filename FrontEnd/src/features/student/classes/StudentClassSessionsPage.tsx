@@ -14,6 +14,7 @@ import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.
 import { classDiscoveryService } from "../../../services/classDiscovery.service";
 import { sessionService } from "../../../services/session.service";
 import { ROUTES } from "../../../routes/routePaths";
+import { formatScheduleEntries } from "../../../api/classAdapters";
 import type { ClassDiscoveryItem, SessionEntity } from "../../../types/classDiscovery";
 import SessionDetailModal, { type SessionWithNumber } from "./components/SessionDetailModal";
 
@@ -244,15 +245,14 @@ export default function StudentClassSessionsPage() {
 
             <span className="flex items-center gap-1.5 text-slate-600">
               <CalendarOutlined className="text-slate-400 text-xs" />
-              {classItem.startDate} – {classItem.formattedEndDate || classItem.endDate || "20/12/2026"}
+              {classItem.startDate} – {classItem.formattedEndDate || "Đang cập nhật"}
             </span>
 
             <span className="text-slate-300">•</span>
 
             <span className="flex items-center gap-1.5 text-slate-600">
               <ClockCircleOutlined className="text-slate-400 text-xs" />
-              {classItem.scheduleDays || classItem.scheduleText}
-              {classItem.scheduleTime ? ` • ${classItem.scheduleTime}` : ""}
+              {formatScheduleEntries(classItem.schedule).join(", ") || "Lịch học đang cập nhật"}
             </span>
           </div>
         </div>

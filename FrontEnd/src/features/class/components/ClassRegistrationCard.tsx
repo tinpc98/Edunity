@@ -15,13 +15,16 @@ import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.
 import { classKeys } from "../../../services/class.service";
 import { useAuthStore } from "../../../stores/auth.store";
 import { ROUTES } from "../../../routes/routePaths";
+import { formatScheduleEntries } from "../../../api/classAdapters";
 
 interface ClassRegistrationCardProps {
   item: ClassDiscoveryItem;
+  /** Planned session count; undefined while sessions are still loading */
+  sessionCount?: number;
 }
 
 
-export default function ClassRegistrationCard({ item }: ClassRegistrationCardProps) {
+export default function ClassRegistrationCard({ item, sessionCount }: ClassRegistrationCardProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuthStore();
@@ -76,6 +79,7 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
   });
 
   const isFree = item.classType === "FREE";
+  const scheduleLines = formatScheduleEntries(item.schedule);
   const capacity = availability ? availability.capacity : item.capacity;
   const enrolledCount = availability ? availability.enrolledCount : item.enrolledCount;
   const seatsLeft = availability ? availability.remaining : item.seatsLeft;
@@ -263,19 +267,29 @@ export default function ClassRegistrationCard({ item }: ClassRegistrationCardPro
         <div className="flex items-center justify-between">
           <span className="text-slate-400 font-medium">Kết thúc</span>
           <span className="font-semibold text-slate-800">
-            {item.formattedEndDate || "20/12/2026"}
+            {item.formattedEndDate || "Đang cập nhật"}
           </span>
         </div>
 
-        <div className="flex items-start justify-between">
-          <span className="text-slate-400 font-medium">Lịch học</span>
+        <div className="flex items-center justify-between">
+          <span className="text-slate-400 font-medium">Số buổi</span>
+          <span className="font-semibold text-slate-800">
+            {sessionCount === undefined ? "…" : sessionCount > 0 ? `${sessionCount} buổi` : "Đang cập nhật"}
+          </span>
+        </div>
+
+        <div className="flex items-start justify-between gap-3">
+          <span className="text-slate-400 font-medium shrink-0">Lịch học</span>
           <div className="text-right">
-            <div className="font-semibold text-slate-800">
-              {item.scheduleDays || "Theo lịch lớp"}
-            </div>
-            <div className="text-slate-500 font-medium mt-0.5">
-              {item.scheduleTime || "08:30 – 10:30"}
-            </div>
+            {scheduleLines.length > 0 ? (
+              scheduleLines.map((line) => (
+                <div key={line} className="font-semibold text-slate-800 [&:not(:first-child)]:mt-0.5">
+                  {line}
+                </div>
+              ))
+            ) : (
+              <div className="font-semibold text-slate-800">Đang cập nhật</div>
+            )}
           </div>
         </div>
 

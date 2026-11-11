@@ -20,6 +20,13 @@ import { courseService } from "../../services/course.service";
 import { classService, classKeys } from "../../services/class.service";
 import { GRADE_LEVEL_LABELS, COURSE_LEVEL_LABELS } from "../../types/catalog";
 import { ROUTES } from "../../routes/routePaths";
+import { formatScheduleEntries } from "../../api/classAdapters";
+
+const formatStartDate = (value?: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString("vi-VN");
+};
 
 export default function CourseDetailPage() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -220,6 +227,18 @@ export default function CourseDetailPage() {
                     </div>
                     <div className="text-xs text-gray-500 mb-2">
                       Giảng viên: <strong className="text-gray-700">{cls.teacherName}</strong>
+                    </div>
+                    <div className="text-xs text-gray-500 mb-2 flex flex-col gap-0.5">
+                      <span>
+                        Khai giảng:{" "}
+                        <strong className="text-gray-700">{formatStartDate(cls.startDate) || "Đang cập nhật"}</strong>
+                      </span>
+                      <span>
+                        Lịch học:{" "}
+                        <strong className="text-gray-700">
+                          {formatScheduleEntries(cls.schedule).join(", ") || "Đang cập nhật"}
+                        </strong>
+                      </span>
                     </div>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-gray-200/60 text-xs text-gray-500">

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   Typography, Steps, Button, Card, Form, Input, InputNumber, 
-  Select, DatePicker, Radio, message, Breadcrumb, Tag, Row, Col, Divider, Spin, TimePicker
+  Select, DatePicker, Radio, message, Breadcrumb, Tag, Row, Col, Divider, Spin, TimePicker, Alert
 } from 'antd';
 import { 
   BookOutlined, 
@@ -11,6 +11,7 @@ import {
   SearchOutlined, 
   PlusOutlined, 
   DeleteOutlined, 
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -53,15 +54,59 @@ export default function CreateTeacherClassPage() {
   } = useTeacherVerification();
 
   // 2. Real Courses Query from Phase 3 (only after verification confirmed)
-  const { data: coursesData, isLoading: isCoursesLoading } = useQuery({
+  const {
+    data: coursesData,
+    isLoading: isCoursesLoading,
+    isError: isCoursesError,
+    error: coursesError,
+    refetch: refetchCourses,
+  } = useQuery({
     queryKey: ["courses", "active", courseSearch],
     queryFn: () => courseService.searchCourses({ search: courseSearch || undefined, pageSize: 50 }),
     enabled: isVerified,
     staleTime: 1000 * 60 * 2,
   });
 
-  const courses: Course[] = coursesData?.items || [];
-  const selectedCourse = courses.find((c) => c.id === selectedCourseId);
+  // Only ACTIVE courses may be selected by Teachers to create a new Class
+  const courses: Course[] = (coursesData?.items || []).filter(
+    (c) => c.status === "ACTIVE"
+  );
+  const matchedCourseInList = courses.find((c) => c.id === selectedCourseId);
+
+  // If URL or selection points to a courseId not in the current list page, verify via GET /courses/:id
+  const {
+    data: fetchedSelectedCourse,
+    isLoading: isVerifyingSelectedCourse,
+    isError: isSelectedCourseError,
+  } = useQuery({
+    queryKey: ["teacher-selected-course", selectedCourseId],
+    queryFn: () => courseService.getCourse(selectedCourseId!),
+    enabled:
+      isVerified &&
+      Boolean(selectedCourseId) &&
+      !isCoursesLoading &&
+      !matchedCourseInList,
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  const selectedCourse: Course | undefined =
+    matchedCourseInList ||
+    (fetchedSelectedCourse?.status === "ACTIVE" ? fetchedSelectedCourse : undefined);
+
+  const isCheckingSelectedCourse =
+    Boolean(selectedCourseId) &&
+    !matchedCourseInList &&
+    (isCoursesLoading || isVerifyingSelectedCourse);
+
+  const isInvalidSelectedCourse =
+    Boolean(selectedCourseId) &&
+    !matchedCourseInList &&
+    !isCoursesLoading &&
+    !isVerifyingSelectedCourse &&
+    (isSelectedCourseError ||
+      !fetchedSelectedCourse ||
+      fetchedSelectedCourse.status !== "ACTIVE");
 
   // Form watches
   const classType = Form.useWatch('classType', form) || 'PAID';
@@ -82,8 +127,16 @@ export default function CreateTeacherClassPage() {
 
   const handleNext = async () => {
     if (currentStep === 0) {
-      if (!selectedCourseId) {
-        message.warning("Vui lòng chọn một khóa học từ danh mục chuẩn.");
+      if (isCheckingSelectedCourse) {
+        message.info("Đang kiểm tra trạng thái khóa học đã chọn, vui lòng đợi...");
+        return;
+      }
+      if (!selectedCourseId || !selectedCourse || selectedCourse.status !== "ACTIVE") {
+        message.warning(
+          isInvalidSelectedCourse
+            ? "Khóa học đã chọn không hợp lệ hoặc không còn hoạt động (ACTIVE). Vui lòng chọn lại một khóa học đang hoạt động."
+            : "Vui lòng chọn một khóa học đang hoạt động (ACTIVE) từ danh mục chuẩn."
+        );
         return;
       }
       setCurrentStep(1);
@@ -127,7 +180,11 @@ export default function CreateTeacherClassPage() {
     setScheduleList(scheduleList.filter((_, i) => i !== index));
   };
 
-  const handleUpdateSchedule = (index: number, field: keyof ScheduleEntry, value: any) => {
+  const handleUpdateSchedule = (
+    index: number,
+    field: keyof ScheduleEntry,
+    value: ScheduleEntry[keyof ScheduleEntry]
+  ) => {
     const updated = [...scheduleList];
     updated[index] = { ...updated[index], [field]: value };
     setScheduleList(updated);
@@ -169,6 +226,21 @@ export default function CreateTeacherClassPage() {
           </div>
         </div>
 
+        {isInvalidSelectedCourse && (
+          <Alert
+            type="warning"
+            showIcon
+            className="mb-6 rounded-xl"
+            message="Khóa học từ đường dẫn không khả dụng"
+            description="Khóa học được chỉ định không tồn tại hoặc hiện không ở trạng thái Hoạt động (ACTIVE). Vui lòng chọn một khóa học đang hoạt động từ danh sách bên dưới để tiếp tục."
+            action={
+              <Button size="small" onClick={() => setSelectedCourseId(null)}>
+                Chọn lại
+              </Button>
+            }
+          />
+        )}
+
         <div className="flex gap-3 mb-6">
           <Input 
             placeholder="Tìm khóa học theo tên hoặc chủ đề..." 
@@ -185,14 +257,35 @@ export default function CreateTeacherClassPage() {
           <div className="py-12 text-center">
             <Spin tip="Đang tải danh sách khóa học..." />
           </div>
+        ) : isCoursesError ? (
+          <Alert
+            type="error"
+            showIcon
+            className="rounded-xl"
+            message="Không thể tải danh sách khóa học"
+            description={getFriendlyErrorMessage(
+              coursesError,
+              "Đã xảy ra lỗi khi tải danh sách khóa học chuẩn. Vui lòng thử lại."
+            )}
+            action={
+              <Button
+                size="small"
+                danger
+                icon={<ReloadOutlined />}
+                onClick={() => refetchCourses()}
+              >
+                Thử lại
+              </Button>
+            }
+          />
         ) : courses.length === 0 ? (
           <div className="p-8 text-center bg-gray-50 rounded-xl border border-gray-200">
-            <Text className="text-gray-500">Không tìm thấy khóa học nào phù hợp.</Text>
+            <Text className="text-gray-500">Không tìm thấy khóa học đang hoạt động nào phù hợp.</Text>
           </div>
         ) : (
           <div className="flex flex-col gap-3.5 max-h-[500px] overflow-y-auto pr-1">
             {courses.map((course) => {
-              const isSelected = selectedCourseId === course.id;
+              const isSelected = selectedCourse?.id === course.id;
               return (
                 <div 
                   key={course.id}
@@ -451,7 +544,7 @@ export default function CreateTeacherClassPage() {
                   value={entry.startTime ? dayjs(entry.startTime, "HH:mm") : null}
                   format="HH:mm"
                   minuteStep={5}
-                  onChange={(_, str) => handleUpdateSchedule(index, 'startTime', str)}
+                  onChange={(_, str) => handleUpdateSchedule(index, 'startTime', str || '')}
                   className="w-[100px]"
                 />
                 <span className="text-xs text-gray-500">đến</span>
@@ -459,7 +552,7 @@ export default function CreateTeacherClassPage() {
                   value={entry.endTime ? dayjs(entry.endTime, "HH:mm") : null}
                   format="HH:mm"
                   minuteStep={5}
-                  onChange={(_, str) => handleUpdateSchedule(index, 'endTime', str)}
+                  onChange={(_, str) => handleUpdateSchedule(index, 'endTime', str || '')}
                   className="w-[100px]"
                 />
               </div>
@@ -623,6 +716,8 @@ export default function CreateTeacherClassPage() {
             <Button 
               type="primary" 
               onClick={handleNext} 
+              loading={currentStep === 0 && isCheckingSelectedCourse}
+              disabled={currentStep === 0 && (isCheckingSelectedCourse || isInvalidSelectedCourse)}
               className="h-[44px] px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-medium"
             >
               Tiếp tục
