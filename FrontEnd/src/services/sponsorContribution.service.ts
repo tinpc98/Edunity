@@ -1,136 +1,132 @@
 import { apiClient } from "../api/apiClient";
 import type {
+  CreateContributionPayload,
   CreateContributionResponse,
   SponsorContributionsResponse,
   CampaignImpactResponse,
-  ApiSponsorContribution,
 } from "../types/campaign";
 import {
   adaptContributions,
   adaptCampaignImpact,
 } from "../api/campaignAdapters";
 
-export const contributionKeys = {
-  all: ["contributions"] as const,
-  myList: (params?: Record<string, any>) => ["contributions", "myList", params] as const,
-  impact: (campaignId: string) => ["contributions", "impact", campaignId] as const,
+export const sponsorContributionKeys = {
+  all: ["sponsor-contributions"] as const,
+  myList: (params?: { status?: string; campaignId?: string; page?: number; pageSize?: number }) =>
+    ["sponsor-contributions", "myList", params] as const,
+  impact: (campaignId: string) => ["sponsor-contributions", "impact", campaignId] as const,
 };
+
+export const contributionKeys = sponsorContributionKeys;
+
+function parseDecimal(val: any): number {
+  if (typeof val === "number") return val;
+  if (typeof val === "string") return parseFloat(val) || 0;
+  if (val && typeof val === "object" && val.$numberDecimal) {
+    return parseFloat(val.$numberDecimal) || 0;
+  }
+  return 0;
+}
 
 export const sponsorContributionService = {
   /**
-   * Sponsor: Create a new contribution intent for an open campaign.
+   * Sponsor: Create a PENDING contribution intent via Unified Payment Engine (DONATION channel).
    * POST /api/campaigns/:id/contributions
-   * Body: { amount: number }
-   * Returns: PENDING contribution with gatewayReference
    */
   async createContribution(
     campaignId: string,
-    payload: { amount: number }
+    payload: CreateContributionPayload
   ): Promise<CreateContributionResponse> {
-    const data = await apiClient<{
-      contributionId: string;
-      campaignId: string;
-      amount: number | string | { $numberDecimal?: string };
-      contributionStatus: "PENDING" | "COMPLETED" | "FAILED";
-      gateway: string;
-      gatewayReference: string;
-    }>(`/campaigns/${campaignId}/contributions`, {
+    const raw = await apiClient<any>(`/campaigns/${campaignId}/contributions`, {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        amount: payload.amount,
+        isAnonymous: Boolean(payload.isAnonymous),
+        ...(payload.donorDisplayName ? { donorDisplayName: payload.donorDisplayName } : {}),
+      }),
     });
 
-    const amountNum =
-      typeof data.amount === "number"
-        ? data.amount
-        : typeof data.amount === "string"
-        ? parseFloat(data.amount) || 0
-        : data.amount?.$numberDecimal
-        ? parseFloat(data.amount.$numberDecimal) || 0
-        : 0;
+    const contributionId = String(raw.contributionId || raw.paymentId || raw._id || "");
+    const paymentId = String(raw.paymentId || contributionId);
 
     return {
-      contributionId: data.contributionId,
-      campaignId: data.campaignId,
-      amount: amountNum,
-      contributionStatus: data.contributionStatus,
-      gateway: data.gateway,
-      gatewayReference: data.gatewayReference,
+      paymentId,
+      contributionId,
+      campaignId: String(raw.campaignId || campaignId),
+      campaignTitle: raw.campaignTitle || null,
+      campaignStatus: raw.campaignStatus || null,
+      purpose: "DONATION",
+      channelKey: "DONATION",
+      provider: raw.provider || (raw.gateway === "PAYOS" ? "PAYOS" : "SANDBOX"),
+      amount: parseDecimal(raw.amount),
+      currency: raw.currency || "VND",
+      contributionStatus: raw.contributionStatus || "PENDING",
+      paymentStatus: raw.paymentStatus || raw.contributionStatus || "PENDING",
+      gateway: raw.gateway || "SANDBOX",
+      gatewayReference: raw.gatewayReference || raw.paymentReference || "",
+      orderCode: typeof raw.orderCode === "number" ? raw.orderCode : null,
+      paymentLinkId: raw.paymentLinkId || null,
+      qrCode: raw.qrCode || null,
+      checkoutUrl: raw.checkoutUrl || null,
+      expiredAt: raw.expiredAt || null,
+      remainingSeconds:
+        typeof raw.remainingSeconds === "number" ? Math.max(0, raw.remainingSeconds) : 900,
+      isAnonymous: Boolean(raw.isAnonymous),
+      donorDisplayName: raw.donorDisplayName || (raw.isAnonymous ? "Nhà tài trợ ẩn danh" : null),
     };
   },
 
   /**
-   * Sponsor: Get authenticated sponsor's contribution history and total contributed.
-   * GET /api/sponsor/contributions?page=...&pageSize=...&status=...
+   * Sponsor: List own contributions with optional status/campaign filter and totalContributed summary.
+   * GET /api/sponsor/contributions
    */
   async getMyContributions(params?: {
-    page?: number;
-    pageSize?: number;
     status?: string;
     campaignId?: string;
+    page?: number;
+    pageSize?: number;
   }): Promise<SponsorContributionsResponse> {
     const query = new URLSearchParams();
-    if (params?.page) query.set("page", String(params.page));
-    if (params?.pageSize) query.set("pageSize", String(params.pageSize));
     if (params?.status) query.set("status", params.status);
     if (params?.campaignId) query.set("campaignId", params.campaignId);
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.pageSize) query.set("pageSize", String(params.pageSize));
 
     const qs = query.toString();
-    const data = await apiClient<{
-      items: ApiSponsorContribution[];
-      total: number;
-      page: number;
-      pageSize: number;
-      totalPages: number;
-      totalContributed?: number | string | { $numberDecimal?: string };
-    }>(`/sponsor/contributions${qs ? `?${qs}` : ""}`);
-
-    const totalContributedNum =
-      typeof data.totalContributed === "number"
-        ? data.totalContributed
-        : typeof data.totalContributed === "string"
-        ? parseFloat(data.totalContributed) || 0
-        : data.totalContributed?.$numberDecimal
-        ? parseFloat(data.totalContributed.$numberDecimal) || 0
-        : 0;
+    const raw = await apiClient<any>(`/sponsor/contributions${qs ? `?${qs}` : ""}`);
 
     return {
-      items: adaptContributions(data.items || []),
-      total: data.total || 0,
-      page: data.page || 1,
-      pageSize: data.pageSize || 20,
-      totalPages: data.totalPages || 1,
-      totalContributed: totalContributedNum,
+      items: adaptContributions(raw.items || []),
+      total: raw.total || 0,
+      page: raw.page || 1,
+      pageSize: raw.pageSize || 20,
+      totalPages: raw.totalPages || 0,
+      totalContributed: parseDecimal(raw.totalContributed),
     };
   },
 
   /**
-   * Sponsor: Get impact report of a campaign the sponsor has funded.
+   * Sponsor: Get aggregated impact report for a campaign the sponsor has contributed to (FR-SPO-07..10).
    * GET /api/sponsor/campaigns/:id/impact
    */
   async getCampaignImpact(campaignId: string): Promise<CampaignImpactResponse> {
-    const data = await apiClient<any>(`/sponsor/campaigns/${campaignId}/impact`);
-    return adaptCampaignImpact(data);
+    const raw = await apiClient<any>(`/sponsor/campaigns/${campaignId}/impact`);
+    return adaptCampaignImpact(raw);
   },
 
   /**
-   * Sandbox only: Simulate gateway webhook to confirm or fail a contribution.
-   * POST /api/payments/sandbox/webhook
-   * Body: { gatewayReference, status: "SUCCESS" | "FAILED" }
+   * Simulate Sandbox Webhook for DONATION in DEV/TEST only.
    */
   async triggerSandboxWebhook(
     gatewayReference: string,
     status: "SUCCESS" | "FAILED"
-  ): Promise<{
-    contributionStatus: "COMPLETED" | "FAILED";
-    result: string;
-  }> {
-    const data = await apiClient<{
-      contributionStatus: "COMPLETED" | "FAILED";
-      result: string;
-    }>(`/payments/sandbox/webhook`, {
-      method: "POST",
-      body: JSON.stringify({ gatewayReference, status }),
-    });
-    return data;
+  ): Promise<{ contributionStatus?: string; result?: string }> {
+    return apiClient<{ contributionStatus?: string; result?: string }>(
+      "/payments/sandbox/webhook",
+      {
+        method: "POST",
+        body: JSON.stringify({ gatewayReference, status }),
+      }
+    );
   },
 };

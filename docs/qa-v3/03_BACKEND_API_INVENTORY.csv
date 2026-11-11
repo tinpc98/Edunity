@@ -1,0 +1,109 @@
+Endpoint_ID,HTTP_Method,Route_Path,Raw_Path,Module_File,Handlers_and_Middlewares,Auth_Role,Description
+API-001,POST,/api/auth/register,/register,authRoutes.js,validateRegister,PUBLIC,Đăng ký tài khoản học sinh / giáo viên / nhà tài trợ
+API-002,POST,/api/auth/login,/login,authRoutes.js,validateLogin,PUBLIC,Đăng nhập hệ thống cấp JWT access và refresh token
+API-003,POST,/api/auth/refresh,/refresh,authRoutes.js,anonymous,PUBLIC,Cấp mới JWT access token từ refresh token
+API-004,POST,/api/auth/logout,/logout,authRoutes.js,requireAuth,AUTHENTICATED,Đăng xuất và hủy refresh token
+API-005,GET,/api/auth/me,/me,authRoutes.js,requireAuth,AUTHENTICATED,Lấy thông tin tài khoản hiện tại
+API-006,POST,/api/auth/dev-login,/dev-login,authRoutes.js,anonymous,DEV_ONLY,Đăng nhập dev nhanh trong môi trường development
+API-007,GET,/api/catalog/categories,/catalog/categories,catalogRoutes.js,anonymous,PUBLIC,Lấy danh sách danh mục khóa học
+API-008,GET,/api/catalog/filters,/catalog/filters,catalogRoutes.js,anonymous,PUBLIC,Lấy các bộ lọc danh mục (cấp độ môn học khối lớp)
+API-009,GET,/api/classes,/classes,catalogRoutes.js,anonymous,PUBLIC,Tìm kiếm và phân trang danh sách lớp học công khai
+API-010,GET,/api/classes/:id,/classes/:id,catalogRoutes.js,anonymous,PUBLIC,Xem chi tiết thông tin lớp học công khai
+API-011,GET,/api/courses,/courses,catalogRoutes.js,anonymous,PUBLIC,Tìm kiếm danh sách khóa học công khai
+API-012,GET,/api/courses/:id,/courses/:id,catalogRoutes.js,anonymous,PUBLIC,Xem chi tiết khóa học công khai
+API-013,GET,/api/teachers,/teachers,catalogRoutes.js,anonymous,PUBLIC,Tìm kiếm và xem danh sách giáo viên công khai
+API-014,POST,/api/classes/:id/enrollments,/classes/:id/enrollments,enrollmentRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Đăng ký tham gia lớp học giữ chỗ 15 phút
+API-015,GET,/api/enrollments/my,/enrollments/my,enrollmentRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Lấy danh sách các lượt đăng ký lớp của học sinh
+API-016,GET,/api/enrollments/:id,/enrollments/:id,enrollmentRoutes.js,requireAuth,STUDENT_ADMIN,Xem chi tiết đơn ghi danh
+API-017,POST,/api/enrollments/:id/cancel,/enrollments/:id/cancel,enrollmentRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Hủy đơn ghi danh đang ở trạng thái PENDING_PAYMENT
+API-018,POST,/api/enrollments/:id/scholarship-payment,/enrollments/:id/scholarship-payment,enrollmentRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Áp dụng học bổng để thanh toán lớp học
+API-019,POST,/api/enrollments/:id/payments,/enrollments/:id/payments,paymentRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Khởi tạo giao dịch thanh toán học phí qua payOS / VietQR
+API-020,GET,/api/payments/:id,/payments/:id,paymentRoutes.js,requireAuth,AUTHENTICATED,Xem chi tiết trạng thái giao dịch thanh toán
+API-021,GET,/api/payments/my,/payments/my,paymentRoutes.js,requireAuth,STUDENT,Lấy lịch sử thanh toán của học sinh
+API-022,POST,/api/payments/webhooks/payos/tuition,/payments/webhooks/payos/tuition,paymentRoutes.js,anonymous,PAYOS_GATEWAY,Nhận Webhook thanh toán học phí Kênh 1 từ payOS
+API-023,POST,/api/payments/webhooks/payos/donation,/payments/webhooks/payos/donation,paymentRoutes.js,anonymous,PAYOS_GATEWAY,Nhận Webhook đóng góp tài trợ Kênh 2 từ payOS
+API-024,POST,/api/payments/sandbox/webhook,/payments/sandbox/webhook,paymentRoutes.js,anonymous,SANDBOX_TEST,Webhook giả lập thanh toán sandbox nội bộ
+API-025,GET,/api/payments/sandbox/accounts,/payments/sandbox/accounts,paymentRoutes.js,anonymous,SANDBOX_TEST,Lấy danh sách tài khoản thử nghiệm sandbox
+API-026,GET,/api/admin/finance/overview,/admin/finance/overview,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Tổng quan chỉ số tài chính doanh thu hoàn tiền học bổng
+API-027,GET,/api/admin/finance-overview,/admin/finance-overview,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Alias lấy tổng quan tài chính cho Admin Dashboard
+API-028,GET,/api/admin/overview,/admin/overview,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Legacy alias lấy tổng quan tài chính
+API-029,GET,/api/finance/admin/overview,/finance/admin/overview,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Legacy alias lấy tổng quan tài chính
+API-030,GET,/api/admin/transactions,/admin/transactions,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Tra cứu danh sách sổ cái giao dịch tài chính hệ thống
+API-031,GET,/api/admin/transactions/:id,/admin/transactions/:id,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Xem chi tiết một giao dịch sổ cái tài chính
+API-032,GET,/api/admin/bank-events,/admin/bank-events,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Danh sách sự kiện biến động số dư BankTransferEvent
+API-033,GET,/api/admin/bank-events/:id,/admin/bank-events/:id,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Xem chi tiết một sự kiện chuyển khoản ngân hàng
+API-034,GET,/api/admin/reconciliations,/admin/reconciliations,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Danh sách hàng đợi đối soát giao dịch bất thường
+API-035,GET,/api/admin/reconciliations/:id,/admin/reconciliations/:id,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Chi tiết hồ sơ đối soát sai lệch giao dịch
+API-036,PATCH,/api/admin/reconciliations/:id/claim,/admin/reconciliations/:id/claim,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Admin tiếp nhận hồ sơ đối soát xử lý
+API-037,PATCH,/api/admin/reconciliations/:id/assign,/admin/reconciliations/:id/assign,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Phân công hồ sơ đối soát cho chuyên viên
+API-038,POST,/api/admin/reconciliations/:id/notes,/admin/reconciliations/:id/notes,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Ghi chú tiến trình xử lý đối soát
+API-039,PATCH,/api/admin/reconciliations/:id/resolve,/admin/reconciliations/:id/resolve,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Đóng hồ sơ đối soát với kết luận chính thức
+API-040,GET,/api/admin/refunds,/admin/refunds,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Danh sách các yêu cầu hoàn tiền học phí
+API-041,GET,/api/admin/refunds/:id,/admin/refunds/:id,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Chi tiết một ca hoàn tiền học phí
+API-042,POST,/api/admin/refunds/:id/verify,/admin/refunds/:id/verify,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Xác minh đối soát Four-Eyes hoàn tất ca hoàn tiền
+API-043,GET,/api/admin/payouts,/admin/payouts,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Danh sách các đợt giải ngân thù lao giáo viên
+API-044,GET,/api/admin/payouts/:id,/admin/payouts/:id,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Chi tiết một đợt chi trả thù lao giáo viên
+API-045,POST,/api/admin/payouts/:id/complete,/admin/payouts/:id/complete,financeRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Admin thứ hai xác minh sao kê và hoàn tất đợt chi trả
+API-046,GET,/api/teacher/revenue,/teacher/revenue,financeRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Xem tổng quan thu nhập thù lao và phí sàn của giáo viên
+API-047,GET,/api/teacher/earnings,/teacher/earnings,financeRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Danh sách các khoản thu nhập TeacherEarning theo lớp
+API-048,POST,/api/teacher/earnings/withdraw,/teacher/earnings/withdraw,financeRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Giáo viên yêu cầu rút tiền vào khung giờ thứ Hai
+API-049,GET,/api/teacher/payouts,/teacher/payouts,financeRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Lịch sử các đợt nhận tiền thù lao của giáo viên
+API-050,GET,/api/student/classes,/student/classes,studentRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Danh sách các lớp học sinh đã tham gia
+API-051,GET,/api/student/schedule,/student/schedule,studentRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Lịch học chi tiết theo tuần/tháng của học sinh
+API-052,GET,/api/student/classes/:id/sessions,/student/classes/:id/sessions,studentRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Danh sách các buổi học của một lớp học sinh tham gia
+API-053,GET,/api/student/classes/:id/attendance,/student/classes/:id/attendance,studentRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Báo cáo chuyên cần và điểm danh của học sinh
+API-054,GET,/api/sessions/:id/join,/sessions/:id/join,studentRoutes.js,"requireAuth, requireRole(STUDENT,TEACHER)",STUDENT_TEACHER,Tham gia lớp học trực tuyến nhận token phòng LiveKit
+API-055,POST,/api/sessions/livekit-webhook,/sessions/livekit-webhook,studentRoutes.js,anonymous,LIVEKIT_SERVER,Webhook tiếp nhận sự kiện hiện diện từ máy chủ LiveKit
+API-056,POST,/api/admin/categories,/admin/categories,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Tạo mới danh mục ngành học
+API-057,PUT,/api/admin/categories/:id,/admin/categories/:id,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Cập nhật thông tin danh mục
+API-058,DELETE,/api/admin/categories/:id,/admin/categories/:id,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Xóa danh mục nếu chưa có môn học liên kết
+API-059,POST,/api/admin/subjects,/admin/subjects,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Tạo mới môn học thuộc danh mục
+API-060,PUT,/api/admin/subjects/:id,/admin/subjects/:id,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Cập nhật thông tin môn học
+API-061,DELETE,/api/admin/subjects/:id,/admin/subjects/:id,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Xóa môn học
+API-062,POST,/api/admin/courses,/admin/courses,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Tạo mới khóa học chuẩn hóa
+API-063,PUT,/api/admin/courses/:id,/admin/courses/:id,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Cập nhật thông tin khóa học
+API-064,DELETE,/api/admin/courses/:id,/admin/courses/:id,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Xóa khóa học
+API-065,GET,/api/admin/course-proposals,/admin/course-proposals,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Danh sách các đề xuất khóa học nâng cao từ giáo viên
+API-066,PATCH,/api/admin/course-proposals/:id/approve,/admin/course-proposals/:id/approve,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Phê duyệt đề xuất khóa học nâng cao
+API-067,PATCH,/api/admin/course-proposals/:id/reject,/admin/course-proposals/:id/reject,courseCatalogRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Từ chối đề xuất khóa học có ghi lý do
+API-068,POST,/api/teacher/classes,/teacher/classes,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Giáo viên đã xác minh tạo lớp học mới
+API-069,GET,/api/teacher/classes,/teacher/classes,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Danh sách các lớp học do giáo viên phụ trách
+API-070,GET,/api/teacher/classes/:id,/teacher/classes/:id,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Xem chi tiết lớp học của giáo viên
+API-071,PUT,/api/teacher/classes/:id,/teacher/classes/:id,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Chỉnh sửa thông tin lớp học DRAFT hoặc REJECTED
+API-072,PATCH,/api/teacher/classes/:id/submit,/teacher/classes/:id/submit,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Gửi lớp học lên Admin phê duyệt
+API-073,POST,/api/teacher/course-proposals,/teacher/course-proposals,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Giáo viên gửi đề xuất khóa học nâng cao mới
+API-074,GET,/api/teacher/schedule,/teacher/schedule,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Lịch dạy học của giáo viên
+API-075,POST,/api/teacher/sessions/:id/incident,/teacher/sessions/:id/incident,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Báo cáo sự cố buổi học kèm tài liệu minh chứng
+API-076,POST,/api/teacher/sessions/:id/reschedule,/teacher/sessions/:id/reschedule,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Đề xuất lịch dạy bù cho buổi học gặp sự cố
+API-077,GET,/api/teacher/verification,/teacher/verification,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Xem trạng thái và hồ sơ xác minh năng lực của giáo viên
+API-078,POST,/api/teacher/verification,/teacher/verification,teachingRoutes.js,"requireAuth, requireRole(TEACHER)",TEACHER,Nộp hồ sơ bằng cấp giấy tờ xác minh giáo viên
+API-079,GET,/api/campaigns,/campaigns,scholarshipRoutes.js,anonymous,PUBLIC,Xem danh sách các chiến dịch gây quỹ học bổng
+API-080,GET,/api/campaigns/:id,/campaigns/:id,scholarshipRoutes.js,anonymous,PUBLIC,Xem chi tiết chiến dịch gây quỹ học bổng
+API-081,POST,/api/campaigns/:id/contributions,/campaigns/:id/contributions,scholarshipRoutes.js,"requireAuth, requireRole(SPONSOR)",SPONSOR,Nhà tài trợ tạo intent ủng hộ quỹ học bổng
+API-082,GET,/api/sponsor/contributions,/sponsor/contributions,scholarshipRoutes.js,"requireAuth, requireRole(SPONSOR)",SPONSOR,Lịch sử các khoản đóng góp của nhà tài trợ
+API-083,POST,/api/admin/campaigns,/admin/campaigns,scholarshipRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Admin tạo chiến dịch gây quỹ học bổng mới
+API-084,PATCH,/api/admin/campaigns/:id,/admin/campaigns/:id,scholarshipRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Cập nhật thông tin chiến dịch học bổng
+API-085,GET,/api/admin/scholarship-applications,/admin/scholarship-applications,scholarshipRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Danh sách đơn xin cấp học bổng của học sinh
+API-086,GET,/api/admin/scholarship-applications/:id,/admin/scholarship-applications/:id,scholarshipRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Xem chi tiết đơn xin học bổng kèm hồ sơ xác minh
+API-087,PATCH,/api/admin/scholarship-applications/:id/review,/admin/scholarship-applications/:id/review,scholarshipRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Admin phê duyệt hoặc từ chối cấp học bổng
+API-088,POST,/api/scholarship-applications,/scholarship-applications,scholarshipRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Học sinh nộp đơn xin xét duyệt học bổng
+API-089,GET,/api/scholarships/my,/scholarships/my,scholarshipRoutes.js,"requireAuth, requireRole(STUDENT)",STUDENT,Xem danh sách học bổng đã được cấp của học sinh
+API-090,GET,/api/admin/users,/admin/users,accountRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Quản lý danh sách người dùng phân quyền tìm kiếm
+API-091,PATCH,/api/admin/users/:id/status,/admin/users/:id/status,accountRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Khóa hoặc kích hoạt tài khoản người dùng
+API-092,GET,/api/admin/teachers/verifications,/admin/teachers/verifications,accountRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Danh sách hồ sơ giáo viên chờ duyệt xác minh
+API-093,GET,/api/admin/teachers/verifications/:id,/admin/teachers/verifications/:id,accountRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Xem chi tiết hồ sơ xác minh giáo viên
+API-094,PATCH,/api/admin/teachers/verifications/:id/approve,/admin/teachers/verifications/:id/approve,accountRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Phê duyệt hồ sơ giáo viên chuyển trạng thái VERIFIED
+API-095,PATCH,/api/admin/teachers/verifications/:id/reject,/admin/teachers/verifications/:id/reject,accountRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Từ chối hồ sơ giáo viên yêu cầu bổ sung
+API-096,POST,/api/files/upload/public,/files/upload/public,accountRoutes.js,requireAuth,AUTHENTICATED,Upload ảnh đại diện ảnh bìa khóa học công khai
+API-097,POST,/api/files/upload/private,/files/upload/private,accountRoutes.js,requireAuth,AUTHENTICATED,Upload tài liệu định danh bằng cấp bảo mật
+API-098,GET,/api/files/download/:id,/files/download/:id,accountRoutes.js,requireAuth,AUTHORIZED_OWNER,Tải hoặc xem tài liệu bảo mật qua signed URL
+API-099,GET,/api/conversations,/conversations,communityRoutes.js,requireAuth,AUTHENTICATED,Lấy danh sách các cuộc trò chuyện tin nhắn
+API-100,POST,/api/conversations,/conversations,communityRoutes.js,requireAuth,AUTHENTICATED,Khởi tạo cuộc hội thoại mới giữa các thành viên
+API-101,GET,/api/conversations/:id/messages,/conversations/:id/messages,communityRoutes.js,requireAuth,CONVERSATION_MEMBER,Lấy lịch sử tin nhắn trong cuộc trò chuyện
+API-102,POST,/api/conversations/:id/messages,/conversations/:id/messages,communityRoutes.js,requireAuth,CONVERSATION_MEMBER,Gửi tin nhắn mới trong cuộc hội thoại
+API-103,POST,/api/reports,/reports,communityRoutes.js,requireAuth,AUTHENTICATED,Gửi báo cáo vi phạm sự cố khiếu nại chất lượng
+API-104,GET,/api/admin/reports,/admin/reports,communityRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Quản lý danh sách các khiếu nại báo cáo vi phạm
+API-105,PATCH,/api/admin/reports/:id/resolve,/admin/reports/:id/resolve,communityRoutes.js,"requireAuth, requireRole(ADMIN)",ADMIN,Admin xử lý giải quyết báo cáo khiếu nại
+API-106,GET,/api/notifications,/notifications,communityRoutes.js,requireAuth,AUTHENTICATED,Lấy danh sách thông báo của tài khoản
+API-107,PATCH,/api/notifications/:id/read,/notifications/:id/read,communityRoutes.js,requireAuth,AUTHENTICATED,Đánh dấu thông báo đã đọc
+

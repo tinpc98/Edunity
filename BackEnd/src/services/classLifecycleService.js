@@ -28,8 +28,12 @@ const startClassesThatBegan = async () => {
 
 /**
  * IN_PROGRESS → COMPLETED when every Session is final and the class period is over (endDate, or the last Session's
- * end when no endDate is set). Completing a class completes its CONFIRMED enrollments and releases the Teacher's
- * PENDING earnings for payout (AVAILABLE).
+ * end when no endDate is set). Completing a class completes its CONFIRMED enrollments.
+ *
+ * V3 Settlement Guard (GAP-P0-05 / PR3 Section 4.8):
+ * Earnings created under the V3 payment dispatch pipeline carry `settlementHoldRequired: true` and must NOT be
+ * auto-released to `AVAILABLE` upon class completion; they remain `PENDING` until PR7's 7-day reconciliation
+ * and makeup/incident review window is completed.
  */
 const completeFinishedClasses = async (now = new Date()) => {
   const running = await Class.find({ status: "IN_PROGRESS", ...NOT_DELETED })
@@ -51,7 +55,18 @@ const completeFinishedClasses = async (now = new Date()) => {
       { classId: cls._id, enrollmentStatus: "CONFIRMED" },
       { $set: { enrollmentStatus: "COMPLETED" } }
     );
-    await TeacherEarning.updateMany({ classId: cls._id, status: "PENDING" }, { $set: { status: "AVAILABLE" } });
+    // For explicit legacy earnings with settlementHoldRequired === false, release to AVAILABLE
+    await TeacherEarning.updateMany(
+      { classId: cls._id, status: "PENDING", settlementHoldRequired: false },
+      { $set: { status: "AVAILABLE" } }
+    );
+    // V3 PR7 Settlement Hardening (BR-04, BR-07): Class COMPLETED does NOT auto-release
+    // V3 teacher earnings to AVAILABLE. All earnings must undergo the 7-day maturity evaluation
+    // and verified absence of incidents, makeup sessions, and disputes.
+    try {
+      const settlementService = require("./settlementService");
+      await settlementService.evaluateClassSettlement(cls._id, { now });
+    } catch (_) {}
     await notify(
       cls.teacherId,
       "Lớp học đã hoàn thành",

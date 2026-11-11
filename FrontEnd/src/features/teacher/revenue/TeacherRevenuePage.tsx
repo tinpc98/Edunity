@@ -10,16 +10,19 @@ import {
   Row,
   Col,
   Statistic,
+  Tooltip,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
   WalletOutlined,
   ReloadOutlined,
   CheckCircleOutlined,
-  ClockCircleOutlined,
   DollarOutlined,
   PercentageOutlined,
   BankOutlined,
+  LockOutlined,
+  HourglassOutlined,
+  SyncOutlined,
 } from "@ant-design/icons";
 import { financeService, financeKeys } from "../../../services/finance.service";
 import TeacherPayoutSection from "./TeacherPayoutSection";
@@ -35,16 +38,34 @@ const { Title, Text } = Typography;
 export default function TeacherRevenuePage() {
   const {
     data,
-    isLoading,
-    refetch,
-    isFetching,
+    isLoading: earningsLoading,
+    refetch: refetchEarnings,
+    isFetching: isFetchingEarnings,
   } = useQuery({
     queryKey: financeKeys.teacherEarnings(),
     queryFn: () => financeService.getTeacherEarnings(),
   });
 
+  const {
+    data: settlementData,
+    isLoading: settlementsLoading,
+    refetch: refetchSettlements,
+    isFetching: isFetchingSettlements,
+  } = useQuery({
+    queryKey: financeKeys.teacherSettlements(),
+    queryFn: () => financeService.getTeacherSettlements(),
+  });
+
+  const isLoading = earningsLoading || settlementsLoading;
+  const isFetching = isFetchingEarnings || isFetchingSettlements;
+
+  const refetchAll = () => {
+    refetchEarnings();
+    refetchSettlements();
+  };
+
   const earnings = data?.items || [];
-  const summary = data?.summary || {
+  const rawSummary = data?.summary || {
     totalGross: 0,
     totalCommission: 0,
     totalNet: 0,
@@ -52,6 +73,14 @@ export default function TeacherRevenuePage() {
     available: 0,
     paidOut: 0,
   };
+
+  const setSummary = settlementData?.summary;
+  const pendingHeld = setSummary?.pendingHeld ?? 0;
+  const pendingMaturing = setSummary?.pendingMaturing ?? 0;
+  const availableAmount = setSummary?.available ?? rawSummary.available;
+  const inPayoutAmount = setSummary?.inPayout ?? 0;
+  const paidOutAmount = setSummary?.paidOut ?? rawSummary.paidOut;
+  const totalNet = setSummary?.totalNet ?? rawSummary.totalNet;
 
   const columns: ColumnsType<TeacherEarningItem> = [
     {
@@ -136,35 +165,35 @@ export default function TeacherRevenuePage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Title level={3} className="!mb-1 !text-slate-900 font-bold flex items-center gap-2">
-            <WalletOutlined className="text-indigo-600" /> Quản lý Doanh thu & Thu nhập
+            <WalletOutlined className="text-indigo-600" /> Quản lý Doanh thu & Quyết toán Thù lao
           </Title>
           <Text type="secondary" className="text-sm">
-            Theo dõi chi tiết doanh thu giảng dạy từ các lượt ghi danh học viên và tỷ lệ phân chia nền tảng.
+            Hạch toán doanh thu giảng dạy, theo dõi điều kiện quyết toán (7 ngày sau kết thúc buổi dạy) và yêu cầu rút tiền.
           </Text>
         </div>
 
         <Button
           icon={<ReloadOutlined spin={isFetching} />}
-          onClick={() => refetch()}
+          onClick={refetchAll}
           disabled={isLoading}
         >
           Làm mới
         </Button>
       </div>
 
-      {/* Summary Cards */}
+      {/* Top 3 High-Level Financial Cards */}
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={8}>
           <Card className="rounded-2xl border-slate-200/80 shadow-xs">
             <Statistic
               title={<span className="text-xs font-semibold text-slate-500 uppercase">Tổng doanh thu gộp</span>}
-              value={summary.totalGross}
+              value={rawSummary.totalGross}
               formatter={(val) => formatVND(Number(val))}
               prefix={<DollarOutlined className="text-indigo-500 text-lg mr-2" />}
               valueStyle={{ color: "#1e293b", fontWeight: "bold" }}
             />
             <div className="mt-2 text-xs text-slate-400">
-              Tổng số tiền học phí từ tất cả các lớp đã ghi danh
+              Tổng số tiền học phí từ tất cả các lượt ghi danh đã thanh toán
             </div>
           </Card>
         </Col>
@@ -173,13 +202,13 @@ export default function TeacherRevenuePage() {
           <Card className="rounded-2xl border-slate-200/80 shadow-xs">
             <Statistic
               title={<span className="text-xs font-semibold text-slate-500 uppercase">Phí nền tảng (10%)</span>}
-              value={summary.totalCommission}
+              value={rawSummary.totalCommission}
               formatter={(val) => formatVND(Number(val))}
               prefix={<PercentageOutlined className="text-amber-500 text-lg mr-2" />}
               valueStyle={{ color: "#d97706", fontWeight: "bold" }}
             />
             <div className="mt-2 text-xs text-slate-400">
-              Chi phí duy trì hệ thống và kết nối học viên
+              Chi phí kết nối và vận hành hệ thống Edunity
             </div>
           </Card>
         </Col>
@@ -187,72 +216,118 @@ export default function TeacherRevenuePage() {
         <Col xs={24} sm={12} lg={8}>
           <Card className="rounded-2xl border-slate-200/80 shadow-xs bg-emerald-50/50 border-emerald-200">
             <Statistic
-              title={<span className="text-xs font-semibold text-emerald-800 uppercase">Doanh thu thực nhận</span>}
-              value={summary.totalNet}
+              title={<span className="text-xs font-semibold text-emerald-800 uppercase">Doanh thu thực nhận tích lũy</span>}
+              value={totalNet}
               formatter={(val) => formatVND(Number(val))}
               prefix={<BankOutlined className="text-emerald-600 text-lg mr-2" />}
               valueStyle={{ color: "#059669", fontWeight: "bold" }}
             />
             <div className="mt-2 text-xs text-emerald-600/80">
-              Thu nhập ròng sau khi trừ phí nền tảng
+              Tổng thu nhập ròng 90% thuộc về Quý Thầy/Cô
             </div>
           </Card>
         </Col>
       </Row>
 
-      {/* Status Breakdown Cards */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={8}>
-          <Card className="rounded-xl border-slate-200/80 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs text-slate-500 font-medium">Chờ đối soát (PENDING)</div>
-                <div className="text-lg font-bold text-amber-600 mt-1">
-                  {formatVND(summary.pending)}
+      {/* 5-Stage Settlement Status Breakdown */}
+      <div>
+        <div className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center gap-1.5">
+          <span>Tiến trình phân bổ & quyết toán thù lao</span>
+          <Tooltip title="Thu nhập qua các giai đoạn: Tạm giữ bảo đảm -> Chờ 7 ngày kiểm tra khiếu nại -> Khả dụng để rút -> Đang xử lý lệnh rút -> Đã giải ngân thành công.">
+            <HourglassOutlined className="cursor-pointer text-slate-400" />
+          </Tooltip>
+        </div>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} md={8} lg={4}>
+            <Card className="rounded-xl border-slate-200 shadow-2xs bg-amber-50/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-amber-700 font-medium flex items-center gap-1">
+                    <LockOutlined /> Tạm giữ (Chưa đủ ĐK)
+                  </div>
+                  <div className="text-base font-bold text-amber-800 mt-1">
+                    {formatVND(pendingHeld)}
+                  </div>
                 </div>
               </div>
-              <ClockCircleOutlined className="text-2xl text-amber-400" />
-            </div>
-          </Card>
-        </Col>
+              <div className="text-[10px] text-amber-600/80 mt-1">Lớp đang học / Có sự vụ</div>
+            </Card>
+          </Col>
 
-        <Col xs={24} sm={8}>
-          <Card className="rounded-xl border-slate-200/80 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs text-slate-500 font-medium">Khả dụng (AVAILABLE)</div>
-                <div className="text-lg font-bold text-emerald-600 mt-1">
-                  {formatVND(summary.available)}
+          <Col xs={24} sm={12} md={8} lg={5}>
+            <Card className="rounded-xl border-slate-200 shadow-2xs bg-cyan-50/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-cyan-700 font-medium flex items-center gap-1">
+                    <HourglassOutlined /> Đang chờ đủ 7 ngày
+                  </div>
+                  <div className="text-base font-bold text-cyan-800 mt-1">
+                    {formatVND(pendingMaturing)}
+                  </div>
                 </div>
               </div>
-              <CheckCircleOutlined className="text-2xl text-emerald-400" />
-            </div>
-          </Card>
-        </Col>
+              <div className="text-[10px] text-cyan-600/80 mt-1">Đã kết thúc, chờ đối soát</div>
+            </Card>
+          </Col>
 
-        <Col xs={24} sm={8}>
-          <Card className="rounded-xl border-slate-200/80 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs text-slate-500 font-medium">Đã thanh toán (PAID_OUT)</div>
-                <div className="text-lg font-bold text-blue-600 mt-1">
-                  {formatVND(summary.paidOut)}
+          <Col xs={24} sm={12} md={8} lg={5}>
+            <Card className="rounded-xl border-emerald-300 shadow-2xs bg-emerald-50/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-emerald-700 font-bold flex items-center gap-1">
+                    <CheckCircleOutlined /> Khả dụng để rút
+                  </div>
+                  <div className="text-base font-bold text-emerald-800 mt-1">
+                    {formatVND(availableAmount)}
+                  </div>
                 </div>
               </div>
-              <WalletOutlined className="text-2xl text-blue-400" />
-            </div>
-          </Card>
-        </Col>
-      </Row>
+              <div className="text-[10px] text-emerald-600/80 mt-1">Có thể rút vào Thứ Hai</div>
+            </Card>
+          </Col>
 
-      {/* Payouts (F02) */}
-      <TeacherPayoutSection available={Number(summary.available) || 0} />
+          <Col xs={24} sm={12} md={8} lg={5}>
+            <Card className="rounded-xl border-slate-200 shadow-2xs bg-purple-50/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-purple-700 font-medium flex items-center gap-1">
+                    <SyncOutlined /> Đang chờ giải ngân
+                  </div>
+                  <div className="text-base font-bold text-purple-800 mt-1">
+                    {formatVND(inPayoutAmount)}
+                  </div>
+                </div>
+              </div>
+              <div className="text-[10px] text-purple-600/80 mt-1">Lệnh đã tạo, chờ thứ Sáu</div>
+            </Card>
+          </Col>
+
+          <Col xs={24} sm={12} md={8} lg={5}>
+            <Card className="rounded-xl border-slate-200 shadow-2xs bg-blue-50/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-blue-700 font-medium flex items-center gap-1">
+                    <WalletOutlined /> Đã chi trả xong
+                  </div>
+                  <div className="text-base font-bold text-blue-800 mt-1">
+                    {formatVND(paidOutAmount)}
+                  </div>
+                </div>
+              </div>
+              <div className="text-[10px] text-blue-600/80 mt-1">Đã chuyển vào tài khoản</div>
+            </Card>
+          </Col>
+        </Row>
+      </div>
+
+      {/* Payouts Section (Monday Request Window) */}
+      <TeacherPayoutSection available={Number(availableAmount) || 0} />
 
       {/* Earnings Table */}
       <Card className="rounded-2xl border-slate-200/80 shadow-xs overflow-hidden">
         <div className="mb-4">
           <Title level={5} className="!mb-1 text-slate-800">
-            Lịch sử các khoản thu nhập
+            Chi tiết các khoản thu nhập
           </Title>
           <Text type="secondary" className="text-xs">
             Danh sách từng khoản học phí được chuyển đến tài khoản giảng viên sau mỗi giao dịch thanh toán thành công.

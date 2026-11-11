@@ -70,6 +70,8 @@ const notifyAdminsOnce = async (title, content, type, dedupeKey, sessionId = nul
 const notifyTeacherOfEnrollment = async (enrollmentId) => {
   try {
     if (!enrollmentId) return;
+    const mongoose = require("mongoose");
+    if (!mongoose.connection || mongoose.connection.readyState !== 1) return;
     const Enrollment = require("../models/Enrollment");
     const enrollment = await Enrollment.findById(enrollmentId)
       .populate("classId", "className")

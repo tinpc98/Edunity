@@ -19,8 +19,8 @@ const STRONG = {
   PAYMENT_WEBHOOK_SECRET: "c".repeat(40),
   ROOM_TOKEN_SECRET: "d".repeat(40),
 };
-const PROD = { NODE_ENV: "production", CORS_ORIGIN: "https://edunity.example", ...STRONG };
-const ALL_KEYS = ["NODE_ENV", "CORS_ORIGIN", ...Object.keys(STRONG), "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"];
+const PROD = { NODE_ENV: "production", CORS_ORIGIN: "https://edunity.example", COMMISSION_RATE: "0.10", COMMISSION_POLICY_VERSION: "POLICY_PROD_APPROVED", COMMISSION_POLICY_APPROVED: "true", ...STRONG };
+const ALL_KEYS = ["NODE_ENV", "CORS_ORIGIN", "COMMISSION_RATE", "COMMISSION_POLICY_VERSION", "COMMISSION_POLICY_APPROVED", ...Object.keys(STRONG), "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"];
 const NON_TEST_ENVS = [undefined, "development", "staging", "Production", "prod", "production"];
 
 /** Runs fn with exactly these env values (the rest of ALL_KEYS unset), then restores. */
@@ -212,6 +212,22 @@ describe("P0: payment webhooks", () => {
       expect((await call("wrong")).statusCode).toBe(401);
       expect((await Enrollment.findById(enrollmentId)).enrollmentStatus).toBe("PENDING_PAYMENT");
       expect((await call(STRONG.PAYMENT_WEBHOOK_SECRET)).body.data.enrollmentStatus).toBe("CONFIRMED");
+    });
+  });
+
+  it("the gateway webhook refuses to confirm when production lacks approved commission policy", async () => {
+    const { gatewayReference, enrollmentId } = await pendingPayment();
+    const call = (secret) => {
+      const req = request(app).post("/api/payments/webhook");
+      if (secret) req.set("x-webhook-secret", secret);
+      return req.send({ gatewayReference, status: "SUCCESS" });
+    };
+    const unapprovedProd = { ...PROD, COMMISSION_POLICY_APPROVED: "false" };
+    await withEnv(unapprovedProd, async () => {
+      const res = await call(STRONG.PAYMENT_WEBHOOK_SECRET);
+      expect(res.statusCode).toBe(503);
+      expect(res.body.error).toMatch(/COMMISSION_POLICY/);
+      expect((await Enrollment.findById(enrollmentId)).enrollmentStatus).toBe("PENDING_PAYMENT");
     });
   });
 

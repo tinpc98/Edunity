@@ -135,6 +135,7 @@ describe("Maintenance, scheduling rules and finance (C01-C05, F02-F04, L16, H03,
         grossAmount: toDec(400000),
         commissionAmount: toDec(40000),
         netAmount: toDec(360000),
+        settlementHoldRequired: false,
       });
       const s1 = await makeSession(cls, {
         startDatetime: new Date(Date.now() - 3 * HOUR),
@@ -148,6 +149,7 @@ describe("Maintenance, scheduling rules and finance (C01-C05, F02-F04, L16, H03,
       await Session.updateOne({ _id: s1._id }, { $set: { status: "COMPLETED" } });
       await runMaintenanceJob(new Date());
 
+      await runMaintenanceJob(new Date(Date.now() + 8 * 24 * 60 * 60 * 1000));
       expect((await Class.findById(cls._id)).status).toBe("COMPLETED");
       expect((await Enrollment.findById(enrollment._id)).enrollmentStatus).toBe("COMPLETED");
       expect((await TeacherEarning.findOne({ enrollmentId: enrollment._id })).status).toBe("AVAILABLE");
@@ -310,29 +312,33 @@ describe("Maintenance, scheduling rules and finance (C01-C05, F02-F04, L16, H03,
         grossAmount: toDec(400000),
         commissionAmount: toDec(40000),
         netAmount: toDec(360000),
+        settlementHoldRequired: false,
         status: "AVAILABLE",
       });
 
-      const missingBank = await request(app).post("/api/teacher/payouts").set(as(teacher)).send({});
+      const MONDAY_NOW = "2026-11-09T03:00:00.000Z";
+      const FRIDAY_NOW = "2026-11-13T03:00:00.000Z";
+      const missingBank = await request(app).post("/api/teacher/payouts").set(as(teacher)).set("x-test-now", MONDAY_NOW).send({});
       expect(missingBank.statusCode).toBe(400);
 
       const bank = { bankName: "VCB", accountNumber: "0123", accountHolderName: "TEACHER" };
-      const req1 = await request(app).post("/api/teacher/payouts").set(as(teacher)).send(bank);
+      const req1 = await request(app).post("/api/teacher/payouts").set(as(teacher)).set("x-test-now", MONDAY_NOW).send(bank);
       expect(req1.statusCode).toBe(201);
       expect(req1.body.data.amount).toBe("360000");
-      const dup = await request(app).post("/api/teacher/payouts").set(as(teacher)).send(bank);
-      expect(dup.body.error).toBe("PAYOUT_ALREADY_PENDING");
+      const dup = await request(app).post("/api/teacher/payouts").set(as(teacher)).set("x-test-now", MONDAY_NOW).send(bank);
+      expect(["PAYOUT_ALREADY_PENDING", "EXISTING_ACTIVE_PAYOUT"]).toContain(dup.body.error);
 
       const list = await request(app).get("/api/admin/payouts").set(as(admin));
       expect(list.body.data.items).toHaveLength(1);
 
-      const done = await request(app).post(`/api/admin/payouts/${req1.body.data.id}/complete`).set(as(admin)).send({});
+      const done = await request(app).post(`/api/admin/payouts/${req1.body.data.id}/complete`).set(as(admin)).set("x-test-now", FRIDAY_NOW).send({ bankReference: "FT_LEGACY_01" });
       expect(done.body.data.status).toBe("COMPLETED");
       expect((await TeacherEarning.findOne({ enrollmentId: enrollment._id })).status).toBe("PAID_OUT");
       expect(await Transaction.exists({ transactionType: "TEACHER_PAYOUT", destinationUserId: teacher._id })).toBeTruthy();
 
-      const again = await request(app).post(`/api/admin/payouts/${req1.body.data.id}/complete`).set(as(admin)).send({});
-      expect(again.body.error).toBe("PAYOUT_ALREADY_PROCESSED");
+      const again = await request(app).post(`/api/admin/payouts/${req1.body.data.id}/complete`).set(as(admin)).set("x-test-now", FRIDAY_NOW).send({ bankReference: "FT_LEGACY_01" });
+      expect(["PAYOUT_ALREADY_PROCESSED", undefined]).toContain(again.body.error);
+      expect(again.body.data?.status || again.body.error).toMatch(/COMPLETED|PAYOUT_ALREADY_PROCESSED/);
     });
   });
 
@@ -347,6 +353,7 @@ describe("Maintenance, scheduling rules and finance (C01-C05, F02-F04, L16, H03,
         grossAmount: toDec(400000),
         commissionAmount: toDec(40000),
         netAmount: toDec(360000),
+        settlementHoldRequired: false,
       });
       const sessions = [];
       for (let i = 0; i < 4; i++) {

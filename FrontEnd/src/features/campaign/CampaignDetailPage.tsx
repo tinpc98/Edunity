@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Typography,
@@ -9,12 +9,13 @@ import {
   Tag,
   Progress,
   Button,
+  Input,
   InputNumber,
   Breadcrumb,
   Alert,
   Skeleton,
   Modal,
-  Descriptions,
+  Radio,
   message,
   Divider,
 } from "antd";
@@ -25,11 +26,25 @@ import {
   ArrowLeftOutlined,
   WalletOutlined,
   CloseCircleOutlined,
+  EyeInvisibleOutlined,
+  GlobalOutlined,
+  ExperimentOutlined,
 } from "@ant-design/icons";
 import { campaignService, campaignKeys } from "../../services/campaign.service";
-import { sponsorContributionService, contributionKeys } from "../../services/sponsorContribution.service";
+import {
+  sponsorContributionService,
+  contributionKeys,
+} from "../../services/sponsorContribution.service";
+import { paymentKeys } from "../../services/gatewayPayment.service";
 import { financeKeys } from "../../services/finance.service";
 import { useAuthStore } from "../../stores/auth.store";
+import { usePaymentPolling, derivePaymentUiState } from "../../hooks/usePaymentPolling";
+import {
+  PaymentQrPanel,
+  PaymentInstructions,
+  PaymentResult,
+  PaymentErrorState,
+} from "../../components/payment";
 import type { CreateContributionResponse } from "../../types/campaign";
 import {
   CAMPAIGN_STATUS_LABELS,
@@ -50,66 +65,129 @@ const PRESET_AMOUNTS = [
   5_000_000,
 ];
 
+const IS_DEV_OR_TEST =
+  typeof import.meta !== "undefined" &&
+  Boolean(import.meta.env?.DEV || import.meta.env?.MODE === "test");
+
 export default function PublicCampaignDetailPage() {
   const { campaignId } = useParams<{ campaignId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuthStore();
 
   const [contributionAmount, setContributionAmount] = useState<number>(500_000);
-  const [pendingContribution, setPendingContribution] = useState<CreateContributionResponse | null>(null);
+  const [isAnonymous, setIsAnonymous] = useState<boolean>(false);
+  const [donorDisplayName, setDonorDisplayName] = useState<string>("");
+  const [pendingContribution, setPendingContribution] =
+    useState<CreateContributionResponse | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [isApplyScholarshipModalOpen, setIsApplyScholarshipModalOpen] = useState<boolean>(false);
+  const [isClientTimerZero, setIsClientTimerZero] = useState<boolean>(false);
+  const [isApplyScholarshipModalOpen, setIsApplyScholarshipModalOpen] =
+    useState<boolean>(false);
 
   // Fetch campaign detail
   const {
     data: campaign,
     isLoading,
     isError,
+    refetch: refetchCampaign,
   } = useQuery({
     queryKey: campaignKeys.detail(campaignId || ""),
     queryFn: () => (campaignId ? campaignService.getCampaign(campaignId) : null),
     enabled: Boolean(campaignId),
   });
 
-  // Mutation to create contribution intent
+  // Poll active donation payment status every 3s when modal is open
+  const activePaymentId = pendingContribution?.paymentId || null;
+  const {
+    payment: polledDonation,
+    uiState: polledUiState,
+    isPolling,
+    isFetching: isPollingFetching,
+    refetch: refetchDonationPayment,
+  } = usePaymentPolling({
+    paymentId: activePaymentId,
+    enabled: Boolean(isModalOpen && activePaymentId),
+    isClientTimerZero,
+  });
+
+  const activeDonation = useMemo(() => {
+    if (polledDonation && pendingContribution) {
+      return {
+        ...pendingContribution,
+        ...polledDonation,
+        qrCode: polledDonation.qrCode || pendingContribution.qrCode || null,
+        checkoutUrl:
+          polledDonation.checkoutUrl || pendingContribution.checkoutUrl || null,
+        orderCode: polledDonation.orderCode ?? pendingContribution.orderCode ?? null,
+      };
+    }
+    return pendingContribution;
+  }, [pendingContribution, polledDonation]);
+
+  const effectiveUiState = useMemo(() => {
+    if (polledDonation) return polledUiState;
+    if (pendingContribution) {
+      return derivePaymentUiState(pendingContribution as any, isClientTimerZero);
+    }
+    return "PENDING";
+  }, [polledDonation, polledUiState, pendingContribution, isClientTimerZero]);
+
+  // Only refresh campaign fundedAmount from Backend AFTER webhook confirms COMPLETED
+  useEffect(() => {
+    if (
+      effectiveUiState === "COMPLETED" ||
+      effectiveUiState === "RECONCILIATION_REQUIRED"
+    ) {
+      queryClient.invalidateQueries({ queryKey: campaignKeys.all });
+      queryClient.invalidateQueries({ queryKey: contributionKeys.all });
+      queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      queryClient.invalidateQueries({ queryKey: financeKeys.all });
+      refetchCampaign();
+    }
+  }, [effectiveUiState, queryClient, refetchCampaign]);
+
+  // Mutation to create contribution intent via Unified Payment Engine (DONATION channel)
   const createContributionMutation = useMutation({
-    mutationFn: (amount: number) => {
+    mutationFn: () => {
       if (!campaignId) throw new Error("Mã chiến dịch không hợp lệ.");
-      return sponsorContributionService.createContribution(campaignId, { amount });
+      if (!Number.isFinite(contributionAmount) || contributionAmount <= 0) {
+        throw new Error("Vui lòng nhập số tiền tài trợ hợp lệ (> 0 VNĐ).");
+      }
+      return sponsorContributionService.createContribution(campaignId, {
+        amount: Math.round(contributionAmount),
+        isAnonymous,
+        donorDisplayName: isAnonymous ? null : donorDisplayName.trim() || null,
+      });
     },
     onSuccess: (data) => {
       setPendingContribution(data);
+      setIsClientTimerZero(false);
       setIsModalOpen(true);
-      message.info("Đã tạo yêu cầu tài trợ. Vui lòng hoàn tất thanh toán.");
     },
     onError: (err: any) => {
-      message.error(err.message || "Không thể khởi tạo phiên tài trợ. Vui lòng thử lại.");
+      const errMsg =
+        err?.code === "PAYMENT_PROVIDER_DISABLED" || err?.status === 503
+          ? "Cổng thanh toán chưa được kích hoạt."
+          : err?.message || "Không thể khởi tạo mã VietQR tài trợ. Vui lòng thử lại.";
+      message.error(errMsg);
     },
   });
 
-  // Mutation to confirm sandbox webhook
+  // Mutation to confirm sandbox webhook (DEV/TEST + SANDBOX only)
   const confirmWebhookMutation = useMutation({
     mutationFn: (status: "SUCCESS" | "FAILED") => {
-      if (!pendingContribution?.gatewayReference) {
+      if (!activeDonation?.gatewayReference) {
         throw new Error("Không tìm thấy mã đối soát thanh toán.");
       }
       return sponsorContributionService.triggerSandboxWebhook(
-        pendingContribution.gatewayReference,
+        activeDonation.gatewayReference,
         status
       );
     },
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: campaignKeys.all });
-      queryClient.invalidateQueries({ queryKey: contributionKeys.all });
-      queryClient.invalidateQueries({ queryKey: financeKeys.all });
-
-      if (res.contributionStatus === "COMPLETED" || res.result === "CONTRIBUTION_SUCCESS") {
-        message.success("Tài trợ thành công! Cảm ơn sự đóng góp quý báu của bạn.");
-        setIsModalOpen(false);
-        setPendingContribution(null);
-      } else {
-        message.error("Giao dịch tài trợ không thành công.");
-      }
+    onSuccess: async () => {
+      await refetchDonationPayment();
+      await refetchCampaign();
     },
     onError: (err: any) => {
       message.error(err.message || "Lỗi xử lý xác nhận tài trợ.");
@@ -141,7 +219,15 @@ export default function PublicCampaignDetailPage() {
   }
 
   const isClosed = campaign.status === "CLOSED";
-  const isAcceptingFunding = campaign.isAcceptingFunding;
+  const isAcceptingFunding = campaign.isAcceptingFunding && !isClosed;
+
+  const canShowSandboxControls =
+    IS_DEV_OR_TEST &&
+    import.meta.env.VITE_ENABLE_PAYMENT_SANDBOX === "true" &&
+    Boolean(activeDonation?.gatewayReference) &&
+    (activeDonation?.provider === "SANDBOX" ||
+      activeDonation?.gateway === "SANDBOX" ||
+      activeDonation?.gatewayReference?.startsWith("SBX-"));
 
   return (
     <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
@@ -167,13 +253,19 @@ export default function PublicCampaignDetailPage() {
                   {CAMPAIGN_STATUS_LABELS[campaign.status] || campaign.status}
                 </Tag>
                 {isAcceptingFunding && (
-                  <Tag color="cyan" className="rounded-full px-3 py-1 font-semibold text-xs border-0">
+                  <Tag
+                    color="cyan"
+                    className="rounded-full px-3 py-1 font-semibold text-xs border-0"
+                  >
                     Đang tiếp nhận đóng góp
                   </Tag>
                 )}
               </div>
 
-              <Title level={2} className="!mb-2 !text-slate-900 font-black tracking-tight text-2xl md:text-4xl">
+              <Title
+                level={2}
+                className="!mb-2 !text-slate-900 font-black tracking-tight text-2xl md:text-4xl"
+              >
                 {campaign.title}
               </Title>
 
@@ -181,12 +273,15 @@ export default function PublicCampaignDetailPage() {
                 {campaign.fundingStart && campaign.fundingEnd && (
                   <span className="flex items-center gap-1.5">
                     <CalendarOutlined className="text-indigo-500" />
-                    Thời gian gây quỹ: {new Date(campaign.fundingStart).toLocaleDateString("vi-VN")} - {new Date(campaign.fundingEnd).toLocaleDateString("vi-VN")}
+                    Thời gian gây quỹ:{" "}
+                    {new Date(campaign.fundingStart).toLocaleDateString("vi-VN")} -{" "}
+                    {new Date(campaign.fundingEnd).toLocaleDateString("vi-VN")}
                   </span>
                 )}
                 {campaign.contributionCount > 0 && (
                   <span className="flex items-center gap-1.5 text-indigo-600 font-semibold">
-                    <HeartOutlined /> {campaign.contributionCount} lượt tài trợ đã hoàn thành
+                    <HeartOutlined /> {campaign.contributionCount} lượt tài trợ đã hoàn
+                    thành
                   </span>
                 )}
               </div>
@@ -205,8 +300,13 @@ export default function PublicCampaignDetailPage() {
           <div className="space-y-3 bg-gradient-to-r from-indigo-50/70 to-blue-50/70 p-6 rounded-2xl border border-indigo-100">
             <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
               <div>
-                <span className="text-xs uppercase font-bold tracking-wider text-indigo-700">Tiến độ quyên góp quỹ</span>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
+                <span className="text-xs uppercase font-bold tracking-wider text-indigo-700">
+                  Tiến độ quyên góp quỹ (Chỉ cộng khi cổng thanh toán xác thực)
+                </span>
+                <div
+                  className="text-2xl sm:text-3xl font-black text-slate-900 mt-1"
+                  data-testid="campaign-funded-amount"
+                >
                   {formatVND(campaign.fundedAmount)}
                   <span className="text-sm font-normal text-slate-500 ml-2">
                     / mục tiêu {formatVND(campaign.targetBudget)}
@@ -214,7 +314,9 @@ export default function PublicCampaignDetailPage() {
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-3xl font-black text-indigo-600">{campaign.fundingProgress}%</span>
+                <span className="text-3xl font-black text-indigo-600">
+                  {campaign.fundingProgress}%
+                </span>
               </div>
             </div>
 
@@ -228,19 +330,27 @@ export default function PublicCampaignDetailPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-indigo-100/60 text-xs">
               <div>
                 <div className="text-slate-500">Đã cấp học bổng</div>
-                <div className="font-bold text-slate-800 text-sm mt-0.5">{formatVND(campaign.allocatedAmount)}</div>
+                <div className="font-bold text-slate-800 text-sm mt-0.5">
+                  {formatVND(campaign.allocatedAmount)}
+                </div>
               </div>
               <div>
                 <div className="text-slate-500">Đã giải ngân học phí</div>
-                <div className="font-bold text-slate-800 text-sm mt-0.5">{formatVND(campaign.usedAmount)}</div>
+                <div className="font-bold text-slate-800 text-sm mt-0.5">
+                  {formatVND(campaign.usedAmount)}
+                </div>
               </div>
               <div>
                 <div className="text-slate-500">Quỹ còn khả dụng</div>
-                <div className="font-bold text-emerald-600 text-sm mt-0.5">{formatVND(campaign.availableFund)}</div>
+                <div className="font-bold text-emerald-600 text-sm mt-0.5">
+                  {formatVND(campaign.availableFund)}
+                </div>
               </div>
               <div>
                 <div className="text-slate-500">Tổng suất học bổng</div>
-                <div className="font-bold text-indigo-700 text-sm mt-0.5">{campaign.expectedSlots} suất</div>
+                <div className="font-bold text-indigo-700 text-sm mt-0.5">
+                  {campaign.expectedSlots} suất
+                </div>
               </div>
             </div>
           </div>
@@ -251,56 +361,78 @@ export default function PublicCampaignDetailPage() {
           {/* Left Column: Details & Criteria */}
           <Col xs={24} lg={15}>
             <div className="space-y-6">
-              {/* Description */}
-              <Card className="rounded-2xl border-slate-200/80 shadow-xs" title="Ý nghĩa & Mục tiêu chương trình">
+              <Card
+                className="rounded-2xl border-slate-200/80 shadow-xs"
+                title="Ý nghĩa & Mục tiêu chương trình"
+              >
                 <Paragraph className="text-slate-700 leading-relaxed whitespace-pre-line text-sm">
                   {campaign.description || "Chưa có mô tả chi tiết."}
                 </Paragraph>
               </Card>
 
-              {/* Eligibility Criteria */}
-              <Card className="rounded-2xl border-slate-200/80 shadow-xs" title="Tiêu chí xét duyệt học bổng">
+              <Card
+                className="rounded-2xl border-slate-200/80 shadow-xs"
+                title="Tiêu chí xét duyệt học bổng"
+              >
                 <Paragraph className="text-slate-700 leading-relaxed whitespace-pre-line text-sm">
-                  {campaign.eligibilityCriteria || "Áp dụng theo quy chế xét duyệt học bổng chung của Edunity."}
+                  {campaign.eligibilityCriteria ||
+                    "Áp dụng theo quy chế xét duyệt học bổng chung của Edunity."}
                 </Paragraph>
               </Card>
 
-              {/* Scope details */}
               {campaign.scopeDetail && (
-                <Card className="rounded-2xl border-slate-200/80 shadow-xs" title="Phạm vi môn học & Khóa học hỗ trợ">
+                <Card
+                  className="rounded-2xl border-slate-200/80 shadow-xs"
+                  title="Phạm vi môn học & Khóa học hỗ trợ"
+                >
                   <div className="space-y-4">
-                    {campaign.scopeDetail.categories && campaign.scopeDetail.categories.length > 0 && (
-                      <div>
-                        <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Danh mục:</div>
-                        <div className="flex flex-wrap gap-2">
-                          {campaign.scopeDetail.categories.map((c) => (
-                            <Tag key={c._id} color="blue">{c.name}</Tag>
-                          ))}
+                    {campaign.scopeDetail.categories &&
+                      campaign.scopeDetail.categories.length > 0 && (
+                        <div>
+                          <div className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                            Danh mục:
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {campaign.scopeDetail.categories.map((c) => (
+                              <Tag key={c._id} color="blue">
+                                {c.name}
+                              </Tag>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {campaign.scopeDetail.subjects && campaign.scopeDetail.subjects.length > 0 && (
-                      <div>
-                        <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Môn học:</div>
-                        <div className="flex flex-wrap gap-2">
-                          {campaign.scopeDetail.subjects.map((s) => (
-                            <Tag key={s._id} color="purple">{s.name}</Tag>
-                          ))}
+                    {campaign.scopeDetail.subjects &&
+                      campaign.scopeDetail.subjects.length > 0 && (
+                        <div>
+                          <div className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                            Môn học:
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {campaign.scopeDetail.subjects.map((s) => (
+                              <Tag key={s._id} color="purple">
+                                {s.name}
+                              </Tag>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {campaign.scopeDetail.courses && campaign.scopeDetail.courses.length > 0 && (
-                      <div>
-                        <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Khóa học cụ thể:</div>
-                        <div className="flex flex-wrap gap-2">
-                          {campaign.scopeDetail.courses.map((cr) => (
-                            <Tag key={cr._id} color="cyan">{cr.title}</Tag>
-                          ))}
+                    {campaign.scopeDetail.courses &&
+                      campaign.scopeDetail.courses.length > 0 && (
+                        <div>
+                          <div className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                            Khóa học cụ thể:
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {campaign.scopeDetail.courses.map((cr) => (
+                              <Tag key={cr._id} color="cyan">
+                                {cr.title}
+                              </Tag>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
                   </div>
                 </Card>
               )}
@@ -317,10 +449,10 @@ export default function PublicCampaignDetailPage() {
                   </div>
                   <div>
                     <Title level={4} className="!mb-0 !text-slate-900 font-bold">
-                      Đóng góp tài trợ
+                      Đóng góp tài trợ (VietQR)
                     </Title>
                     <Text type="secondary" className="text-xs">
-                      Mỗi khoản tài trợ là một cánh cửa tương lai mở ra
+                      Kênh thanh toán độc lập dành riêng cho Quỹ Học Bổng
                     </Text>
                   </div>
                 </div>
@@ -331,10 +463,16 @@ export default function PublicCampaignDetailPage() {
                 {!isAuthenticated ? (
                   <div className="space-y-4 text-center py-4">
                     <Paragraph className="text-slate-600 text-sm">
-                      Bạn cần đăng nhập tài khoản <strong>Nhà tài trợ (Sponsor)</strong> để tham gia đóng góp cho chiến dịch này.
+                      Bạn cần đăng nhập tài khoản{" "}
+                      <strong>Nhà tài trợ (Sponsor)</strong> để tạo mã VietQR đóng góp cho
+                      chiến dịch này.
                     </Paragraph>
-                    <Link to={`/login?redirect=/campaigns/${campaign.id}`}>
-                      <Button type="primary" block className="h-11 rounded-xl bg-indigo-600 font-semibold">
+                    <Link to={`${ROUTES.AUTH.LOGIN}?redirect=/campaigns/${campaign.id}`}>
+                      <Button
+                        type="primary"
+                        block
+                        className="h-11 rounded-xl bg-indigo-600 font-semibold"
+                      >
                         Đăng nhập để tài trợ
                       </Button>
                     </Link>
@@ -343,12 +481,19 @@ export default function PublicCampaignDetailPage() {
                   <div className="space-y-4">
                     <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-3">
                       <div className="flex items-center gap-2">
-                        <Tag color="indigo" className="font-bold border-none">DÀNH CHO HỌC SINH</Tag>
-                        <span className="text-xs text-indigo-700 font-semibold">Cơ hội nhận học bổng</span>
+                        <Tag color="indigo" className="font-bold border-none">
+                          DÀNH CHO HỌC SINH
+                        </Tag>
+                        <span className="text-xs text-indigo-700 font-semibold">
+                          Cơ hội nhận học bổng
+                        </span>
                       </div>
                       <div className="text-xs text-slate-600">
                         Chiến dịch hỗ trợ suất học bổng trị giá{" "}
-                        <strong className="text-indigo-700 text-sm">{formatVND(campaign.awardAmountPerStudent)}</strong> để chi trả học phí các lớp học.
+                        <strong className="text-indigo-700 text-sm">
+                          {formatVND(campaign.awardAmountPerStudent)}
+                        </strong>{" "}
+                        để chi trả học phí các lớp học.
                       </div>
                       {campaign.isAcceptingApplications ? (
                         <Button
@@ -379,7 +524,7 @@ export default function PublicCampaignDetailPage() {
                     </div>
 
                     <div className="text-[11px] text-slate-400 text-center">
-                      * Phần đóng góp tài trợ ở trên chỉ dành cho Nhà tài trợ (SPONSOR).
+                      * Phần đóng góp tài trợ chỉ dành cho Nhà tài trợ (SPONSOR).
                     </div>
                   </div>
                 ) : user?.role !== "SPONSOR" ? (
@@ -389,24 +534,30 @@ export default function PublicCampaignDetailPage() {
                     message="Quyền đóng góp tài trợ"
                     description={
                       <span>
-                        Tài khoản của bạn có vai trò <strong>{user?.role}</strong>. Chỉ tài khoản <strong>Nhà tài trợ (SPONSOR)</strong> mới có thể tạo giao dịch đóng góp vào quỹ.
+                        Tài khoản của bạn có vai trò <strong>{user?.role}</strong>. Chỉ
+                        tài khoản <strong>Nhà tài trợ (SPONSOR)</strong> mới có thể tạo
+                        giao dịch đóng góp vào quỹ.
                       </span>
                     }
                   />
                 ) : !isAcceptingFunding ? (
-                  <Alert
-                    type="info"
-                    showIcon
-                    message="Tạm ngưng nhận đóng góp"
+                  <PaymentErrorState
+                    kind="CAMPAIGN_CLOSED"
+                    purpose="DONATION"
+                    message={
+                      isClosed
+                        ? "Chiến dịch học bổng đã đóng"
+                        : "Chiến dịch hiện tạm ngưng tiếp nhận tài trợ"
+                    }
                     description={
                       isClosed
-                        ? "Chiến dịch đã đóng lại sau khi hoàn thành mục tiêu gây quỹ."
+                        ? "Chiến dịch đã đóng lại sau khi hoàn thành đợt gây quỹ nên không thể tạo mã QR đóng góp mới."
                         : "Chiến dịch hiện không nằm trong khung thời gian nhận tài trợ."
                     }
                   />
                 ) : (
                   /* Active Contribution Form for Sponsor */
-                  <div className="space-y-5">
+                  <div className="space-y-4" data-testid="sponsor-donation-form">
                     {/* Amount Presets */}
                     <div>
                       <label className="text-xs font-semibold text-slate-700 block mb-2 uppercase">
@@ -437,16 +588,70 @@ export default function PublicCampaignDetailPage() {
                       </label>
                       <InputNumber
                         value={contributionAmount}
-                        onChange={(val) => setContributionAmount(val || 0)}
+                        onChange={(val) => setContributionAmount(Number(val) || 0)}
                         min={10_000}
                         step={100_000}
                         className="w-full rounded-xl text-base font-bold text-slate-900"
-                        formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                        parser={(value) => (value ? Number(value.replace(/\$\s?|(,*)/g, "")) : 0) as any}
+                        formatter={(value) =>
+                          `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                        }
+                        parser={(value) =>
+                          (value ? Number(value.replace(/\$\s?|(,*)/g, "")) : 0) as any
+                        }
+                        data-testid="donation-amount-input"
                       />
                       <span className="text-[11px] text-slate-400 mt-1 block">
-                        Tối thiểu 10,000 đ. Đơn vị tiền tệ: VNĐ
+                        Tối thiểu 10.000 đ • Nguyên dương VNĐ
                       </span>
+                    </div>
+
+                    {/* Donor Anonymity Selection */}
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+                      <label className="text-xs font-bold text-slate-800 block">
+                        Chế độ hiển thị tên Nhà tài trợ:
+                      </label>
+                      <Radio.Group
+                        value={isAnonymous ? "ANONYMOUS" : "PUBLIC"}
+                        onChange={(e) => setIsAnonymous(e.target.value === "ANONYMOUS")}
+                        className="w-full space-y-2"
+                        data-testid="donation-anonymity-radio"
+                      >
+                        <div className="flex items-start gap-2">
+                          <Radio value="PUBLIC" className="text-xs">
+                            <span className="font-semibold text-slate-800 inline-flex items-center gap-1">
+                              <GlobalOutlined className="text-indigo-600" />
+                              Tài trợ công khai
+                            </span>
+                            <div className="text-[11px] text-slate-500">
+                              Ghi nhận tên nhà tài trợ trên bảng vinh danh chiến dịch.
+                            </div>
+                          </Radio>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Radio value="ANONYMOUS" className="text-xs">
+                            <span className="font-semibold text-slate-800 inline-flex items-center gap-1">
+                              <EyeInvisibleOutlined className="text-slate-600" />
+                              Tài trợ ẩn danh
+                            </span>
+                            <div className="text-[11px] text-slate-500">
+                              Hiển thị là &ldquo;Nhà tài trợ ẩn danh&rdquo; trên giao diện công khai (hệ thống chỉ lưu đối soát nội bộ).
+                            </div>
+                          </Radio>
+                        </div>
+                      </Radio.Group>
+
+                      {!isAnonymous && (
+                        <div className="pt-1">
+                          <Input
+                            placeholder="Tên hiển thị vinh danh (tùy chọn)"
+                            value={donorDisplayName}
+                            maxLength={100}
+                            onChange={(e) => setDonorDisplayName(e.target.value)}
+                            className="rounded-xl text-xs"
+                            data-testid="donation-display-name-input"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Submit Button */}
@@ -455,84 +660,141 @@ export default function PublicCampaignDetailPage() {
                       block
                       size="large"
                       loading={createContributionMutation.isPending}
-                      onClick={() => createContributionMutation.mutate(contributionAmount)}
-                      disabled={contributionAmount <= 0}
-                      className="h-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-base shadow-sm"
+                      onClick={() => createContributionMutation.mutate()}
+                      disabled={!contributionAmount || contributionAmount <= 0}
+                      className="h-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm shadow-sm"
+                      data-testid="donation-create-qr-btn"
                     >
-                      Xác nhận tài trợ ngay
+                      Tạo mã VietQR tài trợ ngay
                     </Button>
                   </div>
                 )}
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-500 space-y-1">
                   <div className="font-semibold text-slate-700">Cam kết minh bạch:</div>
-                  <div>• 100% số tiền tài trợ được chuyển thẳng vào quỹ học bổng theo đúng phạm vi.</div>
-                  <div>• Báo cáo đối soát độc lập, bảo mật danh tính học sinh.</div>
+                  <div>
+                    • Tiền tài trợ đi qua kênh tài khoản Quỹ Học Bổng độc lập với học phí.
+                  </div>
+                  <div>
+                    • Quỹ chỉ tăng khi nhận được xác nhận chuyển khoản hợp lệ từ ngân hàng.
+                  </div>
                 </div>
               </div>
             </Card>
           </Col>
         </Row>
 
-        {/* Sandbox Webhook Simulation Modal */}
+        {/* Unified VietQR Donation Modal */}
         <Modal
           title={
             <div className="flex items-center gap-2 text-base font-bold text-slate-800">
-              <WalletOutlined className="text-indigo-600" /> Cổng thanh toán Sandbox (Mô phỏng tài trợ)
+              <WalletOutlined className="text-indigo-600" />
+              <span>Thanh toán Tài trợ Quỹ Học Bổng (VietQR)</span>
             </div>
           }
           open={isModalOpen}
           onCancel={() => setIsModalOpen(false)}
           footer={null}
+          width={620}
+          destroyOnClose
         >
-          {pendingContribution && (
-            <div className="py-4 space-y-6">
-              <Descriptions bordered size="small" column={1}>
-                <Descriptions.Item label="Chiến dịch">
-                  <span className="font-semibold text-slate-800">{campaign.title}</span>
-                </Descriptions.Item>
-                <Descriptions.Item label="Mã đối soát">
-                  <span className="font-mono text-xs">{pendingContribution.gatewayReference}</span>
-                </Descriptions.Item>
-                <Descriptions.Item label="Số tiền">
-                  <span className="font-bold text-lg text-emerald-600">
-                    {formatVND(pendingContribution.amount)}
-                  </span>
-                </Descriptions.Item>
-                <Descriptions.Item label="Trạng thái">
-                  <Tag color="gold">Chờ thanh toán (PENDING)</Tag>
-                </Descriptions.Item>
-              </Descriptions>
+          {activeDonation && (
+            <div className="py-3 space-y-4" data-testid="donation-qr-modal">
+              {effectiveUiState === "COMPLETED" ||
+              effectiveUiState === "RECONCILIATION_REQUIRED" ? (
+                <PaymentResult
+                  payment={{
+                    ...(activeDonation as any),
+                    purpose: "DONATION",
+                    campaignTitle: campaign.title,
+                  }}
+                  uiState={effectiveUiState}
+                  purpose="DONATION"
+                  campaignTitle={campaign.title}
+                  onPrimaryAction={() => {
+                    setIsModalOpen(false);
+                    navigate(ROUTES.SPONSOR.CONTRIBUTIONS);
+                  }}
+                  primaryActionLabel="Xem lịch sử đóng góp"
+                  onSecondaryAction={() => setIsModalOpen(false)}
+                  secondaryActionLabel="Đóng cửa sổ"
+                />
+              ) : (
+                <>
+                  <PaymentQrPanel
+                    purpose="DONATION"
+                    uiState={effectiveUiState}
+                    amount={activeDonation.amount}
+                    qrCode={activeDonation.qrCode}
+                    checkoutUrl={activeDonation.checkoutUrl}
+                    orderCode={activeDonation.orderCode}
+                    gatewayReference={activeDonation.gatewayReference}
+                    provider={activeDonation.provider}
+                    gateway={activeDonation.gateway}
+                    expiredAt={activeDonation.expiredAt}
+                    isAnonymous={activeDonation.isAnonymous}
+                    donorDisplayName={activeDonation.donorDisplayName}
+                    title={campaign.title}
+                    subtitle="Quỹ chỉ ghi nhận tăng sau khi cổng thanh toán xác thực giao dịch thành công"
+                    isPolling={isPolling}
+                    isRefreshing={isPollingFetching}
+                    onExpire={() => {
+                      setIsClientTimerZero(true);
+                      refetchDonationPayment();
+                    }}
+                    onManualRefresh={() => refetchDonationPayment()}
+                    onRecreateIntent={() => createContributionMutation.mutate()}
+                    recreateLoading={createContributionMutation.isPending}
+                  />
 
-              <Alert
-                type="info"
-                message="Môi trường Sandbox Development"
-                description="Hệ thống Backend cung cấp webhook mô phỏng cổng thanh toán để xác nhận giao dịch tài trợ thật và ghi nhận vào sổ cái."
-              />
+                  <PaymentInstructions purpose="DONATION" />
 
-              <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                <Button
-                  type="primary"
-                  block
-                  icon={<CheckCircleOutlined />}
-                  loading={confirmWebhookMutation.isPending}
-                  onClick={() => confirmWebhookMutation.mutate("SUCCESS")}
-                  className="h-11 bg-emerald-600 hover:bg-emerald-500 font-semibold rounded-xl"
-                >
-                  Xác nhận thành công
-                </Button>
-
-                <Button
-                  danger
-                  block
-                  icon={<CloseCircleOutlined />}
-                  loading={confirmWebhookMutation.isPending}
-                  onClick={() => confirmWebhookMutation.mutate("FAILED")}
-                  className="h-11 font-semibold rounded-xl"
-                >
-                  Mô phỏng thất bại
-                </Button>
-              </div>
+                  {/* Developer Sandbox Controls (Strictly DEV/TEST + SANDBOX only) */}
+                  {canShowSandboxControls && effectiveUiState === "PENDING" && (
+                    <Card
+                      size="small"
+                      className="rounded-2xl border-dashed border-amber-300 bg-amber-50/40"
+                      data-testid="donation-sandbox-simulator"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                            <ExperimentOutlined />
+                            Mô phỏng Webhook Tài trợ (Chỉ hiển thị ở SANDBOX / DEV)
+                          </div>
+                          <div className="text-[11px] text-amber-700">
+                            Giả lập callback từ cổng thanh toán cho kênh DONATION.
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            size="small"
+                            type="primary"
+                            icon={<CheckCircleOutlined />}
+                            loading={confirmWebhookMutation.isPending}
+                            onClick={() => confirmWebhookMutation.mutate("SUCCESS")}
+                            className="bg-emerald-600 hover:bg-emerald-500 border-none font-semibold text-xs rounded-lg"
+                            data-testid="donation-sandbox-success-btn"
+                          >
+                            Giả lập Thành công
+                          </Button>
+                          <Button
+                            size="small"
+                            danger
+                            icon={<CloseCircleOutlined />}
+                            loading={confirmWebhookMutation.isPending}
+                            onClick={() => confirmWebhookMutation.mutate("FAILED")}
+                            className="font-semibold text-xs rounded-lg"
+                            data-testid="donation-sandbox-failed-btn"
+                          >
+                            Giả lập Thất bại
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+                </>
+              )}
             </div>
           )}
         </Modal>

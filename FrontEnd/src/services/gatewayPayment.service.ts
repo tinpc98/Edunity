@@ -1,47 +1,63 @@
 import { apiClient } from "../api/apiClient";
 import type {
-  Payment,
   ApiPayment,
+  Payment,
   CreatePaymentResponse,
   WebhookResult,
 } from "../types/payment";
 import { adaptPayment, adaptPayments } from "../api/paymentAdapters";
+import { enrollmentService } from "./enrollment.service";
 
 export const paymentKeys = {
   all: ["payments"] as const,
-  history: (enrollmentId: string) => ["payments", "history", enrollmentId] as const,
-  myPayments: (userId: string) => ["payments", "myPayments", userId] as const,
   detail: (id: string) => ["payments", "detail", id] as const,
+  intent: (id: string) => ["payments", "intent", id] as const,
+  byEnrollment: (enrollmentId: string) => ["payments", "enrollment", enrollmentId] as const,
+  myPayments: (userId: string) => ["payments", "my", userId] as const,
 };
 
 export const gatewayPaymentService = {
   /**
-   * Student: Create or retrieve existing PENDING payment for an enrollment.
+   * Student: Create a Payment Intent (payOS VietQR / Sandbox fallback) for a PENDING_PAYMENT enrollment.
    * POST /api/enrollments/:id/payments
-   * Backend calculates amount canonically from Class.price.
    */
   async createPayment(enrollmentId: string): Promise<CreatePaymentResponse> {
-    const data = await apiClient<{
-      paymentId: string;
-      gatewayReference: string;
-      amount: number | string;
-      enrollmentId: string;
-      holdExpiresAt?: string | null;
-    }>(`/enrollments/${enrollmentId}/payments`, {
+    const data = await apiClient<any>(`/enrollments/${enrollmentId}/payments`, {
       method: "POST",
     });
-
+    const adapted = adaptPayment(data);
     return {
-      paymentId: data.paymentId,
-      gatewayReference: data.gatewayReference,
-      amount: typeof data.amount === "number" ? data.amount : parseFloat(data.amount as string) || 0,
-      enrollmentId: data.enrollmentId,
-      holdExpiresAt: data.holdExpiresAt || null,
+      paymentId: adapted.paymentId,
+      purpose: adapted.purpose,
+      channelKey: adapted.channelKey,
+      provider: adapted.provider,
+      gateway: adapted.gateway,
+      gatewayReference: adapted.gatewayReference,
+      orderCode: adapted.orderCode,
+      paymentLinkId: adapted.paymentLinkId,
+      qrCode: adapted.qrCode,
+      checkoutUrl: adapted.checkoutUrl,
+      currency: adapted.currency,
+      amount: adapted.amount,
+      tuitionAmount: adapted.tuitionAmount,
+      scholarshipAmount: adapted.scholarshipAmount,
+      enrollmentId: adapted.enrollmentId || enrollmentId,
+      campaignId: adapted.campaignId,
+      contributionId: adapted.contributionId,
+      holdExpiresAt: adapted.holdExpiresAt,
+      expiredAt: adapted.expiredAt,
+      remainingSeconds: adapted.remainingSeconds,
+      paymentStatus: adapted.paymentStatus,
+      providerStatus: adapted.providerStatus,
+      enrollmentStatus: adapted.enrollmentStatus,
+      paymentSource: adapted.paymentSource,
+      isAnonymous: adapted.isAnonymous,
+      donorDisplayName: adapted.donorDisplayName,
     };
   },
 
   /**
-   * Get single Payment by ID.
+   * Student / Sponsor / Admin: Get single payment or donation intent status & details by ID.
    * GET /api/payments/:id
    */
   async getPaymentById(paymentId: string): Promise<Payment> {
@@ -50,7 +66,7 @@ export const gatewayPaymentService = {
   },
 
   /**
-   * Student: Get payment attempts history for a specific enrollment.
+   * Student: Get payment history for a specific enrollment.
    * GET /api/enrollments/:id/payments
    */
   async getPaymentHistory(enrollmentId: string): Promise<Payment[]> {
@@ -59,36 +75,47 @@ export const gatewayPaymentService = {
   },
 
   /**
-   * Student: Get full payment history for authenticated student.
-   * GET /api/me/payments
+   * Student: Aggregate payment history across all of the student's enrollments.
    */
   async getMyPayments(): Promise<Payment[]> {
-    const data = await apiClient<ApiPayment[]>(`/me/payments`);
-    return adaptPayments(data);
+    const enrollmentsRes = await enrollmentService.getMyEnrollments(1, 100, "class");
+    const enrollments = enrollmentsRes.items;
+    if (enrollments.length === 0) return [];
+
+    const results = await Promise.allSettled(
+      enrollments.map(async (enr) => {
+        const payments = await this.getPaymentHistory(enr.id);
+        return payments.map((p) => ({
+          ...p,
+          classId: enr.classId,
+          className: enr.class?.className || `Lớp #${enr.classId.slice(-6)}`,
+        }));
+      })
+    );
+
+    const allPayments: Payment[] = [];
+    for (const res of results) {
+      if (res.status === "fulfilled") {
+        allPayments.push(...res.value);
+      }
+    }
+
+    return allPayments.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   },
 
   /**
-   * Sandbox only: Simulate gateway webhook to confirm or fail a payment.
+   * Simulate payment webhook result in development/test environment only.
    * POST /api/payments/sandbox/webhook
-   * Body: { gatewayReference, status: "SUCCESS" | "FAILED" }
    */
-  async triggerSandboxWebhook(
+  async simulateWebhook(
     gatewayReference: string,
     status: "SUCCESS" | "FAILED"
   ): Promise<WebhookResult> {
-    const data = await apiClient<WebhookResult>(`/payments/sandbox/webhook`, {
+    return apiClient<WebhookResult>("/payments/sandbox/webhook", {
       method: "POST",
       body: JSON.stringify({ gatewayReference, status }),
     });
-    return data;
-  },
-
-  /**
-   * Backward compatibility helper for existing checkout page
-   */
-  async createPaymentAttempt(payload: { enrollmentId: string }): Promise<CreatePaymentResponse> {
-    return this.createPayment(payload.enrollmentId);
   },
 };
-
-export const paymentService = gatewayPaymentService;

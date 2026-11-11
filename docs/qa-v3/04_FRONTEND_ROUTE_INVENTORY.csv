@@ -1,0 +1,76 @@
+Route_ID,Frontend_Route,Mapped_Path,Layout,Component,Guard,Role_Access,Backend_API_Dependencies,Status,Description
+FE-001,ROUTES.HOME,/,PublicLayout,HomePage,None,PUBLIC,GET /api/catalog/categories; GET /api/classes; GET /api/campaigns,IMPLEMENTED,Trang chủ giới thiệu nền tảng Edunity
+FE-002,ROUTES.CLASSES,/classes,PublicLayout,ClassDiscoveryPage,None,PUBLIC,GET /api/classes; GET /api/catalog/filters,IMPLEMENTED,Khám phá và tìm kiếm danh sách lớp học công khai
+FE-003,ROUTES.TEACHERS,/teachers,PublicLayout,TeacherDiscoveryPage,None,PUBLIC,GET /api/teachers,IMPLEMENTED,Danh sách và hồ sơ giáo viên được chứng nhận
+FE-004,ROUTES.TEACHER_DETAIL,/teachers/:teacherId,PublicLayout,TeacherDetailPage,None,PUBLIC,GET /api/teachers/:id; GET /api/classes,IMPLEMENTED,Chi tiết thông tin giới thiệu và các lớp của giáo viên
+FE-005,ROUTES.CLASS_DETAIL,/classes/:classId,PublicLayout,ClassDetailPage,None,PUBLIC,GET /api/classes/:id,IMPLEMENTED,Thông tin chi tiết lớp học lộ trình học phí lịch học
+FE-006,ROUTES.COURSES.LIST,/courses,PublicLayout,CoursesPage,None,PUBLIC,GET /api/courses; GET /api/catalog/categories,IMPLEMENTED,Danh mục các khóa học chuẩn hóa
+FE-007,ROUTES.COURSE_DETAIL,/courses/:courseId,PublicLayout,CourseDetailPage,None,PUBLIC,GET /api/courses/:id,IMPLEMENTED,Chi tiết khóa học và danh sách lớp thuộc khóa học
+FE-008,ROUTES.ENROLLMENT,/enrollment/:classId,PublicLayout,EnrollmentPage,None,STUDENT,POST /api/classes/:id/enrollments,IMPLEMENTED,Giao diện ghi danh giữ chỗ lớp học trong 15 phút
+FE-009,ROUTES.CHECKOUT,/checkout/:enrollmentId,PublicLayout,CheckoutPage,None,STUDENT,POST /api/enrollments/:id/payments; GET /api/payments/:id,IMPLEMENTED,Trang thanh toán học phí hiển thị VietQR payOS
+FE-010,ROUTES.PAYMENT_SUCCESS,/checkout/:enrollmentId/success,PublicLayout,PaymentSuccessPage,None,STUDENT,GET /api/enrollments/:id; GET /api/payments/:id,IMPLEMENTED,Trang xác nhận thanh toán thành công và mở quyền học
+FE-011,ROUTES.PAYMENT_RETURN,/payment/return,PublicLayout,PaymentSuccessPage,None,STUDENT,GET /api/payments/:id,IMPLEMENTED,Redirect callback từ payOS sau khi thanh toán
+FE-012,ROUTES.PAYMENT_CANCEL,/payment/cancel,PublicLayout,PaymentSuccessPage,None,STUDENT,GET /api/payments/:id,IMPLEMENTED,Redirect callback khi người dùng hủy cổng thanh toán
+FE-013,ROUTES.SPONSOR_CONTRIBUTION_RETURN,/sponsor/contributions/return,PublicLayout,PaymentSuccessPage,None,SPONSOR,GET /api/payments/:id,IMPLEMENTED,Callback sau khi nhà tài trợ ủng hộ thành công
+FE-014,ROUTES.SPONSOR_CONTRIBUTION_CANCEL,/sponsor/contributions/cancel,PublicLayout,PaymentSuccessPage,None,SPONSOR,GET /api/payments/:id,IMPLEMENTED,Callback khi nhà tài trợ hủy giao dịch
+FE-015,ROUTES.AUTH.REGISTER,/register,PublicLayout,RegisterPage,None,PUBLIC,POST /api/auth/register,IMPLEMENTED,Đăng ký tài khoản học sinh / nhà tài trợ
+FE-016,ROUTES.AUTH.LOGIN,/login,PublicLayout,LoginPage,None,PUBLIC,POST /api/auth/login,IMPLEMENTED,Đăng nhập hệ thống bằng email và mật khẩu
+FE-017,ROUTES.AUTH.TEACHER_REGISTER,/register/teacher,PublicLayout,TeacherRegisterPage,None,PUBLIC,POST /api/auth/register,IMPLEMENTED,Bước 1 đăng ký tài khoản giảng viên
+FE-018,ROUTES.AUTH.TEACHER_QUALIFICATION,/register/teacher/qualification,PublicLayout,TeacherQualificationPage,None,TEACHER,POST /api/files/upload/private; POST /api/teacher/verification,IMPLEMENTED,Bước 2 nộp hồ sơ bằng cấp xác minh giảng viên
+FE-019,ROUTES.AUTH.TEACHER_PENDING,/register/teacher/pending,PublicLayout,TeacherPendingPage,None,TEACHER,GET /api/teacher/verification,IMPLEMENTED,Màn hình chờ Admin xét duyệt hồ sơ giáo viên
+FE-020,ROUTES.CAMPAIGNS,/campaigns,PublicLayout,CampaignsPage,None,PUBLIC,GET /api/campaigns,IMPLEMENTED,Danh sách các chiến dịch gây quỹ học bổng cộng đồng
+FE-021,ROUTES.CAMPAIGN_DETAIL,/campaigns/:campaignId,PublicLayout,PublicCampaignDetailPage,None,PUBLIC,GET /api/campaigns/:id; POST /api/campaigns/:id/contributions,IMPLEMENTED,Chi tiết chiến dịch gây quỹ và nút Ủng hộ qua VietQR
+FE-022,ROUTES.NOTIFICATIONS,/notifications,PublicLayout,NotificationsPage,None,AUTHENTICATED,GET /api/notifications; PATCH /api/notifications/:id/read,IMPLEMENTED,Trung tâm thông báo tài khoản
+FE-023,ROUTES.MESSAGES,/messages,PublicLayout,MessagesPage,None,AUTHENTICATED,GET /api/conversations; GET /api/conversations/:id/messages; POST /api/conversations/:id/messages,IMPLEMENTED,Hệ thống tin nhắn trao đổi nội bộ
+FE-024,ROUTES.REPORTS,/reports,PublicLayout,MyReportsPage,None,AUTHENTICATED,POST /api/reports; GET /api/reports/my,IMPLEMENTED,Quản lý và gửi báo cáo khiếu nại sự cố
+FE-025,ROUTES.STUDENT.HOME,/student,StudentLayout,StudentHomePage,None,STUDENT,GET /api/student/classes; GET /api/student/schedule,IMPLEMENTED,Dashboard học tập tổng quan của học sinh
+FE-026,STUDENT.CLASS_DETAIL,/student/classes/:classId,StudentLayout,StudentClassSessionsPage,None,STUDENT,GET /api/student/classes/:id/sessions; GET /api/student/classes/:id/attendance,IMPLEMENTED,Danh sách buổi học điểm danh và tài liệu của lớp
+FE-027,ROUTES.STUDENT.SCHEDULE,/student/schedule,StudentLayout,StudentSchedulePage,None,STUDENT,GET /api/student/schedule,IMPLEMENTED,Thời khóa biểu tuần/tháng của học sinh
+FE-028,ROUTES.STUDENT.ENROLLMENTS,/student/enrollments,StudentLayout,StudentEnrollmentsPage,None,STUDENT,GET /api/enrollments/my,IMPLEMENTED,Quản lý các lớp đã đăng ký và trạng thái thanh toán
+FE-029,ROUTES.STUDENT.PROFILE,/student/profile,StudentLayout,StudentProfilePage,None,STUDENT,GET /api/auth/me; PUT /api/auth/me; POST /api/files/upload/public,IMPLEMENTED,Cập nhật thông tin cá nhân và ảnh đại diện
+FE-030,ROUTES.STUDENT.PAYMENTS,/student/payments,StudentLayout,StudentPaymentHistoryPage,None,STUDENT,GET /api/payments/my,IMPLEMENTED,Lịch sử thanh toán học phí thật đã kết nối API
+FE-031,ROUTES.STUDENT.SCHOLARSHIPS,/student/scholarships,StudentLayout,StudentScholarshipsPage,None,STUDENT,GET /api/scholarships/my,IMPLEMENTED,Danh sách các suất học bổng học sinh được cấp
+FE-032,ROUTES.STUDENT.APPLICATIONS,/student/scholarships/applications,StudentLayout,StudentScholarshipApplicationsPage,None,STUDENT,GET /api/scholarship-applications/my; POST /api/scholarship-applications,IMPLEMENTED,Hồ sơ xin cấp học bổng và tiến độ xét duyệt
+FE-033,ROUTES.STUDENT.EXPLORE,/student/scholarships/explore,StudentLayout,StudentScholarshipExplorePage,None,STUDENT,GET /api/campaigns,IMPLEMENTED,Khám phá các chương trình học bổng đang mở
+FE-034,ROUTES.STUDENT.SCHOLARSHIP_DETAIL,/student/scholarships/explore/:campaignId,StudentLayout,StudentScholarshipDetailPage,None,STUDENT,GET /api/campaigns/:id; POST /api/scholarship-applications,IMPLEMENTED,Chi tiết chương trình học bổng và form nộp hồ sơ
+FE-035,ROUTES.TEACHER.HOME,/teacher,TeacherLayout,TeacherHomePage,None,TEACHER,GET /api/teacher/classes; GET /api/teacher/revenue,IMPLEMENTED,Dashboard tổng quan dành cho giảng viên
+FE-036,ROUTES.TEACHER.CLASSES,/teacher/classes,TeacherLayout,TeacherClassesPage,RequireVerifiedTeacher,TEACHER,GET /api/teacher/classes,IMPLEMENTED,Quản lý danh sách các lớp học giáo viên phụ trách
+FE-037,ROUTES.TEACHER.CREATE_CLASS,/teacher/classes/create,TeacherLayout,CreateTeacherClassPage,RequireVerifiedTeacher,TEACHER,POST /api/teacher/classes; GET /api/catalog/courses,IMPLEMENTED,Khởi tạo lớp học mới theo khóa học chuẩn hóa
+FE-038,ROUTES.TEACHER.CLASS_DETAIL,/teacher/classes/:classId,TeacherLayout,TeacherClassDetailPage,RequireVerifiedTeacher,TEACHER,GET /api/teacher/classes/:id; PUT /api/teacher/classes/:id,IMPLEMENTED,Chi tiết lớp học danh sách học sinh lịch buổi học
+FE-039,ROUTES.TEACHER.COURSES,/teacher/courses,TeacherLayout,TeacherCourseCatalogPage,None,TEACHER,GET /api/catalog/courses,IMPLEMENTED,Danh mục khóa học và giáo trình tham khảo
+FE-040,ROUTES.TEACHER.PROPOSALS,/teacher/course-proposals,TeacherLayout,TeacherCourseProposalsPage,RequireVerifiedTeacher,TEACHER,GET /api/teacher/course-proposals; POST /api/teacher/course-proposals,IMPLEMENTED,Đề xuất giáo trình nâng cao lên Admin phê duyệt
+FE-041,ROUTES.TEACHER.SCHEDULE,/teacher/schedule,TeacherLayout,TeacherSchedulePage,RequireVerifiedTeacher,TEACHER,GET /api/teacher/schedule,IMPLEMENTED,Lịch giảng dạy chi tiết theo tuần của giáo viên
+FE-042,ROUTES.TEACHER.PROFILE,/teacher/profile,TeacherLayout,TeacherProfilePage,None,TEACHER,GET /api/teacher/verification; GET /api/auth/me,IMPLEMENTED,Hồ sơ giáo viên bằng cấp kinh nghiệm và ngân hàng
+FE-043,ROUTES.TEACHER.REVENUE,/teacher/revenue,TeacherLayout,TeacherRevenuePage,None,TEACHER,GET /api/teacher/revenue; GET /api/teacher/earnings; POST /api/teacher/earnings/withdraw,IMPLEMENTED,Quản lý thu nhập thù lao lớp học và rút tiền thứ Hai
+FE-044,ROUTES.TEACHER.REVIEWS,/teacher/reviews,TeacherLayout,TeacherReviewsPage,None,TEACHER,GET /api/teacher/reviews,IMPLEMENTED,Xem đánh giá nhận xét từ học sinh sau các buổi học
+FE-045,ROUTES.ADMIN.HOME,/admin,AdminLayout,AdminHomePage,None,ADMIN,GET /api/admin/finance/overview; GET /api/admin/users,IMPLEMENTED,Dashboard quản trị trung tâm hệ thống Edunity
+FE-046,ROUTES.ADMIN.USERS,/admin/users,AdminLayout,AdminUsersPage,None,ADMIN,GET /api/admin/users; PATCH /api/admin/users/:id/status,IMPLEMENTED,Quản lý danh sách người dùng phân quyền khóa mở tài khoản
+FE-047,ROUTES.ADMIN.CLASSES,/admin/classes,AdminLayout,AdminClassesPage,None,ADMIN,GET /api/classes; PATCH /api/admin/classes/:id/approve,IMPLEMENTED,Duyệt mở lớp và giám sát sĩ số tiến độ các lớp học
+FE-048,ROUTES.ADMIN.CLASS_DETAIL,/admin/classes/:classId,AdminLayout,AdminClassDetailPage,None,ADMIN,GET /api/classes/:id,IMPLEMENTED,Chi tiết lớp học báo cáo điểm danh sự cố giảng viên
+FE-049,ROUTES.ADMIN.CATALOG,/admin/catalog,AdminLayout,AdminCatalogPage,None,ADMIN,GET /api/catalog/categories; POST /api/admin/courses,IMPLEMENTED,Quản lý cây danh mục ngành học môn học khóa học
+FE-050,ROUTES.ADMIN.COURSE_PROPOSALS,/admin/course-proposals,AdminLayout,AdminCourseProposalsPage,None,ADMIN,GET /api/admin/course-proposals; PATCH /api/admin/course-proposals/:id/approve,IMPLEMENTED,Phê duyệt đề xuất khóa học nâng cao từ giáo viên
+FE-051,ROUTES.ADMIN.TEACHER_VERIFICATIONS,/admin/teachers/verifications,AdminLayout,TeacherVerificationPage,None,ADMIN,GET /api/admin/teachers/verifications,IMPLEMENTED,Hàng đợi duyệt hồ sơ xác minh năng lực giáo viên
+FE-052,ROUTES.ADMIN.TEACHER_DETAIL,/admin/teachers/verifications/:teacherId,AdminLayout,TeacherVerificationDetailPage,None,ADMIN,GET /api/admin/teachers/verifications/:id; PATCH /api/admin/teachers/verifications/:id/approve,IMPLEMENTED,Xem tài liệu CCCD bằng cấp và phê duyệt giáo viên
+FE-053,ROUTES.ADMIN.CAMPAIGNS,/admin/campaigns,AdminLayout,AdminCampaignsPage,None,ADMIN,GET /api/campaigns,IMPLEMENTED,Quản lý danh sách các chiến dịch học bổng
+FE-054,ROUTES.ADMIN.CREATE_CAMPAIGN,/admin/campaigns/create,AdminLayout,CreateCampaignPage,None,ADMIN,POST /api/admin/campaigns,IMPLEMENTED,Tạo mới chiến dịch học bổng mục tiêu ngân sách
+FE-055,ROUTES.ADMIN.CAMPAIGN_DETAIL,/admin/campaigns/:campaignId,AdminLayout,CampaignDetailPage,None,ADMIN,GET /api/campaigns/:id; PATCH /api/admin/campaigns/:id,IMPLEMENTED,Theo dõi tiến độ gây quỹ và phân bổ học bổng chiến dịch
+FE-056,ROUTES.ADMIN.SCHOLARSHIP_APPS,/admin/scholarship-applications,AdminLayout,ScholarshipApplicationsPage,None,ADMIN,GET /api/admin/scholarship-applications,IMPLEMENTED,Xét duyệt các hồ sơ xin cấp học bổng của học sinh
+FE-057,ROUTES.ADMIN.SCHOLARSHIP_REVIEW,/admin/scholarship-applications/:applicationId,AdminLayout,ScholarshipApplicationReviewPage,None,ADMIN,GET /api/admin/scholarship-applications/:id; PATCH /api/admin/scholarship-applications/:id/review,IMPLEMENTED,Chi tiết hồ sơ hoàn cảnh học sinh và duyệt cấp tiền
+FE-058,ROUTES.ADMIN.FINANCE_OVERVIEW,/admin/finance-overview,AdminLayout,AdminFinanceOverviewPage,None,ADMIN,GET /api/admin/finance/overview,IMPLEMENTED,Báo cáo tài chính tổng hợp doanh thu đối soát quỹ
+FE-059,ROUTES.ADMIN.PAYMENTS,/admin/payments,AdminLayout,AdminPaymentsPage,None,ADMIN,GET /api/admin/payments,IMPLEMENTED,Tra cứu và lọc giao dịch thanh toán học phí
+FE-060,ROUTES.ADMIN.TRANSACTIONS,/admin/transactions,AdminLayout,AdminTransactionsPage,None,ADMIN,GET /api/admin/transactions,IMPLEMENTED,Sổ cái kế toán toàn hệ thống audit giao dịch
+FE-061,ROUTES.ADMIN.BANK_EVENTS,/admin/bank-events,AdminLayout,AdminBankEventsPage,None,ADMIN,GET /api/admin/bank-events,IMPLEMENTED,Biến động số dư tài khoản ngân hàng BankTransferEvent
+FE-062,ROUTES.ADMIN.RECONCILIATIONS,/admin/reconciliations,AdminLayout,AdminReconciliationsPage,None,ADMIN,GET /api/admin/reconciliations; PATCH /api/admin/reconciliations/:id/claim,IMPLEMENTED,Xử lý các giao dịch bất thường thừa thiếu sai memo
+FE-063,ROUTES.ADMIN.PAYOUTS,/admin/payouts,AdminLayout,AdminPayoutsPage,None,ADMIN,GET /api/admin/payouts; POST /api/admin/payouts/:id/complete,IMPLEMENTED,Duyệt chi trả thù lao giáo viên và Four-Eyes verification
+FE-064,ROUTES.ADMIN.REFUNDS,/admin/refunds,AdminLayout,AdminRefundsPage,None,ADMIN,GET /api/admin/refunds; POST /api/admin/refunds/:id/verify,IMPLEMENTED,Quản lý và thực hiện hoàn tiền học phí Four-Eyes
+FE-065,ROUTES.ADMIN.REPORTS,/admin/reports,AdminLayout,AdminReportsPage,None,ADMIN,GET /api/admin/reports; PATCH /api/admin/reports/:id/resolve,IMPLEMENTED,Xử lý báo cáo vi phạm khiếu nại chất lượng
+FE-066,ROUTES.SPONSOR.HOME,/sponsor,SponsorLayout,SponsorHomePage,None,SPONSOR,GET /api/sponsor/contributions; GET /api/campaigns,IMPLEMENTED,Trang chủ nhà tài trợ thống kê số tiền và học sinh hỗ trợ
+FE-067,ROUTES.SPONSOR.PROFILE,/sponsor/profile,SponsorLayout,SponsorProfilePage,None,SPONSOR,GET /api/auth/me; PUT /api/auth/me,IMPLEMENTED,Cấu hình hồ sơ nhà tài trợ và tùy chọn hiển thị công khai
+FE-068,ROUTES.SPONSOR.CONTRIBUTIONS,/sponsor/contributions,SponsorLayout,SponsorContributionsPage,None,SPONSOR,GET /api/sponsor/contributions,IMPLEMENTED,Lịch sử các khoản đóng góp ủng hộ và biên lai điện tử
+FE-069,ROUTES.CLASSROOM,/classroom/:sessionId,None,ClassroomPage,None,STUDENT_TEACHER,GET /api/sessions/:id/join,IMPLEMENTED,Lớp học ảo LiveKit tương tác trực tuyến video âm thanh
+FE-070,ROUTES.NOT_FOUND,*,None,NotFoundPage,None,PUBLIC,None,IMPLEMENTED,Trang báo lỗi 404 không tìm thấy đường dẫn
+FE-071,STUDENT_ASSIGNMENTS,/student/assignments,StudentLayout,None,None,STUDENT,None,MISSING,Giao diện xem và nộp bài tập về nhà của học sinh (LMS-06)
+FE-072,STUDENT_ASSESSMENTS,/student/assessments,StudentLayout,None,None,STUDENT,None,MISSING,Giao diện làm bài kiểm tra đầu vào và thi trắc nghiệm (LMS-02 LMS-09)
+FE-073,TEACHER_ASSIGNMENTS,/teacher/assignments,TeacherLayout,None,RequireVerifiedTeacher,TEACHER,None,MISSING,Giao diện giáo viên giao bài chấm điểm và rubric (LMS-05 LMS-07)
+FE-074,CONTRACT_SIGNING,/teacher/contracts/:id/sign,TeacherLayout,None,None,TEACHER,None,MISSING,Giao diện ký hợp đồng điện tử FPT.eContract (TEA-11)
+
