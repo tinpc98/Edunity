@@ -3,6 +3,7 @@ const router = express.Router();
 const studentController = require("../controllers/studentController");
 const lmsController = require("../controllers/lmsController");
 const qualityProgressController = require("../controllers/qualityProgressController");
+const aiController = require("../controllers/aiController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const requireRole = require("../middlewares/requireRole");
 
@@ -67,5 +68,9 @@ router.get("/me/progress-reviews", student, qualityProgressController.listMyProg
 router.get("/me/classes/:classId/progress-reviews", student, qualityProgressController.listMyClassProgressReviews);
 router.get("/me/learning-progress", student, qualityProgressController.getMyLearningProgress);
 router.get("/me/classes/:classId/learning-progress", student, qualityProgressController.getMyClassLearningProgress);
+
+// Stage 6: AI-01 Student AI Learning Resource Recommendations (Fallback + Scoped Access)
+router.get("/me/ai/resource-recommendations", student, aiController.recommendLearningResources);
+router.post("/me/ai/resource-recommendations", student, aiController.recommendLearningResources);
 
 module.exports = router;

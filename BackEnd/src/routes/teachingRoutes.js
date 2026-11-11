@@ -2,6 +2,7 @@ const express = require("express");
 const controller = require("../controllers/teachingController");
 const lmsController = require("../controllers/lmsController");
 const qualityProgressController = require("../controllers/qualityProgressController");
+const aiController = require("../controllers/aiController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const requireRole = require("../middlewares/requireRole");
 
@@ -177,5 +178,20 @@ router.post("/admin/contract-reviews/packets/:id/execute-contract-action", admin
 // SPO-07: Teaching Quality Reporting (Admin only)
 router.get("/admin/teaching-quality/report", admin, qualityProgressController.adminGetTeachingQualityReport);
 router.get("/admin/teaching-quality/teachers/:teacherId", admin, qualityProgressController.adminGetTeacherQualityDetail);
+
+// ---------- Stage 6: Governed AI Features (AI-02 Teacher Authoring & AI-03 Admin Reporting) ----------
+
+// AI-02: Teacher AI Lesson Planning & Quiz Draft Authoring (Draft-Only + Teacher Verification)
+router.post("/teacher/ai/lesson-drafts", teacher, aiController.generateTeacherLessonDraft);
+router.post("/teacher/ai/quiz-drafts", teacher, aiController.generateTeacherQuizDraft);
+router.get("/teacher/ai/drafts", teacher, aiController.listTeacherAiDrafts);
+router.get("/teacher/ai/drafts/:id", teacher, aiController.getTeacherAiDraft);
+router.post("/teacher/ai/drafts/:id/approve", teacher, aiController.approveTeacherAiDraft);
+router.post("/teacher/ai/drafts/:id/reject", teacher, aiController.rejectTeacherAiDraft);
+
+// AI-03: Admin AI Aggregate Reporting & Governance Status / Audit Logs
+router.get("/admin/ai/status", admin, aiController.adminGetAiStatus);
+router.get("/admin/ai/audit-logs", admin, aiController.adminListAiAuditLogs);
+router.post("/admin/ai/reports/summary", admin, aiController.adminGenerateReportSummary);
 
 module.exports = router;

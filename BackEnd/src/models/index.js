@@ -50,4 +50,7 @@ module.exports = {
   SessionReview: require("./SessionReview"),
   StudentProgressReview: require("./StudentProgressReview"),
   TeacherContractReviewPacket: require("./TeacherContractReviewPacket"),
+  MessageModerationReport: require("./MessageModerationReport"),
+  AiAuditLog: require("./AiAuditLog"),
+  AiGeneratedDraft: require("./AiGeneratedDraft"),
 };
