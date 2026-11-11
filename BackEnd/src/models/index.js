@@ -48,4 +48,6 @@ module.exports = {
   Attempt: require("./Attempt"),
   PlacementResult: require("./PlacementResult"),
   SessionReview: require("./SessionReview"),
+  StudentProgressReview: require("./StudentProgressReview"),
+  TeacherContractReviewPacket: require("./TeacherContractReviewPacket"),
 };

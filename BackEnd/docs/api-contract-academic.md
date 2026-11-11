@@ -605,3 +605,29 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
    - `Review` giữ nguyên ràng buộc `enrollmentId` unique (`1 review / enrollment` cấp lớp) để tương thích 100% với `G0-02.3.1`..`G0-02.3.3` và dữ liệu cũ.
    - Đánh giá buổi học dùng collection mới `SessionReview` với unique index `{ sessionId: 1, studentId: 1 }`, xác minh tham gia thật qua `SessionAttendance` (`PRESENT`/`LATE`/`EXCUSED` hoặc `hasVerifiedConnection: true`), `Session` `COMPLETED`, và `Enrollment`, đồng thời **không tự phát sinh kỷ luật hay trừ thù lao giảng viên**.
 
+---
+
+## 6. GIAI ĐOẠN 5: TIẾN BỘ HỌC TẬP, ĐIỀU PHỐI HỢP ĐỒNG & CHẤT LƯỢNG GIẢNG DẠY (LMS-12, LMS-14, TEA-16, SPO-07)
+
+1. **`LMS-12` (`StudentProgressReview` — Đánh giá tiến bộ học viên theo lớp):**
+   - `POST /api/teacher/classes/:classId/students/:studentId/progress-reviews` (`TEACHER`), `PATCH /api/teacher/progress-reviews/:id` (`TEACHER`), `GET /api/teacher/classes/:classId/progress-reviews`, `GET /api/teacher/classes/:classId/students/:studentId/progress-reviews`, `GET /api/teacher/progress-reviews/:id/history`.
+   - Student xem đánh giá của mình: `GET /api/me/progress-reviews`, `GET /api/me/classes/:classId/progress-reviews` (kiểm tra `Enrollment` `CONFIRMED`/`COMPLETED`, ẩn các ID ghi nhận nội bộ).
+   - Admin tra cứu: `GET /api/admin/progress-reviews`, `GET /api/admin/classes/:classId/progress-reviews`, `GET /api/admin/progress-reviews/:id/history`.
+   - Ràng buộc thời điểm & trạng thái: chặn lớp `DRAFT`/`PENDING_APPROVAL`/`REJECTED`/`CANCELLED` (`409 PROGRESS_REVIEW_NOT_ALLOWED`), chặn lớp chưa bắt đầu/chưa phát sinh hoạt động (`409 PROGRESS_REVIEW_TOO_EARLY`), chặn `END_OF_CLASS` khi lớp chưa hoàn thành (`409 END_OF_CLASS_REVIEW_NOT_READY`), chặn học viên ngoài lớp (`403 NOT_ENROLLED`), và bảo lưu lịch sử append-only `revisionHistory[]` kèm `metricsSnapshot` tại thời điểm đánh giá.
+
+2. **`LMS-14` (`learningProgressService` — Learning Progress Dashboard API):**
+   - Student: `GET /api/me/learning-progress`, `GET /api/me/classes/:classId/learning-progress` (`STUDENT` chỉ xem lớp mình có `Enrollment` `CONFIRMED`/`COMPLETED`).
+   - Teacher: `GET /api/teacher/classes/:classId/learning-progress`, `GET /api/teacher/classes/:classId/students/:studentId/learning-progress` (chỉ lớp do mình phụ trách).
+   - Admin: `GET /api/admin/learning-progress/overview`, `GET /api/admin/learning-progress/classes/:classId`, `GET /api/admin/learning-progress/students/:studentId`.
+   - Tổng hợp 100% từ dữ liệu thật (`Session`, `SessionAttendance`, `Assignment`, `Submission`, `Grade`, `Assessment`, `Attempt`, `PlacementResult`, `StudentProgressReview`, `Enrollment`). Không bịa số liệu: điểm trung bình / chuyên cần trả `null` kèm cờ `completeness` khi bài chưa chấm, chưa chốt điểm danh hoặc lớp đang diễn ra.
+
+3. **`TEA-16` (`TeacherContractReviewPacket` — Incident Contract Review Coordination):**
+   - Teacher tự tra cứu readiness đã ẩn admin ID: `GET /api/teacher/contract-review-readiness`.
+   - Admin điều phối packet: `GET /api/admin/contract-reviews/incidents`, `GET /api/admin/contract-reviews/teachers/:teacherId/readiness`, `POST /api/admin/contract-reviews/packets`, `GET /api/admin/contract-reviews/packets/:id`, `PATCH /api/admin/contract-reviews/packets/:id/status`.
+   - Fail-closed guard: `POST /api/admin/contract-reviews/packets/:id/execute-contract-action` luôn ghi `AuditLog` (`CONTRACT_REVIEW_EXECUTION_BLOCKED`) và trả `503 CONTRACT_DEPENDENCY_BLOCKED` khi module `TEA-12` (của Bảo) chưa tích hợp (hoặc `409 CONTRACT_MUTATION_OUT_OF_AUTHORITY` ngay cả khi có verifier đọc), không bao giờ tự động chấm dứt hợp đồng.
+
+4. **`SPO-07` (`teachingQualityReportService` — Teaching Quality Reporting):**
+   - `GET /api/admin/teaching-quality/report`, `GET /api/admin/teaching-quality/teachers/:teacherId` (`ADMIN` only, read-only hoàn toàn).
+   - Tổng hợp đối chiếu 1:1 kèm `traceability.sourceIds` và `traceability.sourceTotals` từ `Session`, `TeacherViolation`, `TeacherIncidentReport`, `TeacherDisciplineCase`, `Report`, `Review`, `SessionReview`, `SessionRefundReview` theo khoảng thời gian (`from`/`to`), `teacherId`, `classId`, `subjectId`, `categoryId`, `reportType`.
+
+

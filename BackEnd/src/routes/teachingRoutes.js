@@ -1,6 +1,7 @@
 const express = require("express");
 const controller = require("../controllers/teachingController");
 const lmsController = require("../controllers/lmsController");
+const qualityProgressController = require("../controllers/qualityProgressController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const requireRole = require("../middlewares/requireRole");
 
@@ -141,5 +142,40 @@ router.get("/admin/assessments/:id/attempts", admin, lmsController.listStaffAsse
 router.post("/admin/attempts/:id/grade", admin, lmsController.manualGradeAttempt);
 
 router.get("/admin/placement-results", admin, lmsController.adminListPlacementResults);
+
+// ---------- Stage 5: Learning Progress, Contract Review Coordination & Teaching Quality (LMS-12, LMS-14, TEA-16, SPO-07) ----------
+
+// LMS-12: Student Progress Reviews (Teacher & Admin)
+router.post("/teacher/classes/:classId/students/:studentId/progress-reviews", teacher, qualityProgressController.createStudentProgressReview);
+router.get("/teacher/classes/:classId/progress-reviews", teacher, qualityProgressController.listTeacherClassProgressReviews);
+router.get("/teacher/classes/:classId/students/:studentId/progress-reviews", teacher, qualityProgressController.listTeacherStudentProgressReviews);
+router.patch("/teacher/progress-reviews/:id", teacher, qualityProgressController.updateStudentProgressReview);
+router.get("/teacher/progress-reviews/:id/history", teacher, qualityProgressController.getTeacherProgressReviewHistory);
+
+router.get("/admin/progress-reviews", admin, qualityProgressController.adminListProgressReviews);
+router.get("/admin/classes/:classId/progress-reviews", admin, qualityProgressController.adminListClassProgressReviews);
+router.get("/admin/progress-reviews/:id/history", admin, qualityProgressController.adminGetProgressReviewHistory);
+
+// LMS-14: Learning Progress Dashboard (Teacher & Admin)
+router.get("/teacher/classes/:classId/learning-progress", teacher, qualityProgressController.getTeacherClassLearningProgress);
+router.get("/teacher/classes/:classId/students/:studentId/learning-progress", teacher, qualityProgressController.getTeacherStudentLearningProgress);
+
+router.get("/admin/learning-progress/overview", admin, qualityProgressController.adminGetLearningProgressOverview);
+router.get("/admin/learning-progress/classes/:classId", admin, qualityProgressController.adminGetClassLearningProgress);
+router.get("/admin/learning-progress/students/:studentId", admin, qualityProgressController.adminGetStudentLearningProgress);
+
+// TEA-16: Incident Contract Review Coordination (Teacher self-readiness & Admin packets)
+router.get("/teacher/contract-review-readiness", teacher, qualityProgressController.getTeacherContractReviewReadiness);
+
+router.get("/admin/contract-reviews/incidents", admin, qualityProgressController.adminListContractReviewQueue);
+router.get("/admin/contract-reviews/teachers/:teacherId/readiness", admin, qualityProgressController.adminGetTeacherContractReviewReadiness);
+router.post("/admin/contract-reviews/packets", admin, qualityProgressController.adminCreateContractReviewPacket);
+router.get("/admin/contract-reviews/packets/:id", admin, qualityProgressController.adminGetContractReviewPacket);
+router.patch("/admin/contract-reviews/packets/:id/status", admin, qualityProgressController.adminUpdateContractReviewPacketStatus);
+router.post("/admin/contract-reviews/packets/:id/execute-contract-action", admin, qualityProgressController.adminAttemptContractExecutionHandoff);
+
+// SPO-07: Teaching Quality Reporting (Admin only)
+router.get("/admin/teaching-quality/report", admin, qualityProgressController.adminGetTeachingQualityReport);
+router.get("/admin/teaching-quality/teachers/:teacherId", admin, qualityProgressController.adminGetTeacherQualityDetail);
 
 module.exports = router;

@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const studentController = require("../controllers/studentController");
 const lmsController = require("../controllers/lmsController");
+const qualityProgressController = require("../controllers/qualityProgressController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const requireRole = require("../middlewares/requireRole");
 
@@ -60,5 +61,11 @@ router.post("/me/placement-results", student, lmsController.evaluatePlacementRes
 router.post("/me/placement-attempts/:attemptId/evaluate", student, lmsController.evaluatePlacementResult);
 router.get("/me/placement-results", student, lmsController.listMyPlacementResults);
 router.get("/me/placement-results/:id", student, lmsController.getMyPlacementResult);
+
+// Stage 5: Learning Progress & Student Progress Reviews (LMS-12, LMS-14)
+router.get("/me/progress-reviews", student, qualityProgressController.listMyProgressReviews);
+router.get("/me/classes/:classId/progress-reviews", student, qualityProgressController.listMyClassProgressReviews);
+router.get("/me/learning-progress", student, qualityProgressController.getMyLearningProgress);
+router.get("/me/classes/:classId/learning-progress", student, qualityProgressController.getMyClassLearningProgress);
 
 module.exports = router;
