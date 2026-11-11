@@ -143,11 +143,16 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `SCHOLARSHIP_NOT_USABLE` | Học bổng đã hết hạn, hết số dư hoặc không hợp lệ |
 | | `CLASS_OUT_OF_SCHOLARSHIP_SCOPE` | Lớp học nằm ngoài phạm vi tài trợ của Chiến dịch |
 | **429 Too Many Requests** | `RATE_LIMITED` | Vượt tần suất gọi API cho phép (tin nhắn, upload) |
+| | `AI_RATE_LIMITED` / `AI_BUDGET_EXCEEDED` | Vượt ngưỡng tần suất hoặc ngân sách token AI theo ngày (`AI-01..04`) |
+| **502 Bad Gateway** | `AI_OUTPUT_PII_LEAK_BLOCKED` | Chặn phản hồi AI chứa email/SĐT/CCCD/`storageKey` nhạy cảm |
+| | `AI_OUTPUT_UNGROUNDED` | Chặn tóm tắt AI chứa số liệu bịa đặt không khớp tập dữ liệu tổng hợp xác thực |
 | **503 Service Unavailable** | `VIDEO_PROVIDER_UNAVAILABLE` | Lỗi kết nối dịch vụ LiveKit Server |
 | | `RECORDING_START_FAILED` | Không thể khởi động phiên ghi hình bài giảng |
 | | `PRICING_POLICY_DEPENDENCY_BLOCKED` | Cổng kiểm tra chính sách giá (`CUR-07` `CoursePricingPolicy`) chưa sẵn sàng (fail-closed) |
 | | `CONTRACT_DEPENDENCY_BLOCKED` | Cổng xác minh hợp đồng giảng viên `ACTIVE` (`TEA-12` của Bảo) chưa sẵn sàng (fail-closed, không thay thế bằng `VERIFIED`) |
 | | `CONSENT_DEPENDENCY_BLOCKED` | Cổng xác minh đồng thuận người giám hộ (`AID-08` của Bảo) chưa sẵn sàng (fail-closed khi campaign bật `requireGuardianConsentForMinor`) |
+| | `AI_PROVIDER_BLOCKED` | Chặn thực thi AI (fail-closed) khi chưa có nhà cung cấp AI/API key/chính sách `AID-08` được phê duyệt |
+| **504 Gateway Timeout** | `AI_PROVIDER_TIMEOUT` | Nhà cung cấp AI vượt thời gian phản hồi cấu hình (`timeoutMs`) |
 
 ---
 
@@ -629,5 +634,25 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 4. **`SPO-07` (`teachingQualityReportService` — Teaching Quality Reporting):**
    - `GET /api/admin/teaching-quality/report`, `GET /api/admin/teaching-quality/teachers/:teacherId` (`ADMIN` only, read-only hoàn toàn).
    - Tổng hợp đối chiếu 1:1 kèm `traceability.sourceIds` và `traceability.sourceTotals` từ `Session`, `TeacherViolation`, `TeacherIncidentReport`, `TeacherDisciplineCase`, `Report`, `Review`, `SessionReview`, `SessionRefundReview` theo khoảng thời gian (`from`/`to`), `teacherId`, `classId`, `subjectId`, `categoryId`, `reportType`.
+
+---
+
+## 7. GIAI ĐOẠN 6: TIN NHẮN LỚP HỌC & AI CÓ KIỂM SOÁT (LMS-13, AI-01..04)
+
+1. **`LMS-13` (Kênh trao đổi theo Lớp học & Kiểm duyệt — `messagingService` + `MessageModerationReport`):**
+   - Kênh lớp học (`channelType: "CLASS"`, chỉ số unique partial `{ channelType: 1, classId: 1 }` độc lập hoàn toàn với chat 1-1 `DIRECT`):
+     - `GET/POST /api/classes/:classId/conversation`, `GET/POST /api/classes/:classId/conversation/messages` (`STUDENT`/`TEACHER` là thành viên sống của lớp: `Class.teacherId` hoặc `Enrollment` `CONFIRMED`/`COMPLETED`; lớp `CANCELLED` tự chuyển read-only).
+   - Báo cáo & Kiểm duyệt:
+     - `POST /api/messages/:id/report`, `GET /api/me/message-reports` (chống trùng `OPEN`/`IN_REVIEW`, lưu bất biến `messageSnapshot`).
+     - Teacher: `PATCH /api/teacher/classes/:classId/conversation/moderation`, `POST/DELETE /api/teacher/classes/:classId/conversation/mute(/:studentId)`, `POST /api/teacher/classes/:classId/messages/:messageId/moderate` (không được ghi đè khóa/ẩn/mute do Admin đặt).
+     - Admin (`AuditLog` đầy đủ): `GET/PATCH /api/admin/message-reports(/:id)`, `PATCH /api/admin/classes/:classId/conversation/moderation`, `POST/DELETE /api/admin/classes/:classId/conversation/mute(/:userId)`, `POST /api/admin/messages/:messageId/moderate` (giữ nguyên nội dung gốc trong DB khi ẩn, ẩn toàn bộ `adminId` với người dùng thường).
+
+2. **`AI-01..04` (Kiến trúc AI có kiểm soát, fail-closed & whitelist/grounding — `aiGovernanceService` + `aiUseCaseService`):**
+   - **`AI-01` (`GET/POST /api/me/ai/resource-recommendations` — `STUDENT`):** Chỉ đề xuất trên tập `LearningResource` `PUBLISHED` thuộc lớp/khóa đang theo học; lọc bỏ ID ngoài whitelist và ẩn `storageKey`; có cơ chế fallback quy tắc minh bạch (`aiUsed: false, mode: "DETERMINISTIC_FALLBACK"`) khi chưa có AI provider hoặc timeout.
+   - **`AI-02` (`/api/teacher/ai/lesson-drafts`, `/quiz-drafts`, `/drafts`, `/drafts/:id/approve|reject` — `TEACHER`):** Kết quả AI chỉ lưu ở `AiGeneratedDraft` (`status: "DRAFT_PENDING_REVIEW"`, `isPublished: false`). Giáo viên xác nhận (`confirmReviewed: true`) chỉ sinh `LearningResource` hoặc `Assessment` ở trạng thái `DRAFT`, cấm auto-publish (`403 AI_AUTO_PUBLISH_FORBIDDEN`) và cấm sửa trực tiếp `SyllabusVersion` đã `PUBLISHED` (`409 SYLLABUS_VERSION_IMMUTABLE`).
+   - **`AI-03` (`GET /api/admin/ai/status`, `GET /api/admin/ai/audit-logs`, `POST /api/admin/ai/reports/summary` — `ADMIN`):** Chỉ gửi số liệu tổng hợp ẩn danh tuyệt đối không PII từ dashboard/tiến độ/chất lượng; read-only; kiểm tra numeric grounding chống bịa số (`502 AI_OUTPUT_UNGROUNDED`).
+   - **`AI-04` (`POST /api/sponsor/campaigns/:id/ai-impact-narrative` — `SPONSOR` có `SponsorContribution` `COMPLETED`):** Chỉ truyền số liệu tác động tổng hợp của chiến dịch (cấm hoàn toàn PII học viên/giám hộ và lịch sử giao dịch cá nhân); bắt buộc numeric grounding.
+   - **Trạng thái Provider Production:** Khi chưa có AI provider SDK/API key/chính sách `AID-08` được phê duyệt, `AI-02`, `AI-03`, `AI-04` chủ động khóa cứng **fail-closed** (`503 AI_PROVIDER_BLOCKED`), mọi lượt gọi đều ghi `AiAuditLog` (không lưu raw PII).
+
 
 

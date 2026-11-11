@@ -446,7 +446,7 @@ describe("LMS-13: Class Messaging & Moderation", () => {
       ).statusCode
     ).toBe(403);
 
-    // Teacher mutes studentB -> blocked from sending
+    // Teacher mutes studentB -> blocked from sending, then unmutes and sets allowStudentPosts=false
     const muteRes = await request(app)
       .post(`/api/teacher/classes/${classA._id}/conversation/mute`)
       .set(as(teacherA))
@@ -459,7 +459,35 @@ describe("LMS-13: Class Messaging & Moderation", () => {
     expect(mutedPost.statusCode).toBe(403);
     expect(mutedPost.body.error).toBe("USER_MUTED_IN_CLASS");
 
-    // Admin reviews report with HIDE_MESSAGE & LOCK_CHANNEL -> preserves original DB content, creates AuditLog
+    const unmuteRes = await request(app)
+      .delete(`/api/teacher/classes/${classA._id}/conversation/mute/${studentB._id}`)
+      .set(as(teacherA));
+    expect(unmuteRes.statusCode).toBe(200);
+
+    const disableStudentPosts = await request(app)
+      .patch(`/api/teacher/classes/${classA._id}/conversation/moderation`)
+      .set(as(teacherA))
+      .send({ allowStudentPosts: false });
+    expect(disableStudentPosts.statusCode).toBe(200);
+    expect(
+      (
+        await request(app)
+          .post(`/api/classes/${classA._id}/conversation/messages`)
+          .set(as(studentB))
+          .send({ content: "Thu nhan khi khoa binh luan" })
+      ).statusCode
+    ).toBe(403);
+    await request(app)
+      .patch(`/api/teacher/classes/${classA._id}/conversation/moderation`)
+      .set(as(teacherA))
+      .send({ allowStudentPosts: true });
+
+    // Admin lists/inspects reports and reviews report with HIDE_MESSAGE -> preserves original DB content, creates AuditLog
+    const adminReports = await request(app).get("/api/admin/message-reports?status=OPEN").set(as(admin));
+    expect(adminReports.statusCode).toBe(200);
+    expect(adminReports.body.data.total).toBe(1);
+    expect((await request(app).get(`/api/admin/message-reports/${reportId}`).set(as(admin))).statusCode).toBe(200);
+
     const reviewed = await request(app)
       .patch(`/api/admin/message-reports/${reportId}`)
       .set(as(admin))
@@ -475,6 +503,31 @@ describe("LMS-13: Class Messaging & Moderation", () => {
     const dbMsg = await Message.findById(msgId).lean();
     expect(dbMsg.content).toBe("Spam link quang cao khong phu hop"); // preserved internally
     expect(dbMsg.moderationStatus).toBe("HIDDEN_BY_MODERATOR");
+
+    // Admin direct mute/unmute and message restore/hide endpoints
+    expect(
+      (
+        await request(app)
+          .post(`/api/admin/classes/${classA._id}/conversation/mute`)
+          .set(as(admin))
+          .send({ userId: studentB._id, reason: "Cảnh báo hành vi lặp lại" })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await request(app)
+          .delete(`/api/admin/classes/${classA._id}/conversation/mute/${studentB._id}`)
+          .set(as(admin))
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await request(app)
+          .post(`/api/admin/messages/${msgId}/moderate`)
+          .set(as(admin))
+          .send({ action: "HIDE", reason: "Khóa hiển thị vĩnh viễn" })
+      ).statusCode
+    ).toBe(200);
 
     // Teacher CANNOT override Admin's moderation (restore Admin-hidden message -> 403 MODERATED_BY_ADMIN)
     const teacherOverride = await request(app)
@@ -710,7 +763,8 @@ describe("Stage 6 AI Governance, Fail-Closed Blockers & Scoped Use Cases (AI-01.
     expect(ai02Timeout.statusCode).toBe(504);
     expect(ai02Timeout.body.error).toBe("AI_PROVIDER_TIMEOUT");
 
-    // Rate limit enforcement
+    // Rate limit enforcement (reset in-memory window first so counter starts at 0)
+    resetAiGovernanceConfig();
     setAiGovernanceConfig({ timeoutMs: 5000, rateMaxRequests: 1 });
     setAiProviderAdapter({
       providerId: "MOCK_FAST_AI",
@@ -883,6 +937,50 @@ describe("Stage 6 AI Governance, Fail-Closed Blockers & Scoped Use Cases (AI-01.
     expect(createdAssessment.totalMaxScore).toBe(2);
     expect(await Question.countDocuments({ assessmentId: createdAssessment._id })).toBe(1);
     expect((await SyllabusVersion.findById(publishedSyllabus._id)).summary).toBe("Chuyên đề Đạo hàm & Tích phân");
+
+    // Lesson plan draft authored via courseId (TeacherSubjectAuthorization APPROVED) materializes only as DRAFT LearningResource
+    setAiProviderAdapter({
+      providerId: "MOCK_EDU_AI",
+      modelId: "mock-edu-1",
+      generate: async () => ({
+        lessonPlan: {
+          outline: "Phần 1: Khái niệm nguyên hàm\nPhần 2: Bài tập vận dụng",
+          objectives: ["Hiểu định nghĩa nguyên hàm"],
+        },
+      }),
+    });
+    const lessonDraftRes = await request(app)
+      .post("/api/teacher/ai/lesson-drafts")
+      .set(as(teacherA))
+      .send({ courseId: course._id, topic: "Nguyên hàm cơ bản" });
+    expect(lessonDraftRes.statusCode).toBe(201);
+    const lessonDraftId = lessonDraftRes.body.data.id;
+
+    const approvedLesson = await request(app)
+      .post(`/api/teacher/ai/drafts/${lessonDraftId}/approve`)
+      .set(as(teacherA))
+      .send({ confirmReviewed: true, classId: classA._id });
+    expect(approvedLesson.statusCode).toBe(200);
+    expect(approvedLesson.body.data.materializedTargetType).toBe("LearningResource");
+    const createdResource = await LearningResource.findById(approvedLesson.body.data.materializedTargetId).lean();
+    expect(createdResource.status).toBe("DRAFT");
+
+    // Teacher can also reject an unwanted AI draft and list drafts
+    const rejectableDraft = await request(app)
+      .post("/api/teacher/ai/lesson-drafts")
+      .set(as(teacherA))
+      .send({ classId: classA._id, topic: "Nháp cần từ chối" });
+    expect(rejectableDraft.statusCode).toBe(201);
+    const rejectedRes = await request(app)
+      .post(`/api/teacher/ai/drafts/${rejectableDraft.body.data.id}/reject`)
+      .set(as(teacherA))
+      .send({ reason: "Nội dung chưa sát đối tượng lớp" });
+    expect(rejectedRes.statusCode).toBe(200);
+    expect(rejectedRes.body.data.status).toBe("REJECTED");
+
+    const listedDrafts = await request(app).get("/api/teacher/ai/drafts").set(as(teacherA));
+    expect(listedDrafts.statusCode).toBe(200);
+    expect(listedDrafts.body.data.total).toBe(3);
   });
 
   it("enforces AI-03 & AI-04 zero PII, verified sponsor ownership, and numeric grounding against fabricated metrics", async () => {
