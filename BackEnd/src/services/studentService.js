@@ -13,17 +13,30 @@ class StudentService {
     
     const classIds = enrollments.map(e => e.classId);
     
-    // 2. Default date range: today to 14 days later
+    // 2. Default date range: today to 14 days later (plus active sessions crossing midnight)
     const now = new Date();
-    const from = fromDate ? new Date(fromDate) : new Date(now.setHours(0,0,0,0));
-    const to = toDate ? new Date(toDate) : new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
-    
-    const sessions = await Session.find({
-      classId: { $in: classIds },
-      startDatetime: { $gte: from, $lte: to }
-    }).sort({ startDatetime: 1 }).lean();
-    
     const currentNow = new Date();
+    const from = fromDate ? new Date(fromDate) : new Date(now.setHours(0, 0, 0, 0));
+    const to = toDate ? new Date(toDate) : new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    const filter = { classId: { $in: classIds } };
+    if (fromDate || toDate) {
+      filter.startDatetime = {
+        ...(fromDate ? { $gte: from } : {}),
+        ...(toDate ? { $lte: to } : {}),
+      };
+    } else {
+      filter.$or = [
+        { startDatetime: { $gte: from, $lte: to } },
+        {
+          status: { $in: ["SCHEDULED", "WAITING", "IN_PROGRESS", "INTERRUPTED"] },
+          endDatetime: { $gte: currentNow },
+          startDatetime: { $lte: to },
+        },
+      ];
+    }
+
+    const sessions = await Session.find(filter).sort({ startDatetime: 1 }).lean();
     
     return sessions.map(s => {
       const start = new Date(s.startDatetime);

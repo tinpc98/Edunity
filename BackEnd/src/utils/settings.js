@@ -1,4 +1,5 @@
 const { AppError } = require("./errors");
+const platformSettingService = require("../services/platformSettingService");
 
 // Runtime commission policy store (can be populated by Admin/System config or tests).
 // Never treats 0.1 as an approved final business policy in production/staging.
@@ -154,23 +155,28 @@ function resolveCommissionPolicy(options = {}) {
   };
 }
 
-function getSetting(key) {
-  const holdMinutes = parseInt(process.env.SEAT_HOLD_MINUTES, 10) || 15;
-  const scholarshipValidDays = parseInt(process.env.SCHOLARSHIP_VALID_DAYS, 10) || 180;
-
-  if (key === "COMMISSION_RATE") {
+/**
+ * Synchronous accessor backed by PlatformSetting cache + zero-safe env fallback + defaults,
+ * while preserving Tin PR5's commission policy enforcement when no DB override is active.
+ */
+function getSetting(key, now = new Date()) {
+  const normalized = String(key || "").trim().toUpperCase();
+  if (normalized === "COMMISSION_RATE") {
+    const meta = platformSettingService.getSettingMetaSync("COMMISSION_RATE", now);
+    if (meta && meta.source === "DB") {
+      return meta.value;
+    }
     return resolveCommissionPolicy().rate;
   }
 
-  const settings = {
-    "SEAT_HOLD_DURATION": holdMinutes * 60 * 1000,
-    "SCHOLARSHIP_VALID_DAYS": scholarshipValidDays,
-  };
-  return settings[key];
+  return platformSettingService.getEffectiveSettingSync(key, now);
 }
 
 module.exports = {
   getSetting,
+  getEffectiveSetting: platformSettingService.getEffectiveSetting,
+  refreshSettingsCache: platformSettingService.warmCache,
+  clearSettingsCache: platformSettingService.clearCache,
   resolveCommissionPolicy,
   setCommissionPolicyForRuntime,
   clearCommissionPolicyForRuntime,

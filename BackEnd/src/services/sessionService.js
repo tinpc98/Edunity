@@ -1,15 +1,26 @@
+const crypto = require("crypto");
 const mongoose = require("mongoose");
-const { Class, Session, SessionAttendance, Enrollment, User } = require("../models");
+const {
+  Class,
+  Session,
+  SessionAttendance,
+  Enrollment,
+  User,
+  TeacherScheduleLock,
+  ScheduleIdempotencyKey,
+} = require("../models");
 const { AppError, FORBIDDEN, CLASS_NOT_FOUND } = require("../utils/errors");
 const { validationError, parseDate, isBlank } = require("../utils/http");
 const { getDisplayProfile } = require("../utils/userProfile");
+const { computePlannedOccurrences, parseDateTimeInZone, validateTimeZone } = require("../utils/timezone");
 const videoProvider = require("./videoProvider");
 const { getVerifiedTeacher, getOwnClass, isSessionWithinClass } = require("./teacherClassService");
 const presenceService = require("./sessionPresenceService");
+const { runInTeacherScheduleTx } = require("../utils/teacherScheduleLock");
 
 const JOIN_WINDOW_BEFORE_MS = 10 * 60 * 1000; // 10 minutes pre-open waiting room window (TIN-05D)
 const LATE_AFTER_SECONDS = 5 * 60; // 5 minutes (300s) student late threshold (TIN-05D)
-const STUDENT_LATE_JITTER_SECONDS = 3; // 3s tolerance for HTTP/test boundary setup jitter
+const STUDENT_LATE_JITTER_SECONDS = 0; // Strict 300s threshold aligned with sessionPresenceService (Math.floor yields 300 at exactly 5m)
 const STUDENT_FIRST_JOIN_DEADLINE_SECONDS = 20 * 60; // 20 minutes (1200s) first-join deadline (TIN-05D)
 const STUDENT_FIRST_JOIN_JITTER_SECONDS = 2; // 2s tolerance for HTTP/test boundary jitter
 const CLOSED_CLASS_STATUSES = ["COMPLETED", "CANCELLED"];
@@ -39,11 +50,35 @@ const assertSessionTimes = (cls, startDatetime, endDatetime, label = "session", 
   }
 };
 
+const stableStringify = (value) => {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(",")}}`;
+};
+
+const buildRequestHash = (operation, payload) =>
+  crypto.createHash("sha256").update(`${operation}:${stableStringify(payload)}`).digest("hex");
+
+const normalizeIdempotencyKey = (options = {}, body = {}) => {
+  const raw = options?.idempotencyKey !== undefined ? options.idempotencyKey : body?.idempotencyKey;
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "string" || raw.trim() === "") {
+    throw validationError("Idempotency-Key must be a non-empty string");
+  }
+  const key = raw.trim();
+  if (key.length > 128) {
+    throw validationError("Idempotency-Key must not exceed 128 characters");
+  }
+  return key;
+};
+
 /**
- * A Teacher teaches one Session at a time: the new time ranges may not overlap each other nor any non-cancelled
+ * A Teacher teaches one Session at a time: the new time ranges may not overlap each other nor any active
  * Session of the same Teacher (in any of their classes).
  */
-const assertNoTeacherOverlap = async (teacherId, ranges, excludeSessionId = null) => {
+const assertNoTeacherOverlap = async (teacherId, ranges, excludeSessionId = null, dbSession = null) => {
   const sorted = [...ranges].sort((a, b) => a.startDatetime - b.startDatetime);
   for (let i = 1; i < sorted.length; i++) {
     if (sorted[i].startDatetime < sorted[i - 1].endDatetime) {
@@ -54,21 +89,35 @@ const assertNoTeacherOverlap = async (teacherId, ranges, excludeSessionId = null
       );
     }
   }
-  for (const range of ranges) {
-    const filter = {
-      teacherId,
-      status: { $ne: "CANCELLED" },
+  if (ranges.length === 0) return;
+
+  const filter = {
+    teacherId,
+    status: { $ne: "CANCELLED" },
+    lifecycleState: { $ne: "RESCHEDULED" },
+    $or: ranges.map((range) => ({
       startDatetime: { $lt: range.endDatetime },
       endDatetime: { $gt: range.startDatetime },
-    };
-    if (excludeSessionId) filter._id = { $ne: excludeSessionId };
-    const conflict = await Session.findOne(filter).select("title className startDatetime").lean();
-    if (conflict) {
-      throw new AppError(
-        `${range.label} overlaps "${conflict.title}" (${conflict.className}) at ${conflict.startDatetime.toISOString()}`,
-        "SESSION_TIME_CONFLICT",
-        409
+    })),
+  };
+  if (excludeSessionId) filter._id = { $ne: excludeSessionId };
+
+  const query = Session.find(filter).select("title className startDatetime endDatetime");
+  if (dbSession) query.session(dbSession);
+  const conflicts = await query.lean();
+
+  if (conflicts.length > 0) {
+    for (const range of ranges) {
+      const conflict = conflicts.find(
+        (c) => new Date(c.startDatetime) < range.endDatetime && new Date(c.endDatetime) > range.startDatetime
       );
+      if (conflict) {
+        throw new AppError(
+          `${range.label} overlaps "${conflict.title}" (${conflict.className}) at ${new Date(conflict.startDatetime).toISOString()}`,
+          "SESSION_TIME_CONFLICT",
+          409
+        );
+      }
     }
   }
 };
@@ -83,10 +132,8 @@ const scheduleLocked = () =>
     409
   );
 
-// UC-TEA-03. Accepts one session, or `{ sessions: [...] }` to save the whole session plan at once.
-const createSessions = async (teacherId, classId, body) => {
-  await getVerifiedTeacher(teacherId);
-  const cls = await getOwnClass(teacherId, classId);
+const assertClassAllowsScheduleMutation = (cls) => {
+  if (!cls) throw CLASS_NOT_FOUND();
   if (CLOSED_CLASS_STATUSES.includes(cls.status)) {
     throw new AppError("Cannot add sessions to a completed or cancelled class", "CLASS_CLOSED", 409);
   }
@@ -94,95 +141,395 @@ const createSessions = async (teacherId, classId, body) => {
     throw new AppError("Cannot add sessions while class is pending approval", "CLASS_NOT_EDITABLE", 409);
   }
   if (SCHEDULE_LOCKED_CLASS_STATUSES.includes(cls.status)) throw scheduleLocked();
+};
+
+const getNextSessionNumber = async (classId, dbSession) => {
+  const q = Session.findOne({ classId, sessionNumber: { $ne: null } })
+    .sort({ sessionNumber: -1 })
+    .select("sessionNumber");
+  if (dbSession) q.session(dbSession);
+  const maxDoc = await q.lean();
+  return maxDoc && Number.isInteger(maxDoc.sessionNumber) ? maxDoc.sessionNumber + 1 : 1;
+};
+
+// UC-TEA-03 / CUR-11. Accepts one session, or `{ sessions: [...] }` atomically with Teacher write-lock serialization.
+const createSessions = async (teacherId, classId, body = {}, options = {}) => {
+  await getVerifiedTeacher(teacherId);
+  const preCls = await getOwnClass(teacherId, classId);
+  assertClassAllowsScheduleMutation(preCls);
+
+  const timeZone = validateTimeZone(body.timezone);
+  const idempotencyKey = normalizeIdempotencyKey(options, body);
 
   const isBulk = Array.isArray(body.sessions);
   const inputs = isBulk ? body.sessions : [body];
   if (inputs.length === 0) throw validationError("sessions must not be empty");
 
-  const now = new Date();
-  const docs = inputs.map((input, index) => {
+  const parsedInputs = inputs.map((input, index) => {
     const label = isBulk ? `sessions[${index}]` : "session";
     if (!input || isBlank(input.title)) throw validationError(`${label}: title is required`); // BR-52
-    const startDatetime = parseDate(input.startDatetime, "startDatetime");
-    const endDatetime = parseDate(input.endDatetime, "endDatetime");
-    assertSessionTimes(cls, startDatetime, endDatetime, label, now);
+    const startDatetime = parseDateTimeInZone(input.startDatetime, "startDatetime", timeZone);
+    const endDatetime = parseDateTimeInZone(input.endDatetime, "endDatetime", timeZone);
     return {
-      classId: cls._id,
-      className: cls.className,
-      teacherId: cls.teacherId,
-      title: input.title,
+      label,
+      title: String(input.title).trim(),
       description: input.description,
+      sessionNumber: input.sessionNumber,
       startDatetime,
       endDatetime,
-      status: "SCHEDULED",
     };
   });
-  await assertNoTeacherOverlap(
-    cls.teacherId,
-    docs.map((doc, index) => ({ ...doc, label: isBulk ? `sessions[${index}]` : "session" }))
-  );
 
-  const created = await Session.insertMany(docs);
-  const result = created.map((doc) => doc.toObject());
-  return isBulk ? result : result[0];
+  const requestHash = idempotencyKey
+    ? buildRequestHash("CREATE_SESSIONS", {
+        isBulk,
+        timeZone,
+        sessions: parsedInputs.map((s) => ({
+          title: s.title,
+          description: s.description || null,
+          sessionNumber: s.sessionNumber || null,
+          startDatetime: s.startDatetime ? s.startDatetime.toISOString() : null,
+          endDatetime: s.endDatetime ? s.endDatetime.toISOString() : null,
+        })),
+      })
+    : null;
+
+  return runInTeacherScheduleTx(preCls.teacherId, async (dbSession) => {
+    const cls = await Class.findOne({ _id: preCls._id, ...NOT_DELETED }).session(dbSession);
+    assertClassAllowsScheduleMutation(cls);
+
+    if (idempotencyKey) {
+      const existingKey = await ScheduleIdempotencyKey.findOne({
+        teacherId: cls.teacherId,
+        classId: cls._id,
+        operation: "CREATE_SESSIONS",
+        idempotencyKey,
+      })
+        .session(dbSession)
+        .lean();
+
+      if (existingKey) {
+        if (existingKey.requestHash !== requestHash) {
+          throw new AppError(
+            "Idempotency-Key was already used with a different session payload",
+            "IDEMPOTENCY_KEY_CONFLICT",
+            409
+          );
+        }
+        const existingSessions = await Session.find({ _id: { $in: existingKey.sessionIds } })
+          .sort({ startDatetime: 1 })
+          .session(dbSession)
+          .lean();
+        return isBulk ? existingSessions : existingSessions[0];
+      }
+    }
+
+    const now = new Date();
+    let nextNumber = await getNextSessionNumber(cls._id, dbSession);
+    const docs = parsedInputs.map((item) => {
+      assertSessionTimes(cls, item.startDatetime, item.endDatetime, item.label, now);
+      let assignedNum;
+      if (item.sessionNumber !== undefined && item.sessionNumber !== null) {
+        if (
+          typeof item.sessionNumber === "boolean" ||
+          Array.isArray(item.sessionNumber) ||
+          typeof item.sessionNumber === "object" ||
+          (typeof item.sessionNumber === "string" && item.sessionNumber.trim() === "")
+        ) {
+          throw validationError(`${item.label}: sessionNumber must be a positive integer`);
+        }
+        const n = Number(item.sessionNumber);
+        if (!Number.isInteger(n) || n < 1) throw validationError(`${item.label}: sessionNumber must be a positive integer`);
+        assignedNum = n;
+        if (n >= nextNumber) nextNumber = n + 1;
+      } else {
+        assignedNum = nextNumber++;
+      }
+      return {
+        classId: cls._id,
+        className: cls.className,
+        teacherId: cls.teacherId,
+        title: item.title,
+        sessionNumber: assignedNum,
+        scheduleSource: "MANUAL",
+        description: item.description,
+        startDatetime: item.startDatetime,
+        endDatetime: item.endDatetime,
+        status: "SCHEDULED",
+      };
+    });
+
+    await assertNoTeacherOverlap(
+      cls.teacherId,
+      docs.map((doc, index) => ({ ...doc, label: parsedInputs[index].label })),
+      null,
+      dbSession
+    );
+
+    const created = await Session.insertMany(docs, { session: dbSession });
+    if (idempotencyKey) {
+      await ScheduleIdempotencyKey.create(
+        [
+          {
+            teacherId: cls.teacherId,
+            classId: cls._id,
+            operation: "CREATE_SESSIONS",
+            idempotencyKey,
+            requestHash,
+            isBulk,
+            sessionIds: created.map((doc) => doc._id),
+          },
+        ],
+        { session: dbSession }
+      );
+    }
+
+    const result = created.map((doc) => doc.toObject());
+    return isBulk ? result : result[0];
+  });
 };
 
-const updateSession = async (teacherId, sessionId, body) => {
+/**
+ * CUR-11: Generates and persists Session documents from Class.schedule inside a serialized
+ * MongoDB transaction. Normalizes Asia/Ho_Chi_Minh wall-clock schedule slots to UTC, checks
+ * teacher overlaps across all classes, prevents duplicate creation on retry, and assigns
+ * sequential sessionNumber values.
+ */
+const generateSessionsFromSchedule = async (teacherId, classId, body = {}, options = {}) => {
   await getVerifiedTeacher(teacherId);
-  const session = await getOwnSession(teacherId, sessionId);
-  if (session.status !== "SCHEDULED") {
+  const preCls = await getOwnClass(teacherId, classId);
+  assertClassAllowsScheduleMutation(preCls);
+
+  if (!preCls.startDate || !preCls.endDate || !Array.isArray(preCls.schedule) || preCls.schedule.length === 0) {
+    throw validationError("startDate, endDate and schedule are required to generate sessions");
+  }
+
+  const timeZone = validateTimeZone(body.timezone);
+  const idempotencyKey = normalizeIdempotencyKey(options, body);
+  if (body.skipPast !== undefined && typeof body.skipPast !== "boolean") {
+    throw validationError("skipPast must be a boolean");
+  }
+  const skipPast = body.skipPast === true;
+  const fromDate = body.fromDate ? parseDateTimeInZone(body.fromDate, "fromDate", timeZone) : null;
+  const untilDate = body.untilDate ? parseDateTimeInZone(body.untilDate, "untilDate", timeZone) : null;
+  const titlePrefix = isBlank(body.titlePrefix) ? null : String(body.titlePrefix).trim();
+  const description = isBlank(body.description) ? undefined : String(body.description).trim();
+
+  if (fromDate && untilDate && fromDate > untilDate) {
+    throw validationError("fromDate must be before untilDate");
+  }
+
+  return runInTeacherScheduleTx(preCls.teacherId, async (dbSession) => {
+    const cls = await Class.findOne({ _id: preCls._id, ...NOT_DELETED }).session(dbSession);
+    assertClassAllowsScheduleMutation(cls);
+
+    const planned = computePlannedOccurrences(cls, { timeZone, fromDate, untilDate, maxOccurrences: 366 });
+    const now = new Date();
+    const targetOccurrences = skipPast ? planned.filter((occ) => occ.startDatetime > now) : planned;
+
+    if (targetOccurrences.length === 0) {
+      throw validationError("No upcoming sessions matched the class schedule and date range");
+    }
+
+    targetOccurrences.forEach((occ, index) => {
+      assertSessionTimes(cls, occ.startDatetime, occ.endDatetime, `generated[${index}]`, now);
+    });
+
+    const requestHash = idempotencyKey
+      ? buildRequestHash("GENERATE_SESSIONS", {
+          timeZone,
+          skipPast,
+          titlePrefix: titlePrefix || null,
+          description: description || null,
+          fromDate: fromDate ? fromDate.toISOString() : null,
+          untilDate: untilDate ? untilDate.toISOString() : null,
+          slots: targetOccurrences.map((o) => [o.startDatetime.toISOString(), o.endDatetime.toISOString()]),
+        })
+      : null;
+
+    if (idempotencyKey) {
+      const existingKey = await ScheduleIdempotencyKey.findOne({
+        teacherId: cls.teacherId,
+        classId: cls._id,
+        operation: "GENERATE_SESSIONS",
+        idempotencyKey,
+      })
+        .session(dbSession)
+        .lean();
+
+      if (existingKey) {
+        if (existingKey.requestHash !== requestHash) {
+          throw new AppError(
+            "Idempotency-Key was already used with different schedule generation parameters",
+            "IDEMPOTENCY_KEY_CONFLICT",
+            409
+          );
+        }
+        const existingSessions = await Session.find({ _id: { $in: existingKey.sessionIds } })
+          .sort({ startDatetime: 1 })
+          .session(dbSession)
+          .lean();
+        return {
+          classId: String(cls._id),
+          timezone: timeZone,
+          generatedCount: existingSessions.length,
+          idempotent: true,
+          sessions: existingSessions,
+        };
+      }
+    }
+
+    let nextNumber = await getNextSessionNumber(cls._id, dbSession);
+    const docs = targetOccurrences.map((occ, index) => {
+      const num = nextNumber++;
+      const prefix = titlePrefix || `Buổi ${num}`;
+      const title = titlePrefix ? `${prefix} ${index + 1}` : prefix;
+      return {
+        classId: cls._id,
+        className: cls.className,
+        teacherId: cls.teacherId,
+        title,
+        sessionNumber: num,
+        scheduleSource: "SCHEDULE_GENERATED",
+        description,
+        startDatetime: occ.startDatetime,
+        endDatetime: occ.endDatetime,
+        status: "SCHEDULED",
+      };
+    });
+
+    await assertNoTeacherOverlap(
+      cls.teacherId,
+      docs.map((doc, index) => ({ ...doc, label: `generated[${index}]` })),
+      null,
+      dbSession
+    );
+
+    const created = await Session.insertMany(docs, { session: dbSession });
+    if (idempotencyKey) {
+      await ScheduleIdempotencyKey.create(
+        [
+          {
+            teacherId: cls.teacherId,
+            classId: cls._id,
+            operation: "GENERATE_SESSIONS",
+            idempotencyKey,
+            requestHash,
+            isBulk: true,
+            sessionIds: created.map((doc) => doc._id),
+          },
+        ],
+        { session: dbSession }
+      );
+    }
+
+    return {
+      classId: String(cls._id),
+      timezone: timeZone,
+      generatedCount: created.length,
+      idempotent: false,
+      sessions: created.map((doc) => doc.toObject()),
+    };
+  });
+};
+
+const updateSession = async (teacherId, sessionId, body = {}) => {
+  await getVerifiedTeacher(teacherId);
+  const preSession = await getOwnSession(teacherId, sessionId);
+  if (preSession.status !== "SCHEDULED") {
     throw new AppError("Only SCHEDULED sessions can be updated", "SESSION_NOT_EDITABLE", 409);
   }
-  const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED });
-  if (!cls) throw CLASS_NOT_FOUND();
-  if (CLOSED_CLASS_STATUSES.includes(cls.status)) {
+  const preCls = await Class.findOne({ _id: preSession.classId, ...NOT_DELETED });
+  if (!preCls) throw CLASS_NOT_FOUND();
+  if (CLOSED_CLASS_STATUSES.includes(preCls.status)) {
     throw new AppError("Cannot update sessions of a completed or cancelled class", "CLASS_CLOSED", 409);
   }
-  if (cls.status === "PENDING_APPROVAL") {
+  if (preCls.status === "PENDING_APPROVAL") {
     throw new AppError("Cannot update sessions while class is pending approval", "CLASS_NOT_EDITABLE", 409);
   }
 
   const changesSchedule =
     body.startDatetime !== undefined || body.endDatetime !== undefined || body.status !== undefined;
-  if (changesSchedule && SCHEDULE_LOCKED_CLASS_STATUSES.includes(cls.status)) throw scheduleLocked();
+  if (changesSchedule && SCHEDULE_LOCKED_CLASS_STATUSES.includes(preCls.status)) throw scheduleLocked();
 
-  if (body.title !== undefined) {
-    if (isBlank(body.title)) throw validationError("title must not be empty");
-    session.title = body.title;
-  }
-  if (body.description !== undefined) session.description = body.description;
-  if (body.startDatetime !== undefined) session.startDatetime = parseDate(body.startDatetime, "startDatetime");
-  if (body.endDatetime !== undefined) session.endDatetime = parseDate(body.endDatetime, "endDatetime");
-  if (body.startDatetime !== undefined || body.endDatetime !== undefined) {
-    assertSessionTimes(cls || {}, session.startDatetime, session.endDatetime);
-    await assertNoTeacherOverlap(
-      session.teacherId,
-      [{ startDatetime: session.startDatetime, endDatetime: session.endDatetime, label: "session" }],
-      session._id
-    );
-  }
-  if (body.status !== undefined) {
-    if (body.status !== "CANCELLED") throw validationError("status can only be changed to CANCELLED");
-    session.status = "CANCELLED";
-    session.roomState = "CANCELLED";
-    session.lifecycleState = "CANCELLED";
+  const timeZone = validateTimeZone(body.timezone);
+
+  if (!changesSchedule) {
+    if (body.title !== undefined) {
+      if (isBlank(body.title)) throw validationError("title must not be empty");
+      preSession.title = body.title;
+    }
+    if (body.description !== undefined) preSession.description = body.description;
+    await preSession.save();
+    return preSession.toObject();
   }
 
-  await session.save();
-  return session.toObject();
+  return runInTeacherScheduleTx(preSession.teacherId, async (dbSession) => {
+    const session = await Session.findById(preSession._id).session(dbSession);
+    if (!session) throw sessionNotFound();
+    if (session.status !== "SCHEDULED") {
+      throw new AppError("Only SCHEDULED sessions can be updated", "SESSION_NOT_EDITABLE", 409);
+    }
+    const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).session(dbSession);
+    if (!cls) throw CLASS_NOT_FOUND();
+    if (CLOSED_CLASS_STATUSES.includes(cls.status)) {
+      throw new AppError("Cannot update sessions of a completed or cancelled class", "CLASS_CLOSED", 409);
+    }
+    if (cls.status === "PENDING_APPROVAL") {
+      throw new AppError("Cannot update sessions while class is pending approval", "CLASS_NOT_EDITABLE", 409);
+    }
+    if (SCHEDULE_LOCKED_CLASS_STATUSES.includes(cls.status)) throw scheduleLocked();
+
+    if (body.title !== undefined) {
+      if (isBlank(body.title)) throw validationError("title must not be empty");
+      session.title = body.title;
+    }
+    if (body.description !== undefined) session.description = body.description;
+    if (body.startDatetime !== undefined) session.startDatetime = parseDateTimeInZone(body.startDatetime, "startDatetime", timeZone);
+    if (body.endDatetime !== undefined) session.endDatetime = parseDateTimeInZone(body.endDatetime, "endDatetime", timeZone);
+    if (body.startDatetime !== undefined || body.endDatetime !== undefined) {
+      assertSessionTimes(cls, session.startDatetime, session.endDatetime);
+      await assertNoTeacherOverlap(
+        session.teacherId,
+        [{ startDatetime: session.startDatetime, endDatetime: session.endDatetime, label: "session" }],
+        session._id,
+        dbSession
+      );
+    }
+    if (body.status !== undefined) {
+      if (body.status !== "CANCELLED") throw validationError("status can only be changed to CANCELLED");
+      session.status = "CANCELLED";
+      session.roomState = "CANCELLED";
+      session.lifecycleState = "CANCELLED";
+    }
+
+    await session.save({ session: dbSession });
+    return session.toObject();
+  });
 };
 
 // Removing a planned session is only possible while the Class has not been submitted/opened
 const deleteSession = async (teacherId, sessionId) => {
   await getVerifiedTeacher(teacherId);
-  const session = await getOwnSession(teacherId, sessionId);
-  const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).select("status").lean();
-  if (!cls) throw CLASS_NOT_FOUND();
-  if (!["DRAFT", "REJECTED"].includes(cls.status)) {
-    throw new AppError("Sessions can only be deleted while the class is DRAFT or REJECTED; cancel it instead", "SESSION_NOT_DELETABLE", 409);
-  }
-  await session.deleteOne();
-  return { deleted: true };
+  const preSession = await getOwnSession(teacherId, sessionId);
+  return runInTeacherScheduleTx(preSession.teacherId, async (dbSession) => {
+    const session = await Session.findById(preSession._id).session(dbSession);
+    if (!session) throw sessionNotFound();
+    const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED })
+      .select("status")
+      .session(dbSession)
+      .lean();
+    if (!cls) throw CLASS_NOT_FOUND();
+    if (!["DRAFT", "REJECTED"].includes(cls.status)) {
+      throw new AppError(
+        "Sessions can only be deleted while the class is DRAFT or REJECTED; cancel it instead",
+        "SESSION_NOT_DELETABLE",
+        409
+      );
+    }
+    await Session.deleteOne({ _id: session._id }, { session: dbSession });
+    return { deleted: true };
+  });
 };
 
 /**
@@ -613,34 +960,27 @@ const handleLiveKitWebhook = async (event) => {
     event.event === "participant_joined" ||
     event.event === "participant_left" ||
     event.event === "participant_disconnected" ||
-    event.event === "room_finished"
+    event.event === "room_finished" ||
+    event.event === "egress_ended"
   ) {
     await presenceService.handleLiveKitEvent(event);
     return;
   }
 
   if (!event.egressInfo) return;
-  const egressId = event.egressInfo.egressId;
-  const status = event.egressInfo.status;
-  const error = event.egressInfo.error;
-
-  const session = await Session.findOne({ "recording.providerRecordingId": egressId });
-  if (!session || !session.recording) {
-    await presenceService.handleLiveKitEvent(event);
-    return;
-  }
-
-  if (event.event === "egress_ended") {
-    // 3 = EGRESS_COMPLETE
-    if (status === 3) {
-      session.recording.status = "AVAILABLE";
-      session.recording.availableAt = new Date();
-    } else {
-      session.recording.status = "FAILED";
-      session.recording.failureReason = error || "Egress failed";
-    }
-    await session.save();
-  }
+  await presenceService.handleLiveKitEvent(event);
 };
 
-module.exports = { createSessions, updateSession, deleteSession, joinSession, startSession, endSession, getSessionAttendance, handleLiveKitWebhook };
+module.exports = {
+  createSessions,
+  generateSessionsFromSchedule,
+  updateSession,
+  deleteSession,
+  joinSession,
+  startSession,
+  endSession,
+  getSessionAttendance,
+  handleLiveKitWebhook,
+  assertNoTeacherOverlap,
+  runInTeacherScheduleTx,
+};

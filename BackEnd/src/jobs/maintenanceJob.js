@@ -10,35 +10,46 @@ const {
   resolveOutboxConfig,
 } = require("./financialOutboxWorker");
 
+let isRunning = false;
+
 /**
  * Low-frequency housekeeping. Each step is independent: one failing does not skip the others.
- * - Class lifecycle: OPEN → IN_PROGRESS → COMPLETED (+ enrollments COMPLETED, earnings AVAILABLE)
+ * - Class lifecycle: OPEN → IN_PROGRESS → COMPLETED (+ enrollments COMPLETED, legacy earnings AVAILABLE)
  * - Scholarship expiry: ACTIVE → EXPIRED, unused balance back to the Campaign fund
  * - Recording retention and PROCESSING timeout
  * - Financial outbox recovery sweep (when ENABLE_FINANCIAL_OUTBOX_WORKER=true)
  */
 const runMaintenanceJob = async (now = new Date()) => {
-  const result = {};
-  const steps = {
-    classes: () => advanceClassStatuses(now),
-    scholarships: () => expireScholarships(now),
-    expiredRecordings: () => expireOldRecordings(now),
-    staleRecordings: () => failStaleProcessingRecordings(now),
-  };
-
-  if (resolveOutboxConfig().isEnabled) {
-    steps.financialOutbox = () => runFinancialOutboxTick({ now });
+  if (isRunning) {
+    return { skipped: true, reason: "LOCAL_EXECUTION_IN_PROGRESS" };
   }
+  isRunning = true;
 
-  for (const [name, step] of Object.entries(steps)) {
-    try {
-      result[name] = await step();
-    } catch (err) {
-      console.error(`[maintenanceJob] ${name} failed:`, err.message);
-      result[name] = { error: err.message };
+  try {
+    const result = {};
+    const steps = {
+      classes: () => advanceClassStatuses(now),
+      scholarships: () => expireScholarships(now),
+      expiredRecordings: () => expireOldRecordings(now),
+      staleRecordings: () => failStaleProcessingRecordings(now),
+    };
+
+    if (resolveOutboxConfig().isEnabled) {
+      steps.financialOutbox = () => runFinancialOutboxTick({ now });
     }
+
+    for (const [name, step] of Object.entries(steps)) {
+      try {
+        result[name] = await step();
+      } catch (err) {
+        console.error(`[maintenanceJob] ${name} failed:`, err.message);
+        result[name] = { error: err.message };
+      }
+    }
+    return result;
+  } finally {
+    isRunning = false;
   }
-  return result;
 };
 
 const startMaintenanceJob = () => {

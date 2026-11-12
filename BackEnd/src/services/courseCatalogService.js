@@ -9,7 +9,10 @@ const { allowedGradeLevelsForCategory, resolveGradeLevel } = require("../utils/g
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const STATUSES = ["ACTIVE", "INACTIVE"];
-const COURSE_TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites"];
+const COURSE_TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "curriculumReference"];
+
+const isDuplicateKeyError = (err) =>
+  Boolean(err && (err.code === 11000 || (err.cause && err.cause.code === 11000)));
 
 const presentCategory = (category) => ({
   ...category,
@@ -32,10 +35,18 @@ const resolveStatus = (status) => {
   return status;
 };
 
+const normalizeLevel = (rawLevel) => {
+  if (rawLevel === undefined || rawLevel === null || rawLevel === "") return undefined;
+  const upper = String(rawLevel).trim().toUpperCase();
+  if (upper === "BASIC") return "BEGINNER";
+  return upper;
+};
+
 const resolveLevel = (level) => {
-  if (level === undefined || level === null || level === "") return undefined;
-  if (!COURSE_LEVELS.includes(level)) throw validationError(`level must be one of ${COURSE_LEVELS.join(", ")}`);
-  return level;
+  const normalized = normalizeLevel(level);
+  if (normalized === undefined) return undefined;
+  if (!COURSE_LEVELS.includes(normalized)) throw validationError(`level must be one of ${COURSE_LEVELS.join(", ")}`);
+  return normalized;
 };
 
 const getCategoryOrThrow = async (categoryId) => {
@@ -72,13 +83,19 @@ const createCategory = async (adminId, body) => {
     throw new AppError("Category already exists", "DUPLICATE_CATEGORY", 409);
   }
 
-  const category = await Category.create({
-    name: body.name,
-    slug: await resolveSlug(Category, body, body.name),
-    description: body.description,
-    status: body.status === undefined ? "ACTIVE" : resolveStatus(body.status),
-    createdBy: adminId,
-  });
+  let category;
+  try {
+    category = await Category.create({
+      name: body.name,
+      slug: await resolveSlug(Category, body, body.name),
+      description: body.description,
+      status: body.status === undefined ? "ACTIVE" : resolveStatus(body.status),
+      createdBy: adminId,
+    });
+  } catch (err) {
+    if (isDuplicateKeyError(err)) throw new AppError("Slug already exists", "DUPLICATE_SLUG", 409);
+    throw err;
+  }
   return presentCategory(category.toObject());
 };
 
@@ -131,15 +148,21 @@ const createSubject = async (adminId, body) => {
     throw new AppError("Subject already exists in this category", "DUPLICATE_SUBJECT", 409);
   }
 
-  const subject = await Subject.create({
-    categoryId: category._id,
-    categoryName: category.name,
-    name: body.name,
-    slug: await resolveSlug(Subject, body, body.name),
-    description: body.description,
-    status: body.status === undefined ? "ACTIVE" : resolveStatus(body.status),
-    createdBy: adminId,
-  });
+  let subject;
+  try {
+    subject = await Subject.create({
+      categoryId: category._id,
+      categoryName: category.name,
+      name: body.name,
+      slug: await resolveSlug(Subject, body, body.name),
+      description: body.description,
+      status: body.status === undefined ? "ACTIVE" : resolveStatus(body.status),
+      createdBy: adminId,
+    });
+  } catch (err) {
+    if (isDuplicateKeyError(err)) throw new AppError("Slug already exists", "DUPLICATE_SLUG", 409);
+    throw err;
+  }
   return subject.toObject();
 };
 
@@ -174,7 +197,7 @@ const searchCourses = async (query, paging) => {
 
   if (query.search) {
     const pattern = { $regex: escapeRegex(query.search), $options: "i" };
-    filter.$or = [{ title: pattern }, { description: pattern }];
+    filter.$or = [{ title: pattern }, { description: pattern }, { curriculumReference: pattern }];
   }
   for (const field of ["categoryId", "subjectId"]) {
     if (query[field]) {
@@ -190,6 +213,9 @@ const searchCourses = async (query, paging) => {
     filter.gradeLevel = query.gradeLevel;
   }
   if (query.level) filter.level = resolveLevel(query.level);
+  if (query.curriculumReference) {
+    filter.curriculumReference = { $regex: escapeRegex(query.curriculumReference.trim()), $options: "i" };
+  }
 
   const [items, total] = await Promise.all([
     Course.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
@@ -249,8 +275,13 @@ const insertCourse = async ({ adminId, subject, category, data, sourceProposalId
     if (data[field] !== undefined) doc[field] = data[field];
   }
 
-  const [course] = await Course.create([doc], { session });
-  return course;
+  try {
+    const [course] = await Course.create([doc], { session });
+    return course;
+  } catch (err) {
+    if (isDuplicateKeyError(err)) throw new AppError("Slug already exists", "DUPLICATE_SLUG", 409);
+    throw err;
+  }
 };
 
 const createCourse = async (adminId, body) => {
@@ -265,6 +296,14 @@ const updateCourse = async (adminId, courseId, body) => {
   const course = await getCourseOrThrow(courseId);
   const category = await getCategoryOrThrow(course.categoryId);
 
+  if (body.syllabus !== undefined && course.publishedSyllabusVersionId && body.syllabus !== course.syllabus) {
+    throw new AppError(
+      "Course syllabus is governed by an immutable published SyllabusVersion; create a new DRAFT SyllabusVersion instead",
+      "SYLLABUS_VERSION_IMMUTABLE",
+      409
+    );
+  }
+
   if (body.title !== undefined) {
     if (isBlank(body.title)) throw validationError("title must not be empty");
     await assertCourseTitleAvailable(course.subjectId, body.title, course._id);
@@ -273,7 +312,8 @@ const updateCourse = async (adminId, courseId, body) => {
   for (const field of COURSE_TEXT_FIELDS) {
     if (body[field] !== undefined) course[field] = body[field];
   }
-  if (body.level !== undefined) course.level = resolveLevel(body.level);
+  const levelUpdated = body.level !== undefined;
+  if (levelUpdated) course.level = resolveLevel(body.level);
   if (body.gradeLevel !== undefined) course.gradeLevel = resolveGradeLevel(category, body.gradeLevel); // FR-ADM-22
   if (body.status !== undefined) course.status = resolveStatus(body.status);
   course.updatedBy = adminId;
@@ -281,6 +321,12 @@ const updateCourse = async (adminId, courseId, body) => {
 
   // courseTitle and gradeLevel are denormalized in Class
   await Class.updateMany({ courseId: course._id }, { $set: { courseTitle: course.title, gradeLevel: course.gradeLevel } });
+  if (levelUpdated && course.level) {
+    await Class.updateMany(
+      { courseId: course._id, status: { $in: ["DRAFT", "REJECTED"] } },
+      { $set: { level: course.level } }
+    );
+  }
   return course.toObject();
 };
 
@@ -301,4 +347,6 @@ module.exports = {
   insertCourse,
   createCourse,
   updateCourse,
+  normalizeLevel,
+  resolveLevel,
 };

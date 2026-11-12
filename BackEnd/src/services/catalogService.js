@@ -28,26 +28,31 @@ const toPublicTeacher = (teacher) => {
 
 class CatalogService {
   async getCategories() {
-    const categories = await Category.find({ status: "ACTIVE" }).lean();
-    const subjects = await Subject.find({ status: "ACTIVE" }).lean();
-    const courses = await Course.find({ status: "ACTIVE" }).lean();
+    const [categories, subjects] = await Promise.all([
+      Category.find({ status: "ACTIVE", ...NOT_DELETED }).lean(),
+      Subject.find({ status: "ACTIVE", ...NOT_DELETED }).lean(),
+    ]);
 
     return categories.map(cat => ({
       id: cat._id.toString(),
       name: cat.name,
       slug: cat.slug,
-      subjects: subjects.filter(sub => sub.categoryId.toString() === cat._id.toString()).map(sub => ({
-        id: sub._id.toString(),
-        name: sub.name,
-        slug: sub.slug,
-        classCount: 0 // Simplification for now
-      }))
+      subjects: subjects
+        .filter(sub => sub.categoryId && sub.categoryId.toString() === cat._id.toString())
+        .map(sub => ({
+          id: sub._id.toString(),
+          name: sub.name,
+          slug: sub.slug,
+          classCount: 0 // Simplification for now
+        }))
     }));
   }
 
   async getFilters() {
-    const subjects = await Subject.find({ status: "ACTIVE" }).select("name slug").lean();
-    const courses = await Course.find({ status: "ACTIVE" }).select("title slug subjectId").lean();
+    const [subjects, courses] = await Promise.all([
+      Subject.find({ status: "ACTIVE", ...NOT_DELETED }).select("name slug").lean(),
+      Course.find({ status: "ACTIVE", ...NOT_DELETED }).select("title slug subjectId").lean(),
+    ]);
     
     // Simplification for counts and minMax
     return {

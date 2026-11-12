@@ -4,6 +4,14 @@ const { AppError, CLASS_NOT_FOUND } = require("../utils/errors");
 const { paged } = require("../utils/http");
 const { audit } = require("./auditService");
 const { notify } = require("./notificationService");
+const {
+  getVerifiedTeacher,
+  validateClassCompletenessAndSessions,
+} = require("./teacherClassService");
+const {
+  validateClassGate,
+  captureClassSnapshots,
+} = require("./classCreationGateService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 
@@ -61,15 +69,82 @@ const getClassForReview = async (classId) => {
   };
 };
 
-// BR-50: only Admin approves/rejects, and only a Class that is PENDING_APPROVAL
-const reviewClass = async (adminId, classId, body, status) => {
+// BR-50 + CUR-09 + CUR-10 + TEA-07 + TEA-12: Admin cannot approve/open a class bypassing governance gates
+const approveClass = async (adminId, classId, body = {}, options = {}) => {
+  if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
+
+  const cls = await Class.findOne({ _id: classId, ...NOT_DELETED });
+  if (!cls) throw CLASS_NOT_FOUND();
+  if (cls.status !== "PENDING_APPROVAL") {
+    throw new AppError("Class is not pending approval", "CLASS_NOT_PENDING_APPROVAL", 409);
+  }
+
+  const teacher = await getVerifiedTeacher(cls.teacherId);
+  const course = await Course.findOne({ _id: cls.courseId, status: "ACTIVE", ...NOT_DELETED }).lean();
+  const sessions = await validateClassCompletenessAndSessions(cls, "Class is not complete enough to be approved");
+
+  const gateResult = await validateClassGate({
+    teacher,
+    course,
+    cls,
+    mode: "APPROVE",
+    totalSessions: sessions.length,
+    pricingPolicyVerifier: options.pricingPolicyVerifier,
+    contractVerifier: options.contractVerifier,
+  });
+
+  const snapshots = await captureClassSnapshots({
+    course,
+    pricingResult: gateResult.pricingResult,
+  });
+
+  const updated = await Class.findOneAndUpdate(
+    { _id: classId, status: "PENDING_APPROVAL", ...NOT_DELETED },
+    {
+      $set: {
+        status: "OPEN",
+        level: gateResult.alignment.level,
+        ...snapshots,
+        reviewedBy: adminId,
+        reviewedAt: new Date(),
+        reviewNote: body.reviewNote || null,
+        updatedBy: adminId,
+      },
+    },
+    { returnDocument: "after" }
+  ).lean();
+
+  if (!updated) {
+    throw new AppError("Class is not pending approval", "CLASS_NOT_PENDING_APPROVAL", 409);
+  }
+
+  await audit({
+    actorAdminId: adminId,
+    action: "CLASS_APPROVED",
+    targetType: "Class",
+    targetId: updated._id,
+    beforeState: { status: "PENDING_APPROVAL" },
+    afterState: {
+      status: "OPEN",
+      reviewNote: updated.reviewNote,
+      syllabusVersionId: updated.syllabusVersionId ? String(updated.syllabusVersionId) : null,
+      pricingPolicyVersion: updated.pricingPolicyVersion || null,
+    },
+  });
+
+  await notify(updated.teacherId, "Lớp học đã được duyệt", `Lớp "${updated.className}" đã được mở tuyển sinh.`, "CLASS_APPROVED");
+  return updated;
+};
+
+// BR-50: Admin can reject an invalid/incomplete pending class without being blocked by gates
+const rejectClass = async (adminId, classId, body = {}) => {
   if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
 
   const updated = await Class.findOneAndUpdate(
     { _id: classId, status: "PENDING_APPROVAL", ...NOT_DELETED },
     {
       $set: {
-        status,
+        status: "REJECTED",
         reviewedBy: adminId,
         reviewedAt: new Date(),
         reviewNote: body.reviewNote || null,
@@ -87,27 +162,20 @@ const reviewClass = async (adminId, classId, body, status) => {
 
   await audit({
     actorAdminId: adminId,
-    action: status === "OPEN" ? "CLASS_APPROVED" : "CLASS_REJECTED",
+    action: "CLASS_REJECTED",
     targetType: "Class",
     targetId: updated._id,
     beforeState: { status: "PENDING_APPROVAL" },
-    afterState: { status, reviewNote: updated.reviewNote },
+    afterState: { status: "REJECTED", reviewNote: updated.reviewNote },
   });
 
-  if (status === "OPEN") {
-    await notify(updated.teacherId, "Lớp học đã được duyệt", `Lớp "${updated.className}" đã được mở tuyển sinh.`, "CLASS_APPROVED");
-  } else {
-    await notify(
-      updated.teacherId,
-      "Lớp học bị từ chối",
-      updated.reviewNote || `Lớp "${updated.className}" cần chỉnh sửa và gửi duyệt lại.`,
-      "CLASS_REJECTED"
-    );
-  }
+  await notify(
+    updated.teacherId,
+    "Lớp học bị từ chối",
+    updated.reviewNote || `Lớp "${updated.className}" cần chỉnh sửa và gửi duyệt lại.`,
+    "CLASS_REJECTED"
+  );
   return updated;
 };
-
-const approveClass = (adminId, classId, body) => reviewClass(adminId, classId, body, "OPEN");
-const rejectClass = (adminId, classId, body) => reviewClass(adminId, classId, body, "REJECTED");
 
 module.exports = { listPendingClasses, getClassForReview, approveClass, rejectClass };

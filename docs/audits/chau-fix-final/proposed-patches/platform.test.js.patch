@@ -1,0 +1,102 @@
+diff --git a/BackEnd/tests/platform.test.js b/BackEnd/tests/platform.test.js
+index fbb688b..2fe04ca 100644
+--- a/BackEnd/tests/platform.test.js
++++ b/BackEnd/tests/platform.test.js
+@@ -24,7 +24,10 @@ const {
+   AuditLog,
+   Notification,
+   SessionAttendance,
++  CoursePricingPolicy,
++  TeacherSubjectAuthorization,
+ } = require("../src/models");
++const classCreationGateService = require("../src/services/classCreationGateService");
+ const { runJob } = require("../src/jobs/expireEnrollmentsJob");
+ const { verifyRoomToken } = require("../src/utils/roomToken");
+ const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
+@@ -57,10 +60,16 @@ beforeAll(async () => {
+ });
+ 
+ afterAll(async () => {
++  classCreationGateService.resetDependencyVerifiers();
+   await disconnectDB();
+ });
+ 
++afterEach(() => {
++  classCreationGateService.resetDependencyVerifiers();
++});
++
+ beforeEach(async () => {
++  classCreationGateService.resetDependencyVerifiers();
+   await clearDB();
+ 
+   admin = await User.create({ email: "admin@test.com", passwordHash: "x", role: "ADMIN" });
+@@ -101,6 +110,27 @@ beforeEach(async () => {
+     subjectId: subject._id,
+     subjectName: subject.name,
+     gradeLevel: "GRADE_6",
++    level: "BEGINNER",
++    createdBy: admin._id,
++  });
++  await CoursePricingPolicy.create({
++    policyKey: `COURSE:${course._id}:ALL:GRADE_6:BEGINNER`,
++    version: 1,
++    name: "Toán 6 Test Policy",
++    scopeType: "COURSE",
++    categoryId: category._id,
++    subjectId: subject._id,
++    courseId: course._id,
++    gradeLevel: "GRADE_6",
++    level: "BEGINNER",
++    classType: "ALL",
++    allowFree: true,
++    minPrice: 0,
++    maxPrice: 2000000,
++    minSessions: 1,
++    maxSessions: 50,
++    effectiveFrom: new Date(Date.now() - 60000),
++    status: "ACTIVE",
+     createdBy: admin._id,
+   });
+ });
+@@ -401,6 +431,22 @@ describe("Teacher verification, class approval and classroom", () => {
+     expect(verified.body.data.verificationStatus).toBe("VERIFIED");
+     expect(verified.body.data.documents.every((d) => d.status === "APPROVED")).toBe(true);
+ 
++    // CUR-10 / TEA-07 / TEA-12 fixture preconditions after verification
++    await TeacherSubjectAuthorization.create({
++      teacherId: newTeacher._id,
++      subjectId: subject._id,
++      categoryId: category._id,
++      gradeLevel: "GRADE_6",
++      level: "BEGINNER",
++      status: "APPROVED",
++      createdBy: admin._id,
++      approvedBy: admin._id,
++      approvedAt: new Date(),
++    });
++    classCreationGateService.setDependencyVerifiers({
++      contractVerifier: async () => ({ id: "legacy-platform-test-contract", status: "ACTIVE" }),
++    });
++
+     // BR-09 / BR-10
+     const freeWithPrice = await request(app).post("/api/teacher/classes").set(as(newTeacher)).send({ ...classBody, classType: "FREE" });
+     expect(freeWithPrice.statusCode).toBe(400);
+@@ -529,8 +575,8 @@ describe("Teacher verification, class approval and classroom", () => {
+     expect(early.body.error).toBe("REVIEW_NOT_ALLOWED");
+ 
+     // Join: BR-12 not enrolled, BR-15 not owner
+-    // Time passes: session 1 is now running (moved directly, the API only schedules future sessions)
+-    await Session.updateOne({ _id: sessionId }, { $set: { startDatetime: start, endDatetime: end } });
++    // Time passes: session 1 is now running (moved directly, the API only schedules future sessions; < 300s keeps PRESENT)
++    await Session.updateOne({ _id: sessionId }, { $set: { startDatetime: new Date(Date.now() - 60 * 1000), endDatetime: end } });
+     const stranger = await request(app).post(`/api/sessions/${sessionId}/join`).set(as(student2));
+     expect(stranger.body.error).toBe("NOT_ENROLLED");
+     const wrongTeacher = await request(app).post(`/api/sessions/${sessionId}/join`).set(as(teacher));
+@@ -887,6 +933,7 @@ describe("Scholarship campaign, contribution, application and usage", () => {
+       categoryName: category.name,
+       subjectId: subject._id,
+       subjectName: subject.name,
++      level: "BEGINNER",
+       createdBy: admin._id,
+     });
+     const outside = await createOpenClass(500000, { courseId: otherCourse._id, className: "Ngoài phạm vi" });

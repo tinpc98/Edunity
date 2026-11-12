@@ -78,3 +78,10 @@ Lấy danh sách giảng viên đã VERIFIED (cùng các trường như mục 4,
 ## 6. Lỗi phổ biến
 - `404 CLASS_NOT_FOUND`: Không tìm thấy lớp.
 - `404 TEACHER_NOT_FOUND`: Không tìm thấy giảng viên hoặc giảng viên chưa verified.
+
+---
+
+## 7. Khóa học V3 & Đề xuất khóa học (Curriculum V3)
+Toàn bộ API quản lý Chuyên mục, Môn học, Khóa học (Admin) và Đề xuất khóa học (Teacher / Admin) theo kiến trúc Edunity V3 đã được chuẩn hóa chi tiết tại:  
+👉 **`docs/api-contract-academic.md`** (Mục 3.1: Phân hệ CUR).
+

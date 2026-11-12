@@ -1,6 +1,25 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
+const enrollmentPricingPolicySnapshotSchema = new Schema(
+  {
+    policyId: { type: Schema.Types.ObjectId, ref: "CoursePricingPolicy", default: null },
+    policyKey: { type: String, trim: true, default: null },
+    version: { type: Number, min: 1, default: null },
+    scopeType: { type: String, default: null },
+    classType: { type: String, default: null },
+    allowFree: { type: Boolean, default: null },
+    minPrice: { type: Schema.Types.Decimal128, default: null },
+    maxPrice: { type: Schema.Types.Decimal128, default: null },
+    minSessions: { type: Number, default: null },
+    maxSessions: { type: Number, default: null },
+    effectiveFrom: { type: Date, default: null },
+    effectiveTo: { type: Date, default: null },
+    capturedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
 const enrollmentSchema = new Schema(
   {
     classId: { type: Schema.Types.ObjectId, ref: "Class", required: true },
@@ -25,6 +44,14 @@ const enrollmentSchema = new Schema(
 
     enrolledAt: { type: Date, default: Date.now },
     holdExpiresAt: { type: Date, default: null }, // BR-38/39: created_at + 15 minutes while PENDING_PAYMENT
+
+    // CUR-09: Snapshots copied from Class at Enrollment creation (populated by Tin in enrollmentService)
+    syllabusVersionId: { type: Schema.Types.ObjectId, ref: "SyllabusVersion", default: null },
+    syllabusVersionNumber: { type: Number, min: 1, default: null },
+    pricingPolicyId: { type: Schema.Types.ObjectId, ref: "CoursePricingPolicy", default: null },
+    pricingPolicyKey: { type: String, trim: true, default: null },
+    pricingPolicyVersion: { type: Number, min: 1, default: null },
+    pricingPolicySnapshot: { type: enrollmentPricingPolicySnapshotSchema, default: null },
   },
   { timestamps: true }
 );

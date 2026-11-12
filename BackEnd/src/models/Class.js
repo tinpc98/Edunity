@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
-const { GRADE_LEVELS } = require("./constants");
+const { GRADE_LEVELS, COURSE_LEVELS } = require("./constants");
 const { softDeletePlugin, reviewablePlugin } = require("./plugins");
 
 const scheduleEntrySchema = new Schema(
@@ -8,6 +8,25 @@ const scheduleEntrySchema = new Schema(
     dayOfWeek: { type: Number, min: 0, max: 6, required: true }, // 0 = Sunday
     startTime: { type: String, required: true }, // "HH:mm"
     endTime: { type: String, required: true },
+  },
+  { _id: false }
+);
+
+const pricingPolicySnapshotSchema = new Schema(
+  {
+    policyId: { type: Schema.Types.ObjectId, ref: "CoursePricingPolicy", default: null },
+    policyKey: { type: String, trim: true, default: null },
+    version: { type: Number, min: 1, default: null },
+    scopeType: { type: String, default: null },
+    classType: { type: String, default: null },
+    allowFree: { type: Boolean, default: null },
+    minPrice: { type: Schema.Types.Decimal128, default: null },
+    maxPrice: { type: Schema.Types.Decimal128, default: null },
+    minSessions: { type: Number, default: null },
+    maxSessions: { type: Number, default: null },
+    effectiveFrom: { type: Date, default: null },
+    effectiveTo: { type: Date, default: null },
+    capturedAt: { type: Date, default: null },
   },
   { _id: false }
 );
@@ -21,6 +40,7 @@ const classSchema = new Schema(
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
     subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
     gradeLevel: { type: String, enum: GRADE_LEVELS, default: null },
+    level: { type: String, enum: COURSE_LEVELS, default: null },
 
     className: { type: String, required: true, trim: true },
     description: String, // BR-52: mô tả tổng quan riêng của Class
@@ -34,14 +54,32 @@ const classSchema = new Schema(
     enrollmentEnd: Date,
     startDate: Date,
     endDate: Date,
+    completedAt: { type: Date, default: null },
     status: {
       type: String,
       enum: ["DRAFT", "PENDING_APPROVAL", "OPEN", "REJECTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
       default: "DRAFT",
     },
+    settlementSyncStatus: {
+      type: String,
+      enum: ["NONE", "IN_PROGRESS", "SYNCED", "FAILED"],
+      default: "NONE",
+    },
+    settlementSyncAttempts: { type: Number, default: 0, min: 0 },
+    settlementSyncError: { type: String, default: null },
+    settlementSyncLastAttemptAt: { type: Date, default: null },
+    settlementSyncedAt: { type: Date, default: null },
     updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null }, // Teacher hoặc Admin chỉnh sửa gần nhất
 
     schedule: [scheduleEntrySchema],
+
+    // CUR-09: Course SyllabusVersion & PricingPolicy snapshots captured before/at opening
+    syllabusVersionId: { type: Schema.Types.ObjectId, ref: "SyllabusVersion", default: null },
+    syllabusVersionNumber: { type: Number, min: 1, default: null },
+    pricingPolicyId: { type: Schema.Types.ObjectId, ref: "CoursePricingPolicy", default: null },
+    pricingPolicyKey: { type: String, trim: true, default: null },
+    pricingPolicyVersion: { type: Number, min: 1, default: null },
+    pricingPolicySnapshot: { type: pricingPolicySnapshotSchema, default: null },
 
     ratingAverage: { type: Number, default: 0 },
     ratingCount: { type: Number, default: 0 },

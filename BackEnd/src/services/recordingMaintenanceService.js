@@ -1,12 +1,19 @@
 const fs = require("fs/promises");
 const path = require("path");
 const { Session } = require("../models");
+const { getSetting } = require("../utils/settings");
 const { notifyAdminsOnce } = require("./notificationService");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const getRetentionDays = () => Number(process.env.RECORDING_RETENTION_DAYS) || 90;
+const getRetentionDays = () => {
+  const days = getSetting("RECORDING_RETENTION_DAYS");
+  return Number.isFinite(days) && days > 0 ? days : 90;
+};
 // egress_ended normally arrives within minutes; past this the recording is reported FAILED instead of hanging
-const getProcessingTimeoutMs = () => (Number(process.env.RECORDING_PROCESSING_TIMEOUT_HOURS) || 6) * 60 * 60 * 1000;
+const getProcessingTimeoutMs = () => {
+  const hours = getSetting("RECORDING_PROCESSING_TIMEOUT_HOURS");
+  return (Number.isFinite(hours) && hours > 0 ? hours : 6) * 60 * 60 * 1000;
+};
 
 const getStorageRoot = () => path.resolve(process.env.STORAGE_DIR || path.join(__dirname, "../../storage"));
 

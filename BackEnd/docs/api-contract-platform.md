@@ -202,7 +202,7 @@ Quy tắc: `startDatetime` phải ở tương lai (`400 SESSION_IN_PAST`); khôn
   `RECORDING_PROCESSING_TIMEOUT_HOURS` thì `FAILED`) → `EXPIRED` sau `RECORDING_RETENTION_DAYS` (mặc định 90 ngày, file bị xoá).
 - Quyền xem bản ghi: Teacher chủ buổi, Admin, Student có Enrollment `CONFIRMED`/`COMPLETED`.
 - Lỗi: `403 NOT_ENROLLED`, `409 SESSION_NOT_JOINABLE`, `409 SESSION_CANCELLED`, `409 SESSION_ENDED`, `404 SESSION_NOT_FOUND`.
-- `GET /sessions/:id/join` (Student) vẫn dùng được và trả về cùng dữ liệu như trên — không còn `joinUrl`.
+- `GET /sessions/:id/join` bị chặn cứng với `405 METHOD_NOT_ALLOWED` (`BUG-TIN03-01`). FE/Client bắt buộc dùng `POST /sessions/:id/join`.
 
 ## 5. Xác minh Teacher
 
@@ -482,3 +482,13 @@ Dashboard response:
 ```
 - `revenue` = tổng học phí của các Enrollment trả phí đã xác nhận (thanh toán trực tiếp, học bổng hoặc kết hợp);
   `commission` = phần hoa hồng của nền tảng. `monthly` luôn có 6 tháng gần nhất (theo UTC).
+
+## 18. Admin: cấu hình hệ thống theo version (`G0-05`)
+
+| Method | Endpoint | Actor | Mô tả |
+|---|---|---|---|
+| GET | `/admin/settings` | Admin | Danh sách khóa cấu hình hiệu lực (`DB`/`ENV`/`DEFAULT`) |
+| GET | `/admin/settings/:key` | Admin | Chi tiết giá trị hiệu lực + lịch sử version |
+| PUT | `/admin/settings/:key` | Admin | Tạo version mới (`value`, `effectiveFrom?`, `changeReason?`) + AuditLog |
+| POST | `/admin/settings/:key/rollback` | Admin | Khôi phục về `targetVersion` bằng version mới + AuditLog |
+
