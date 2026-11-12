@@ -1,95 +1,211 @@
-import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { Button, Skeleton, Tag } from "antd";
-import { CheckCircleFilled, BookOutlined, ArrowRightOutlined } from "@ant-design/icons";
-import { enrollmentService } from "../../services/enrollment.service";
-import { useClassDetailQuery } from "../class/hooks/useClassDiscovery";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Alert, Button, Card, Skeleton } from "antd";
+import { ReloadOutlined, ArrowLeftOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { usePaymentPolling } from "../../hooks/usePaymentPolling";
+import {
+  PaymentResult,
+  PaymentQrPanel,
+  PaymentErrorState,
+} from "../../components/payment";
+import { FetchError } from "../../api/apiClient";
 import { ROUTES } from "../../routes/routePaths";
 
 export default function PaymentSuccessPage() {
-  const { enrollmentId } = useParams<{ enrollmentId: string }>();
+  const { paymentId: paramPaymentId } = useParams<{ paymentId?: string }>();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const { data: enrollment, isLoading: isLoadingEnrollment } = useQuery({
-    queryKey: ["enrollment", enrollmentId],
-    queryFn: () => (enrollmentId ? enrollmentService.getEnrollmentById(enrollmentId) : null),
-    enabled: Boolean(enrollmentId),
+  // Resolve paymentId from route param OR returnUrl/cancelUrl query string.
+  // SECURITY RULE: NEVER trust ?status=PAID or ?code=00 in the URL query string.
+  // Always verify payment state directly from Backend via GET /api/payments/:id.
+  const queryPaymentId =
+    searchParams.get("paymentId") ||
+    searchParams.get("contributionId") ||
+    searchParams.get("id") ||
+    null;
+
+  const resolvedPaymentId = paramPaymentId || queryPaymentId;
+  const isCancelRoute = location.pathname.includes("/cancel");
+  const isSponsorRoute = location.pathname.includes("/sponsor/");
+
+  const {
+    payment,
+    uiState,
+    isLoading,
+    isError,
+    error,
+    isPolling,
+    isFetching,
+    refetch,
+  } = usePaymentPolling({
+    paymentId: resolvedPaymentId,
+    enabled: Boolean(resolvedPaymentId),
   });
 
-  const { data: classItem, isLoading: isLoadingClass } = useClassDetailQuery(
-    enrollment?.classId
-  );
-
-  if (isLoadingEnrollment || isLoadingClass) {
+  if (!resolvedPaymentId) {
     return (
-      <div className="site-container py-16 min-h-[60vh] flex items-center justify-center">
-        <Skeleton active paragraph={{ rows: 4 }} className="max-w-md" />
+      <div className="max-w-2xl mx-auto p-6 md:p-8 space-y-4">
+        <PaymentErrorState
+          kind="NOT_FOUND"
+          purpose={isSponsorRoute ? "DONATION" : "TUITION"}
+          message={
+            isCancelRoute
+              ? "Giao dịch thanh toán đã được hủy hoặc tạm dừng"
+              : "Không tìm thấy mã định danh giao dịch cần kiểm tra"
+          }
+          description="Hệ thống không xác nhận thanh toán qua tham số đường dẫn (URL). Vui lòng kiểm tra trạng thái thực tế trong danh sách đơn đăng ký hoặc lịch sử đóng góp của bạn."
+          onBack={() =>
+            navigate(isSponsorRoute ? ROUTES.SPONSOR.CONTRIBUTIONS : ROUTES.STUDENT.ENROLLMENTS)
+          }
+          backLabel={isSponsorRoute ? "Về lịch sử tài trợ" : "Về đơn đăng ký của tôi"}
+        />
       </div>
     );
   }
 
-  const formattedAmount = enrollment
-    ? `${enrollment.tuitionAmount.toLocaleString("vi-VN")}đ`
-    : "";
+  if (isLoading) {
+    return (
+      <div className="max-w-2xl mx-auto p-6 md:p-8">
+        <Card className="rounded-2xl border border-slate-200 p-6">
+          <Skeleton active paragraph={{ rows: 6 }} />
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError || !payment) {
+    const status = error instanceof FetchError ? error.status : 0;
+    const kind =
+      status === 403 ? "FORBIDDEN" : status === 404 ? "NOT_FOUND" : "NETWORK_ERROR";
+    return (
+      <div className="max-w-2xl mx-auto p-6 md:p-8">
+        <PaymentErrorState
+          kind={kind}
+          purpose={isSponsorRoute ? "DONATION" : "TUITION"}
+          onRetry={() => refetch()}
+          retryLoading={isFetching}
+          onBack={() =>
+            navigate(isSponsorRoute ? ROUTES.SPONSOR.CONTRIBUTIONS : ROUTES.STUDENT.ENROLLMENTS)
+          }
+          backLabel={isSponsorRoute ? "Về lịch sử tài trợ" : "Về đơn đăng ký của tôi"}
+        />
+      </div>
+    );
+  }
+
+  const purpose = payment.purpose || (isSponsorRoute ? "DONATION" : "TUITION");
 
   return (
-    <div className="site-container py-12 min-h-[calc(100vh-140px)] flex items-center justify-center">
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-8 sm:p-12 shadow-sm max-w-lg w-full text-center">
-        <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-5 text-3xl">
-          <CheckCircleFilled />
-        </div>
+    <div className="max-w-3xl mx-auto p-6 md:p-8 space-y-5" data-testid="payment-verification-page">
+      {/* Return/Cancel URL Security Notice */}
+      {isCancelRoute && uiState === "PENDING" && (
+        <Alert
+          type="warning"
+          showIcon
+          message="Bạn đã rời khỏi trang cổng thanh toán"
+          description="Giao dịch của bạn hiện vẫn đang ở trạng thái Chờ thanh toán. Nếu thời gian hiệu lực 15 phút vẫn còn, bạn có thể tiếp tục quét mã VietQR bên dưới."
+          className="rounded-2xl"
+        />
+      )}
 
-        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2">
-          Thanh toán thành công
-        </h1>
-        <p className="text-sm text-slate-500 mb-6">
-          Bạn đã đăng ký lớp học thành công.
-        </p>
-
-        {classItem && (
-          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 text-left mb-8 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400">Lớp học</span>
-              <Tag color="green" className="font-semibold text-[11px] border-none">
-                ĐÃ XÁC NHẬN
-              </Tag>
-            </div>
-            <div className="text-base font-bold text-slate-900">
-              {classItem.title}
-            </div>
-            <div className="text-xs text-slate-600 flex items-center gap-2">
-              <BookOutlined className="text-indigo-600" />
-              <span>{classItem.courseTitle}</span>
-            </div>
-            <div className="pt-3 border-t border-slate-200/70 flex items-center justify-between text-xs">
-              <span className="text-slate-500">Số tiền đã thanh toán:</span>
-              <span className="font-bold text-slate-900 text-sm">{formattedAmount}</span>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <Link to={ROUTES.STUDENT.HOME} className="block">
+      {!isCancelRoute && (uiState === "PENDING" || uiState === "PROCESSING") && (
+        <Alert
+          type="info"
+          showIcon
+          icon={<SafetyCertificateOutlined />}
+          message="Đang xác minh giao dịch từ máy chủ ngân hàng..."
+          description="Edunity chỉ xác nhận thành công sau khi nhận và kiểm tra chữ ký Webhook hợp lệ từ cổng thanh toán. Hệ thống đang tự động kiểm tra 3 giây/lần."
+          action={
             <Button
-              type="primary"
-              size="large"
-              icon={<ArrowRightOutlined />}
-              className="w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-bold text-sm shadow-xs"
+              size="small"
+              icon={<ReloadOutlined spin={isFetching} />}
+              onClick={() => refetch()}
             >
-              Đến Học tập của tôi
+              Kiểm tra ngay
             </Button>
-          </Link>
+          }
+          className="rounded-2xl"
+        />
+      )}
 
-          {classItem && (
-            <Link to={`/classes/${classItem.id}`} className="block">
-              <Button
-                size="large"
-                className="w-full h-12 rounded-xl font-semibold text-sm text-slate-600 border-slate-200"
-              >
-                Xem lại lớp học
-              </Button>
-            </Link>
-          )}
-        </div>
+      {uiState === "PENDING" || uiState === "PROCESSING" ? (
+        <PaymentQrPanel
+          purpose={purpose}
+          uiState={uiState}
+          amount={payment.amount}
+          tuitionAmount={payment.tuitionAmount}
+          scholarshipAmount={payment.scholarshipAmount}
+          qrCode={payment.qrCode}
+          checkoutUrl={payment.checkoutUrl}
+          orderCode={payment.orderCode}
+          gatewayReference={payment.gatewayReference}
+          provider={payment.provider}
+          gateway={payment.gateway}
+          expiredAt={payment.expiredAt || payment.holdExpiresAt}
+          isAnonymous={payment.isAnonymous}
+          donorDisplayName={payment.donorDisplayName}
+          title={
+            purpose === "DONATION"
+              ? "Đang chờ xác nhận khoản tài trợ học bổng"
+              : "Đang chờ xác nhận thanh toán học phí"
+          }
+          isPolling={isPolling}
+          isRefreshing={isFetching}
+          onManualRefresh={() => refetch()}
+          onExpire={() => refetch()}
+        />
+      ) : (
+        <PaymentResult
+          payment={payment}
+          uiState={uiState}
+          purpose={purpose}
+          onPrimaryAction={
+            purpose === "TUITION" && uiState === "COMPLETED" && payment.classId
+              ? () => navigate(`/student/classes/${payment.classId}`)
+              : purpose === "TUITION" &&
+                (uiState === "FAILED" || uiState === "EXPIRED") &&
+                payment.enrollmentId
+              ? () => navigate(`/checkout/${payment.enrollmentId}`)
+              : purpose === "DONATION"
+              ? () => navigate(ROUTES.SPONSOR.CONTRIBUTIONS)
+              : undefined
+          }
+          primaryActionLabel={
+            purpose === "TUITION" && uiState === "COMPLETED"
+              ? "Vào lớp của tôi"
+              : purpose === "TUITION" && (uiState === "FAILED" || uiState === "EXPIRED")
+              ? "Quay lại trang thanh toán"
+              : "Xem lịch sử tài trợ"
+          }
+          onSecondaryAction={() =>
+            navigate(
+              purpose === "DONATION" ? ROUTES.CAMPAIGNS : ROUTES.STUDENT.PAYMENTS
+            )
+          }
+          secondaryActionLabel={
+            purpose === "DONATION" ? "Khám phá chiến dịch" : "Lịch sử thanh toán"
+          }
+        />
+      )}
+
+      <div className="flex justify-center">
+        <Button
+          type="link"
+          icon={<ArrowLeftOutlined />}
+          onClick={() =>
+            navigate(
+              purpose === "DONATION"
+                ? ROUTES.SPONSOR.CONTRIBUTIONS
+                : ROUTES.STUDENT.ENROLLMENTS
+            )
+          }
+          className="text-xs text-slate-500"
+        >
+          {purpose === "DONATION"
+            ? "Quay về trang đóng góp của Nhà tài trợ"
+            : "Quay về danh sách đơn đăng ký của Học viên"}
+        </Button>
       </div>
     </div>
   );

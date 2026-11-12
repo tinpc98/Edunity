@@ -543,6 +543,7 @@ module.exports = {
   clearCache,
   refreshKeyCache,
   getEffectiveSettingSync,
+  getSettingMetaSync,
   getEffectiveSetting,
   listSettings,
   getSettingHistory,

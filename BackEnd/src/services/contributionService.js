@@ -5,22 +5,27 @@ const {
   SponsorContribution,
   Scholarship,
   ScholarshipUsage,
+  Payment,
   Transaction,
 } = require("../models");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { paged } = require("../utils/http");
 const { toNum, toDec, parseAmount } = require("../utils/money");
 const campaignService = require("./campaignService");
+const paymentService = require("./paymentService");
 const { toPublic } = require("../utils/publicView");
 const { notify } = require("./notificationService");
 
 /**
- * UC-SPO-02: Tạo yêu cầu tài trợ (PENDING). Tương tự thanh toán học phí, số tiền chỉ
- * được ghi nhận khi webhook từ gateway xác nhận — không tin cậy kết quả trực tiếp từ frontend.
+ * UC-SPO-02: Tạo yêu cầu tài trợ (PENDING) thông qua Unified Payment Engine (kênh DONATION).
+ * Tương tự thanh toán học phí, số tiền chỉ được ghi nhận khi webhook từ gateway xác nhận —
+ * không tin cậy kết quả trực tiếp từ frontend, và không cộng vào fundedAmount khi mới tạo QR.
  */
 const createContribution = async (sponsorId, campaignId, body) => {
   // PAY-06: Parse và validate số tiền trước khi thực hiện truy vấn database
   const amount = parseAmount(body ? body.amount : undefined, "amount");
+  const isAnonymous = Boolean(body && body.isAnonymous);
+  const donorDisplayName = body && body.donorDisplayName ? body.donorDisplayName : null;
 
   const campaign = await campaignService.getCampaignOrThrow(campaignId);
   // BR-17: Sponsor chỉ tài trợ Campaign đang OPEN (và đang trong thời gian nhận tài trợ)
@@ -28,21 +33,33 @@ const createContribution = async (sponsorId, campaignId, body) => {
     throw new AppError("Campaign is not accepting contributions", "CAMPAIGN_NOT_ACCEPTING_FUNDING", 409);
   }
 
-  const contribution = await SponsorContribution.create({
-    campaignId: campaign._id,
+  // Gọi Unified Payment Engine cho mục đích DONATION (kênh DONATION)
+  const { payment, contribution } = await paymentService.createDonationPaymentIntent({
     sponsorId,
-    amount: toDec(amount),
-    contributionStatus: "PENDING",
-    paymentReference: "SBX-C-" + crypto.randomUUID(),
+    campaign,
+    amountInput: amount,
+    isAnonymous,
+    donorDisplayName,
   });
 
+  const formatted = paymentService.formatPaymentIntentResponse(payment, {
+    contributionId: contribution._id,
+  });
+
+  // Phản hồi không bao giờ tiết lộ thông tin định danh cá nhân (email/sponsorId) nếu isAnonymous = true
   return {
+    ...formatted,
     contributionId: contribution._id,
     campaignId: campaign._id,
+    campaignTitle: campaign.title || null,
+    campaignStatus: campaign.status || null,
     amount: contribution.amount,
     contributionStatus: contribution.contributionStatus,
-    gateway: "SANDBOX",
+    gateway: payment.gateway,
     gatewayReference: contribution.paymentReference,
+    donorDisplayName: contribution.isAnonymous
+      ? "Nhà tài trợ ẩn danh"
+      : contribution.donorDisplayName || null,
   };
 };
 
@@ -79,7 +96,13 @@ const processWebhook = async (gatewayReference, status) => {
       const now = new Date();
       const updated = await SponsorContribution.updateOne(
         { _id: contribution._id, contributionStatus: "PENDING" },
-        { $set: { contributionStatus: targetStatus, contributedAt: now } },
+        {
+          $set: {
+            contributionStatus: targetStatus,
+            providerStatus: status === "SUCCESS" ? "PAID" : "FAILED",
+            contributedAt: now,
+          },
+        },
         { session }
       );
       applied = updated.modifiedCount === 1;
@@ -149,11 +172,14 @@ const getMyContributions = async (sponsorId, query, paging) => {
 
   return {
     ...paged(
-      items.map(({ campaignId: campaign, ...item }) => ({
+      items.map(({ campaignId: campaign, providerMetadata, ...item }) => ({
         ...item,
+        paymentId: item._id,
+        contributionId: item._id,
         campaignId: campaign ? campaign._id : null,
         campaignTitle: campaign ? campaign.title : null,
         campaignStatus: campaign ? campaign.status : null,
+        remainingSeconds: paymentService.computeRemainingSeconds(item.expiredAt),
       })),
       total,
       paging

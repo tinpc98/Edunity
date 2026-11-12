@@ -54,11 +54,21 @@ const classSchema = new Schema(
     enrollmentEnd: Date,
     startDate: Date,
     endDate: Date,
+    completedAt: { type: Date, default: null },
     status: {
       type: String,
       enum: ["DRAFT", "PENDING_APPROVAL", "OPEN", "REJECTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
       default: "DRAFT",
     },
+    settlementSyncStatus: {
+      type: String,
+      enum: ["NONE", "IN_PROGRESS", "SYNCED", "FAILED"],
+      default: "NONE",
+    },
+    settlementSyncAttempts: { type: Number, default: 0, min: 0 },
+    settlementSyncError: { type: String, default: null },
+    settlementSyncLastAttemptAt: { type: Date, default: null },
+    settlementSyncedAt: { type: Date, default: null },
     updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null }, // Teacher hoặc Admin chỉnh sửa gần nhất
 
     schedule: [scheduleEntrySchema],

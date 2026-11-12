@@ -11,6 +11,8 @@ const scholarshipUsageSchema = new Schema(
     usedAt: { type: Date, default: Date.now },
     // PENDING = tạm giữ trong lúc chờ Student thanh toán phần chênh lệch (MIXED, 15 phút)
     status: { type: String, enum: ["PENDING", "CONFIRMED", "RELEASED"], default: "PENDING" },
+    isReverted: { type: Boolean, default: false },
+    revertedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

@@ -60,6 +60,8 @@ const PUBLIC_ROUTES = new Set([
   "get /api/files/download", // the signature is the credential
   "post /api/payments/sandbox/webhook", // development/test only (security.test.js)
   "post /api/payments/webhook", // shared secret (security.test.js)
+  "post /api/payments/webhooks/payos/tuition", // signed by payOS TUITION checksumKey
+  "post /api/payments/webhooks/payos/donation", // signed by payOS DONATION checksumKey
   "post /api/sessions/livekit-webhook", // signed by LiveKit (security.test.js)
 ]);
 

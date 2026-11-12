@@ -111,13 +111,28 @@ export type ContributionStatus = "PENDING" | "COMPLETED" | "FAILED";
 
 export interface ApiSponsorContribution {
   _id: string;
+  paymentId?: string;
+  contributionId?: string;
   campaignId: string | any;
   campaignTitle?: string;
   campaignStatus?: CampaignStatus;
-  sponsorId: string | any;
+  sponsorId?: string | any;
   amount: number | string | { $numberDecimal?: string };
   contributionStatus: ContributionStatus;
   paymentReference?: string | null;
+  gatewayReference?: string | null;
+  purpose?: "DONATION" | "TUITION";
+  channelKey?: "DONATION" | "TUITION";
+  provider?: string;
+  gateway?: string;
+  orderCode?: number | null;
+  paymentLinkId?: string | null;
+  qrCode?: string | null;
+  checkoutUrl?: string | null;
+  expiredAt?: string | null;
+  remainingSeconds?: number;
+  isAnonymous?: boolean;
+  donorDisplayName?: string | null;
   contributedAt: string;
   createdAt?: string;
   updatedAt?: string;
@@ -125,6 +140,7 @@ export interface ApiSponsorContribution {
 
 export interface SponsorContribution {
   id: string;
+  paymentId: string;
   campaignId: string;
   campaignTitle?: string;
   campaignStatus?: CampaignStatus;
@@ -133,6 +149,18 @@ export interface SponsorContribution {
   amount: number;
   contributionStatus: ContributionStatus;
   paymentReference?: string | null;
+  purpose?: "DONATION" | "TUITION";
+  channelKey?: "DONATION" | "TUITION";
+  provider?: string;
+  gateway?: string;
+  orderCode?: number | null;
+  paymentLinkId?: string | null;
+  qrCode?: string | null;
+  checkoutUrl?: string | null;
+  expiredAt?: string | null;
+  remainingSeconds?: number;
+  isAnonymous?: boolean;
+  donorDisplayName?: string | null;
   contributedAt: string;
   createdAt?: string;
   updatedAt?: string;
@@ -140,15 +168,33 @@ export interface SponsorContribution {
 
 export interface CreateContributionPayload {
   amount: number;
+  isAnonymous?: boolean;
+  donorDisplayName?: string | null;
 }
 
 export interface CreateContributionResponse {
+  paymentId: string;
   contributionId: string;
   campaignId: string;
+  campaignTitle?: string | null;
+  campaignStatus?: CampaignStatus | string | null;
+  purpose: "DONATION";
+  channelKey: "DONATION";
+  provider: string;
   amount: number;
+  currency: string;
   contributionStatus: ContributionStatus;
+  paymentStatus: ContributionStatus;
   gateway: string;
   gatewayReference: string;
+  orderCode: number | null;
+  paymentLinkId: string | null;
+  qrCode: string | null;
+  checkoutUrl: string | null;
+  expiredAt: string | null;
+  remainingSeconds: number;
+  isAnonymous: boolean;
+  donorDisplayName: string | null;
 }
 
 export interface SponsorContributionsResponse {

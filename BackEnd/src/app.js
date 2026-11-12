@@ -7,7 +7,25 @@ const catalogRoutes = require("./routes/catalogRoutes");
 const authRoutes = require("./routes/authRoutes");
 const financeRoutes = require("./routes/financeRoutes");
 
+const clock = require("./utils/clock");
+
 const app = express();
+
+// P0 Financial Security Gate: Strip and disallow public HTTP clients from manipulating business clock
+app.use((req, res, next) => {
+  if (req.headers["x-test-now"]) {
+    if (process.env.NODE_ENV !== "test" || process.env.EDUNITY_RUNNING_SERVER === "true") {
+      delete req.headers["x-test-now"];
+    } else {
+      // Internal in-process Supertest execution only
+      clock.setTestTime(req.headers["x-test-now"]);
+      res.on("finish", () => {
+        clock.clearTestTime();
+      });
+    }
+  }
+  next();
+});
 
 // Number of reverse proxies in front of the app; without it every client behind a proxy shares one rate limit
 if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY));
@@ -66,7 +84,7 @@ app.use((err, req, res, next) => {
     return res.status(err.statusCode).json({
       success: false,
       error: err.code,
-      message: err.message,
+      message: err.rawMessage || err.message,
       ...(err.details ? { details: err.details } : {})
     });
   }

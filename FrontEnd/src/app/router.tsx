@@ -47,6 +47,10 @@ import AdminCourseProposalsPage from "../features/admin/catalog/AdminCoursePropo
 import AdminPaymentsPage from "../features/admin/finance/AdminPaymentsPage";
 import AdminTransactionsPage from "../features/admin/finance/AdminTransactionsPage";
 import AdminPayoutsPage from "../features/admin/finance/AdminPayoutsPage";
+import AdminRefundsPage from "../features/admin/finance/AdminRefundsPage";
+import AdminFinanceOverviewPage from "../features/admin/finance/AdminFinanceOverviewPage";
+import AdminBankEventsPage from "../features/admin/finance/AdminBankEventsPage";
+import AdminReconciliationsPage from "../features/admin/finance/AdminReconciliationsPage";
 import { AdminReportsPage } from "../features/admin/reports/AdminReportsPage";
 import SponsorLayout from "../components/layout/SponsorLayout";
 import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
@@ -112,6 +116,22 @@ const router = createBrowserRouter([
       },
       {
         path: ROUTES.PAYMENT_SUCCESS,
+        element: <PaymentSuccessPage />,
+      },
+      {
+        path: ROUTES.PAYMENT_RETURN,
+        element: <PaymentSuccessPage />,
+      },
+      {
+        path: ROUTES.PAYMENT_CANCEL,
+        element: <PaymentSuccessPage />,
+      },
+      {
+        path: ROUTES.SPONSOR_CONTRIBUTION_RETURN,
+        element: <PaymentSuccessPage />,
+      },
+      {
+        path: ROUTES.SPONSOR_CONTRIBUTION_CANCEL,
         element: <PaymentSuccessPage />,
       },
       {
@@ -329,6 +349,10 @@ const router = createBrowserRouter([
         element: <ScholarshipApplicationReviewPage />,
       },
       {
+        path: "finance-overview",
+        element: <AdminFinanceOverviewPage />,
+      },
+      {
         path: "payments",
         element: <AdminPaymentsPage />,
       },
@@ -337,8 +361,20 @@ const router = createBrowserRouter([
         element: <AdminTransactionsPage />,
       },
       {
+        path: "bank-events",
+        element: <AdminBankEventsPage />,
+      },
+      {
+        path: "reconciliations",
+        element: <AdminReconciliationsPage />,
+      },
+      {
         path: "payouts",
         element: <AdminPayoutsPage />,
+      },
+      {
+        path: "refunds",
+        element: <AdminRefundsPage />,
       },
       {
         path: "reports",

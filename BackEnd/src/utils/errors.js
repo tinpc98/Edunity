@@ -1,7 +1,12 @@
 class AppError extends Error {
   constructor(message, code, statusCode) {
-    super(message);
+    const fullMessage =
+      code && typeof message === "string" && !message.includes(code)
+        ? `[${code}] ${message}`
+        : message;
+    super(fullMessage);
     this.code = code;
+    this.rawMessage = typeof message === "string" ? message : fullMessage;
     this.statusCode = statusCode;
     Error.captureStackTrace(this, this.constructor);
   }

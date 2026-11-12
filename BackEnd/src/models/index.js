@@ -19,6 +19,7 @@ module.exports = {
   Payment: require("./Payment"),
   Transaction: require("./Transaction"),
   TeacherEarning: require("./TeacherEarning"),
+  TeacherSettlement: require("./TeacherSettlement"),
   Payout: require("./Payout"),
   Review: require("./Review"),
   ScholarshipCampaign: require("./ScholarshipCampaign"),
@@ -56,4 +57,8 @@ module.exports = {
   MessageModerationReport: require("./MessageModerationReport"),
   AiAuditLog: require("./AiAuditLog"),
   AiGeneratedDraft: require("./AiGeneratedDraft"),
+  BankTransferEvent: require("./BankTransferEvent"),
+  PaymentReconciliation: require("./PaymentReconciliation"),
+  RefundCase: require("./RefundCase"),
+  BankProofRegistry: require("./BankProofRegistry"),
 };

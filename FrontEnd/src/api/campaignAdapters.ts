@@ -76,26 +76,28 @@ export function adaptCampaigns(rawList: ApiScholarshipCampaign[]): ScholarshipCa
 }
 
 export function adaptContribution(raw: ApiSponsorContribution): SponsorContribution {
+  const id = String(raw._id || raw.contributionId || raw.paymentId || (raw as any).id || "");
   const sponsorId =
-    typeof raw.sponsorId === "object"
+    typeof raw.sponsorId === "object" && raw.sponsorId !== null
       ? raw.sponsorId._id || raw.sponsorId.id || ""
       : String(raw.sponsorId || "");
   const sponsorEmail =
-    typeof raw.sponsorId === "object" ? raw.sponsorId.email : undefined;
+    typeof raw.sponsorId === "object" && raw.sponsorId !== null ? raw.sponsorId.email : undefined;
 
   const campaignId =
-    typeof raw.campaignId === "object"
+    typeof raw.campaignId === "object" && raw.campaignId !== null
       ? raw.campaignId._id || raw.campaignId.id || ""
       : String(raw.campaignId || "");
   const campaignTitle =
     raw.campaignTitle ||
-    (typeof raw.campaignId === "object" ? raw.campaignId.title : undefined);
+    (typeof raw.campaignId === "object" && raw.campaignId !== null ? raw.campaignId.title : undefined);
   const campaignStatus =
     raw.campaignStatus ||
-    (typeof raw.campaignId === "object" ? raw.campaignId.status : undefined);
+    (typeof raw.campaignId === "object" && raw.campaignId !== null ? raw.campaignId.status : undefined);
 
   return {
-    id: raw._id || (raw as any).id,
+    id,
+    paymentId: String(raw.paymentId || id),
     campaignId,
     campaignTitle,
     campaignStatus,
@@ -103,7 +105,20 @@ export function adaptContribution(raw: ApiSponsorContribution): SponsorContribut
     sponsorEmail,
     amount: parseDecimal(raw.amount),
     contributionStatus: raw.contributionStatus || "PENDING",
-    paymentReference: raw.paymentReference || null,
+    paymentReference: raw.paymentReference || raw.gatewayReference || null,
+    purpose: raw.purpose || "DONATION",
+    channelKey: raw.channelKey || "DONATION",
+    provider: raw.provider || (raw.gateway === "PAYOS" ? "PAYOS" : "SANDBOX"),
+    gateway: raw.gateway || "SANDBOX",
+    orderCode: typeof raw.orderCode === "number" ? raw.orderCode : null,
+    paymentLinkId: raw.paymentLinkId || null,
+    qrCode: raw.qrCode || null,
+    checkoutUrl: raw.checkoutUrl || null,
+    expiredAt: raw.expiredAt || null,
+    remainingSeconds:
+      typeof raw.remainingSeconds === "number" ? Math.max(0, raw.remainingSeconds) : undefined,
+    isAnonymous: Boolean(raw.isAnonymous),
+    donorDisplayName: raw.donorDisplayName || (raw.isAnonymous ? "Nhà tài trợ ẩn danh" : null),
     contributedAt: raw.contributedAt || raw.createdAt || new Date().toISOString(),
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,

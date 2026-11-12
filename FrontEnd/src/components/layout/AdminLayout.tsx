@@ -13,6 +13,9 @@ import {
   CustomerServiceOutlined,
   NotificationOutlined,
   TeamOutlined,
+  BarChartOutlined,
+  AuditOutlined,
+  CloudSyncOutlined,
 } from "@ant-design/icons";
 
 const adminMenuItems = [
@@ -70,22 +73,42 @@ const adminMenuItems = [
   },
   {
     type: 'group',
-    label: 'TÀI CHÍNH',
+    label: 'TÀI CHÍNH & ĐỐI SOÁT',
     children: [
       {
-        key: ROUTES.ADMIN.PAYMENTS,
-        icon: <WalletOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.PAYMENTS}>Thanh toán</Link>,
+        key: ROUTES.ADMIN.FINANCE_OVERVIEW,
+        icon: <BarChartOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.ADMIN.FINANCE_OVERVIEW}>Tổng quan tài chính</Link>,
       },
       {
         key: ROUTES.ADMIN.TRANSACTIONS,
         icon: <FileTextOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.TRANSACTIONS}>Giao dịch</Link>,
+        label: <Link to={ROUTES.ADMIN.TRANSACTIONS}>Sổ cái giao dịch</Link>,
+      },
+      {
+        key: ROUTES.ADMIN.RECONCILIATIONS,
+        icon: <AuditOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.ADMIN.RECONCILIATIONS}>Hàng đợi đối soát</Link>,
+      },
+      {
+        key: ROUTES.ADMIN.BANK_EVENTS,
+        icon: <CloudSyncOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.ADMIN.BANK_EVENTS}>Webhooks & Outbox</Link>,
+      },
+      {
+        key: ROUTES.ADMIN.PAYMENTS,
+        icon: <WalletOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.ADMIN.PAYMENTS}>Thanh toán học phí</Link>,
       },
       {
         key: ROUTES.ADMIN.PAYOUTS,
         icon: <WalletOutlined className="text-[18px]" />,
         label: <Link to={ROUTES.ADMIN.PAYOUTS}>Rút tiền giáo viên</Link>,
+      },
+      {
+        key: ROUTES.ADMIN.REFUNDS,
+        icon: <AuditOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.ADMIN.REFUNDS}>Quản lý hoàn tiền</Link>,
       },
     ]
   },
@@ -99,9 +122,9 @@ const adminMenuItems = [
         label: <Link to={ROUTES.ADMIN.REPORTS}>Khiếu nại</Link>,
       },
       {
-        key: ROUTES.NOTIFICATIONS,
+        key: '/admin/notifications',
         icon: <NotificationOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.NOTIFICATIONS}>Thông báo</Link>,
+        label: <Link to="/admin/notifications">Thông báo</Link>,
       },
     ]
   }
