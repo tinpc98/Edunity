@@ -298,6 +298,28 @@ describe("TASK G0-10: Academic API Contract Standardization (CUR / LMS / AID)", 
       expect(routeMap.has("POST:/admin/course-proposals/:id/approve")).toBe(true);
       expect(routeMap.has("POST:/admin/course-proposals/:id/reject")).toBe(true);
       expect(routeMap.has("POST:/admin/course-proposals/:id/request-changes")).toBe(true);
+
+      // Learning Paths (CUR-03)
+      expect(routeMap.has("GET:/learning-paths")).toBe(true);
+      expect(routeMap.has("GET:/learning-paths/:id")).toBe(true);
+      expect(routeMap.has("GET:/admin/learning-paths")).toBe(true);
+      expect(routeMap.has("POST:/admin/learning-paths")).toBe(true);
+      expect(routeMap.has("GET:/admin/learning-paths/:id")).toBe(true);
+      expect(routeMap.has("PATCH:/admin/learning-paths/:id")).toBe(true);
+      expect(routeMap.has("POST:/admin/learning-paths/:id/publish")).toBe(true);
+      expect(routeMap.has("POST:/admin/learning-paths/:id/archive")).toBe(true);
+      expect(routeMap.has("DELETE:/admin/learning-paths/:id")).toBe(true);
+
+      // Course Pricing Policies (CUR-07)
+      expect(routeMap.has("GET:/teacher/courses/:courseId/pricing-policy")).toBe(true);
+      expect(routeMap.has("GET:/admin/pricing-policies")).toBe(true);
+      expect(routeMap.has("POST:/admin/pricing-policies/verify-preview")).toBe(true);
+      expect(routeMap.has("POST:/admin/pricing-policies")).toBe(true);
+      expect(routeMap.has("GET:/admin/pricing-policies/:id")).toBe(true);
+      expect(routeMap.has("POST:/admin/pricing-policies/:id/versions")).toBe(true);
+      expect(routeMap.has("POST:/admin/pricing-policies/:id/activate")).toBe(true);
+      expect(routeMap.has("POST:/admin/pricing-policies/:id/rollback")).toBe(true);
+      expect(routeMap.has("POST:/admin/pricing-policies/:id/archive")).toBe(true);
     });
   });
 
@@ -395,6 +417,10 @@ describe("TASK G0-10: Academic API Contract Standardization (CUR / LMS / AID)", 
       expect(routeMap.has("POST:/classes/:id/reviews")).toBe(true);
       expect(routeMap.has("GET:/classes/:id/reviews")).toBe(true);
       expect(routeMap.has("GET:/teachers/:id/reviews")).toBe(true);
+      expect(routeMap.has("GET:/admin/settings")).toBe(true);
+      expect(routeMap.has("GET:/admin/settings/:key")).toBe(true);
+      expect(routeMap.has("PUT:/admin/settings/:key")).toBe(true);
+      expect(routeMap.has("POST:/admin/settings/:key/rollback")).toBe(true);
     });
   });
 

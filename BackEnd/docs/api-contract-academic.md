@@ -2,7 +2,7 @@
 **Dự án:** EDUNITY V3  
 **Phân hệ:** Curriculum (CUR), Learning Management System (LMS), Financial Aid / Scholarship & Sponsor (AID)  
 **Tài liệu tham chiếu:** `BackEnd/src/utils/http.js`, `BackEnd/src/routes/*`, `BackEnd/src/controllers/*`, `BackEnd/src/services/*`  
-**Ngày chuẩn hóa:** 07/11/2026 — Phiên bản 3.0  
+**Ngày chuẩn hóa:** 12/11/2026 — Phiên bản 3.1 (Final Phase 0 → Phase 6 Sync)  
 
 ---
 
@@ -63,6 +63,11 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `SUBJECT_CATEGORY_MISMATCH` | Môn học không thuộc về Chuyên mục đã chọn |
 | | `COURSE_ATTRIBUTE_MISMATCH` | Thuộc tính môn/danh mục/khối lớp/trình độ truyền lên không khớp Course (`CUR-10`) |
 | | `COURSE_LEVEL_REQUIRED` | Khóa học chưa cấu hình `level` hợp lệ để mở lớp |
+| | `LEARNING_PATH_INVALID_PREREQUISITE` | Môn tiên quyết tự tham chiếu, tham chiếu vòng hoặc nằm ở bước sau (`CUR-03`) |
+| | `PRICE_OUT_OF_POLICY_RANGE` | Học phí lớp học vượt ngoài `[minPrice, maxPrice]` của `CoursePricingPolicy` hiệu lực (`CUR-07`) |
+| | `SESSION_COUNT_OUT_OF_POLICY_RANGE` | Số buổi học vượt ngoài `[minSessions, maxSessions]` của `CoursePricingPolicy` (`CUR-07`) |
+| | `PRICING_POLICY_FREE_NOT_ALLOWED` | Chính sách giá hiện hành không cho phép mở lớp `FREE` (`CUR-07`) |
+| | `PRICING_POLICY_NOT_CONFIGURED` | Chưa cấu hình `CoursePricingPolicy` hiệu lực cho khóa học (`CUR-07`) |
 | | `GRADE_LEVEL_REQUIRED` | Thiếu `gradeLevel` cho danh mục có ràng buộc khối lớp (`TEA-07`) |
 | | `CLASS_INCOMPLETE` | Lớp học chưa đủ thông tin bắt buộc khi bấm gửi duyệt (`details.missing`) |
 | | `SESSION_OUT_OF_CLASS_RANGE` | Lịch buổi học nằm ngoài khoảng `startDate` đến `endDate` của Lớp học |
@@ -108,6 +113,10 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `SYLLABUS_PUBLISH_CONFLICT` | Xung đột publish phiên bản giáo trình đồng thời trên cùng khóa học |
 | | `SYLLABUS_VERSION_ALREADY_PUBLISHED` | Phiên bản giáo trình đã ở trạng thái `PUBLISHED` |
 | | `DUPLICATE_UNIT_ORDER` | Trùng `unitOrder` trong cùng Phiên bản giáo trình |
+| | `LEARNING_PATH_IMMUTABLE` | Lộ trình học tập đã `ARCHIVED` hoặc đã ở trạng thái đích (`CUR-03`) |
+| | `DUPLICATE_LEARNING_PATH_COURSE` | Một khóa học xuất hiện quá 1 lần trong cùng lộ trình (`CUR-03`) |
+| | `PRICING_POLICY_VERSION_CONFLICT` | Xung đột version đồng thời của `CoursePricingPolicy` (`CUR-07`) |
+| | `PRICING_POLICY_IMMUTABLE` | Chính sách giá đã `ARCHIVED` hoặc không ở trạng thái `DRAFT` để activate (`CUR-07`) |
 | | `CLASS_NOT_EDITABLE` | Lớp học không ở trạng thái `DRAFT` hoặc `REJECTED` |
 | | `RESCHEDULE_REQUIRED` | Không được sửa ngày giờ trực tiếp khi lớp đang `OPEN`/`IN_PROGRESS` |
 | | `TEACHER_SCHEDULE_CONFLICT` | Lịch dạy bù bị trùng với buổi khác của Giảng viên |
@@ -138,6 +147,15 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `PAPER_RECEIPT_DISCREPANCY_UNRESOLVED` | Biên nhận bản giấy đang có sai lệch chưa xử lý |
 | | `RECONCILIATION_HAS_UNRESOLVED_ITEMS` | Có mục bản giấy bị `MISSING`/`MISMATCH`/`DAMAGED` khi chốt `RECONCILED` |
 | | `PAPER_CHECKLIST_INCOMPLETE` | Thiếu mục bản giấy bắt buộc `MATCHED` khi chốt `RECONCILED` |
+| | `REGRADE_CONFLICT` | Xung đột CAS khi nhiều yêu cầu sửa điểm cùng tác động lên 1 bản ghi `Grade` (`LMS-07`) |
+| | `PROGRESS_REVIEW_CONFLICT` | Xung đột CAS (`revisionNumber`) khi cập nhật đồng thời `StudentProgressReview` (`LMS-12`) |
+| | `ACTIVE_CONTRACT_REVIEW_PACKET_EXISTS` | Giảng viên đang có packet phối hợp hợp đồng chưa đóng (`TEA-16`) |
+| | `CONTRACT_MUTATION_OUT_OF_AUTHORITY` | Thao tác sửa/chấm dứt hợp đồng nằm ngoài thẩm quyền phân hệ `TEA-16` |
+| | `INVALID_REPORT_STATUS` | Báo cáo vi phạm tin nhắn đã được xử lý trước đó (CAS conflict `LMS-13`) |
+| | `MESSAGE_NOT_HIDDEN` | Tin nhắn không ở trạng thái ẩn để khôi phục (`LMS-13`) |
+| | `INVALID_DRAFT_STATUS` | Bản nháp AI đã được duyệt hoặc từ chối trước đó (`AI-02`) |
+| | `AI_AUTO_PUBLISH_FORBIDDEN` | Chặn tự động phát hành kết quả AI khi giáo viên chưa xác nhận (`AI-02`) |
+| | `PROMPT_INJECTION_DETECTED` | Từ chối prompt có dấu hiệu tấn công chèn chỉ dẫn / bẻ khóa (`AI-01..04`) |
 | | `CAMPAIGN_NOT_ACCEPTING_APPLICATIONS`| Nộp đơn ngoài thời hạn nhận hồ sơ của Chiến dịch |
 | | `CAMPAIGN_FUND_UNAVAILABLE` | Quỹ khả dụng của Chiến dịch không đủ giải ngân |
 | | `SCHOLARSHIP_NOT_USABLE` | Học bổng đã hết hạn, hết số dư hoặc không hợp lệ |
@@ -193,9 +211,20 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 | **CUR** | `PATCH` | `/api/teacher/course-proposals/:id` | `TEACHER` | Chỉ sửa khi `PENDING_REVIEW` hoặc `NEED_CHANGES` |
 | **CUR** | `GET` | `/api/admin/course-proposals` | `ADMIN` | Danh sách đề xuất chờ duyệt |
 | **CUR** | `GET` | `/api/admin/course-proposals/:id` | `ADMIN` | Chi tiết đề xuất kèm thông tin giảng viên |
-| **CUR** | `POST` | `/api/admin/course-proposals/:id/approve` | `ADMIN` | Transaction tạo Course trong catalog |
+| **CUR** | `POST` | `/api/admin/course-proposals/:id/approve` | `ADMIN` | Transaction tạo Course + tự động xuất bản `SyllabusVersion` v1 nếu có `syllabusDraft` (`CUR-05`) |
 | **CUR** | `POST` | `/api/admin/course-proposals/:id/reject` | `ADMIN` | Từ chối đề xuất khóa học |
-| **CUR** | `POST` | `/api/admin/course-proposals/:id/request-changes` | `ADMIN` | Yêu cầu sửa đổi kèm `reviewNote` |
+| **CUR** | `POST` | `/api/admin/course-proposals/:id/request-changes` | `ADMIN` | Yêu cầu sửa đổi kèm `reviewNote` (lưu `revisionHistory`) |
+| **CUR** | `GET` | `/api/learning-paths` | Public | Danh sách lộ trình học tập `PUBLISHED` (`CUR-03`) |
+| **CUR** | `GET` | `/api/learning-paths/:id` | Public | Chi tiết lộ trình `PUBLISHED` (ẩn staff ID) (`CUR-03`) |
+| **CUR** | `GET`/`POST` | `/api/admin/learning-paths` | `ADMIN` | Quản trị danh sách/tạo lộ trình học tập (kiểm tra DAG tiên quyết) (`CUR-03`) |
+| **CUR** | `GET`/`PATCH`/`DELETE` | `/api/admin/learning-paths/:id` | `ADMIN` | Xem/cập nhật/xóa mềm lộ trình học tập (`CUR-03`) |
+| **CUR** | `POST` | `/api/admin/learning-paths/:id/publish` & `/archive` | `ADMIN` | Xuất bản/lưu trữ bất biến lộ trình học tập (`CUR-03`) |
+| **CUR** | `GET` | `/api/teacher/courses/:courseId/pricing-policy` | `TEACHER` | Xem chính sách khung giá & số buổi hiệu lực cho khóa học (ẩn staff ID) (`CUR-07`) |
+| **CUR** | `GET`/`POST` | `/api/admin/pricing-policies` | `ADMIN` | Quản trị chính sách giá có version & `effectiveFrom` (`CUR-07`) |
+| **CUR** | `POST` | `/api/admin/pricing-policies/verify-preview` | `ADMIN` | Kiểm thử trước mức giá & số buổi lớp học với chính sách hiệu lực (`CUR-07`) |
+| **CUR** | `GET` | `/api/admin/pricing-policies/:id` | `ADMIN` | Chi tiết một phiên bản chính sách giá (`CUR-07`) |
+| **CUR** | `POST` | `/api/admin/pricing-policies/:id/versions` | `ADMIN` | Tạo phiên bản kế tiếp (tự supersede bản hiệu lực nếu `effectiveFrom <= now`) (`CUR-07`) |
+| **CUR** | `POST` | `/api/admin/pricing-policies/:id/activate` & `/rollback` & `/archive` | `ADMIN` | Kích hoạt bản nháp/rollback sang bản cũ/lưu trữ phiên bản giá (`CUR-07`) |
 | **LMS** | `GET` | `/api/teacher/subject-authorizations` | `TEACHER` | Danh sách quyền giảng dạy của chính giảng viên đăng nhập (`TEA-07`) |
 | **LMS** | `POST` | `/api/teacher/subject-authorizations` | `TEACHER` | Gửi yêu cầu cấp quyền dạy theo môn/khối/trình độ (`PENDING`) |
 | **LMS** | `GET` | `/api/teacher/subject-authorizations/:id` | `TEACHER` | Xem chi tiết quyền giảng dạy của chính mình (chống IDOR) |
@@ -573,9 +602,9 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 
 ## 4. TƯƠNG THÍCH DỮ LIỆU CŨ VÀ RANH GIỚI LIÊN NHÓM
 
-1. **Ranh giới tài chính an toàn với Châu (Payment / Sponsor / Scholarship):**
-   - Khi buổi học bị hủy do lỗi giảng viên hoặc học viên từ chối lịch học bù, LMS chỉ tạo bản ghi `SessionRefundReview` với trạng thái `HOLD_RECOMMENDED`.
-   - Tuyệt đối không tự ý cập nhật `Payment`, `Transaction` hay `TeacherEarning`. Mọi thao tác hoàn tiền thực tế phải do quản trị viên tài chính xử lý.
+1. **Ranh giới tài chính an toàn giữa phân hệ Đào tạo / LMS (Châu) và Tài chính (Tin):**
+   - Khi buổi học bị hủy do lỗi giảng viên hoặc học viên từ chối lịch học bù, LMS chỉ tạo bản ghi `SessionRefundReview` với trạng thái `HOLD_RECOMMENDED` (lưu `paidAmountSnapshot` từ `amountPaidViaPayment` + `amountPaidViaScholarship`).
+   - Tuyệt đối không tự ý cập nhật `Payment`, `Transaction` hay `TeacherEarning`. Mọi thao tác hoàn tiền thực tế phải do quản trị viên tài chính / Tin xử lý.
 
 2. **Ranh giới tài chính & học bổng phi tài chính với Tin (`AID-06` & Financial Allocation):**
    - `AID-01` (`POST /api/admin/scholarship-applications/:id/verify-dossier`) và `AID-04` (`PaperDossierReceipt`) chỉ thực hiện tiếp nhận, đối chiếu checklist, xác minh thông tin người giám hộ/trường lớp và chuyển hồ sơ sang `DOSSIER_VERIFIED`.
@@ -608,7 +637,7 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 
 3. **`LMS-10` (Tách `Review` cấp lớp và `SessionReview` cấp buổi học):**
    - `Review` giữ nguyên ràng buộc `enrollmentId` unique (`1 review / enrollment` cấp lớp) để tương thích 100% với `G0-02.3.1`..`G0-02.3.3` và dữ liệu cũ.
-   - Đánh giá buổi học dùng collection mới `SessionReview` với unique index `{ sessionId: 1, studentId: 1 }`, xác minh tham gia thật qua `SessionAttendance` (`PRESENT`/`LATE`/`EXCUSED` hoặc `hasVerifiedConnection: true`), `Session` `COMPLETED`, và `Enrollment`, đồng thời **không tự phát sinh kỷ luật hay trừ thù lao giảng viên**.
+   - Đánh giá buổi học dùng collection mới `SessionReview` với partial unique index `{ sessionId: 1, studentId: 1 }` (`partialFilterExpression: { isDeleted: false }` — cho phép đánh giá lại sau khi Admin soft-delete bản ghi cũ), xác minh tham gia thật qua `SessionAttendance` (`PRESENT`/`LATE`/`EXCUSED` hoặc `hasVerifiedConnection: true`), `Session` `COMPLETED`, và `Enrollment`, đồng thời **không tự phát sinh kỷ luật hay trừ thù lao giảng viên**.
 
 ---
 
@@ -653,6 +682,17 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
    - **`AI-03` (`GET /api/admin/ai/status`, `GET /api/admin/ai/audit-logs`, `POST /api/admin/ai/reports/summary` — `ADMIN`):** Chỉ gửi số liệu tổng hợp ẩn danh tuyệt đối không PII từ dashboard/tiến độ/chất lượng; read-only; kiểm tra numeric grounding chống bịa số (`502 AI_OUTPUT_UNGROUNDED`).
    - **`AI-04` (`POST /api/sponsor/campaigns/:id/ai-impact-narrative` — `SPONSOR` có `SponsorContribution` `COMPLETED`):** Chỉ truyền số liệu tác động tổng hợp của chiến dịch (cấm hoàn toàn PII học viên/giám hộ và lịch sử giao dịch cá nhân); bắt buộc numeric grounding.
    - **Trạng thái Provider Production:** Khi chưa có AI provider SDK/API key/chính sách `AID-08` được phê duyệt, `AI-02`, `AI-03`, `AI-04` chủ động khóa cứng **fail-closed** (`503 AI_PROVIDER_BLOCKED`), mọi lượt gọi đều ghi `AiAuditLog` (không lưu raw PII).
+
+---
+
+## 8. CẤU HÌNH HỆ THỐNG CÓ VERSION (`G0-05` — `PlatformSetting`)
+
+- **Endpoints (`ADMIN`):**
+  - `GET /api/admin/settings` — Liệt kê giá trị hiệu lực hiện tại, nguồn (`DB` / `ENV` / `DEFAULT`), version đang hiệu lực và lịch hiệu lực kế tiếp (`scheduledNext`) của toàn bộ khóa cấu hình (`SEAT_HOLD_MINUTES`, `COMMISSION_RATE`, `SCHOLARSHIP_VALID_DAYS`, `RECORDING_RETENTION_DAYS`, `RECORDING_PROCESSING_TIMEOUT_HOURS`, `TEACHER_BRIEF_PRESENCE_MIN_SECONDS`, `ATTENDANCE_THRESHOLD_PERCENT`). `SEAT_HOLD_DURATION` được tính suy diễn (`SEAT_HOLD_MINUTES * 60 * 1000`).
+  - `GET /api/admin/settings/:key` — Xem giá trị hiệu lực hiện tại và lịch sử version phân trang (`history`).
+  - `PUT /api/admin/settings/:key` — Tạo version mới `{ value, effectiveFrom?, description?, changeReason? }`, tự động supersede version cũ nếu có hiệu lực ngay và ghi `AuditLog` (`PLATFORM_SETTING_UPDATED`). Hỗ trợ giá trị `0` hợp lệ (ví dụ `COMMISSION_RATE = 0`).
+  - `POST /api/admin/settings/:key/rollback` — `{ targetVersion, changeReason? }`: tạo version mới sao chép giá trị từ `targetVersion` và ghi `AuditLog` (`PLATFORM_SETTING_ROLLED_BACK`).
+
 
 
 

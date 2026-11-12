@@ -11,6 +11,9 @@ const NOT_DELETED = { isDeleted: { $ne: true } };
 const STATUSES = ["ACTIVE", "INACTIVE"];
 const COURSE_TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "curriculumReference"];
 
+const isDuplicateKeyError = (err) =>
+  Boolean(err && (err.code === 11000 || (err.cause && err.cause.code === 11000)));
+
 const presentCategory = (category) => ({
   ...category,
   allowedGradeLevels: allowedGradeLevelsForCategory(category), // BR-45: null = không giới hạn theo khối
@@ -80,13 +83,19 @@ const createCategory = async (adminId, body) => {
     throw new AppError("Category already exists", "DUPLICATE_CATEGORY", 409);
   }
 
-  const category = await Category.create({
-    name: body.name,
-    slug: await resolveSlug(Category, body, body.name),
-    description: body.description,
-    status: body.status === undefined ? "ACTIVE" : resolveStatus(body.status),
-    createdBy: adminId,
-  });
+  let category;
+  try {
+    category = await Category.create({
+      name: body.name,
+      slug: await resolveSlug(Category, body, body.name),
+      description: body.description,
+      status: body.status === undefined ? "ACTIVE" : resolveStatus(body.status),
+      createdBy: adminId,
+    });
+  } catch (err) {
+    if (isDuplicateKeyError(err)) throw new AppError("Slug already exists", "DUPLICATE_SLUG", 409);
+    throw err;
+  }
   return presentCategory(category.toObject());
 };
 
@@ -139,15 +148,21 @@ const createSubject = async (adminId, body) => {
     throw new AppError("Subject already exists in this category", "DUPLICATE_SUBJECT", 409);
   }
 
-  const subject = await Subject.create({
-    categoryId: category._id,
-    categoryName: category.name,
-    name: body.name,
-    slug: await resolveSlug(Subject, body, body.name),
-    description: body.description,
-    status: body.status === undefined ? "ACTIVE" : resolveStatus(body.status),
-    createdBy: adminId,
-  });
+  let subject;
+  try {
+    subject = await Subject.create({
+      categoryId: category._id,
+      categoryName: category.name,
+      name: body.name,
+      slug: await resolveSlug(Subject, body, body.name),
+      description: body.description,
+      status: body.status === undefined ? "ACTIVE" : resolveStatus(body.status),
+      createdBy: adminId,
+    });
+  } catch (err) {
+    if (isDuplicateKeyError(err)) throw new AppError("Slug already exists", "DUPLICATE_SLUG", 409);
+    throw err;
+  }
   return subject.toObject();
 };
 
@@ -260,8 +275,13 @@ const insertCourse = async ({ adminId, subject, category, data, sourceProposalId
     if (data[field] !== undefined) doc[field] = data[field];
   }
 
-  const [course] = await Course.create([doc], { session });
-  return course;
+  try {
+    const [course] = await Course.create([doc], { session });
+    return course;
+  } catch (err) {
+    if (isDuplicateKeyError(err)) throw new AppError("Slug already exists", "DUPLICATE_SLUG", 409);
+    throw err;
+  }
 };
 
 const createCourse = async (adminId, body) => {
@@ -292,7 +312,8 @@ const updateCourse = async (adminId, courseId, body) => {
   for (const field of COURSE_TEXT_FIELDS) {
     if (body[field] !== undefined) course[field] = body[field];
   }
-  if (body.level !== undefined) course.level = resolveLevel(body.level);
+  const levelUpdated = body.level !== undefined;
+  if (levelUpdated) course.level = resolveLevel(body.level);
   if (body.gradeLevel !== undefined) course.gradeLevel = resolveGradeLevel(category, body.gradeLevel); // FR-ADM-22
   if (body.status !== undefined) course.status = resolveStatus(body.status);
   course.updatedBy = adminId;
@@ -300,6 +321,12 @@ const updateCourse = async (adminId, courseId, body) => {
 
   // courseTitle and gradeLevel are denormalized in Class
   await Class.updateMany({ courseId: course._id }, { $set: { courseTitle: course.title, gradeLevel: course.gradeLevel } });
+  if (levelUpdated && course.level) {
+    await Class.updateMany(
+      { courseId: course._id, status: { $in: ["DRAFT", "REJECTED"] } },
+      { $set: { level: course.level } }
+    );
+  }
   return course.toObject();
 };
 

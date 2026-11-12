@@ -31,7 +31,10 @@ const sessionReviewSchema = new Schema(
 
 sessionReviewSchema.plugin(softDeletePlugin);
 
-sessionReviewSchema.index({ sessionId: 1, studentId: 1 }, { unique: true });
+sessionReviewSchema.index(
+  { sessionId: 1, studentId: 1 },
+  { unique: true, partialFilterExpression: { isDeleted: false } }
+);
 sessionReviewSchema.index({ classId: 1, isDeleted: 1, createdAt: -1 });
 sessionReviewSchema.index({ teacherId: 1, isDeleted: 1, createdAt: -1 });
 sessionReviewSchema.index({ studentId: 1, createdAt: -1 });

@@ -32,4 +32,10 @@ router.get("/me/notifications", authMiddleware, controller.getMyNotifications);
 router.post("/me/notifications/read-all", authMiddleware, controller.markAllNotificationsAsRead);
 router.post("/me/notifications/:id/read", authMiddleware, controller.markNotificationAsRead);
 
+// Admin Platform Settings (G0-05)
+router.get("/admin/settings", admin, controller.adminListSettings);
+router.get("/admin/settings/:key", admin, controller.adminGetSetting);
+router.put("/admin/settings/:key", admin, controller.adminUpdateSetting);
+router.post("/admin/settings/:key/rollback", admin, controller.adminRollbackSetting);
+
 module.exports = router;

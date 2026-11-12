@@ -17,8 +17,8 @@ describe("TASK G0-03: Migration Plan, Preflight Auditing & Safe Halt Circuit Bre
   // 1. Unique Index Specification Integrity
   // =========================================================================
   describe("1. Unique Index Specification Matrix", () => {
-    test("G0-03.SPEC.1: All 19 core unique/partial index specifications are defined", () => {
-      expect(UNIQUE_INDEX_SPECS.length).toBe(19);
+    test("G0-03.SPEC.1: All 54 model-synced unique/partial index specifications are defined", () => {
+      expect(UNIQUE_INDEX_SPECS.length).toBe(54);
 
       const collections = UNIQUE_INDEX_SPECS.map((s) => s.collection);
       expect(collections).toContain("users");
@@ -26,6 +26,11 @@ describe("TASK G0-03: Migration Plan, Preflight Auditing & Safe Halt Circuit Bre
       expect(collections).toContain("categories");
       expect(collections).toContain("subjects");
       expect(collections).toContain("courses");
+      expect(collections).toContain("learningpaths");
+      expect(collections).toContain("coursepricingpolicies");
+      expect(collections).toContain("syllabusversions");
+      expect(collections).toContain("curriculumunits");
+      expect(collections).toContain("teachersubjectauthorizations");
       expect(collections).toContain("payments");
       expect(collections).toContain("teacherearnings");
       expect(collections).toContain("reviews");
@@ -37,9 +42,14 @@ describe("TASK G0-03: Migration Plan, Preflight Auditing & Safe Halt Circuit Bre
       expect(collections).toContain("enrollments");
       expect(collections).toContain("sponsorcontributions");
       expect(collections).toContain("scholarshipapplications");
+      expect(collections).toContain("paperdossierreceipts");
       expect(collections).toContain("scholarships");
       expect(collections).toContain("notifications");
+      expect(collections).toContain("platformsettings");
       expect(collections).toContain("joblocks");
+      expect(collections).toContain("submissions");
+      expect(collections).toContain("attempts");
+      expect(collections).toContain("placementresults");
     });
 
     test("G0-03.SPEC.2: Every unique index specification contains valid pipeline and keys", () => {
@@ -72,11 +82,19 @@ describe("TASK G0-03: Migration Plan, Preflight Auditing & Safe Halt Circuit Bre
         status: { $in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] },
       });
 
-      // Scholarship Application: only pending applications block duplicate
-      const appSpec = UNIQUE_INDEX_SPECS.find((s) => s.collection === "scholarshipapplications");
+      // Scholarship Application: active & approved dossier statuses aligned with ScholarshipApplication model
+      const appSpec = UNIQUE_INDEX_SPECS.find(
+        (s) => s.collection === "scholarshipapplications" && s.indexName === "studentId_1_campaignId_1"
+      );
       expect(appSpec.partialFilterExpression).toEqual({
-        status: { $in: ["SUBMITTED", "NEED_MORE_INFORMATION"] },
+        status: { $in: ["DRAFT", "SUBMITTED", "NEED_MORE_INFORMATION", "DOSSIER_VERIFIED", "APPROVED"] },
       });
+
+      // SessionReview: soft-deleted reviews do not permanently lock re-submission
+      const sessionReviewSpec = UNIQUE_INDEX_SPECS.find(
+        (s) => s.collection === "sessionreviews" && s.indexName === "sessionId_1_studentId_1"
+      );
+      expect(sessionReviewSpec.partialFilterExpression).toEqual({ isDeleted: false });
     });
   });
 

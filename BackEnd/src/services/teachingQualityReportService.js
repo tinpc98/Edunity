@@ -13,8 +13,28 @@ const {
 const { AppError } = require("../utils/errors");
 const { assertId, paged, validationError, parseDate } = require("../utils/http");
 
+const mongoose = require("mongoose");
 const NOT_DELETED = { isDeleted: { $ne: true } };
+
+const assertNonObjectIdentifier = (value) => {
+  if (
+    value !== undefined &&
+    value !== null &&
+    typeof value === "object" &&
+    !(value instanceof mongoose.Types.ObjectId)
+  ) {
+    throw validationError("Invalid identifier format");
+  }
+};
 const MAX_TRACE_IDS = 1000;
+const ALLOWED_REPORT_TYPES = [
+  "TEACHER_ABSENT",
+  "TEACHING_QUALITY",
+  "PAYMENT_DISPUTE",
+  "INAPPROPRIATE_BEHAVIOR",
+  "FRAUD",
+  "OTHER",
+];
 
 const toId = (val) => (val && val._id ? val._id.toString() : val ? String(val) : null);
 const round2 = (num) => Math.round(num * 100) / 100;
@@ -78,8 +98,8 @@ const computeMetricsBundle = ({
   const cancelledCount = sessions.filter((s) => s.status === "CANCELLED").length;
   const rescheduledCount = sessions.filter((s) => s.lifecycleState === "RESCHEDULED").length;
   const interruptedCount = sessions.filter((s) => s.status === "INTERRUPTED").length;
-  const upcomingOrActiveCount = sessions.filter((s) =>
-    ["SCHEDULED", "WAITING", "IN_PROGRESS"].includes(s.status)
+  const upcomingOrActiveCount = sessions.filter(
+    (s) => ["SCHEDULED", "WAITING", "IN_PROGRESS"].includes(s.status) && s.lifecycleState !== "RESCHEDULED"
   ).length;
   const teacherNoShowCancelledCount = sessions.filter((s) => s.endReason === "TEACHER_NO_SHOW").length;
   const teacherLeftEarlyCount = sessions.filter((s) => s.endReason === "TEACHER_LEFT_EARLY").length;
@@ -257,6 +277,7 @@ const fetchScopedQualitySources = async (query = {}) => {
 
   let teacherFilterId = null;
   if (query.teacherId) {
+    assertNonObjectIdentifier(query.teacherId);
     assertId(query.teacherId, "Teacher not found", "TEACHER_NOT_FOUND");
     const teacherExists = await User.exists({ _id: query.teacherId, role: "TEACHER", ...NOT_DELETED });
     if (!teacherExists) throw new AppError("Teacher not found", "TEACHER_NOT_FOUND", 404);
@@ -264,18 +285,21 @@ const fetchScopedQualitySources = async (query = {}) => {
   }
 
   let hasClassScopeFilter = false;
-  const classQuery = {};
+  const classQuery = { ...NOT_DELETED };
   if (query.classId) {
+    assertNonObjectIdentifier(query.classId);
     assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
     classQuery._id = query.classId;
     hasClassScopeFilter = true;
   }
   if (query.subjectId) {
+    assertNonObjectIdentifier(query.subjectId);
     assertId(query.subjectId, "Subject not found", "SUBJECT_NOT_FOUND");
     classQuery.subjectId = query.subjectId;
     hasClassScopeFilter = true;
   }
   if (query.categoryId) {
+    assertNonObjectIdentifier(query.categoryId);
     assertId(query.categoryId, "Category not found", "CATEGORY_NOT_FOUND");
     classQuery.categoryId = query.categoryId;
     hasClassScopeFilter = true;
@@ -305,9 +329,17 @@ const fetchScopedQualitySources = async (query = {}) => {
   const classReviewFilter = scopeDocFilter({ ...NOT_DELETED, ...(dateRange ? { createdAt: dateRange } : {}) });
   const sessionReviewFilter = scopeDocFilter({ ...NOT_DELETED, ...(dateRange ? { createdAt: dateRange } : {}) });
 
+  let normalizedReportType = null;
   const reportFilter = { ...(dateRange ? { createdAt: dateRange } : {}) };
-  if (query.reportType) {
-    reportFilter.type = String(query.reportType).trim().toUpperCase();
+  if (query.reportType !== undefined && query.reportType !== null && query.reportType !== "") {
+    if (typeof query.reportType !== "string") {
+      throw validationError("reportType must be a string");
+    }
+    normalizedReportType = query.reportType.trim().toUpperCase();
+    if (!ALLOWED_REPORT_TYPES.includes(normalizedReportType)) {
+      throw validationError(`reportType must be one of ${ALLOWED_REPORT_TYPES.join(", ")}`);
+    }
+    reportFilter.type = normalizedReportType;
   }
   if (hasClassScopeFilter) {
     reportFilter.classId = { $in: scopedClassIds };
@@ -363,7 +395,9 @@ const fetchScopedQualitySources = async (query = {}) => {
   const reportClassIds = [...new Set(reportsRaw.map((r) => toId(r.classId)).filter(Boolean))];
   const missingClassIds = reportClassIds.filter((cid) => !classTeacherMap.has(cid));
   if (missingClassIds.length) {
-    const extraClasses = await Class.find({ _id: { $in: missingClassIds } }).select("_id teacherId").lean();
+    const extraClasses = await Class.find({ _id: { $in: missingClassIds }, ...NOT_DELETED })
+      .select("_id teacherId")
+      .lean();
     for (const c of extraClasses) classTeacherMap.set(toId(c._id), toId(c.teacherId));
   }
 
@@ -392,7 +426,10 @@ const fetchScopedQualitySources = async (query = {}) => {
   const complaintTeacherAttribution = new Map();
   for (const r of reportsRaw) {
     const rid = toId(r._id);
-    const directTeacher = r.reportedUserId && reportedTeacherIdSet.has(toId(r.reportedUserId)) ? toId(r.reportedUserId) : null;
+    const hasReportedUser = Boolean(r.reportedUserId);
+    const directTeacher = hasReportedUser && reportedTeacherIdSet.has(toId(r.reportedUserId)) ? toId(r.reportedUserId) : null;
+    // Never attribute a complaint explicitly targeting a non-teacher user (e.g., student-vs-student) to the class teacher
+    if (hasReportedUser && !directTeacher) continue;
     const classTeacher = r.classId ? classTeacherMap.get(toId(r.classId)) || null : null;
     const attributedTeacher = directTeacher || classTeacher;
 
@@ -412,7 +449,7 @@ const fetchScopedQualitySources = async (query = {}) => {
       classId: query.classId ? toId(query.classId) : null,
       subjectId: query.subjectId ? toId(query.subjectId) : null,
       categoryId: query.categoryId ? toId(query.categoryId) : null,
-      reportType: query.reportType ? String(query.reportType).trim().toUpperCase() : null,
+      reportType: normalizedReportType,
     },
     candidateTeacherIds: [...candidateTeacherIds].filter(Boolean),
     sessions,

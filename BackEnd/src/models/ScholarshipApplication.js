@@ -105,13 +105,13 @@ const scholarshipApplicationSchema = new Schema(
 
 scholarshipApplicationSchema.plugin(reviewablePlugin); // reviewedBy / reviewedAt / reviewNote
 
-// BR-29: no duplicate application to the same campaign while one is still active
+// BR-29: no duplicate application to the same campaign while one is still active or already APPROVED
 scholarshipApplicationSchema.index(
   { studentId: 1, campaignId: 1 },
   {
     unique: true,
     partialFilterExpression: {
-      status: { $in: ["DRAFT", "SUBMITTED", "NEED_MORE_INFORMATION", "DOSSIER_VERIFIED"] },
+      status: { $in: ["DRAFT", "SUBMITTED", "NEED_MORE_INFORMATION", "DOSSIER_VERIFIED", "APPROVED"] },
     },
   }
 );

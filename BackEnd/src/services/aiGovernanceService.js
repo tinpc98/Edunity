@@ -1,10 +1,24 @@
 const crypto = require("crypto");
 const { AiAuditLog } = require("../models");
+const { AI_TASK_TYPES, AI_AUDIT_OUTCOMES } = require("../models/constants");
 const { AppError } = require("../utils/errors");
 const { paged, validationError } = require("../utils/http");
 const { getConsentDependencyStatus } = require("./scholarshipDossierGateService");
 
+const ALLOWED_AI_ACTOR_ROLES = ["STUDENT", "TEACHER", "SPONSOR", "ADMIN"];
 const toId = (val) => (val && val._id ? val._id.toString() : val ? String(val) : null);
+const assertQueryEnum = (val, allowed, field) => {
+  if (val === undefined || val === null || val === "") return null;
+  if (typeof val !== "string") {
+    throw validationError(`${field} query parameter must be a string`);
+  }
+  const upper = val.trim().toUpperCase();
+  if (!upper) return null;
+  if (!allowed.includes(upper)) {
+    throw validationError(`${field} must be one of ${allowed.join(", ")}`);
+  }
+  return upper;
+};
 
 /**
  * Pluggable AI Provider Port (Fail-Closed by default).
@@ -396,6 +410,9 @@ const executeGovernedAi = async ({
   metadata = {},
 }) => {
   const startedAt = Date.now();
+  if (userPrompt !== undefined && userPrompt !== null && typeof userPrompt !== "string") {
+    throw validationError("prompt must be a string");
+  }
   const trimmedPrompt = typeof userPrompt === "string" ? userPrompt.trim() : "";
   if (trimmedPrompt.length > governanceConfig.maxInputChars) {
     throw validationError(`prompt exceeds maximum length of ${governanceConfig.maxInputChars} characters`);
@@ -435,30 +452,8 @@ const executeGovernedAi = async ({
   const promptHash = hashPrompt(serializedInput);
   const estInputTokens = estimateTokens(serializedInput);
 
-  // 3. Per-user rate limit & daily token budget
-  try {
-    await assertAiRateAndBudget(actorUser.id);
-  } catch (rateErr) {
-    await writeAiAudit({
-      featureCode,
-      operation,
-      actorUserId: actorUser.id,
-      actorRole: actorUser.role,
-      targetType,
-      targetId,
-      providerId: registeredAiAdapter ? registeredAiAdapter.providerId : "NONE",
-      modelId: registeredAiAdapter ? registeredAiAdapter.modelId : "NONE",
-      outcome: "BLOCKED",
-      errorCode: rateErr.code || "AI_RATE_LIMITED",
-      promptHash,
-      piiRedactionCount: totalRedactions,
-      latencyMs: Date.now() - startedAt,
-      metadata,
-    });
-    throw rateErr;
-  }
-
-  // 4. Fail-Closed AI Provider Readiness Gate
+  // 3. Fail-Closed AI Provider Readiness Gate BEFORE consuming user rate/token quota
+  // Ensures deterministic fallbacks (AI-01) and 503 AI_PROVIDER_BLOCKED (AI-02..04) waste ZERO AI quota.
   const status = getAiProviderStatus();
   if (!registeredAiAdapter) {
     if (typeof fallbackHandler === "function") {
@@ -518,6 +513,29 @@ const executeGovernedAi = async ({
       aid08ConsentReady: status.aid08ConsentReady,
     };
     throw err;
+  }
+
+  // 4. Per-user rate limit & daily token budget (only when invoking a configured provider adapter)
+  try {
+    await assertAiRateAndBudget(actorUser.id);
+  } catch (rateErr) {
+    await writeAiAudit({
+      featureCode,
+      operation,
+      actorUserId: actorUser.id,
+      actorRole: actorUser.role,
+      targetType,
+      targetId,
+      providerId: registeredAiAdapter ? registeredAiAdapter.providerId : "NONE",
+      modelId: registeredAiAdapter ? registeredAiAdapter.modelId : "NONE",
+      outcome: "BLOCKED",
+      errorCode: rateErr.code || "AI_RATE_LIMITED",
+      promptHash,
+      piiRedactionCount: totalRedactions,
+      latencyMs: Date.now() - startedAt,
+      metadata,
+    });
+    throw rateErr;
   }
 
   // 5. Execute adapter with bounded retry & timeout
@@ -691,9 +709,12 @@ const executeGovernedAi = async ({
 
 const adminListAiAuditLogs = async (query = {}, paging) => {
   const filter = {};
-  if (query.featureCode) filter.featureCode = String(query.featureCode).trim().toUpperCase();
-  if (query.outcome) filter.outcome = String(query.outcome).trim().toUpperCase();
-  if (query.actorRole) filter.actorRole = String(query.actorRole).trim().toUpperCase();
+  const featureCode = assertQueryEnum(query.featureCode, AI_TASK_TYPES, "featureCode");
+  if (featureCode) filter.featureCode = featureCode;
+  const outcome = assertQueryEnum(query.outcome, AI_AUDIT_OUTCOMES, "outcome");
+  if (outcome) filter.outcome = outcome;
+  const actorRole = assertQueryEnum(query.actorRole, ALLOWED_AI_ACTOR_ROLES, "actorRole");
+  if (actorRole) filter.actorRole = actorRole;
 
   const [items, total] = await Promise.all([
     AiAuditLog.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),

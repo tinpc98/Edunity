@@ -115,6 +115,15 @@ const teacherContractReviewPacketSchema = new Schema(
 
 teacherContractReviewPacketSchema.index({ teacherId: 1, status: 1, createdAt: -1 });
 teacherContractReviewPacketSchema.index({ status: 1, createdAt: -1 });
+teacherContractReviewPacketSchema.index(
+  { teacherId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ["DRAFT", "READY_FOR_CONTRACT_TEAM", "ACKNOWLEDGED_PENDING_TEA12", "ON_HOLD"] },
+    },
+  }
+);
 
 module.exports = mongoose.model("TeacherContractReviewPacket", teacherContractReviewPacketSchema);
 

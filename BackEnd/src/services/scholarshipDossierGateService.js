@@ -210,12 +210,22 @@ const parseChecklistDefinition = (rawChecklist) => {
 
     const title = assertRequiredText(entry.title, `documentChecklist[${idx}].title`, { min: 1, max: 150 });
     const description = assertOptionalText(entry.description, `documentChecklist[${idx}].description`, { max: 500 }) || "";
-    const required = entry.required === undefined ? true : Boolean(entry.required);
+    if (entry.required !== undefined && typeof entry.required !== "boolean") {
+      throw validationError(`documentChecklist[${idx}].required must be a boolean`);
+    }
+    const required = entry.required === undefined ? true : entry.required;
 
+    if (
+      entry.acceptedMode !== undefined &&
+      entry.acceptedMode !== null &&
+      typeof entry.acceptedMode !== "string"
+    ) {
+      throw validationError(`documentChecklist[${idx}].acceptedMode must be a string`);
+    }
     const acceptedMode =
       entry.acceptedMode === undefined || entry.acceptedMode === null
         ? "EITHER"
-        : String(entry.acceptedMode).trim().toUpperCase();
+        : entry.acceptedMode.trim().toUpperCase();
     if (!CHECKLIST_ITEM_MODES.includes(acceptedMode)) {
       throw validationError(
         `documentChecklist[${idx}].acceptedMode must be one of ${CHECKLIST_ITEM_MODES.join(", ")}`
@@ -228,7 +238,10 @@ const parseChecklistDefinition = (rawChecklist) => {
         throw validationError(`documentChecklist[${idx}].acceptedDocumentTypes must be a non-empty array`);
       }
       acceptedDocumentTypes = entry.acceptedDocumentTypes.map((dt) => {
-        const upper = String(dt).trim().toUpperCase();
+        if (typeof dt !== "string") {
+          throw validationError(`documentChecklist[${idx}].acceptedDocumentTypes must contain strings`);
+        }
+        const upper = dt.trim().toUpperCase();
         if (!ALLOWED_CHECKLIST_DOC_TYPES.includes(upper)) {
           throw validationError(
             `documentChecklist[${idx}].acceptedDocumentTypes contains invalid value: ${upper}`
@@ -238,12 +251,26 @@ const parseChecklistDefinition = (rawChecklist) => {
       });
     }
 
-    const maxFiles = entry.maxFiles === undefined ? 5 : Number(entry.maxFiles);
+    const parseChecklistInt = (val, defaultVal) => {
+      if (val === undefined) return defaultVal;
+      if (
+        val === null ||
+        typeof val === "boolean" ||
+        Array.isArray(val) ||
+        typeof val === "object" ||
+        (typeof val === "string" && val.trim() === "")
+      ) {
+        return NaN;
+      }
+      return Number(val);
+    };
+
+    const maxFiles = parseChecklistInt(entry.maxFiles, 5);
     if (!Number.isInteger(maxFiles) || maxFiles < 1 || maxFiles > 20) {
       throw validationError(`documentChecklist[${idx}].maxFiles must be an integer between 1 and 20`);
     }
 
-    const order = entry.order === undefined ? idx + 1 : Number(entry.order);
+    const order = parseChecklistInt(entry.order, idx + 1);
     if (!Number.isInteger(order) || order < 1) {
       throw validationError(`documentChecklist[${idx}].order must be a positive integer`);
     }

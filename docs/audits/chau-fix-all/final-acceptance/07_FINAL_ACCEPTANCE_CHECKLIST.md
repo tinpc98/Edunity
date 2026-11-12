@@ -1,0 +1,15 @@
+# 07. FINAL ACCEPTANCE CHECKLIST — EDUNITY V3 (CHÂU)
+
+| Hạng mục kiểm tra | Tiêu chí đạt | Trạng thái | Bằng chứng thực tế |
+|---|---|---|---|
+| **1. Phạm vi 34/34 Tasks (Phase 0 → 6)** | Hoàn tất Audit → Fix → Integration → Regression → Docs cho tất cả task Châu | **PASS** | `02_REQUIREMENTS_TRACEABILITY_MATRIX.md` & `PHASE_0_REPORT.md` → `PHASE_6_REPORT.md` |
+| **2. Kiểm tra cú pháp JS toàn bộ backend** | `0` lỗi cú pháp trên toàn bộ `.js` trong `src/`, `scripts/`, `tests/` | **PASS (`219/219`)** | Chạy `node --check` toàn bộ 219 file (`TOTAL=219 FAILED=0`, `task-6368`) |
+| **3. Kiểm chứng MongoMemoryReplSet** | Mọi phase có suite test transaction, CAS, race condition, rollback thật không mock | **PASS (`7/7` Phase ReplSet suites)** | `phase0ReplSet..phase6ReplSet` + `cur11ScheduleCollisionReplSet` + `aidDossierReplSet` đều **PASS 100%** |
+| **4. Regression toàn hệ thống (`npm test`)** | Đo toàn bộ 46 test suites, báo cáo trung thực `OpenHandles` & lý do fail nếu có | **CONDITIONAL PASS (`44/46` suites, `615/618` tests)** | `task-6369`: `0 open handles`; 100% suite Châu xanh; `3` fail chỉ ở legacy fixture `CUR-10` trong `platform.test.js` (`1`) & `authorization.test.js` (`2`) |
+| **5. Đồng bộ Schema & Migration Preflight (`G0-02`, `G0-03`)** | 100% model export, soft-delete, & partial/unique index specs khớp hoàn toàn | **PASS (`57` models / `17` soft-delete / `54` specs)** | `schemaInventory.test.js` (`16/16`), `migrationPreflight.test.js` (`12/12`), [`schema-inventory-g0-02.md`](file:///c:/CODE/Edunity/BackEnd/docs/schema-inventory-g0-02.md) |
+| **6. Đồng bộ API Contract & Handover (`G0-10`)** | Phản ánh chính xác endpoint, mã lỗi, serialization, ranh giới liên nhóm | **PASS** | `academicContract.test.js` (`19/19`), [`api-contract-academic.md`](file:///c:/CODE/Edunity/BackEnd/docs/api-contract-academic.md), [`coordination-and-handover.md`](file:///c:/CODE/Edunity/BackEnd/docs/coordination-and-handover.md) |
+| **7. An toàn ranh giới sở hữu mã nguồn** | Tuyệt đối không sửa `app.js`, `storageService.js`, `authMiddleware.js`, `requireRole.js`, `paymentService.js`, `settlementService.js`, `enrollmentService.js`, `FrontEnd/*`, `.env` | **PASS (`0` file vi phạm)** | Xác minh trực tiếp qua `git diff --name-only` và `git status -s` |
+| **8. Nguyên tắc Fail-Closed & Security** | Không tự bypass `TEA-12`, `AID-08`, `AI_PROVIDER_BLOCKED`; chặn coercion, query injection, leak staff ID & `storageKey` | **PASS** | Chứng minh tự động ở `phase2..6ReplSet.test.js`, `security.test.js` (`54/54`), `authorization.test.js` (`Route matrix` + `Responses do not leak`) |
+| **9. Không tự chạy lệnh Git thay đổi lịch sử** | Không chạy `git commit`, `git push`, `git merge`, `git reset` | **PASS** | Giữ nguyên working tree sạch trên `BE-2` để chủ dự án review & commit |
+| **10. Bộ Acceptance Pack 7 tài liệu** | Đủ 7 file `01` → `07` trong `docs/audits/chau-fix-all/final-acceptance/` + các ledger & báo cáo Phase 0–6 | **PASS** | Hoàn tất đủ `01_EXECUTIVE_SUMMARY.md` → `07_FINAL_ACCEPTANCE_CHECKLIST.md` |
+

@@ -246,7 +246,7 @@ const applyForScholarship = async (studentId, campaignId, body, options = {}) =>
             guardianInfo,
             schoolInfo,
             consentSnapshot,
-            statement: body.statement,
+            statement: body.statement.trim(),
             status: "SUBMITTED",
             submittedAt: now,
             dossierVerification: {
@@ -385,24 +385,28 @@ const updateDossier = async (studentId, applicationId, body) => {
   const campaign = await campaignService.getCampaignOrThrow(application.campaignId);
   const existingDocs = await VerificationDocument.find({ applicationId: application._id }).lean();
 
-  if (body.submissionMode !== undefined) {
-    application.submissionMode = parseSubmissionMode(body.submissionMode, campaign);
-  }
-  if (body.guardianInfo !== undefined) {
-    application.guardianInfo = parseGuardianInfo(body.guardianInfo, {
-      required: application.status !== "DRAFT",
-    });
-  }
-  if (body.schoolInfo !== undefined) {
-    application.schoolInfo = parseSchoolInfo(body.schoolInfo, {
-      required: application.status !== "DRAFT",
-    });
-  }
+  const nextMode =
+    body.submissionMode !== undefined
+      ? parseSubmissionMode(body.submissionMode, campaign)
+      : application.submissionMode || "ONLINE";
+  const nextGuardian =
+    body.guardianInfo !== undefined
+      ? parseGuardianInfo(body.guardianInfo, {
+          required: application.status !== "DRAFT",
+        })
+      : application.guardianInfo;
+  const nextSchool =
+    body.schoolInfo !== undefined
+      ? parseSchoolInfo(body.schoolInfo, {
+          required: application.status !== "DRAFT",
+        })
+      : application.schoolInfo;
+  let nextStatement = application.statement;
   if (body.statement !== undefined) {
     if (typeof body.statement !== "string" || (application.status !== "DRAFT" && isBlank(body.statement))) {
       throw validationError("statement must be a non-empty string");
     }
-    application.statement = body.statement.trim();
+    nextStatement = body.statement.trim();
   }
 
   let removeDocIds = [];
@@ -421,6 +425,7 @@ const updateDossier = async (studentId, applicationId, body) => {
   await assertOwnedFiles(studentId, parsedDocs);
 
   const session = await mongoose.startSession();
+  let updated;
   try {
     await session.withTransaction(async () => {
       if (removeDocIds.length > 0) {
@@ -435,18 +440,38 @@ const updateDossier = async (studentId, applicationId, body) => {
       const receipts = await PaperDossierReceipt.find({ applicationId: application._id }).session(session).lean();
       const evaluated = evaluateChecklistProgress({
         campaign,
-        submissionMode: application.submissionMode || "ONLINE",
+        submissionMode: nextMode,
         onlineDocuments: latestDocs,
         paperReceipts: receipts,
       });
-      application.checklistProgress = evaluated.progress;
-      await application.save({ session });
+
+      updated = await ScholarshipApplication.findOneAndUpdate(
+        { _id: application._id, studentId, status: { $in: ["DRAFT", "NEED_MORE_INFORMATION"] } },
+        {
+          $set: {
+            submissionMode: nextMode,
+            guardianInfo: nextGuardian,
+            schoolInfo: nextSchool,
+            statement: nextStatement,
+            checklistProgress: evaluated.progress,
+          },
+        },
+        { returnDocument: "after", session }
+      ).lean();
+
+      if (!updated) {
+        throw new AppError(
+          `Dossier cannot be edited while in status ${application.status}`,
+          "APPLICATION_NOT_EDITABLE",
+          409
+        );
+      }
     });
   } finally {
     session.endSession();
   }
 
-  return redactApplicationForStudent(application.toObject());
+  return redactApplicationForStudent(updated);
 };
 
 /**
@@ -602,21 +627,15 @@ const resubmitApplication = async (studentId, applicationId, body, options = {})
     requireConsent: options.requireConsent,
   });
 
+  const nextStatement = body.statement !== undefined ? body.statement.trim() : application.statement;
+  const existingDossierVerification = application.dossierVerification
+    ? application.dossierVerification.toObject?.() || application.dossierVerification
+    : {};
+
   const session = await mongoose.startSession();
+  let updated;
   try {
     await session.withTransaction(async () => {
-      if (body.statement !== undefined) application.statement = body.statement.trim();
-      application.submissionMode = nextMode;
-      application.guardianInfo = nextGuardian;
-      application.schoolInfo = nextSchool;
-      application.consentSnapshot = consentSnapshot;
-      application.status = "SUBMITTED";
-      application.submittedAt = new Date();
-      application.dossierVerification = {
-        ...(application.dossierVerification ? application.dossierVerification.toObject?.() || application.dossierVerification : {}),
-        status: "PENDING_REVIEW",
-      };
-
       await saveDocuments(studentId, application._id, parsedDocs, session);
       const savedDocs = await VerificationDocument.find({ applicationId: application._id }).session(session).lean();
       const receipts = await PaperDossierReceipt.find({ applicationId: application._id }).session(session).lean();
@@ -632,15 +651,38 @@ const resubmitApplication = async (studentId, applicationId, body, options = {})
           { details: { missing: evaluated.missingOnSubmit } }
         );
       }
-      application.checklistProgress = evaluated.progress;
-      await application.save({ session });
+
+      updated = await ScholarshipApplication.findOneAndUpdate(
+        { _id: application._id, studentId, status: "NEED_MORE_INFORMATION" },
+        {
+          $set: {
+            statement: nextStatement,
+            submissionMode: nextMode,
+            guardianInfo: nextGuardian,
+            schoolInfo: nextSchool,
+            consentSnapshot,
+            status: "SUBMITTED",
+            submittedAt: new Date(),
+            dossierVerification: {
+              ...existingDossierVerification,
+              status: "PENDING_REVIEW",
+            },
+            checklistProgress: evaluated.progress,
+          },
+        },
+        { returnDocument: "after", session }
+      ).lean();
+
+      if (!updated) {
+        throw new AppError("Application is not waiting for more information", "APPLICATION_NOT_RESUBMITTABLE", 409);
+      }
     });
   } finally {
     session.endSession();
   }
 
   await notifyAdmins("Hồ sơ học bổng được bổ sung", "Một hồ sơ học bổng đã được bổ sung và gửi lại.", "SCHOLARSHIP_APPLICATION_SUBMITTED");
-  return redactApplicationForStudent(application.toObject());
+  return redactApplicationForStudent(updated);
 };
 
 const withdrawDossier = async (studentId, applicationId, body = {}) => {
@@ -658,18 +700,38 @@ const withdrawDossier = async (studentId, applicationId, body = {}) => {
   }
 
   const reason = assertOptionalText(body.reason, "reason", { max: 500 });
-  const updated = await ScholarshipApplication.findOneAndUpdate(
-    { _id: application._id, studentId, status: { $in: withdrawable } },
-    {
-      $set: {
-        status: "WITHDRAWN",
-        reviewNote: reason || application.reviewNote,
-      },
-    },
-    { returnDocument: "after" }
-  ).lean();
-  if (!updated) {
-    throw new AppError("Dossier is no longer withdrawable", "APPLICATION_NOT_WITHDRAWABLE", 409);
+  const session = await mongoose.startSession();
+  let updated;
+  try {
+    await session.withTransaction(async () => {
+      updated = await ScholarshipApplication.findOneAndUpdate(
+        { _id: application._id, studentId, status: { $in: withdrawable } },
+        {
+          $set: {
+            status: "WITHDRAWN",
+            reviewNote: reason || application.reviewNote,
+          },
+        },
+        { returnDocument: "after", session }
+      ).lean();
+      if (!updated) {
+        throw new AppError("Dossier is no longer withdrawable", "APPLICATION_NOT_WITHDRAWABLE", 409);
+      }
+
+      await audit(
+        {
+          actorAdminId: studentId,
+          action: "SCHOLARSHIP_DOSSIER_WITHDRAWN",
+          targetType: "ScholarshipApplication",
+          targetId: updated._id,
+          beforeState: { status: application.status },
+          afterState: { status: "WITHDRAWN", reason: reason || null },
+        },
+        session
+      );
+    });
+  } finally {
+    session.endSession();
   }
 
   return redactApplicationForStudent(updated);
@@ -998,13 +1060,23 @@ const verifyDossierApplication = async (adminId, applicationId, body = {}, optio
 
 const adminReviewApplicationDocument = async (adminId, applicationId, documentId, body) => {
   const application = await getApplicationOrThrow(applicationId);
+  if (!["SUBMITTED", "NEED_MORE_INFORMATION", "DOSSIER_VERIFIED"].includes(application.status)) {
+    throw new AppError(
+      `Cannot review documents for an application in status ${application.status}`,
+      "APPLICATION_NOT_REVIEWABLE",
+      409
+    );
+  }
   if (!mongoose.isValidObjectId(documentId)) {
     throw new AppError("Verification document not found", "DOCUMENT_NOT_FOUND", 404);
   }
   const doc = await VerificationDocument.findOne({ _id: documentId, applicationId: application._id });
   if (!doc) throw new AppError("Verification document not found", "DOCUMENT_NOT_FOUND", 404);
 
-  const status = String(body.status || "").trim().toUpperCase();
+  if (typeof body.status !== "string" || isBlank(body.status)) {
+    throw validationError("status must be APPROVED or REJECTED");
+  }
+  const status = body.status.trim().toUpperCase();
   if (!["APPROVED", "REJECTED"].includes(status)) {
     throw validationError("status must be APPROVED or REJECTED");
   }
@@ -1017,62 +1089,160 @@ const adminReviewApplicationDocument = async (adminId, applicationId, documentId
   const now = new Date();
   const prevStatus = doc.status;
 
-  doc.status = status;
-  doc.reviewedBy = adminId;
-  doc.reviewedAt = now;
-  doc.reviewNote = reviewNote;
-  await doc.save();
+  const session = await mongoose.startSession();
+  let updatedDoc;
+  let evaluated;
+  try {
+    await session.withTransaction(async () => {
+      updatedDoc = await VerificationDocument.findOneAndUpdate(
+        { _id: doc._id, applicationId: application._id },
+        {
+          $set: {
+            status,
+            reviewedBy: adminId,
+            reviewedAt: now,
+            reviewNote,
+          },
+        },
+        { returnDocument: "after", session }
+      ).lean();
 
-  const [documents, paperReceipts] = await Promise.all([
-    VerificationDocument.find({ applicationId: application._id }).lean(),
-    PaperDossierReceipt.find({ applicationId: application._id }).lean(),
-  ]);
-  const evaluated = evaluateChecklistProgress({
-    campaign,
-    submissionMode: application.submissionMode || "ONLINE",
-    onlineDocuments: documents,
-    paperReceipts,
-  });
-  application.checklistProgress = evaluated.progress;
-  await application.save();
+      const documents = await VerificationDocument.find({ applicationId: application._id }).session(session).lean();
+      const paperReceipts = await PaperDossierReceipt.find({ applicationId: application._id }).session(session).lean();
+      evaluated = evaluateChecklistProgress({
+        campaign,
+        submissionMode: application.submissionMode || "ONLINE",
+        onlineDocuments: documents,
+        paperReceipts,
+      });
 
-  await audit({
-    actorAdminId: adminId,
-    action: `SCHOLARSHIP_DOCUMENT_${status}`,
-    targetType: "VerificationDocument",
-    targetId: doc._id,
-    beforeState: { status: prevStatus },
-    afterState: { status, checklistItemCode: doc.checklistItemCode, reviewNote },
-  });
+      await ScholarshipApplication.updateOne(
+        { _id: application._id },
+        { $set: { checklistProgress: evaluated.progress } },
+        { session }
+      );
+
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: `SCHOLARSHIP_DOCUMENT_${status}`,
+          targetType: "VerificationDocument",
+          targetId: doc._id,
+          beforeState: { status: prevStatus },
+          afterState: { status, checklistItemCode: doc.checklistItemCode, reviewNote },
+        },
+        session
+      );
+    });
+  } finally {
+    session.endSession();
+  }
 
   return {
-    document: doc.toObject(),
+    document: updatedDoc,
     checklistProgress: evaluated.progress,
   };
 };
 
 /**
  * UC-ADM-04 (Legacy combined financial + grant flow preserved untouched for backwards compatibility).
- * Note: For AID-01 nonfinancial dossier approval without financial grant/fund allocation,
- * use verifyDossierApplication (POST /api/admin/scholarship-applications/:id/verify-dossier).
+ * Enforces AID-01 dossier/paper/consent prerequisites when granting from a V3 AID-01 campaign or DOSSIER_VERIFIED,
+ * preventing any bypass via /approve while keeping simple legacy campaigns compatible with platform.test.js.
  */
-const approveApplication = async (adminId, applicationId, body) => {
+const approveApplication = async (adminId, applicationId, body = {}, options = {}) => {
   const application = await getApplicationOrThrow(applicationId);
-  assertSubmitted(application);
+  const approvable = ["SUBMITTED", "DOSSIER_VERIFIED"];
+  if (!approvable.includes(application.status)) {
+    throw new AppError("Application is not waiting for review", "APPLICATION_NOT_REVIEWABLE", 409);
+  }
   const campaign = await campaignService.getCampaignOrThrow(application.campaignId);
+  const reviewNote = assertOptionalText(body.reviewNote, "reviewNote", { max: 1000 });
   const award = campaign.awardAmountPerStudent;
+
+  const mustEnforceFullDossier =
+    requiresFullDossierValidation(campaign, {}, application) ||
+    Boolean(campaign.dossierPolicy?.requireGuardianConsentForMinor);
+
+  let consentSnapshot = application.consentSnapshot;
+  let evaluatedProgress = application.checklistProgress;
+
+  if (mustEnforceFullDossier || application.status === "DOSSIER_VERIFIED") {
+    const student = await getActiveStudentOrThrow(application.studentId);
+    const documents = await VerificationDocument.find({ applicationId: application._id }).lean();
+    const paperReceipts = await PaperDossierReceipt.find({ applicationId: application._id }).sort({ receivedAt: -1 }).lean();
+
+    if (mustEnforceFullDossier) {
+      if (isBlank(application.statement)) {
+        throw new AppError("Dossier statement is required", "DOSSIER_INCOMPLETE", 400);
+      }
+      parseGuardianInfo(application.guardianInfo?.toObject?.() || application.guardianInfo, { required: true });
+      parseSchoolInfo(application.schoolInfo?.toObject?.() || application.schoolInfo, { required: true });
+    }
+
+    const evaluated = evaluateChecklistProgress({
+      campaign,
+      submissionMode: application.submissionMode || "ONLINE",
+      onlineDocuments: documents,
+      paperReceipts,
+    });
+    if (evaluated.unresolvedDiscrepancyReceipt) {
+      throw new AppError(
+        "Cannot approve application while a linked paper dossier receipt has an unresolved DISCREPANCY",
+        "PAPER_RECEIPT_DISCREPANCY_UNRESOLVED",
+        409
+      );
+    }
+    if (mustEnforceFullDossier && evaluated.missingForVerification.length > 0) {
+      throw Object.assign(
+        new AppError("Dossier checklist requirements are not satisfied yet", "DOSSIER_CHECKLIST_INCOMPLETE", 409),
+        { details: { missing: evaluated.missingForVerification } }
+      );
+    }
+    evaluatedProgress = evaluated.progress;
+
+    if (mustEnforceFullDossier) {
+      consentSnapshot = await assertConsentGate({
+        student,
+        campaign,
+        application,
+        guardianInfo: application.guardianInfo,
+        schoolInfo: application.schoolInfo,
+        consentVerifier: options.consentVerifier,
+        requireConsent: options.requireConsent,
+      });
+    }
+  }
 
   const session = await mongoose.startSession();
   let scholarship;
+  let updatedApplication;
   try {
     await session.withTransaction(async () => {
       const now = new Date();
-      const reviewed = await ScholarshipApplication.updateOne(
-        { _id: application._id, status: "SUBMITTED" },
-        { $set: { status: "APPROVED", reviewedBy: adminId, reviewedAt: now, reviewNote: body.reviewNote || null } },
-        { session }
-      );
-      if (reviewed.modifiedCount !== 1) {
+      const setUpdate = {
+        status: "APPROVED",
+        reviewedBy: adminId,
+        reviewedAt: now,
+        reviewNote,
+      };
+      if (evaluatedProgress) setUpdate.checklistProgress = evaluatedProgress;
+      if (consentSnapshot) setUpdate.consentSnapshot = consentSnapshot;
+      if (application.status === "SUBMITTED" && mustEnforceFullDossier) {
+        setUpdate.dossierVerification = {
+          status: "VERIFIED",
+          verifiedBy: adminId,
+          verifiedAt: now,
+          note: reviewNote,
+          checklistVerified: true,
+        };
+      }
+
+      updatedApplication = await ScholarshipApplication.findOneAndUpdate(
+        { _id: application._id, status: { $in: approvable } },
+        { $set: setUpdate },
+        { returnDocument: "after", session }
+      ).lean();
+      if (!updatedApplication) {
         throw new AppError("Application is not waiting for review", "APPLICATION_NOT_REVIEWABLE", 409);
       }
 
@@ -1118,7 +1288,7 @@ const approveApplication = async (adminId, applicationId, body) => {
           action: "SCHOLARSHIP_APPLICATION_APPROVED",
           targetType: "ScholarshipApplication",
           targetId: application._id,
-          beforeState: { status: "SUBMITTED" },
+          beforeState: { status: application.status },
           afterState: { status: "APPROVED", scholarshipId: scholarship._id, allocatedAmount: award.toString() },
         },
         session
@@ -1134,10 +1304,10 @@ const approveApplication = async (adminId, applicationId, body) => {
     `Bạn đã được cấp học bổng ${award.toString()} VNĐ từ chiến dịch "${campaign.title}".`,
     "SCHOLARSHIP_APPROVED"
   );
-  return { application: (await getApplicationOrThrow(application._id)).toObject(), scholarship: scholarship.toObject() };
+  return { application: updatedApplication, scholarship: scholarship.toObject() };
 };
 
-const reviewApplication = async (adminId, applicationId, body, status) => {
+const reviewApplication = async (adminId, applicationId, body = {}, status) => {
   const application = await getApplicationOrThrow(applicationId);
   // An application left in NEED_MORE_INFORMATION or DOSSIER_VERIFIED (before AID-06) can still be rejected/returned
   const reviewable =
@@ -1147,37 +1317,49 @@ const reviewApplication = async (adminId, applicationId, body, status) => {
   if (!reviewable.includes(application.status)) {
     throw new AppError("Application is not waiting for review", "APPLICATION_NOT_REVIEWABLE", 409);
   }
-  if (status === "NEED_MORE_INFORMATION" && isBlank(body.reviewNote)) {
+  const reviewNote = assertOptionalText(body.reviewNote, "reviewNote", { max: 1000 });
+  if (status === "NEED_MORE_INFORMATION" && !reviewNote) {
     throw validationError("reviewNote is required: describe the information the student must provide");
   }
 
   const now = new Date();
   const dossierReviewStatus = status === "REJECTED" ? "REJECTED" : "NEED_MORE_INFORMATION";
-  const updated = await ScholarshipApplication.findOneAndUpdate(
-    { _id: application._id, status: { $in: reviewable } },
-    {
-      $set: {
-        status,
-        reviewedBy: adminId,
-        reviewedAt: now,
-        reviewNote: body.reviewNote || null,
-        "dossierVerification.status": dossierReviewStatus,
-        "dossierVerification.note": body.reviewNote || null,
-        "dossierVerification.checklistVerified": false,
-      },
-    },
-    { returnDocument: "after" }
-  ).lean();
-  if (!updated) throw new AppError("Application is not waiting for review", "APPLICATION_NOT_REVIEWABLE", 409);
+  const session = await mongoose.startSession();
+  let updated;
+  try {
+    await session.withTransaction(async () => {
+      updated = await ScholarshipApplication.findOneAndUpdate(
+        { _id: application._id, status: { $in: reviewable } },
+        {
+          $set: {
+            status,
+            reviewedBy: adminId,
+            reviewedAt: now,
+            reviewNote,
+            "dossierVerification.status": dossierReviewStatus,
+            "dossierVerification.note": reviewNote,
+            "dossierVerification.checklistVerified": false,
+          },
+        },
+        { returnDocument: "after", session }
+      ).lean();
+      if (!updated) throw new AppError("Application is not waiting for review", "APPLICATION_NOT_REVIEWABLE", 409);
 
-  await audit({
-    actorAdminId: adminId,
-    action: `SCHOLARSHIP_APPLICATION_${status === "REJECTED" ? "REJECTED" : "INFORMATION_REQUESTED"}`,
-    targetType: "ScholarshipApplication",
-    targetId: updated._id,
-    beforeState: { status: application.status },
-    afterState: { status, reviewNote: updated.reviewNote },
-  });
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: `SCHOLARSHIP_APPLICATION_${status === "REJECTED" ? "REJECTED" : "INFORMATION_REQUESTED"}`,
+          targetType: "ScholarshipApplication",
+          targetId: updated._id,
+          beforeState: { status: application.status },
+          afterState: { status, reviewNote: updated.reviewNote },
+        },
+        session
+      );
+    });
+  } finally {
+    session.endSession();
+  }
 
   if (status === "REJECTED") {
     await notify(updated.studentId, "Hồ sơ học bổng bị từ chối", updated.reviewNote || "Hồ sơ học bổng của bạn không đạt.", "SCHOLARSHIP_REJECTED");

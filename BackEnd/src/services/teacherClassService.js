@@ -11,6 +11,7 @@ const {
   assertApprovedAuthorization,
   assertPricingPolicyGate,
   assertTeacherContractGate,
+  captureClassSnapshots,
 } = (() => {
   const gate = require("./classCreationGateService");
   const tea07 = require("./teacherSubjectAuthorizationService");
@@ -19,6 +20,7 @@ const {
     assertCourseAlignment: gate.assertCourseAlignment,
     assertPricingPolicyGate: gate.assertPricingPolicyGate,
     assertTeacherContractGate: gate.assertTeacherContractGate,
+    captureClassSnapshots: gate.captureClassSnapshots,
     assertApprovedAuthorization: tea07.assertApprovedAuthorization,
   };
 })();
@@ -60,14 +62,36 @@ const getActiveCourse = async (courseId) => {
   return course;
 };
 
+const parseStrictInteger = (value) => {
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value === "boolean" ||
+    Array.isArray(value) ||
+    typeof value === "object" ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    return NaN;
+  }
+  return Number(value);
+};
+
 const parseSchedule = (schedule) => {
   if (!Array.isArray(schedule)) throw validationError("schedule must be an array");
   return schedule.map((entry, index) => {
-    const dayOfWeek = Number(entry && entry.dayOfWeek);
-    if (!entry || !Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw validationError(`schedule[${index}] must be an object`);
+    }
+    const dayOfWeek = parseStrictInteger(entry.dayOfWeek);
+    if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
       throw validationError(`schedule[${index}].dayOfWeek must be an integer from 0 (Sunday) to 6`);
     }
-    if (!TIME_PATTERN.test(entry.startTime) || !TIME_PATTERN.test(entry.endTime)) {
+    if (
+      typeof entry.startTime !== "string" ||
+      typeof entry.endTime !== "string" ||
+      !TIME_PATTERN.test(entry.startTime) ||
+      !TIME_PATTERN.test(entry.endTime)
+    ) {
       throw validationError(`schedule[${index}] startTime/endTime must use HH:mm format`);
     }
     if (entry.startTime >= entry.endTime) {
@@ -101,7 +125,7 @@ const applyClassInput = (cls, body) => {
   }
 
   if (body.capacity !== undefined) {
-    const capacity = Number(body.capacity);
+    const capacity = parseStrictInteger(body.capacity);
     if (!Number.isInteger(capacity) || capacity < 1) throw validationError("capacity must be an integer >= 1");
     cls.capacity = capacity;
   }
@@ -152,7 +176,7 @@ const createClass = async (teacherId, body = {}, options = {}) => {
   applyCourse(cls, course);
   applyClassInput(cls, body);
 
-  await validateClassGate({
+  const gateResult = await validateClassGate({
     teacher,
     course,
     cls,
@@ -161,6 +185,12 @@ const createClass = async (teacherId, body = {}, options = {}) => {
     pricingPolicyVerifier: options.pricingPolicyVerifier,
     contractVerifier: options.contractVerifier,
   });
+
+  const snapshots = await captureClassSnapshots({
+    course,
+    pricingResult: gateResult.pricingResult,
+  });
+  Object.assign(cls, snapshots);
 
   await cls.save();
   return cls.toObject();
@@ -182,7 +212,7 @@ const updateClass = async (teacherId, classId, body = {}, options = {}) => {
   }
   applyClassInput(cls, body);
 
-  await validateClassGate({
+  const gateResult = await validateClassGate({
     teacher,
     course,
     cls,
@@ -191,6 +221,12 @@ const updateClass = async (teacherId, classId, body = {}, options = {}) => {
     pricingPolicyVerifier: options.pricingPolicyVerifier,
     contractVerifier: options.contractVerifier,
   });
+
+  const snapshots = await captureClassSnapshots({
+    course,
+    pricingResult: gateResult.pricingResult,
+  });
+  Object.assign(cls, snapshots);
 
   if (!cls.level && course.level) {
     cls.level = catalog.resolveLevel(course.level);
@@ -211,6 +247,32 @@ const isSessionWithinClass = (cls, startDatetime, endDatetime) => {
   return true;
 };
 
+const validateClassCompletenessAndSessions = async (cls, incompleteMessage = "Class is not complete enough to be submitted") => {
+  const missing = [];
+  if (isBlank(cls.description)) missing.push("description");
+  for (const field of DATE_FIELDS) {
+    if (!cls[field]) missing.push(field);
+  }
+  if (!cls.schedule || cls.schedule.length === 0) missing.push("schedule");
+
+  const sessions = await Session.find({ classId: cls._id, status: { $ne: "CANCELLED" } }).lean();
+  if (sessions.length === 0) missing.push("sessions");
+  if (missing.length) {
+    throw Object.assign(new AppError(incompleteMessage, "CLASS_INCOMPLETE", 400), {
+      details: { missing },
+    });
+  }
+
+  const outOfRange = sessions.filter((s) => !isSessionWithinClass(cls, s.startDatetime, s.endDatetime));
+  if (outOfRange.length) {
+    throw Object.assign(new AppError("Some sessions are outside the class start/end date", "SESSION_OUT_OF_CLASS_RANGE", 400), {
+      details: { sessionIds: outOfRange.map((s) => s._id.toString()) },
+    });
+  }
+
+  return sessions;
+};
+
 // BR-48 / BR-49 / CUR-10: submit a completed Class for Admin approval
 const submitClass = async (teacherId, classId, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
@@ -228,29 +290,9 @@ const submitClass = async (teacherId, classId, options = {}) => {
     level: alignment.level,
   });
 
-  const missing = [];
-  if (isBlank(cls.description)) missing.push("description");
-  for (const field of DATE_FIELDS) {
-    if (!cls[field]) missing.push(field);
-  }
-  if (!cls.schedule || cls.schedule.length === 0) missing.push("schedule");
+  const sessions = await validateClassCompletenessAndSessions(cls);
 
-  const sessions = await Session.find({ classId: cls._id, status: { $ne: "CANCELLED" } }).lean();
-  if (sessions.length === 0) missing.push("sessions");
-  if (missing.length) {
-    throw Object.assign(new AppError("Class is not complete enough to be submitted", "CLASS_INCOMPLETE", 400), {
-      details: { missing },
-    });
-  }
-
-  const outOfRange = sessions.filter((s) => !isSessionWithinClass(cls, s.startDatetime, s.endDatetime));
-  if (outOfRange.length) {
-    throw Object.assign(new AppError("Some sessions are outside the class start/end date", "SESSION_OUT_OF_CLASS_RANGE", 400), {
-      details: { sessionIds: outOfRange.map((s) => s._id.toString()) },
-    });
-  }
-
-  await assertPricingPolicyGate({
+  const pricingResult = await assertPricingPolicyGate({
     teacher,
     course,
     cls,
@@ -262,9 +304,11 @@ const submitClass = async (teacherId, classId, options = {}) => {
     contractVerifier: options.contractVerifier,
   });
 
+  const snapshots = await captureClassSnapshots({ course, pricingResult });
+
   const updated = await Class.findOneAndUpdate(
     { _id: cls._id, status: { $in: EDITABLE_STATUSES } },
-    { $set: { status: "PENDING_APPROVAL", level: alignment.level, updatedBy: teacherId } },
+    { $set: { status: "PENDING_APPROVAL", level: alignment.level, updatedBy: teacherId, ...snapshots } },
     { returnDocument: "after" }
   ).lean();
   if (!updated) throw new AppError("Only DRAFT or REJECTED classes can be submitted", "CLASS_NOT_SUBMITTABLE", 409);
@@ -336,6 +380,7 @@ module.exports = {
   getVerifiedTeacher,
   getOwnClass,
   isSessionWithinClass,
+  validateClassCompletenessAndSessions,
   createClass,
   updateClass,
   submitClass,

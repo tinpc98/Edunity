@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const { Class, Session, Enrollment, TeacherEarning } = require("../models");
 const { notify } = require("./notificationService");
 
@@ -29,7 +30,7 @@ const startClassesThatBegan = async () => {
 /**
  * IN_PROGRESS → COMPLETED when every Session is final and the class period is over (endDate, or the last Session's
  * end when no endDate is set). Completing a class completes its CONFIRMED enrollments and releases the Teacher's
- * PENDING earnings for payout (AVAILABLE).
+ * PENDING earnings for payout (AVAILABLE) atomically inside a MongoDB transaction.
  */
 const completeFinishedClasses = async (now = new Date()) => {
   const running = await Class.find({ status: "IN_PROGRESS", ...NOT_DELETED })
@@ -44,14 +45,35 @@ const completeFinishedClasses = async (now = new Date()) => {
     const periodEnd = cls.endDate ? new Date(cls.endDate).getTime() : lastEnd;
     if (periodEnd > now.getTime()) continue;
 
-    const res = await Class.updateOne({ _id: cls._id, status: "IN_PROGRESS" }, { $set: { status: "COMPLETED" } });
-    if (res.modifiedCount !== 1) continue;
+    let didComplete = false;
+    const dbSession = await mongoose.startSession();
+    try {
+      await dbSession.withTransaction(async () => {
+        const res = await Class.updateOne(
+          { _id: cls._id, status: "IN_PROGRESS" },
+          { $set: { status: "COMPLETED" } },
+          { session: dbSession }
+        );
+        if (res.modifiedCount !== 1) return;
 
-    await Enrollment.updateMany(
-      { classId: cls._id, enrollmentStatus: "CONFIRMED" },
-      { $set: { enrollmentStatus: "COMPLETED" } }
-    );
-    await TeacherEarning.updateMany({ classId: cls._id, status: "PENDING" }, { $set: { status: "AVAILABLE" } });
+        await Enrollment.updateMany(
+          { classId: cls._id, enrollmentStatus: "CONFIRMED" },
+          { $set: { enrollmentStatus: "COMPLETED" } },
+          { session: dbSession }
+        );
+        await TeacherEarning.updateMany(
+          { classId: cls._id, status: "PENDING" },
+          { $set: { status: "AVAILABLE" } },
+          { session: dbSession }
+        );
+        didComplete = true;
+      });
+    } finally {
+      await dbSession.endSession();
+    }
+
+    if (!didComplete) continue;
+
     await notify(
       cls.teacherId,
       "Lớp học đã hoàn thành",

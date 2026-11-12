@@ -1,0 +1,120 @@
+diff --git a/BackEnd/tests/authorization.test.js b/BackEnd/tests/authorization.test.js
+index e2f6f1e..3e308e9 100644
+--- a/BackEnd/tests/authorization.test.js
++++ b/BackEnd/tests/authorization.test.js
+@@ -9,7 +9,9 @@ const app = require("../src/app");
+ const {
+   User, Category, Subject, Course, Class, Session, Enrollment, Payment, Notification, Report, Conversation, Message,
+   ScholarshipCampaign, ScholarshipApplication, Scholarship, SponsorContribution, CourseProposal,
++  CoursePricingPolicy, TeacherSubjectAuthorization,
+ } = require("../src/models");
++const classCreationGateService = require("../src/services/classCreationGateService");
+ const { signAccessToken } = require("../src/utils/jwt");
+ const { hashPassword } = require("../src/utils/password");
+ const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
+@@ -98,11 +100,30 @@ beforeAll(async () => {
+ 
+   const category = await Category.create({ name: "Danh mục", slug: "danh-muc", createdBy: users.admin._id });
+   const subject = await Subject.create({ categoryId: category._id, categoryName: category.name, name: "Môn", slug: "mon", createdBy: users.admin._id });
+-  const course = await Course.create({ subjectId: subject._id, subjectName: subject.name, categoryId: category._id, categoryName: category.name, title: "Khóa", slug: "khoa", createdBy: users.admin._id });
++  const course = await Course.create({ subjectId: subject._id, subjectName: subject.name, categoryId: category._id, categoryName: category.name, title: "Khóa", slug: "khoa", level: "BEGINNER", createdBy: users.admin._id });
++  await TeacherSubjectAuthorization.create([
++    { teacherId: users.teacherA._id, subjectId: subject._id, categoryId: category._id, gradeLevel: null, level: "BEGINNER", status: "APPROVED", createdBy: users.admin._id, approvedBy: users.admin._id, approvedAt: new Date() },
++    { teacherId: users.teacherB._id, subjectId: subject._id, categoryId: category._id, gradeLevel: null, level: "BEGINNER", status: "APPROVED", createdBy: users.admin._id, approvedBy: users.admin._id, approvedAt: new Date() },
++  ]);
++  await CoursePricingPolicy.create({
++    policyKey: "GLOBAL:DEFAULT:ALL:ANY:ANY",
++    version: 1,
++    name: "Auth Test Global Policy",
++    scopeType: "GLOBAL",
++    classType: "ALL",
++    allowFree: true,
++    minPrice: 0,
++    maxPrice: 1000000,
++    minSessions: 1,
++    maxSessions: 50,
++    effectiveFrom: new Date(Date.now() - 60000),
++    status: "ACTIVE",
++    createdBy: users.admin._id,
++  });
+ 
+   const makeClass = (teacherKey, name, extra = {}) =>
+     Class.create({
+-      courseId: course._id, courseTitle: course.title, categoryId: category._id, subjectId: subject._id,
++      courseId: course._id, courseTitle: course.title, categoryId: category._id, subjectId: subject._id, level: "BEGINNER",
+       teacherId: users[teacherKey]._id, teacherName: teacherKey, className: name, classType: "PAID", price: 200000,
+       capacity: 10, enrollmentStart: WINDOW.start, enrollmentEnd: WINDOW.end, startDate: WINDOW.start, endDate: WINDOW.end,
+       status: "OPEN", reviewedBy: users.admin._id, reviewNote: "ghi chú nội bộ của admin", ...extra,
+@@ -151,7 +172,10 @@ beforeAll(async () => {
+   data = { category, subject, course, classA, classB, draftA, session, enrollmentA, pendingA, payment, campaign, application, scholarship, contribution, conversation, message, notification, report, proposal };
+ });
+ 
+-afterAll(disconnectDB);
++afterAll(async () => {
++  classCreationGateService.resetDependencyVerifiers();
++  await disconnectDB();
++});
+ 
+ describe("Route matrix: read from the routers themselves", () => {
+   const routes = declaredRoutes();
+@@ -389,6 +413,10 @@ describe("Messaging needs a relationship", () => {
+ });
+ 
+ describe("Mass assignment", () => {
++  afterEach(() => {
++    classCreationGateService.resetDependencyVerifiers();
++  });
++
+   it("a profile update cannot change role, status or verification", async () => {
+     const res = await call("teacherB", "patch", "/api/me/profile").send({
+       role: "ADMIN", status: "ACTIVE", email: "x@x.com", passwordHash: "x", tokenVersion: 99,
+@@ -404,23 +432,37 @@ describe("Mass assignment", () => {
+   });
+ 
+   it("a class update cannot change its status or owner", async () => {
+-    const res = await call("teacherA", "patch", `/api/teacher/classes/${data.draftA._id}`).send({
+-      status: "OPEN", teacherId: users.teacherB._id, enrolledCount: 9, reviewNote: "x", ratingAverage: 5,
++    classCreationGateService.setDependencyVerifiers({
++      contractVerifier: async () => ({ id: "auth-test-contract", status: "ACTIVE" }),
+     });
+-    expect(res.statusCode).toBe(200);
+-    const fresh = await Class.findById(data.draftA._id);
+-    expect(fresh.status).toBe("DRAFT");
+-    expect(fresh.teacherId.toString()).toBe(users.teacherA._id.toString());
+-    expect(fresh.enrolledCount).toBe(0);
++    try {
++      const res = await call("teacherA", "patch", `/api/teacher/classes/${data.draftA._id}`).send({
++        status: "OPEN", teacherId: users.teacherB._id, enrolledCount: 9, reviewNote: "x", ratingAverage: 5,
++      });
++      expect(res.statusCode).toBe(200);
++      const fresh = await Class.findById(data.draftA._id);
++      expect(fresh.status).toBe("DRAFT");
++      expect(fresh.teacherId.toString()).toBe(users.teacherA._id.toString());
++      expect(fresh.enrolledCount).toBe(0);
++    } finally {
++      classCreationGateService.resetDependencyVerifiers();
++    }
+   });
+ 
+   it("a class cover image must be an image location, not arbitrary content", async () => {
+-    for (const coverImage of ["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", { $gt: "" }]) {
+-      const res = await call("teacherA", "patch", `/api/teacher/classes/${data.draftA._id}`).send({ coverImage });
+-      expect(res.statusCode).toBe(400);
++    classCreationGateService.setDependencyVerifiers({
++      contractVerifier: async () => ({ id: "auth-test-contract", status: "ACTIVE" }),
++    });
++    try {
++      for (const coverImage of ["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", { $gt: "" }]) {
++        const res = await call("teacherA", "patch", `/api/teacher/classes/${data.draftA._id}`).send({ coverImage });
++        expect(res.statusCode).toBe(400);
++      }
++      const ok = await call("teacherA", "patch", `/api/teacher/classes/${data.draftA._id}`).send({ coverImage: "/uploads/cover_image/a.png" });
++      expect(ok.statusCode).toBe(200);
++    } finally {
++      classCreationGateService.resetDependencyVerifiers();
+     }
+-    const ok = await call("teacherA", "patch", `/api/teacher/classes/${data.draftA._id}`).send({ coverImage: "/uploads/cover_image/a.png" });
+-    expect(ok.statusCode).toBe(200);
+   });
+ 
+   it("an application decides nothing about its own review", async () => {

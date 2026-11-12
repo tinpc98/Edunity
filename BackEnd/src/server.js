@@ -13,12 +13,16 @@ const connectDB = require("./config/db");
 const { startJob } = require("./jobs/expireEnrollmentsJob");
 const { startSessionLifecycleJob } = require("./jobs/sessionLifecycleJob");
 const { startMaintenanceJob } = require("./jobs/maintenanceJob");
+const { warmCache: warmSettingsCache } = require("./services/platformSettingService");
 
 const PORT = process.env.PORT || 3000;
 
 const startServer = async () => {
   try {
     await connectDB();
+    await warmSettingsCache().catch((err) => {
+      console.error("[PlatformSetting] Failed to warm settings cache:", err.message);
+    });
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error.message);
     process.exit(1);

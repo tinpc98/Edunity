@@ -23,6 +23,25 @@ const PRESENT_ATTENDANCE_STATUSES = ["PRESENT", "LATE", "EXCUSED"];
 
 const toId = (val) => (val && val._id ? val._id.toString() : val ? String(val) : null);
 const round2 = (num) => Math.round(num * 100) / 100;
+const CLASS_STATUSES = ["DRAFT", "PENDING_APPROVAL", "OPEN", "REJECTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
+
+const isNonStringObjectOrArray = (v) =>
+  v !== undefined && v !== null && typeof v === "object" && !(v instanceof mongoose.Types.ObjectId);
+
+const assertQueryIdIfPresent = (value, message, code) => {
+  if (value === undefined || value === null || value === "") return null;
+  if (isNonStringObjectOrArray(value) || typeof value === "boolean") {
+    throw validationError("Invalid identifier format");
+  }
+  assertId(value, message, code);
+  return String(value);
+};
+
+const assertQueryString = (value, field) => {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") throw validationError(`${field} must be a string`);
+  return value.trim();
+};
 
 const pairKey = (classId, studentId) => `${toId(classId)}:${toId(studentId)}`;
 
@@ -69,7 +88,7 @@ const buildStudentClassMetricsMap = async (pairs, { includeItemDetails = false }
     Session.find({ classId: { $in: classIds } })
       .sort({ startDatetime: 1 })
       .select(
-        "classId title sessionNumber startDatetime endDatetime status lifecycleState endReason attendanceFinalizedAt scheduleSource rescheduleMetadata"
+        "classId title sessionNumber startDatetime endDatetime status lifecycleState endReason presenceTrackingActive attendanceFinalizedAt scheduleSource rescheduleMetadata"
       )
       .lean(),
     SessionAttendance.find({ classId: { $in: classIds }, studentId: { $in: studentIds } })
@@ -240,15 +259,18 @@ const buildStudentClassMetricsMap = async (pairs, { includeItemDetails = false }
 
       let effectiveStatus = "PENDING";
       let attPct = null;
+      let isPendingPresenceFinalization = false;
 
       if (attDoc) {
+        isPendingPresenceFinalization =
+          Boolean(s.presenceTrackingActive) && !s.attendanceFinalizedAt && attDoc.evaluationStatus === "PENDING";
         if (attDoc.attendanceStatus === "NOT_EVALUATED" || attDoc.evaluationStatus === "NOT_EVALUATED") {
           notEvaluatedCount += 1;
           effectiveStatus = "NOT_EVALUATED";
         } else if (
-          isCompleted ||
           attDoc.evaluationStatus === "FINALIZED" ||
-          attDoc.evaluationStatus === "EXCUSED"
+          attDoc.evaluationStatus === "EXCUSED" ||
+          (isCompleted && !isPendingPresenceFinalization)
         ) {
           if (attDoc.attendanceStatus === "PRESENT") presentCount += 1;
           else if (attDoc.attendanceStatus === "LATE") lateCount += 1;
@@ -284,7 +306,13 @@ const buildStudentClassMetricsMap = async (pairs, { includeItemDetails = false }
           sessionStatus: s.status,
           attendanceStatus: effectiveStatus,
           attendancePercentage: attPct,
-          evaluationStatus: attDoc ? attDoc.evaluationStatus : isFinalizedSession ? "FINALIZED" : "PENDING",
+          evaluationStatus: isPendingPresenceFinalization
+            ? "PENDING"
+            : attDoc
+              ? attDoc.evaluationStatus
+              : isFinalizedSession
+                ? "FINALIZED"
+                : "PENDING",
         });
       }
     }
@@ -327,8 +355,11 @@ const buildStudentClassMetricsMap = async (pairs, { includeItemDetails = false }
         }
         if (resolvedGrade) {
           gradedAssignmentsCount += 1;
-          const pct = round2((resolvedGrade.score / resolvedGrade.maxScore) * 100);
-          assignmentPercentages.push(pct);
+          const maxSc = Number(resolvedGrade.maxScore);
+          const pct = Number.isFinite(maxSc) && maxSc > 0 ? round2((resolvedGrade.score / maxSc) * 100) : null;
+          if (pct !== null) {
+            assignmentPercentages.push(pct);
+          }
         } else {
           pendingAssignmentGradingCount += 1;
         }
@@ -341,6 +372,12 @@ const buildStudentClassMetricsMap = async (pairs, { includeItemDetails = false }
         if (resolvedGrade) studentStatus = "graded";
         else if (latestSub) studentStatus = latestSub.isLate ? "late" : "submitted";
 
+        const maxScEval = resolvedGrade ? resolvedGrade.maxScore : asgn.maxScore;
+        const pctDetail =
+          resolvedGrade && Number(resolvedGrade.maxScore) > 0
+            ? round2((resolvedGrade.score / Number(resolvedGrade.maxScore)) * 100)
+            : null;
+
         assignmentBreakdown.push({
           assignmentId: toId(asgn._id),
           title: asgn.title,
@@ -352,8 +389,8 @@ const buildStudentClassMetricsMap = async (pairs, { includeItemDetails = false }
           latestSubmittedAt: latestSub ? latestSub.submittedAt : null,
           isLate: latestSub ? Boolean(latestSub.isLate) : false,
           score: resolvedGrade ? resolvedGrade.score : null,
-          maxScoreEvaluated: resolvedGrade ? resolvedGrade.maxScore : asgn.maxScore,
-          percentage: resolvedGrade ? round2((resolvedGrade.score / resolvedGrade.maxScore) * 100) : null,
+          maxScoreEvaluated: maxScEval,
+          percentage: pctDetail,
           gradeStatus: resolvedGrade ? resolvedGrade.status : null,
           gradedAt: resolvedGrade ? resolvedGrade.gradedAt : null,
         });
@@ -396,7 +433,9 @@ const buildStudentClassMetricsMap = async (pairs, { includeItemDetails = false }
 
       if (latestGraded) {
         gradedAssessmentsCount += 1;
-        assessmentPercentages.push(latestGraded.percentage);
+        if (typeof latestGraded.percentage === "number" && Number.isFinite(latestGraded.percentage)) {
+          assessmentPercentages.push(latestGraded.percentage);
+        }
       } else if (submittedOrFinal.some((a) => a.gradingStatus === "PENDING_MANUAL")) {
         pendingAssessmentManualGradingCount += 1;
       }
@@ -621,16 +660,19 @@ const getMyLearningProgress = async (studentId, query = {}, paging) => {
     studentId,
     enrollmentStatus: { $in: ELIGIBLE_ENROLLMENT_STATUSES },
   };
-  if (query.enrollmentStatus) {
-    const reqStatus = String(query.enrollmentStatus).trim().toUpperCase();
+  if (query.enrollmentStatus !== undefined && query.enrollmentStatus !== null && query.enrollmentStatus !== "") {
+    if (typeof query.enrollmentStatus !== "string") {
+      throw validationError(`enrollmentStatus must be one of ${ELIGIBLE_ENROLLMENT_STATUSES.join(", ")}`);
+    }
+    const reqStatus = query.enrollmentStatus.trim().toUpperCase();
     if (!ELIGIBLE_ENROLLMENT_STATUSES.includes(reqStatus)) {
       throw validationError(`enrollmentStatus must be one of ${ELIGIBLE_ENROLLMENT_STATUSES.join(", ")}`);
     }
     enrollmentFilter.enrollmentStatus = reqStatus;
   }
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
-    enrollmentFilter.classId = query.classId;
+  const qClassId = assertQueryIdIfPresent(query.classId, "Class not found", "CLASS_NOT_FOUND");
+  if (qClassId) {
+    enrollmentFilter.classId = qClassId;
   }
 
   const allEnrollments = await Enrollment.find(enrollmentFilter).sort({ createdAt: -1 }).lean();
@@ -745,6 +787,50 @@ const summarizeClassMetricsAcrossStudents = async (cls, enrollments, searchQuery
 
   // Class-level aggregates computed across ALL enrolled students (before search/paging filter)
   const firstSample = metricsMap.values().next().value || null;
+  let totalScheduledSessions = 0;
+  let completedSessionsCount = 0;
+  let cancelledSessionsCount = 0;
+  let sessionDeliveryProgress = null;
+  let totalPublishedAssignments = 0;
+  let totalPublishedAssessments = 0;
+
+  if (firstSample) {
+    totalScheduledSessions = firstSample.attendance.totalScheduledSessions;
+    completedSessionsCount = firstSample.attendance.completedSessionsCount;
+    cancelledSessionsCount = firstSample.attendance.cancelledSessionsCount;
+    sessionDeliveryProgress = firstSample.overall.sessionDeliveryProgress;
+    totalPublishedAssignments = firstSample.assignments.totalPublishedAssignments;
+    totalPublishedAssessments = firstSample.assessments.totalPublishedAssessments;
+  } else {
+    const [classSessions, assignmentCount, assessmentCount] = await Promise.all([
+      Session.find({ classId: cls._id }).select("status lifecycleState").lean(),
+      Assignment.countDocuments({
+        classId: cls._id,
+        ...NOT_DELETED,
+        status: { $in: ["PUBLISHED", "CLOSED"] },
+      }),
+      Assessment.countDocuments({
+        ...NOT_DELETED,
+        status: "PUBLISHED",
+        purpose: { $ne: "PLACEMENT" },
+        $or: [
+          { scopeType: { $in: ["CLASS", "SESSION"] }, classId: cls._id },
+          ...(cls.courseId ? [{ scopeType: "COURSE", courseId: cls.courseId }] : []),
+        ],
+      }),
+    ]);
+    const activeSessions = classSessions.filter(
+      (s) => s.status !== "CANCELLED" && s.lifecycleState !== "RESCHEDULED"
+    );
+    totalScheduledSessions = activeSessions.length;
+    cancelledSessionsCount = classSessions.length - activeSessions.length;
+    completedSessionsCount = activeSessions.filter((s) => s.status === "COMPLETED").length;
+    sessionDeliveryProgress =
+      activeSessions.length > 0 ? round2((completedSessionsCount / activeSessions.length) * 100) : null;
+    totalPublishedAssignments = assignmentCount;
+    totalPublishedAssessments = assessmentCount;
+  }
+
   const classSummary = {
     classId: toId(cls._id),
     className: cls.className,
@@ -754,12 +840,12 @@ const summarizeClassMetricsAcrossStudents = async (cls, enrollments, searchQuery
     teacherId: toId(cls.teacherId),
     teacherName: cls.teacherName || null,
     enrolledStudentsCount: allStudentRows.length,
-    totalScheduledSessions: firstSample ? firstSample.attendance.totalScheduledSessions : 0,
-    completedSessionsCount: firstSample ? firstSample.attendance.completedSessionsCount : 0,
-    cancelledSessionsCount: firstSample ? firstSample.attendance.cancelledSessionsCount : 0,
-    sessionDeliveryProgress: firstSample ? firstSample.overall.sessionDeliveryProgress : null,
-    totalPublishedAssignments: firstSample ? firstSample.assignments.totalPublishedAssignments : 0,
-    totalPublishedAssessments: firstSample ? firstSample.assessments.totalPublishedAssessments : 0,
+    totalScheduledSessions,
+    completedSessionsCount,
+    cancelledSessionsCount,
+    sessionDeliveryProgress,
+    totalPublishedAssignments,
+    totalPublishedAssessments,
     classAverageAttendanceRate: averageNullable(allStudentRows.map((r) => r.attendance.attendanceRate)),
     classAverageAssignmentScorePercentage: averageNullable(
       allStudentRows.map((r) => r.assignments.averageScorePercentage)
@@ -799,6 +885,7 @@ const getTeacherClassLearningProgress = async (teacherId, classId, query = {}, p
   await getVerifiedTeacher(teacherId);
   const clsDoc = await getOwnClass(teacherId, classId);
   const cls = clsDoc.toObject ? clsDoc.toObject() : clsDoc;
+  const search = assertQueryString(query.search, "search");
 
   const enrollments = await Enrollment.find({
     classId: cls._id,
@@ -807,7 +894,7 @@ const getTeacherClassLearningProgress = async (teacherId, classId, query = {}, p
     .sort({ createdAt: 1 })
     .lean();
 
-  return summarizeClassMetricsAcrossStudents(cls, enrollments, query.search ? String(query.search).trim() : "", paging);
+  return summarizeClassMetricsAcrossStudents(cls, enrollments, search, paging);
 };
 
 /**
@@ -855,33 +942,37 @@ const getTeacherStudentLearningProgress = async (teacherId, classId, studentId) 
  */
 const adminGetLearningProgressOverview = async (query = {}, paging) => {
   const filter = { ...NOT_DELETED };
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
-    filter._id = query.classId;
-  }
-  if (query.teacherId) {
-    assertId(query.teacherId, "Teacher not found", "TEACHER_NOT_FOUND");
-    filter.teacherId = query.teacherId;
-  }
-  if (query.courseId) {
-    assertId(query.courseId, "Course not found", "COURSE_NOT_FOUND");
-    filter.courseId = query.courseId;
-  }
-  if (query.subjectId) {
-    assertId(query.subjectId, "Subject not found", "SUBJECT_NOT_FOUND");
-    filter.subjectId = query.subjectId;
-  }
-  if (query.categoryId) {
-    assertId(query.categoryId, "Category not found", "CATEGORY_NOT_FOUND");
-    filter.categoryId = query.categoryId;
-  }
-  if (query.status) {
-    filter.status = String(query.status).trim().toUpperCase();
+  const qClassId = assertQueryIdIfPresent(query.classId, "Class not found", "CLASS_NOT_FOUND");
+  if (qClassId) filter._id = qClassId;
+
+  const qTeacherId = assertQueryIdIfPresent(query.teacherId, "Teacher not found", "TEACHER_NOT_FOUND");
+  if (qTeacherId) filter.teacherId = qTeacherId;
+
+  const qCourseId = assertQueryIdIfPresent(query.courseId, "Course not found", "COURSE_NOT_FOUND");
+  if (qCourseId) filter.courseId = qCourseId;
+
+  const qSubjectId = assertQueryIdIfPresent(query.subjectId, "Subject not found", "SUBJECT_NOT_FOUND");
+  if (qSubjectId) filter.subjectId = qSubjectId;
+
+  const qCategoryId = assertQueryIdIfPresent(query.categoryId, "Category not found", "CATEGORY_NOT_FOUND");
+  if (qCategoryId) filter.categoryId = qCategoryId;
+
+  if (query.status !== undefined && query.status !== null && query.status !== "") {
+    if (typeof query.status !== "string") {
+      throw validationError(`status must be one of ${CLASS_STATUSES.join(", ")}`);
+    }
+    const normalizedStatus = query.status.trim().toUpperCase();
+    if (!CLASS_STATUSES.includes(normalizedStatus)) {
+      throw validationError(`status must be one of ${CLASS_STATUSES.join(", ")}`);
+    }
+    filter.status = normalizedStatus;
   } else {
     filter.status = { $in: ["OPEN", "IN_PROGRESS", "COMPLETED"] };
   }
-  if (query.search) {
-    filter.className = { $regex: escapeRegex(query.search), $options: "i" };
+
+  const search = assertQueryString(query.search, "search");
+  if (search) {
+    filter.className = { $regex: escapeRegex(search), $options: "i" };
   }
 
   const allClasses = await Class.find(filter).sort({ createdAt: -1 }).lean();
@@ -906,11 +997,12 @@ const adminGetLearningProgressOverview = async (query = {}, paging) => {
     .filter((p) => Boolean(p.classDoc));
   const metricsMap = await buildStudentClassMetricsMap(pairs, { includeItemDetails: false });
 
-  // Also count sessions/assignments even for classes that currently have 0 confirmed enrollments
-  const emptyClassSessions = allClasses.length
-    ? await Session.find({
-        classId: { $in: allClasses.filter((c) => !(enrollmentsByClass.get(toId(c._id)) || []).length).map((c) => c._id) },
-      })
+  // Also count sessions even for classes that currently have 0 confirmed enrollments
+  const emptyClassIds = allClasses
+    .filter((c) => !(enrollmentsByClass.get(toId(c._id)) || []).length)
+    .map((c) => c._id);
+  const emptyClassSessions = emptyClassIds.length
+    ? await Session.find({ classId: { $in: emptyClassIds } })
         .select("classId status lifecycleState")
         .lean()
     : [];
@@ -1015,6 +1107,7 @@ const adminGetClassLearningProgress = async (classId, query = {}, paging) => {
   assertId(classId, "Class not found", "CLASS_NOT_FOUND");
   const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
   if (!cls) throw CLASS_NOT_FOUND();
+  const search = assertQueryString(query.search, "search");
 
   const enrollments = await Enrollment.find({
     classId: cls._id,
@@ -1023,7 +1116,7 @@ const adminGetClassLearningProgress = async (classId, query = {}, paging) => {
     .sort({ createdAt: 1 })
     .lean();
 
-  return summarizeClassMetricsAcrossStudents(cls, enrollments, query.search ? String(query.search).trim() : "", paging);
+  return summarizeClassMetricsAcrossStudents(cls, enrollments, search, paging);
 };
 
 const adminGetStudentLearningProgress = async (studentId, query = {}, paging) => {

@@ -1,17 +1,16 @@
-function getSetting(key) {
-  // Temporary mock implementation. Later to be fetched from a DB settings collection or cache.
-  const holdMinutes = parseInt(process.env.SEAT_HOLD_MINUTES, 10) || 15;
-  const commissionRate = parseFloat(process.env.COMMISSION_RATE) || 0.10;
-  const scholarshipValidDays = parseInt(process.env.SCHOLARSHIP_VALID_DAYS, 10) || 180;
+const platformSettingService = require("../services/platformSettingService");
 
-  const settings = {
-    "SEAT_HOLD_DURATION": holdMinutes * 60 * 1000,
-    "COMMISSION_RATE": commissionRate,
-    "SCHOLARSHIP_VALID_DAYS": scholarshipValidDays,
-  };
-  return settings[key];
+/**
+ * Synchronous accessor backed by PlatformSetting cache + zero-safe env fallback + defaults.
+ * Preserves full backwards compatibility with sync callers across Enrollment, Payment, Scholarship, and Settlement.
+ */
+function getSetting(key, now = new Date()) {
+  return platformSettingService.getEffectiveSettingSync(key, now);
 }
 
 module.exports = {
   getSetting,
+  getEffectiveSetting: platformSettingService.getEffectiveSetting,
+  refreshSettingsCache: platformSettingService.warmCache,
+  clearSettingsCache: platformSettingService.clearCache,
 };

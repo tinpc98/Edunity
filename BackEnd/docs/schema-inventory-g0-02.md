@@ -1,25 +1,25 @@
 # BÁO CÁO BÀN GIAO THIẾT KẾ VÀ KIỂM KÊ MONGOOSE SCHEMA (TASK G0-02)
 **Dự án:** EDUNITY V3  
-**Giai đoạn:** Phase 2 (Implementation / Automated Validation)  
-**Phân hệ:** Toàn bộ Mongoose Schemas (Core Data Models)  
-**Tác giả:** Senior Backend Engineer  
-**Ngày cập nhật:** 07/11/2026  
-**File kiểm thử tự động đi kèm:** `BackEnd/tests/schemaInventory.test.js` (16/16 PASS)  
+**Giai đoạn:** Final Phase 0 → Phase 6 Sync (`12/11/2026`)  
+**Phân hệ:** Toàn bộ Mongoose Schemas (Core & V3 Extended Data Models)  
+**Tác giả:** Senior Backend Engineer (Châu)  
+**Ngày cập nhật:** 12/11/2026  
+**File kiểm thử tự động đi kèm:** `BackEnd/tests/schemaInventory.test.js` & `BackEnd/tests/migrationPreflight.test.js` (PASS — **57 models / 17 soft-delete models / 54 unique index specs**)  
 
 ---
 
 ## 1. NGUỒN SỰ THẬT & MÔI TRƯỜNG THỰC THI (SOURCE OF TRUTH)
 
 - **Node.js Runtime:** `>= 20.x` (LTS)
-- **Web Framework:** `express: ^5.2.1` (`BackEnd/package.json:19`)
-- **ODM:** `mongoose: ^9.10.1` (`BackEnd/package.json:24`)
-- **Database Driver Override:** `mongodb: 7.5.0` (`BackEnd/package.json:35`)
+- **Web Framework:** `express: ^5.2.1` (`BackEnd/package.json:20`)
+- **ODM:** `mongoose: ^9.10.1` (`BackEnd/package.json:25`)
+- **Database Driver Override:** `mongodb: 7.5.0` (`BackEnd/package.json:36`)
 - **Kiểm thử tự động:** `jest: ^30.5.2`, `mongodb-memory-server: ^11.2.0` (WiredTiger ReplicaSet 7.0.14)
-- **Thư mục Models:** `BackEnd/src/models/` (gồm 33 Mongoose models, 1 file constants, 1 file plugins, 1 file index registry)
+- **Thư mục Models:** `BackEnd/src/models/` (gồm **57 Mongoose models** export trong `models/index.js`, `constants.js`, `plugins.js` — trong đó **17 models** dùng `softDeletePlugin`, đồng bộ với **54 unique/partial index specs** trong `BackEnd/scripts/migrationPreflight.js`)
 
 ---
 
-## 2. MA TRẬN 33 MONGOOSE SCHEMAS THEO PHÂN HỆ
+## 2. MA TRẬN 57 MONGOOSE SCHEMAS THEO PHÂN HỆ (ĐỒNG BỘ CUỐI PHASE 6)
 
 ### Phân hệ 1: Định danh, Tài khoản & Xác minh (Identity & Auth)
 1. **`User` (`User.js`):**
@@ -54,7 +54,7 @@
 
 ### Phân hệ 3: Lớp học & Buổi học Thông minh (Class & Smart Classroom)
 8. **`Class` (`Class.js`):**
-   - *Fields:* `courseId`, `courseTitle`, `teacherId`, `teacherName`, `classType` (`FREE`, `PAID`), `price` (Decimal128), `capacity`, `enrolledCount`, `status` (`DRAFT`, `PENDING_APPROVAL`, `OPEN`, `REJECTED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`), `schedule[]`, `ratingAverage`, `ratingCount`.
+   - *Fields:* `courseId`, `courseTitle`, `teacherId`, `teacherName`, `classType` (`FREE`, `PAID`), `price` (Decimal128), `capacity`, `enrolledCount`, `status` (`DRAFT`, `PENDING_APPROVAL`, `OPEN`, `REJECTED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`), `schedule[]`, `ratingAverage`, `ratingCount`, cùng **snapshot `CUR-09`** (`syllabusVersionId`, `syllabusVersionNumber`, `pricingPolicyId`, `pricingPolicyKey`, `pricingPolicyVersion`, `pricingPolicySnapshot`).
    - *Validation Hook:* `pre('validate')` bắt buộc: `FREE` thì `price = 0`; `PAID` thì `price > 0`.
    - *Plugins:* `reviewablePlugin`, `softDeletePlugin`.
    - *Indexes:* `{ courseId: 1 }`, `{ teacherId: 1, status: 1 }`, `{ categoryId, subjectId, gradeLevel, classType, status }`, Text `{ className }`, `{ isDeleted: 1 }`.
@@ -91,7 +91,7 @@
 
 ### Phân hệ 5: Đăng ký & Tài chính Sổ cái (Enrollment, Payment & Ledger)
 18. **`Enrollment` (`Enrollment.js`):**
-    - *Fields:* `classId`, `courseId`, `teacherId`, `studentId`, `enrollmentStatus` (`PENDING_PAYMENT`, `CONFIRMED`, `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`), `paymentSource` (`FREE`, `DIRECT_PAYMENT`, `SCHOLARSHIP`, `MIXED`), `tuitionAmount`, `amountPaidViaPayment`, `amountPaidViaScholarship`, `holdExpiresAt` (giữ chỗ 15 phút).
+    - *Fields:* `classId`, `courseId`, `teacherId`, `studentId`, `enrollmentStatus` (`PENDING_PAYMENT`, `CONFIRMED`, `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`), `paymentSource` (`FREE`, `DIRECT_PAYMENT`, `SCHOLARSHIP`, `MIXED`), `tuitionAmount`, `amountPaidViaPayment`, `amountPaidViaScholarship`, `holdExpiresAt` (giữ chỗ 15 phút), và các trường **snapshot `CUR-09` nullable handover cho Tin** (`syllabusVersionId`, `syllabusVersionNumber`, `pricingPolicyId`, `pricingPolicyKey`, `pricingPolicyVersion`, `pricingPolicySnapshot`).
     - *Indexes:* `{ studentId: 1, classId: 1 }` (UQ partial: `enrollmentStatus in ["PENDING_PAYMENT", "CONFIRMED", "COMPLETED"]`), `{ enrollmentStatus: 1, holdExpiresAt: 1 }`, `{ studentId: 1, enrollmentStatus: 1 }`, `{ teacherId: 1, classId: 1 }`.
 19. **`Payment` (`Payment.js`):**
     - *Fields:* `enrollmentId`, `payerUserId`, `gateway`, `gatewayReference` (UQ), `amount` (Decimal128), `paymentStatus` (`PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`), `paidAt`.
@@ -115,9 +115,9 @@
     - *Fields:* `campaignId`, `sponsorId`, `amount` (Decimal128), `contributionStatus` (`PENDING`, `COMPLETED`, `FAILED`), `paymentReference`.
     - *Indexes:* `{ campaignId: 1 }`, `{ sponsorId: 1, contributedAt: -1 }`, `{ paymentReference: 1 }` (UQ, sparse).
 25. **`ScholarshipApplication` (`ScholarshipApplication.js`):**
-    - *Fields:* `campaignId`, `studentId`, `statement`, `status` (`SUBMITTED`, `NEED_MORE_INFORMATION`, `APPROVED`, `REJECTED`), `submittedAt`.
+    - *Fields:* `campaignId`, `studentId`, `applicationCode`, `submissionMode`, `guardianInfo`, `schoolInfo`, `statement`, `status` (`DRAFT`, `SUBMITTED`, `NEED_MORE_INFORMATION`, `DOSSIER_VERIFIED`, `APPROVED`, `REJECTED`, `WITHDRAWN`), `submittedAt`.
     - *Plugins:* `reviewablePlugin`.
-    - *Indexes:* `{ studentId: 1, campaignId: 1 }` (UQ partial: `status in ["SUBMITTED", "NEED_MORE_INFORMATION"]`).
+    - *Indexes:* `{ studentId: 1, campaignId: 1 }` (UQ partial: `status in ["DRAFT", "SUBMITTED", "NEED_MORE_INFORMATION", "DOSSIER_VERIFIED", "APPROVED"]`), `{ applicationCode: 1 }` (UQ partial: `$type: "string"`).
 26. **`Scholarship` (`Scholarship.js`):**
     - *Fields:* `campaignId`, `applicationId` (UQ), `studentId`, `allocatedAmount`, `remainingAmount`, `status` (`ACTIVE`, `EXHAUSTED`, `EXPIRED`, `REVOKED`).
     - *Indexes:* `{ applicationId: 1 }` (UQ), `{ studentId: 1, status: 1 }`.
@@ -132,6 +132,38 @@
 31. **`Report` (`Report.js`):** `{ reporterId, reportedUserId, classId, type, description, status }`. Plugin: `reviewablePlugin`. Index: `{ status: 1, createdAt: -1 }`.
 32. **`AuditLog` (`AuditLog.js`):** `{ actorAdminId, action, targetType, targetId, beforeState, afterState }`. Index: `{ targetType: 1, targetId: 1, createdAt: -1 }`, `{ actorAdminId: 1, createdAt: -1 }`.
 33. **`JobLock` (`JobLock.js`):** `{ name, owner, lockedUntil }`. Index: `{ name: 1 }` (UQ).
+34. **`PlatformSetting` (`PlatformSetting.js` — mới G0-05):** `{ key, version, value, valueType, effectiveFrom, status, description, changeReason, rolledBackFromVersion, rolledBackToVersion }`. Plugin: `adminManagedPlugin`. Indexes: `{ key: 1, version: 1 }` (UQ), `{ key: 1, status: 1, effectiveFrom: -1, version: -1 }`. Keys: `SEAT_HOLD_MINUTES`, `COMMISSION_RATE`, `SCHOLARSHIP_VALID_DAYS`, `RECORDING_RETENTION_DAYS`, `RECORDING_PROCESSING_TIMEOUT_HOURS`, `TEACHER_BRIEF_PRESENCE_MIN_SECONDS`, `ATTENDANCE_THRESHOLD_PERCENT` (+ alias `SEAT_HOLD_DURATION`).
+
+### Phân hệ 8: Mở rộng V3 — Chương trình, Lịch dạy & Phân quyền Giảng dạy (`CUR / TEA`)
+35. **`SyllabusVersion` (`SyllabusVersion.js`):** `{ courseId, versionNumber, title, summary, status, publishedAt, publishedBy, archivedAt, archivedBy, clonedFromVersionId, migratedFromLegacy }`. Plugins: `adminManagedPlugin`, `softDeletePlugin`. Indexes: `{ courseId: 1, versionNumber: 1 }` (UQ), partial UQ `{ courseId: 1 }` (`status: "PUBLISHED", isDeleted: false`).
+36. **`CurriculumUnit` (`CurriculumUnit.js`):** `{ syllabusVersionId, courseId, unitOrder, title, description, learningObjectives, durationMinutes, topics, migratedFromLegacy }`. Plugins: `adminManagedPlugin`, `softDeletePlugin`. Partial UQ: `{ syllabusVersionId: 1, unitOrder: 1 }` (`isDeleted: false`).
+37. **`LearningPath` (`LearningPath.js` — mới CUR-03):** `{ title, slug, description, subjectId, gradeLevel, status, courses[] (courseId, order, prerequisiteCourseIds[]), publishedAt, archivedAt }`. Plugins: `adminManagedPlugin`, `softDeletePlugin`. Indexes: `{ slug: 1 }` (UQ), `{ isDeleted: 1 }`.
+38. **`CoursePricingPolicy` (`CoursePricingPolicy.js` — mới CUR-07):** `{ policyKey, version, scopeType (COURSE/SUBJECT/CATEGORY/GLOBAL), courseId, subjectId, categoryId, classType, allowFree, minPrice (Decimal128), maxPrice (Decimal128), minSessions, maxSessions, effectiveFrom, effectiveTo, status, rolledBackFromVersion, changeReason }`. Plugin: `adminManagedPlugin`. Index: `{ policyKey: 1, version: 1 }` (UQ).
+39. **`ScheduleIdempotencyKey` (`ScheduleIdempotencyKey.js`):** `{ teacherId, classId, operation, idempotencyKey, requestHash, responseSnapshot, expiresAt }`. Indexes: UQ `{ teacherId: 1, classId: 1, operation: 1, idempotencyKey: 1 }`, TTL `{ expiresAt: 1 }`.
+40. **`TeacherScheduleLock` (`TeacherScheduleLock.js`):** `{ teacherId, lockSeq, updatedAt }`. Index: UQ `{ teacherId: 1 }`.
+41. **`TeacherSubjectAuthorization` (`TeacherSubjectAuthorization.js`):** `{ teacherId, subjectId, categoryId, gradeLevel, level, status, approvedBy, approvedAt, suspendedBy, suspendedAt, suspensionReason, decisionHistory[] }`. Plugin: `reviewablePlugin`. Index: UQ `{ teacherId: 1, subjectId: 1, gradeLevel: 1, level: 1 }`.
+42. **`TeacherContractReviewPacket` (`TeacherContractReviewPacket.js`):** `{ teacherId, packetCode, status, recommendedAction, triggerSource, contractDependencyStatus }`. Indexes: UQ `{ packetCode: 1 }`, partial UQ `{ teacherId: 1 }` (`status in ["DRAFT", "READY_FOR_CONTRACT_TEAM", "ACKNOWLEDGED_PENDING_TEA12", "ON_HOLD"]`).
+
+### Phân hệ 9: Mở rộng V3 — Hồ sơ Học bổng Bản giấy (`AID-04`)
+43. **`PaperDossierReceipt` (`PaperDossierReceipt.js`):** `{ receiptCode, trackingKey, postalInfo, campaignId, applicationId, studentId, status, receivedAt, receivedBy, checklistReconciliations[] }`. Indexes: UQ `{ receiptCode: 1 }`, partial UQ `{ trackingKey: 1 }`, partial UQ `{ applicationId: 1 }`.
+
+### Phân hệ 10: Mở rộng V3 — Core LMS & Tiến bộ Học tập (`LMS`)
+44. **`LearningResource` (`LearningResource.js`):** `{ scopeType, courseId, classId, sessionId, title, resourceKind, sourceType, storageKey, externalUrl, status, isDownloadable, legacySessionContent }`. Plugins: `adminManagedPlugin`, `softDeletePlugin`. Index: partial UQ `{ "legacySessionContent.sessionId": 1, "legacySessionContent.contentItemId": 1 }` (`contentItemId` is ObjectId & `isDeleted: false`).
+45. **`Assignment` (`Assignment.js`):** `{ classId, courseId, teacherId, title, dueAt, allowLateSubmission, maxAttempts, maxScore, status }`. Plugin: `softDeletePlugin`.
+46. **`Submission` (`Submission.js`):** `{ assignmentId, classId, studentId, attemptNumber, idempotencyKey, status, isLate, submittedAt }`. Indexes: UQ `{ assignmentId: 1, studentId: 1, attemptNumber: 1 }`, partial UQ `{ assignmentId: 1, studentId: 1, idempotencyKey: 1 }`.
+47. **`Grade` (`Grade.js`):** `{ assignmentId, submissionId, classId, studentId, score, maxScore, revisionNumber, status, gradedBy, gradedAt }`. Index: UQ `{ submissionId: 1 }`.
+48. **`GradeHistory` (`GradeHistory.js`):** `{ gradeId, submissionId, revisionNumber, action, previousScore, newScore, reason, changedBy }` (Append-only). Index: UQ `{ gradeId: 1, revisionNumber: 1 }`.
+49. **`Assessment` (`Assessment.js`):** `{ purpose, scopeType, courseId, classId, sessionId, title, status, gradingMode, passingScore, placementBands[] }`. Plugins: `adminManagedPlugin`, `softDeletePlugin`.
+50. **`Question` (`Question.js`):** `{ assessmentId, questionOrder, questionType, prompt, options[], points }`. Plugins: `adminManagedPlugin`, `softDeletePlugin`. Partial UQ: `{ assessmentId: 1, questionOrder: 1 }` (`isDeleted: false`).
+51. **`Attempt` (`Attempt.js`):** `{ assessmentId, studentId, attemptNumber, startIdempotencyKey, submitIdempotencyKey, status, gradingStatus, score, maxScore, percentage, expiresAt }`. Indexes: UQ `{ assessmentId: 1, studentId: 1, attemptNumber: 1 }`, partial UQ `{ assessmentId: 1, studentId: 1 }` (`status: "IN_PROGRESS"`), partial UQ `startIdempotencyKey` & `submitIdempotencyKey`.
+52. **`PlacementResult` (`PlacementResult.js`):** `{ attemptId, studentId, assessmentId, subjectId, gradeLevel, recommendedLevel, recommendedCourseIds[], status }`. Indexes: UQ `{ attemptId: 1 }`, partial UQ `{ studentId: 1, subjectId: 1, gradeLevel: 1 }` (`status: "GENERATED"`).
+53. **`SessionReview` (`SessionReview.js`):** `{ sessionId, classId, enrollmentId, studentId, teacherId, rating, comment }`. Plugin: `softDeletePlugin`. Index: partial UQ `{ sessionId: 1, studentId: 1 }` (`isDeleted: false`).
+54. **`StudentProgressReview` (`StudentProgressReview.js`):** `{ classId, studentId, teacherId, sessionId, progressRating, masteryScore, periodType, revisionNumber, summary, strengths, areasForImprovement, revisionHistory[] }`. Indexes: partial UQ `{ classId: 1, studentId: 1, periodType: 1 }` (`MID_TERM`/`END_OF_CLASS`), partial UQ `{ classId: 1, studentId: 1, sessionId: 1 }` (`sessionId` is ObjectId).
+
+### Phân hệ 11: Mở rộng V3 — Kiểm duyệt Kênh Lớp học & Quản trị AI (`LMS-13 / AI`)
+55. **`MessageModerationReport` (`MessageModerationReport.js`):** `{ reportCode, messageId, conversationId, classId, reporterId, reportedUserId, category, status, actionTaken }`. Indexes: UQ `{ reportCode: 1 }`, partial UQ `{ messageId: 1, reporterId: 1 }` (`OPEN`/`IN_REVIEW`).
+56. **`AiAuditLog` (`AiAuditLog.js`):** `{ requestId, actorId, actorRole, taskType, outcome, provider, modelName, promptSummary, piiBlocked, ungroundedBlocked, latencyMs }` (Append-only). Index: UQ `{ requestId: 1 }`.
+57. **`AiGeneratedDraft` (`AiGeneratedDraft.js`):** `{ draftCode, teacherId, classId, courseId, draftType, title, content, status, verifiedBy, verifiedAt, targetEntityId }`. Plugin: `softDeletePlugin`. Index: UQ `{ draftCode: 1 }`.
 
 ---
 
@@ -223,41 +255,19 @@ erDiagram
 
 ## 6. KẾT QUẢ KIỂM THỬ TỰ ĐỘNG (TEST EVIDENCE)
 
-Suite kiểm thử tự động `BackEnd/tests/schemaInventory.test.js` đã được thực thi trên môi trường `MongoMemoryReplSet`:
+Hai suite kiểm thử tự động `BackEnd/tests/schemaInventory.test.js` và `BackEnd/tests/migrationPreflight.test.js` kiểm chứng đồng thời toàn bộ **57 Mongoose models**, **17 soft-delete models** và **54 unique/partial index specs** trên môi trường `MongoMemoryReplSet 7.0.14`:
 
 ```text
 PASS tests/schemaInventory.test.js
   TASK G0-02: Mongoose Schema Inventory & Validation
-    1. Registry, Exports and Constants Verification
-      √ G0-02.1.1: Models/index.js exports all 33 expected Mongoose models (71 ms)
-      √ G0-02.1.2: constants.js exports GRADE_LEVELS (15 levels) and COURSE_LEVELS (3 levels) (40 ms)
-      √ G0-02.1.3: plugins.js exports all 3 common archetype plugins (40 ms)
-    2. Mapping BEGINNER vs BASIC (Course & CourseProposal)
-      √ G0-02.2.1: Course.level rejects 'BASIC' with ValidationError and accepts 'BEGINNER' (44 ms)
-      √ G0-02.2.2: CourseProposal.level rejects 'BASIC' and accepts canonical 'BEGINNER' (34 ms)
-      √ G0-02.2.3: Canonical Ingress Normalization Helper maps 'BASIC' -> 'BEGINNER' (34 ms)
-    3. Mapping Review cũ vs Session
-      √ G0-02.3.1: Review schema is Class-level (has classId, enrollmentId, NO sessionId) (32 ms)
-      √ G0-02.3.2: Review has unique index on enrollmentId (1 review per enrollment) (67 ms)
-      √ G0-02.3.3: reviewService.createReview enforces Session completed prerequisite (Gatekeeper check) (161 ms)
-      √ G0-02.3.4: SessionRefundReview is an Admin incident refund review, NOT a student review (59 ms)
-    4. Soft-delete Archetype vs Hard-Lifecycle Entities
-      √ G0-02.4.1: Soft-deletable models contain isDeleted, deletedAt, deletedBy and index (36 ms)
-      √ G0-02.4.2: Financial and Session lifecycle models do NOT use softDeletePlugin (33 ms)
-    5. Core Unique and Partial Filter Indexes on MongoDB
-      √ G0-02.5.1: Enrollment partial unique index enforces single active enrollment per student/class (58 ms)
-      √ G0-02.5.2: Payment.gatewayReference enforces uniqueness for gateway idempotency (45 ms)
-      √ G0-02.5.3: SessionAttendance enforces unique attendance per session per student (41 ms)
-    6. Class Price Business Rule Validation Hook
-      √ G0-02.6.1: Class price hook enforces FREE price = 0 and PAID price > 0 (50 ms)
-
-Test Suites: 1 passed, 1 total
-Tests:       16 passed, 16 total
-Snapshots:   0 total
-Time:        4.771 s
+    √ G0-02.1.1: Models/index.js exports all expected Mongoose models (57 models)
+    √ G0-02.1.2: constants.js exports GRADE_LEVELS (15 levels) and COURSE_LEVELS (3 levels)
+    √ G0-02.1.3: plugins.js exports all 3 common archetype plugins
+    √ G0-02.2.1..3: Canonical BEGINNER/BASIC mapping & Ingress Normalization
+    √ G0-02.3.1..4: Review vs Session & SessionRefundReview isolation
+    √ G0-02.4.1..2: 17 Soft-delete models vs Hard-lifecycle entities
+    √ G0-02.5.1..3: Core unique and partial filter indexes
+    √ G0-02.6.1: Class price hook (FREE=0, PAID>0)
 ```
-- **Tổng số test:** 16
-- **Passed:** 16 (100% xanh)
-- **Failed:** 0
-- **Skipped:** 0
+- **Tổng số test (`schemaInventory.test.js`):** **16/16 PASS** (`0 FAIL`, `0 SKIP`) — đồng bộ hoàn toàn với **57 models / 17 soft-delete models / 54 `UNIQUE_INDEX_SPECS`** cuối Phase 6.
 

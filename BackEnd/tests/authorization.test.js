@@ -52,6 +52,9 @@ const PUBLIC_ROUTES = new Set([
   "get /api/courses",
   "get /api/courses/:id",
   "get /api/courses/:id/classes",
+  "get /api/courses/:id/syllabus",
+  "get /api/learning-paths",
+  "get /api/learning-paths/:id",
   "get /api/campaigns",
   "get /api/campaigns/:id",
   "get /api/files/download", // the signature is the credential

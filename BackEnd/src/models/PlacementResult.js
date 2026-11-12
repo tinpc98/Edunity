@@ -33,6 +33,13 @@ const placementResultSchema = new Schema(
 
 placementResultSchema.index({ studentId: 1, subjectId: 1, gradeLevel: 1, evaluatedAt: -1 });
 placementResultSchema.index({ studentId: 1, evaluatedAt: -1 });
+placementResultSchema.index(
+  { studentId: 1, subjectId: 1, gradeLevel: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: "GENERATED" },
+  }
+);
 
 module.exports = mongoose.model("PlacementResult", placementResultSchema);
 

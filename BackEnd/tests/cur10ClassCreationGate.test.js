@@ -107,21 +107,26 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
     });
     await expect(docNull.validate()).resolves.toBeUndefined();
 
+    expect(Class.schema.paths.syllabusVersionId).toBeDefined();
+    expect(Class.schema.paths.pricingPolicyVersion).toBeDefined();
+
     expect(classCreationGateService.getDependencyStatus()).toEqual({
-      cur07PricingPolicyReady: false,
+      cur07PricingPolicyReady: true,
       tea12ContractReady: false,
     });
   });
 
   // =========================================================================
-  // 2. Fail-Closed Proof: VERIFIED !== Contract ACTIVE & CUR-07 Missing
+  // 2. Fail-Closed Proof: VERIFIED !== Contract ACTIVE & CUR-07 Port
   // =========================================================================
   test("CUR-10.2: Fails closed (503) when CUR-07 or TEA-12 contract dependencies are missing, NEVER substituting VERIFIED for ACTIVE", async () => {
     mockCatalogAndAuth();
     const saveSpy = jest.spyOn(Class.prototype, "save");
 
-    // Both missing -> blocked at CUR-07 first
-    await expect(teacherClassService.createClass(teacherId, validBody)).rejects.toMatchObject({
+    // Explicit missing CUR-07 verifier -> blocked at CUR-07 with 503
+    await expect(
+      teacherClassService.createClass(teacherId, validBody, { pricingPolicyVerifier: null })
+    ).rejects.toMatchObject({
       code: "PRICING_POLICY_DEPENDENCY_BLOCKED",
       statusCode: 503,
     });
@@ -137,10 +142,11 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
       statusCode: 503,
     });
 
-    // Inject TEA-12 only -> still fails closed on CUR-07
+    // Inject TEA-12 while CUR-07 disabled -> still fails closed on CUR-07
     mockCatalogAndAuth();
     await expect(
       teacherClassService.createClass(teacherId, validBody, {
+        pricingPolicyVerifier: null,
         contractVerifier: async () => ({ status: "ACTIVE" }),
       })
     ).rejects.toMatchObject({
@@ -177,12 +183,16 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
       });
     }
 
-    // BASIC alias normalizes to BEGINNER and passes alignment check cleanly (stops at missing CUR-07)
+    // BASIC alias normalizes to BEGINNER and passes alignment & CUR-07 check cleanly (stops at fail-closed TEA-12)
     mockCatalogAndAuth();
     await expect(
-      teacherClassService.createClass(teacherId, { ...validBody, level: "BASIC" })
+      teacherClassService.createClass(
+        teacherId,
+        { ...validBody, level: "BASIC" },
+        { pricingPolicyVerifier: async () => ({ valid: true }) }
+      )
     ).rejects.toMatchObject({
-      code: "PRICING_POLICY_DEPENDENCY_BLOCKED",
+      code: "CONTRACT_DEPENDENCY_BLOCKED",
       statusCode: 503,
     });
   });

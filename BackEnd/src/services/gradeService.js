@@ -11,10 +11,44 @@ const gradeNotFound = () => new AppError("Grade not found", "GRADE_NOT_FOUND", 4
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
+const assertOptionalString = (value, field) => {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "string") {
+    throw validationError(`${field} must be a string`);
+  }
+  return value;
+};
+
+const assertFiniteNumeric = (value, field) => {
+  if (
+    typeof value === "boolean" ||
+    Array.isArray(value) ||
+    (typeof value === "object" && value !== null) ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    throw validationError(`${field} must be a finite number`);
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    throw validationError(`${field} must be a finite number`);
+  }
+  return num;
+};
+
+const assertQueryObjectId = (value, message, code, field = "id") => {
+  if (typeof value !== "string" && !(value instanceof mongoose.Types.ObjectId)) {
+    throw validationError(`${field} must be a valid identifier string`);
+  }
+  assertId(value, message, code);
+  return value;
+};
+
 const parseGradePayload = (assignment, body = {}, { requireReason = false } = {}) => {
   const maxScore = assignment.maxScore;
-  const feedback = body.feedback !== undefined && body.feedback !== null ? String(body.feedback).trim() : "";
-  const reason = body.reason !== undefined && body.reason !== null ? String(body.reason).trim() : "";
+  const feedbackRaw = assertOptionalString(body.feedback, "feedback");
+  const reasonRaw = assertOptionalString(body.reason, "reason");
+  const feedback = feedbackRaw !== undefined && feedbackRaw !== null ? feedbackRaw.trim() : "";
+  const reason = reasonRaw !== undefined && reasonRaw !== null ? reasonRaw.trim() : "";
   if (requireReason && isBlank(reason)) {
     throw validationError("reason is required when regrading a submission");
   }
@@ -36,10 +70,10 @@ const parseGradePayload = (assignment, body = {}, { requireReason = false } = {}
       let sum = 0;
 
       rubricBreakdown = body.rubricBreakdown.map((entry, idx) => {
-        if (!entry || isBlank(entry.criterionCode)) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry) || isBlank(entry.criterionCode)) {
           throw validationError(`rubricBreakdown[${idx}].criterionCode is required`);
         }
-        const code = String(entry.criterionCode).trim().toUpperCase();
+        const code = entry.criterionCode.trim().toUpperCase();
         const criterion = criterionMap.get(code);
         if (!criterion) {
           throw validationError(`Unknown rubric criterionCode "${code}" for this assignment`);
@@ -49,12 +83,13 @@ const parseGradePayload = (assignment, body = {}, { requireReason = false } = {}
         }
         seen.add(code);
 
-        const itemScore = Number(entry.score);
-        if (!Number.isFinite(itemScore) || itemScore < 0 || itemScore > criterion.maxPoints) {
+        const itemScore = assertFiniteNumeric(entry.score, `rubricBreakdown[${idx}].score`);
+        if (itemScore < 0 || itemScore > criterion.maxPoints) {
           throw validationError(
             `rubricBreakdown[${idx}].score must be between 0 and ${criterion.maxPoints} for criterion "${code}"`
           );
         }
+        const commentRaw = assertOptionalString(entry.comment, `rubricBreakdown[${idx}].comment`);
         const rounded = round2(itemScore);
         sum += rounded;
         return {
@@ -62,7 +97,7 @@ const parseGradePayload = (assignment, body = {}, { requireReason = false } = {}
           title: criterion.title,
           score: rounded,
           maxPoints: criterion.maxPoints,
-          comment: entry.comment ? String(entry.comment).trim() : "",
+          comment: commentRaw ? commentRaw.trim() : "",
         };
       });
 
@@ -75,31 +110,35 @@ const parseGradePayload = (assignment, body = {}, { requireReason = false } = {}
       const seen = new Set();
       let sum = 0;
       rubricBreakdown = body.rubricBreakdown.map((entry, idx) => {
-        if (!entry || isBlank(entry.title)) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry) || isBlank(entry.title)) {
           throw validationError(`rubricBreakdown[${idx}].title is required`);
         }
+        if (entry.criterionCode !== undefined && entry.criterionCode !== null && typeof entry.criterionCode !== "string") {
+          throw validationError(`rubricBreakdown[${idx}].criterionCode must be a string`);
+        }
         const code = !isBlank(entry.criterionCode)
-          ? String(entry.criterionCode).trim().toUpperCase()
+          ? entry.criterionCode.trim().toUpperCase()
           : `CRIT_${idx + 1}`;
         if (seen.has(code)) throw validationError(`Duplicate criterionCode "${code}" in rubricBreakdown`);
         seen.add(code);
 
-        const maxPoints = Number(entry.maxPoints);
-        const itemScore = Number(entry.score);
-        if (!Number.isFinite(maxPoints) || maxPoints <= 0) {
+        const maxPoints = assertFiniteNumeric(entry.maxPoints, `rubricBreakdown[${idx}].maxPoints`);
+        const itemScore = assertFiniteNumeric(entry.score, `rubricBreakdown[${idx}].score`);
+        if (maxPoints <= 0) {
           throw validationError(`rubricBreakdown[${idx}].maxPoints must be > 0`);
         }
-        if (!Number.isFinite(itemScore) || itemScore < 0 || itemScore > maxPoints) {
+        if (itemScore < 0 || itemScore > maxPoints) {
           throw validationError(`rubricBreakdown[${idx}].score must be between 0 and maxPoints`);
         }
+        const commentRaw = assertOptionalString(entry.comment, `rubricBreakdown[${idx}].comment`);
         const rounded = round2(itemScore);
         sum += rounded;
         return {
           criterionCode: code,
-          title: String(entry.title).trim(),
+          title: entry.title.trim(),
           score: rounded,
           maxPoints: round2(maxPoints),
-          comment: entry.comment ? String(entry.comment).trim() : "",
+          comment: commentRaw ? commentRaw.trim() : "",
         };
       });
       computedScoreFromRubric = round2(sum);
@@ -108,8 +147,8 @@ const parseGradePayload = (assignment, body = {}, { requireReason = false } = {}
 
   let score;
   if (body.score !== undefined && body.score !== null) {
-    const num = Number(body.score);
-    if (!Number.isFinite(num) || num < 0 || num > maxScore) {
+    const num = assertFiniteNumeric(body.score, "score");
+    if (num < 0 || num > maxScore) {
       throw validationError(`score must be a finite number between 0 and ${maxScore}`);
     }
     score = round2(num);
@@ -301,6 +340,21 @@ const regradeSubmission = async (teacherId, submissionId, body = {}) => {
   if (!assignment) throw new AppError("Assignment not found", "ASSIGNMENT_NOT_FOUND", 404);
 
   const parsed = parseGradePayload(assignment, body, { requireReason: true });
+  const preGrade = await Grade.findOne({ submissionId: preSubmission._id }).lean();
+  if (!preGrade) throw gradeNotFound();
+
+  let expectedRevision = preGrade.revisionNumber;
+  if (body.expectedRevisionNumber !== undefined && body.expectedRevisionNumber !== null) {
+    const reqRev = assertFiniteNumeric(body.expectedRevisionNumber, "expectedRevisionNumber");
+    if (!Number.isInteger(reqRev) || reqRev < 1) {
+      throw validationError("expectedRevisionNumber must be a positive integer");
+    }
+    if (reqRev !== preGrade.revisionNumber) {
+      throw new AppError("Concurrent regrade detected; please retry", "REGRADE_CONFLICT", 409);
+    }
+    expectedRevision = reqRev;
+  }
+
   const now = new Date();
 
   let gradeDoc;
@@ -317,21 +371,35 @@ const regradeSubmission = async (teacherId, submissionId, body = {}) => {
       if (!grade) {
         throw gradeNotFound();
       }
+      if (grade.revisionNumber !== expectedRevision) {
+        throw new AppError("Concurrent regrade detected; please retry", "REGRADE_CONFLICT", 409);
+      }
 
-      const nextRev = grade.revisionNumber + 1;
+      const currentRev = grade.revisionNumber;
+      const nextRev = currentRev + 1;
       const previousScore = grade.score;
       const previousFeedback = grade.feedback;
       const previousRubricBreakdown = grade.rubricBreakdown ? [...grade.rubricBreakdown] : [];
 
-      grade.score = parsed.score;
-      grade.feedback = parsed.feedback;
-      grade.rubricBreakdown = parsed.rubricBreakdown;
-      grade.status = "REGRADED";
-      grade.revisionNumber = nextRev;
-      grade.lastUpdatedBy = teacherId;
-      grade.lastUpdatedAt = now;
-      await grade.save({ session: dbSession });
-      gradeDoc = grade;
+      const casUpdatedGrade = await Grade.findOneAndUpdate(
+        { _id: grade._id, revisionNumber: expectedRevision },
+        {
+          $set: {
+            score: parsed.score,
+            feedback: parsed.feedback,
+            rubricBreakdown: parsed.rubricBreakdown,
+            status: "REGRADED",
+            revisionNumber: nextRev,
+            lastUpdatedBy: teacherId,
+            lastUpdatedAt: now,
+          },
+        },
+        { session: dbSession, returnDocument: "after" }
+      );
+      if (!casUpdatedGrade) {
+        throw new AppError("Concurrent regrade detected; please retry", "REGRADE_CONFLICT", 409);
+      }
+      gradeDoc = casUpdatedGrade;
 
       [historyDoc] = await GradeHistory.create(
         [
@@ -369,6 +437,11 @@ const regradeSubmission = async (teacherId, submissionId, body = {}) => {
       await submission.save({ session: dbSession });
       updatedSubmission = submission;
     });
+  } catch (err) {
+    if (err && err.code === 11000) {
+      throw new AppError("Concurrent regrade detected; please retry", "REGRADE_CONFLICT", 409);
+    }
+    throw err;
   } finally {
     await dbSession.endSession();
   }
@@ -439,17 +512,14 @@ const adminGetSubmissionGradeHistory = async (submissionId) => {
 
 const adminListGradeHistory = async (query = {}, paging) => {
   const filter = {};
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
-    filter.classId = query.classId;
+  if (query.classId !== undefined && query.classId !== "") {
+    filter.classId = assertQueryObjectId(query.classId, "Class not found", "CLASS_NOT_FOUND", "classId");
   }
-  if (query.assignmentId) {
-    assertId(query.assignmentId, "Assignment not found", "ASSIGNMENT_NOT_FOUND");
-    filter.assignmentId = query.assignmentId;
+  if (query.assignmentId !== undefined && query.assignmentId !== "") {
+    filter.assignmentId = assertQueryObjectId(query.assignmentId, "Assignment not found", "ASSIGNMENT_NOT_FOUND", "assignmentId");
   }
-  if (query.studentId) {
-    assertId(query.studentId, "Student not found", "NOT_FOUND");
-    filter.studentId = query.studentId;
+  if (query.studentId !== undefined && query.studentId !== "") {
+    filter.studentId = assertQueryObjectId(query.studentId, "Student not found", "NOT_FOUND", "studentId");
   }
 
   const [items, total] = await Promise.all([
@@ -487,9 +557,8 @@ const getMySubmissionGrade = async (studentId, submissionId) => {
 
 const listMyGrades = async (studentId, query = {}, paging) => {
   const filter = { studentId };
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
-    filter.classId = query.classId;
+  if (query.classId !== undefined && query.classId !== "") {
+    filter.classId = assertQueryObjectId(query.classId, "Class not found", "CLASS_NOT_FOUND", "classId");
   }
 
   const [grades, total] = await Promise.all([

@@ -8,6 +8,7 @@ const {
   User,
 } = require("../models");
 const { AppError, FORBIDDEN } = require("../utils/errors");
+const { getSetting } = require("../utils/settings");
 const videoProvider = require("./videoProvider");
 const { notifyOnce, notifyAdminsOnce } = require("./notificationService");
 const incidentService = require("./sessionIncidentService");
@@ -20,8 +21,10 @@ const TEACHER_YELLOW_LATE_MS = 10 * 60 * 1000; // 10 minutes
 const TEACHER_RED_LATE_MS = 20 * 60 * 1000; // 20 minutes
 const TEACHER_NO_SHOW_CANCEL_MS = 30 * 60 * 1000; // 30 minutes
 const TEACHER_CONTINUOUS_ABSENCE_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
-const getTeacherBriefPresenceMinSeconds = () =>
-  Number(process.env.TEACHER_BRIEF_PRESENCE_MIN_SECONDS) || 5 * 60;
+const getTeacherBriefPresenceMinSeconds = () => {
+  const val = getSetting("TEACHER_BRIEF_PRESENCE_MIN_SECONDS");
+  return Number.isFinite(val) ? val : 5 * 60;
+};
 const TEACHER_BRIEF_PRESENCE_MIN_SECONDS = getTeacherBriefPresenceMinSeconds(); // Proposed 5m threshold (configurable, Admin review only)
 const POST_END_GRACE_PERIOD_MS = 30 * 60 * 1000; // 30 minutes after endDatetime
 const ATTENDANCE_THRESHOLD_PERCENT = 70;

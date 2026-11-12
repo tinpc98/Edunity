@@ -1,6 +1,7 @@
 const reviews = require("../services/reviewService");
 const verifications = require("../services/teacherVerificationService");
 const notifications = require("../services/notificationService");
+const platformSettings = require("../services/platformSettingService");
 const { handle, parsePaging } = require("../utils/http");
 
 const body = (req) => req.body || {};
@@ -33,3 +34,15 @@ exports.getMyNotifications = handle((req) =>
 );
 exports.markNotificationAsRead = handle((req) => notifications.markAsRead(req.user.id, req.params.id));
 exports.markAllNotificationsAsRead = handle((req) => notifications.markAllAsRead(req.user.id));
+
+// Admin Platform Settings (G0-05)
+exports.adminListSettings = handle(() => platformSettings.listSettings());
+exports.adminGetSetting = handle((req) =>
+  platformSettings.getSettingHistory(req.params.key, parsePaging(req.query))
+);
+exports.adminUpdateSetting = handle((req) =>
+  platformSettings.upsertSettingVersion(req.user.id, req.params.key, body(req))
+);
+exports.adminRollbackSetting = handle((req) =>
+  platformSettings.rollbackSetting(req.user.id, req.params.key, body(req))
+);

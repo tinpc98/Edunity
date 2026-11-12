@@ -17,6 +17,7 @@ const { validationError, parseDate, isBlank, paged } = require("../utils/http");
 const storageService = require("./storageService");
 const { notifyOnce, notifyAdminsOnce } = require("./notificationService");
 const { issueSessionRefund } = require("./settlementService");
+const { runInTeacherScheduleTx } = require("../utils/teacherScheduleLock");
 
 const SEVERITY_RANK = {
   YELLOW: 1,
@@ -62,7 +63,7 @@ const getEnrolledStudentIds = async (classId) => {
     classId,
     enrollmentStatus: "CONFIRMED",
   })
-    .select("_id studentId paidAmount scholarshipApplied")
+    .select("_id studentId amountPaidViaPayment amountPaidViaScholarship tuitionAmount paymentSource")
     .lean();
   return enrollments;
 };
@@ -448,6 +449,7 @@ const assertNoScheduleConflict = async ({
   startDatetime,
   endDatetime,
   excludeSessionId = null,
+  dbSession = null,
 }) => {
   if (
     !(startDatetime instanceof Date) ||
@@ -469,14 +471,9 @@ const assertNoScheduleConflict = async ({
     baseFilter._id = { $ne: excludeSessionId };
   }
 
-  const [teacherConflict, classConflict] = await Promise.all([
-    Session.findOne({ ...baseFilter, teacherId })
-      .select("_id title startDatetime endDatetime")
-      .lean(),
-    Session.findOne({ ...baseFilter, classId })
-      .select("_id title startDatetime endDatetime")
-      .lean(),
-  ]);
+  const teacherQuery = Session.findOne({ ...baseFilter, teacherId }).select("_id title startDatetime endDatetime");
+  if (dbSession) teacherQuery.session(dbSession);
+  const teacherConflict = await teacherQuery.lean();
 
   if (teacherConflict) {
     throw new AppError(
@@ -485,6 +482,11 @@ const assertNoScheduleConflict = async ({
       409,
     );
   }
+
+  const classQuery = Session.findOne({ ...baseFilter, classId }).select("_id title startDatetime endDatetime");
+  if (dbSession) classQuery.session(dbSession);
+  const classConflict = await classQuery.lean();
+
   if (classConflict) {
     throw new AppError(
       `Proposed schedule conflicts with class session "${classConflict.title}"`,
@@ -746,6 +748,17 @@ const requestSessionReschedule = async (teacherId, sessionId, body) => {
     throw FORBIDDEN("You can only reschedule your own sessions");
   }
 
+  const cls = await Class.findOne({ _id: session.classId, isDeleted: { $ne: true } })
+    .select("status")
+    .lean();
+  if (!cls || ["COMPLETED", "CANCELLED"].includes(cls.status)) {
+    throw new AppError(
+      "Cannot reschedule sessions of a completed or cancelled class",
+      "CLASS_CLOSED",
+      409,
+    );
+  }
+
   if (!body || isBlank(body.reason)) {
     throw validationError("reason is required");
   }
@@ -757,6 +770,17 @@ const requestSessionReschedule = async (teacherId, sessionId, body) => {
     body.proposedEndDatetime,
     "proposedEndDatetime",
   );
+
+  if (proposedStartDatetime >= proposedEndDatetime) {
+    throw validationError("proposedStartDatetime must be before proposedEndDatetime");
+  }
+  if (proposedStartDatetime <= new Date()) {
+    throw new AppError(
+      "proposedStartDatetime must be in the future",
+      "SESSION_IN_PAST",
+      400,
+    );
+  }
 
   await assertNoScheduleConflict({
     teacherId,
@@ -817,8 +841,9 @@ const requestSessionReschedule = async (teacherId, sessionId, body) => {
 
 /**
  * Admin reviews a Reschedule Request (`APPROVED` or `REJECTED`).
- * When approved, creates a linked makeup Session while preserving the original Session,
- * attendance history, and recording history.
+ * When approved, runs serialized under TeacherScheduleLock inside a MongoDB ReplSet transaction,
+ * checks schedule conflicts atomically with CAS, and creates a linked makeup Session while preserving
+ * the original Session, attendance history, and recording history.
  */
 const reviewRescheduleRequest = async (adminId, requestId, body) => {
   if (!mongoose.isValidObjectId(requestId)) {
@@ -828,15 +853,20 @@ const reviewRescheduleRequest = async (adminId, requestId, body) => {
       404,
     );
   }
-  const reqDoc = await SessionRescheduleRequest.findById(requestId);
-  if (!reqDoc) {
+  const decision = body?.decision;
+  if (!["APPROVED", "REJECTED"].includes(decision)) {
+    throw validationError("decision must be APPROVED or REJECTED");
+  }
+
+  const preReq = await SessionRescheduleRequest.findById(requestId).lean();
+  if (!preReq) {
     throw new AppError(
       "Reschedule request not found",
       "RESCHEDULE_REQUEST_NOT_FOUND",
       404,
     );
   }
-  if (reqDoc.status !== "PENDING_ADMIN_APPROVAL") {
+  if (preReq.status !== "PENDING_ADMIN_APPROVAL") {
     throw new AppError(
       "Reschedule request has already been reviewed",
       "RESCHEDULE_ALREADY_REVIEWED",
@@ -844,107 +874,221 @@ const reviewRescheduleRequest = async (adminId, requestId, body) => {
     );
   }
 
-  const decision = body?.decision;
-  if (!["APPROVED", "REJECTED"].includes(decision)) {
-    throw validationError("decision must be APPROVED or REJECTED");
-  }
-
-  const originalSession = await Session.findById(reqDoc.originalSessionId);
-  if (!originalSession) {
+  const preOriginal = await Session.findById(preReq.originalSessionId).lean();
+  if (!preOriginal) {
     throw new AppError("Original session not found", "SESSION_NOT_FOUND", 404);
   }
 
-  const enrollments = await getEnrolledStudentIds(originalSession.classId);
+  const txOutcome = await runInTeacherScheduleTx(
+    preOriginal.teacherId,
+    async (dbSession) => {
+      const now = new Date();
+      const reqDoc = await SessionRescheduleRequest.findById(requestId)
+        .session(dbSession)
+        .lean();
+      if (!reqDoc) {
+        throw new AppError(
+          "Reschedule request not found",
+          "RESCHEDULE_REQUEST_NOT_FOUND",
+          404,
+        );
+      }
+      if (reqDoc.status !== "PENDING_ADMIN_APPROVAL") {
+        throw new AppError(
+          "Reschedule request has already been reviewed",
+          "RESCHEDULE_ALREADY_REVIEWED",
+          409,
+        );
+      }
+
+      const originalSession = await Session.findById(
+        reqDoc.originalSessionId,
+      ).session(dbSession);
+      if (!originalSession) {
+        throw new AppError("Original session not found", "SESSION_NOT_FOUND", 404);
+      }
+
+      if (decision === "APPROVED") {
+        const cls = await Class.findOne({
+          _id: originalSession.classId,
+          isDeleted: { $ne: true },
+        })
+          .select("status")
+          .session(dbSession)
+          .lean();
+        if (!cls || ["COMPLETED", "CANCELLED"].includes(cls.status)) {
+          throw new AppError(
+            "Cannot approve reschedule for a completed or cancelled class",
+            "CLASS_CLOSED",
+            409,
+          );
+        }
+        if (new Date(reqDoc.proposedStartDatetime) <= now) {
+          throw new AppError(
+            "proposedStartDatetime must be in the future",
+            "SESSION_IN_PAST",
+            400,
+          );
+        }
+
+        await assertNoScheduleConflict({
+          teacherId: originalSession.teacherId,
+          classId: originalSession.classId,
+          startDatetime: reqDoc.proposedStartDatetime,
+          endDatetime: reqDoc.proposedEndDatetime,
+          excludeSessionId: originalSession._id,
+          dbSession,
+        });
+
+        const enrollments = await Enrollment.find({
+          classId: originalSession.classId,
+          enrollmentStatus: "CONFIRMED",
+        })
+          .select("_id studentId")
+          .session(dbSession)
+          .lean();
+
+        const [makeupSession] = await Session.create(
+          [
+            {
+              classId: originalSession.classId,
+              className: originalSession.className,
+              teacherId: originalSession.teacherId,
+              title:
+                reqDoc.proposedTitle || `${originalSession.title} (Buổi học bù)`,
+              scheduleSource: "MAKEUP",
+              description: originalSession.description,
+              contents: originalSession.contents || [],
+              startDatetime: reqDoc.proposedStartDatetime,
+              endDatetime: reqDoc.proposedEndDatetime,
+              status: "SCHEDULED",
+              roomState: "NOT_OPEN",
+              lifecycleState: "SCHEDULED",
+              rescheduleMetadata: {
+                rescheduledFromSessionId: originalSession._id,
+                rescheduleRequestId: reqDoc._id,
+                isMakeupSession: true,
+                rescheduleCount:
+                  (originalSession.rescheduleMetadata?.rescheduleCount || 0) + 1,
+              },
+            },
+          ],
+          { session: dbSession },
+        );
+
+        const updatedReq = await SessionRescheduleRequest.findOneAndUpdate(
+          { _id: reqDoc._id, status: "PENDING_ADMIN_APPROVAL" },
+          {
+            $set: {
+              status: "APPROVED",
+              makeupSessionId: makeupSession._id,
+              reviewedBy: adminId,
+              reviewedAt: now,
+              adminNote: body?.note || null,
+              studentConfirmations: enrollments.map((e) => ({
+                studentId: e.studentId,
+                status: "PENDING",
+                respondedAt: null,
+              })),
+            },
+          },
+          { session: dbSession, returnDocument: "after" },
+        ).lean();
+        if (!updatedReq) {
+          throw new AppError(
+            "Reschedule request has already been reviewed",
+            "RESCHEDULE_ALREADY_REVIEWED",
+            409,
+          );
+        }
+
+        originalSession.lifecycleState = "RESCHEDULED";
+        if (!originalSession.endReason) {
+          originalSession.endReason = "RESCHEDULED";
+        }
+        originalSession.rescheduleMetadata = {
+          ...(originalSession.rescheduleMetadata?.toObject?.() ||
+            originalSession.rescheduleMetadata ||
+            {}),
+          rescheduledToSessionId: makeupSession._id,
+          rescheduleRequestId: reqDoc._id,
+          rescheduleCount:
+            (originalSession.rescheduleMetadata?.rescheduleCount || 0) + 1,
+        };
+        await originalSession.save({ session: dbSession });
+
+        await SessionAttendance.updateMany(
+          { sessionId: originalSession._id, attendanceStatus: "ABSENT" },
+          {
+            $set: {
+              attendanceStatus: "EXCUSED",
+              evaluationStatus: "EXCUSED",
+              evaluationReason: "Session rescheduled to makeup session",
+            },
+          },
+          { session: dbSession },
+        );
+
+        await SessionRefundReview.updateMany(
+          { sessionId: originalSession._id, status: "NEEDS_FINANCIAL_REVIEW" },
+          {
+            $set: {
+              status: "RESCHEDULED_WAIVED",
+              earningReconciliationStatus: "CLEARED_AFTER_MAKEUP",
+              reviewedBy: adminId,
+              reviewedAt: now,
+              reviewNote: "Makeup session approved and scheduled",
+            },
+          },
+          { session: dbSession },
+        );
+
+        return {
+          updatedReq,
+          makeupSession: makeupSession.toObject(),
+          originalSession: originalSession.toObject(),
+          enrollments,
+        };
+      }
+
+      const updatedReq = await SessionRescheduleRequest.findOneAndUpdate(
+        { _id: reqDoc._id, status: "PENDING_ADMIN_APPROVAL" },
+        {
+          $set: {
+            status: "REJECTED",
+            reviewedBy: adminId,
+            reviewedAt: now,
+            adminNote: body?.note || null,
+          },
+        },
+        { session: dbSession, returnDocument: "after" },
+      ).lean();
+      if (!updatedReq) {
+        throw new AppError(
+          "Reschedule request has already been reviewed",
+          "RESCHEDULE_ALREADY_REVIEWED",
+          409,
+        );
+      }
+
+      return {
+        updatedReq,
+        makeupSession: null,
+        originalSession: originalSession.toObject(),
+        enrollments: [],
+      };
+    },
+  );
+
+  const { updatedReq, makeupSession, originalSession, enrollments } = txOutcome;
 
   if (decision === "APPROVED") {
-    await assertNoScheduleConflict({
-      teacherId: originalSession.teacherId,
-      classId: originalSession.classId,
-      startDatetime: reqDoc.proposedStartDatetime,
-      endDatetime: reqDoc.proposedEndDatetime,
-      excludeSessionId: originalSession._id,
-    });
-
-    const makeupSession = await Session.create({
-      classId: originalSession.classId,
-      className: originalSession.className,
-      teacherId: originalSession.teacherId,
-      title: reqDoc.proposedTitle || `${originalSession.title} (Buổi học bù)`,
-      description: originalSession.description,
-      contents: originalSession.contents || [],
-      startDatetime: reqDoc.proposedStartDatetime,
-      endDatetime: reqDoc.proposedEndDatetime,
-      status: "SCHEDULED",
-      roomState: "NOT_OPEN",
-      lifecycleState: "SCHEDULED",
-      rescheduleMetadata: {
-        rescheduledFromSessionId: originalSession._id,
-        rescheduleRequestId: reqDoc._id,
-        isMakeupSession: true,
-        rescheduleCount:
-          (originalSession.rescheduleMetadata?.rescheduleCount || 0) + 1,
-      },
-    });
-
-    originalSession.lifecycleState = "RESCHEDULED";
-    if (!originalSession.endReason) {
-      originalSession.endReason = "RESCHEDULED";
-    }
-    originalSession.rescheduleMetadata = {
-      ...(originalSession.rescheduleMetadata?.toObject?.() ||
-        originalSession.rescheduleMetadata ||
-        {}),
-      rescheduledToSessionId: makeupSession._id,
-      rescheduleRequestId: reqDoc._id,
-      rescheduleCount:
-        (originalSession.rescheduleMetadata?.rescheduleCount || 0) + 1,
-    };
-    await originalSession.save();
-
-    // Excuse students on the original session without deleting their attendance/presence logs
-    await SessionAttendance.updateMany(
-      { sessionId: originalSession._id, attendanceStatus: "ABSENT" },
-      {
-        $set: {
-          attendanceStatus: "EXCUSED",
-          evaluationStatus: "EXCUSED",
-          evaluationReason: "Session rescheduled to makeup session",
-        },
-      },
-    );
-
-    reqDoc.status = "APPROVED";
-    reqDoc.makeupSessionId = makeupSession._id;
-    reqDoc.reviewedBy = adminId;
-    reqDoc.reviewedAt = new Date();
-    reqDoc.adminNote = body?.note || null;
-    reqDoc.studentConfirmations = enrollments.map((e) => ({
-      studentId: e.studentId,
-      status: "PENDING",
-      respondedAt: null,
-    }));
-    await reqDoc.save();
-
-    // Clear any pending refund reviews on the original session because makeup session is scheduled
-    await SessionRefundReview.updateMany(
-      { sessionId: originalSession._id, status: "NEEDS_FINANCIAL_REVIEW" },
-      {
-        $set: {
-          status: "RESCHEDULED_WAIVED",
-          earningReconciliationStatus: "CLEARED_AFTER_MAKEUP",
-          reviewedBy: adminId,
-          reviewedAt: new Date(),
-          reviewNote: "Makeup session approved and scheduled",
-        },
-      },
-    );
-
     await notifyOnce(
       originalSession.teacherId,
       "Lịch dạy bù đã được Admin phê duyệt",
-      `Buổi học bù "${makeupSession.title}" đã được tạo vào ${makeupSession.startDatetime.toISOString()}.`,
+      `Buổi học bù "${makeupSession.title}" đã được tạo vào ${new Date(makeupSession.startDatetime).toISOString()}.`,
       "RESCHEDULE_APPROVED",
-      `reschedule:approved:teacher:${reqDoc._id}`,
+      `reschedule:approved:teacher:${updatedReq._id}`,
       makeupSession._id,
     );
 
@@ -953,26 +1097,20 @@ const reviewRescheduleRequest = async (adminId, requestId, body) => {
         notifyOnce(
           e.studentId,
           "Thông báo lịch học bù mới",
-          `Buổi học "${originalSession.title}" đã được xếp lịch học bù vào ${makeupSession.startDatetime.toISOString()}. Vui lòng xác nhận tham gia.`,
+          `Buổi học "${originalSession.title}" đã được xếp lịch học bù vào ${new Date(makeupSession.startDatetime).toISOString()}. Vui lòng xác nhận tham gia.`,
           "SESSION_RESCHEDULED",
-          `reschedule:approved:student:${reqDoc._id}:${e.studentId.toString()}`,
+          `reschedule:approved:student:${updatedReq._id}:${e.studentId.toString()}`,
           makeupSession._id,
         ),
       ),
     );
   } else {
-    reqDoc.status = "REJECTED";
-    reqDoc.reviewedBy = adminId;
-    reqDoc.reviewedAt = new Date();
-    reqDoc.adminNote = body?.note || null;
-    await reqDoc.save();
-
     await notifyOnce(
       originalSession.teacherId,
       "Yêu cầu đổi lịch / dạy bù bị từ chối",
       `Yêu cầu dạy bù cho buổi "${originalSession.title}" đã bị từ chối. Lý do: ${body?.note || "Không đạt điều kiện"}.`,
       "RESCHEDULE_REJECTED",
-      `reschedule:rejected:teacher:${reqDoc._id}`,
+      `reschedule:rejected:teacher:${updatedReq._id}`,
       originalSession._id,
     );
   }
@@ -981,17 +1119,17 @@ const reviewRescheduleRequest = async (adminId, requestId, body) => {
     actorId: adminId,
     action: `SESSION_RESCHEDULE_${decision}`,
     targetType: "SessionRescheduleRequest",
-    targetId: reqDoc._id,
+    targetId: updatedReq._id,
     reason: body?.note || null,
     metadata: {
       originalSessionId: originalSession._id.toString(),
-      makeupSessionId: reqDoc.makeupSessionId
-        ? reqDoc.makeupSessionId.toString()
+      makeupSessionId: updatedReq.makeupSessionId
+        ? updatedReq.makeupSessionId.toString()
         : null,
     },
   });
 
-  return reqDoc.toObject();
+  return updatedReq;
 };
 
 /**

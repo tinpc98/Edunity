@@ -1,26 +1,29 @@
-const { Category, Subject } = require("../models");
+const { Category, Subject, SyllabusVersion } = require("../models");
 const { COURSE_LEVELS } = require("../models/constants");
 const { AppError } = require("../utils/errors");
 const { validationError } = require("../utils/http");
-const { toNum } = require("../utils/money");
+const { toNum, toDec } = require("../utils/money");
 const { resolveGradeLevel } = require("../utils/gradeLevel");
 const catalog = require("./courseCatalogService");
+const pricingPolicyService = require("./coursePricingPolicyService");
 const { assertApprovedAuthorization } = require("./teacherSubjectAuthorizationService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 
 /**
  * External dependency verifier ports for CUR-10:
- * - CUR-07 (CoursePricingPolicy): NOT present in codebase yet -> MISSING / BLOCKED unless registered.
+ * - CUR-07 (CoursePricingPolicy): WIRED by default to coursePricingPolicyService.verifyClassPricingPolicy.
  * - TEA-12 (TeacherContract ACTIVE by Bao): NOT present in codebase yet -> BLOCKED unless registered.
  *
  * IMPORTANT: User.teacherProfile.verificationStatus === "VERIFIED" is NEVER treated as equivalent
  * to TEA-12 contract ACTIVE. Without an official contract verifier, the contract gate fails closed (503).
  */
-let registeredVerifiers = {
-  pricingPolicyVerifier: null,
+const defaultVerifiers = () => ({
+  pricingPolicyVerifier: pricingPolicyService.verifyClassPricingPolicy,
   contractVerifier: null,
-};
+});
+
+let registeredVerifiers = defaultVerifiers();
 
 const setDependencyVerifiers = (overrides = {}) => {
   if ("pricingPolicyVerifier" in overrides) {
@@ -32,7 +35,7 @@ const setDependencyVerifiers = (overrides = {}) => {
 };
 
 const resetDependencyVerifiers = () => {
-  registeredVerifiers = { pricingPolicyVerifier: null, contractVerifier: null };
+  registeredVerifiers = defaultVerifiers();
 };
 
 const getDependencyStatus = () => ({
@@ -137,7 +140,24 @@ const assertPricingPolicyGate = async ({ teacher, course, cls, body, totalSessio
     throw err;
   }
 
-  const price = cls && cls.price !== undefined ? toNum(cls.price) : body && body.price !== undefined ? Number(body.price) : 0;
+  let price = 0;
+  if (cls && cls.price !== undefined) {
+    price = toNum(cls.price);
+  } else if (body && body.price !== undefined) {
+    if (
+      body.price === null ||
+      typeof body.price === "boolean" ||
+      Array.isArray(body.price) ||
+      typeof body.price === "object" ||
+      (typeof body.price === "string" && body.price.trim() === "")
+    ) {
+      throw validationError("price must be a finite number");
+    }
+    price = Number(body.price);
+    if (!Number.isFinite(price)) {
+      throw validationError("price must be a finite number");
+    }
+  }
   const classType = (cls && cls.classType) || (body && body.classType) || null;
   const result = await verifier({ teacher, course, cls, body, price, classType, totalSessions });
   if (result && result.valid === false) {
@@ -228,6 +248,63 @@ const validateClassGate = async ({
   return { mode, alignment, pricingResult, contractResult };
 };
 
+/**
+ * CUR-09: Captures immutable SyllabusVersion + CoursePricingPolicy snapshots for a Class.
+ */
+const captureClassSnapshots = async ({ course, pricingResult = null, now = new Date() }) => {
+  let syllabusVersionId = course && course.publishedSyllabusVersionId ? course.publishedSyllabusVersionId : null;
+  let syllabusVersionNumber = null;
+
+  if (syllabusVersionId) {
+    const sv = await SyllabusVersion.findOne({ _id: syllabusVersionId, ...NOT_DELETED })
+      .select("_id versionNumber")
+      .lean();
+    if (sv) {
+      syllabusVersionId = sv._id;
+      syllabusVersionNumber = sv.versionNumber || null;
+    }
+  }
+
+  const hasRichPolicy = Boolean(
+    pricingResult &&
+      (pricingResult.policyId || pricingResult.policyKey || pricingResult.policyVersion !== undefined)
+  );
+
+  const pricingPolicyId = hasRichPolicy && pricingResult.policyId ? pricingResult.policyId : null;
+  const pricingPolicyKey = hasRichPolicy && pricingResult.policyKey ? pricingResult.policyKey : null;
+  const pricingPolicyVersion =
+    hasRichPolicy && pricingResult.policyVersion !== undefined && pricingResult.policyVersion !== null
+      ? Number(pricingResult.policyVersion)
+      : null;
+
+  const pricingPolicySnapshot = hasRichPolicy
+    ? {
+        policyId: pricingPolicyId,
+        policyKey: pricingPolicyKey,
+        version: pricingPolicyVersion,
+        scopeType: pricingResult.scopeType || null,
+        classType: pricingResult.classType || null,
+        allowFree: pricingResult.allowFree !== undefined ? pricingResult.allowFree : null,
+        minPrice: pricingResult.minPrice !== undefined && pricingResult.minPrice !== null ? toDec(pricingResult.minPrice) : null,
+        maxPrice: pricingResult.maxPrice !== undefined && pricingResult.maxPrice !== null ? toDec(pricingResult.maxPrice) : null,
+        minSessions: pricingResult.minSessions !== undefined ? pricingResult.minSessions : null,
+        maxSessions: pricingResult.maxSessions !== undefined ? pricingResult.maxSessions : null,
+        effectiveFrom: pricingResult.effectiveFrom || null,
+        effectiveTo: pricingResult.effectiveTo || null,
+        capturedAt: now,
+      }
+    : null;
+
+  return {
+    syllabusVersionId,
+    syllabusVersionNumber,
+    pricingPolicyId,
+    pricingPolicyKey,
+    pricingPolicyVersion,
+    pricingPolicySnapshot,
+  };
+};
+
 module.exports = {
   setDependencyVerifiers,
   resetDependencyVerifiers,
@@ -236,5 +313,7 @@ module.exports = {
   assertPricingPolicyGate,
   assertTeacherContractGate,
   validateClassGate,
+  captureClassSnapshots,
+  buildEnrollmentSnapshotFromClass: pricingPolicyService.buildEnrollmentSnapshotFromClass,
 };
 

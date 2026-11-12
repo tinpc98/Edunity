@@ -323,3 +323,37 @@ db.transactions.aggregate([
 ]);
 ```
 *(Nếu kết quả trả về rỗng: Dữ liệu sạch, sẵn sàng đánh Partial Unique Index an toàn).*
+
+---
+
+## 8. BÀN GIAO KỸ THUẬT PHASE 2: `CUR-09` — SNAPSHOT GIÁO TRÌNH & CHÍNH SÁCH HỌC PHÍ TRÊN `Class` / `Enrollment` (GỬI TIN)
+
+### 8.1. Phạm vi & Ranh giới sở hữu
+- **Châu đã triển khai (`Class.js`, `classCreationGateService.js`, `coursePricingPolicyService.js`, `teacherClassService.js`, `adminClassService.js`):**
+  - Bổ sung các trường snapshot trên [`Class`](file:///c:/CODE/Edunity/BackEnd/src/models/Class.js):
+    - `syllabusVersionId`, `syllabusVersionNumber`
+    - `pricingPolicyId`, `pricingPolicyKey`, `pricingPolicyVersion`, `pricingPolicySnapshot` (`policyId`, `policyKey`, `version`, `scopeType`, `classType`, `allowFree`, `minPrice`, `maxPrice`, `minSessions`, `maxSessions`, `effectiveFrom`, `effectiveTo`, `capturedAt`)
+  - Bổ sung sẵn các trường snapshot tương ứng (nullable `default: null`, tương thích ngược 100%) trên [`Enrollment`](file:///c:/CODE/Edunity/BackEnd/src/models/Enrollment.js).
+  - Lớp học tự động ghi snapshot tại `createClass`, `updateClass`, `submitClass` và khóa snapshot cuối cùng khi Admin `approveClass` (`PENDING_APPROVAL -> OPEN`). Việc xuất bản `SyllabusVersion` mới hoặc tạo `CoursePricingPolicy` v2 sau thời điểm này **không** làm thay đổi snapshot của lớp đã mở.
+- **Tin cần bổ sung trong `BackEnd/src/services/enrollmentService.js` (Châu KHÔNG tự ý sửa file của Tin):**
+  1. Import helper chuẩn từ `coursePricingPolicyService` (hoặc `classCreationGateService`):
+     ```javascript
+     const { buildEnrollmentSnapshotFromClass } = require("./coursePricingPolicyService");
+     ```
+  2. Trong `createEnrollment` (sau khi fetch `targetClass` trong transaction, ngay trước `new Enrollment({ ... })`), gắn snapshot vào document `Enrollment`:
+     ```javascript
+     const cur09Snapshot = buildEnrollmentSnapshotFromClass(targetClass);
+     const enrollmentDoc = new Enrollment({
+       classId: targetClass._id,
+       courseId: targetClass.courseId,
+       teacherId: targetClass.teacherId,
+       studentId,
+       enrollmentStatus,
+       paymentSource,
+       tuitionAmount,
+       enrolledAt: now,
+       holdExpiresAt,
+       ...cur09Snapshot,
+     });
+     ```
+  3. **Quy tắc bất biến:** Không cập nhật lại `Enrollment.syllabusVersionId` / `Enrollment.pricingPolicySnapshot` sau khi đơn ghi danh được tạo, ngay cả khi khóa học gốc chỉnh sửa hoặc archive phiên bản giáo trình/chính sách sau này.

@@ -48,4 +48,26 @@ router.post("/admin/courses/:id/syllabus-versions/:versionId/units", admin, cont
 router.patch("/admin/courses/:id/syllabus-versions/:versionId/units/:unitId", admin, controller.updateCurriculumUnit);
 router.delete("/admin/courses/:id/syllabus-versions/:versionId/units/:unitId", admin, controller.deleteCurriculumUnit);
 
+// Learning Paths (CUR-03)
+router.get("/learning-paths", controller.listPublicLearningPaths);
+router.get("/learning-paths/:id", controller.getPublicLearningPath);
+router.get("/admin/learning-paths", admin, controller.adminListLearningPaths);
+router.post("/admin/learning-paths", admin, controller.createLearningPath);
+router.get("/admin/learning-paths/:id", admin, controller.adminGetLearningPath);
+router.patch("/admin/learning-paths/:id", admin, controller.updateLearningPath);
+router.post("/admin/learning-paths/:id/publish", admin, controller.publishLearningPath);
+router.post("/admin/learning-paths/:id/archive", admin, controller.archiveLearningPath);
+router.delete("/admin/learning-paths/:id", admin, controller.deleteLearningPath);
+
+// Course Pricing Policies (CUR-07)
+router.get("/teacher/courses/:courseId/pricing-policy", teacher, controller.getTeacherCoursePricingPolicy);
+router.get("/admin/pricing-policies", admin, controller.listPricingPolicies);
+router.post("/admin/pricing-policies/verify-preview", admin, controller.verifyPricingPreview);
+router.post("/admin/pricing-policies", admin, controller.createPricingPolicy);
+router.get("/admin/pricing-policies/:id", admin, controller.getPricingPolicy);
+router.post("/admin/pricing-policies/:id/versions", admin, controller.createNextPricingPolicyVersion);
+router.post("/admin/pricing-policies/:id/activate", admin, controller.activatePricingPolicy);
+router.post("/admin/pricing-policies/:id/rollback", admin, controller.rollbackPricingPolicy);
+router.post("/admin/pricing-policies/:id/archive", admin, controller.archivePricingPolicy);
+
 module.exports = router;

@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { Assignment, Submission, Class, Session, Enrollment, User } = require("../models");
+const { ASSIGNMENT_STATUSES, SUBMISSION_STATUSES } = require("../models/constants");
 const { AppError, FORBIDDEN, CLASS_NOT_FOUND } = require("../utils/errors");
 const { assertId, paged, validationError, parseDate, isBlank } = require("../utils/http");
 const { getVerifiedTeacher, getOwnClass } = require("./teacherClassService");
@@ -10,6 +11,59 @@ const { notify } = require("./notificationService");
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const assignmentNotFound = () => new AppError("Assignment not found", "ASSIGNMENT_NOT_FOUND", 404);
 const submissionNotFound = () => new AppError("Submission not found", "SUBMISSION_NOT_FOUND", 404);
+
+const assertOptionalString = (value, field) => {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "string") {
+    throw validationError(`${field} must be a string`);
+  }
+  return value;
+};
+
+const assertOptionalBoolean = (value, field) => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw validationError(`${field} must be a boolean`);
+  }
+  return value;
+};
+
+const assertOptionalEnum = (value, allowed, field, upper = true) => {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") {
+    throw validationError(`${field} must be a string`);
+  }
+  const normalized = upper ? value.trim().toUpperCase() : value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (!allowed.includes(normalized)) {
+    throw validationError(`${field} must be one of ${allowed.join(", ")}`);
+  }
+  return normalized;
+};
+
+const assertQueryObjectId = (value, message, code, field = "id") => {
+  if (typeof value !== "string" && !(value instanceof mongoose.Types.ObjectId)) {
+    throw validationError(`${field} must be a valid identifier string`);
+  }
+  assertId(value, message, code);
+  return value;
+};
+
+const assertFiniteNumeric = (value, field) => {
+  if (
+    typeof value === "boolean" ||
+    Array.isArray(value) ||
+    (typeof value === "object" && value !== null) ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    throw validationError(`${field} must be a finite number`);
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    throw validationError(`${field} must be a finite number`);
+  }
+  return num;
+};
 
 const stableStringify = (value) => {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -41,14 +95,17 @@ const parseAttachments = async (ownerId, rawList) => {
   if (rawList === undefined || rawList === null) return [];
   if (!Array.isArray(rawList)) throw validationError("attachments must be an array");
   const normalized = rawList.map((item, idx) => {
-    if (!item || isBlank(item.storageKey)) {
+    if (!item || typeof item !== "object" || Array.isArray(item) || isBlank(item.storageKey)) {
       throw validationError(`attachments[${idx}].storageKey is required`);
     }
+    const mimeRaw = assertOptionalString(item.mimeType, `attachments[${idx}].mimeType`);
+    const origRaw = assertOptionalString(item.originalName, `attachments[${idx}].originalName`);
+    const titleRaw = assertOptionalString(item.title, `attachments[${idx}].title`);
     return {
-      storageKey: String(item.storageKey).trim(),
-      mimeType: item.mimeType ? String(item.mimeType).trim() : null,
-      originalName: item.originalName ? String(item.originalName).trim() : null,
-      title: item.title ? String(item.title).trim() : null,
+      storageKey: item.storageKey.trim(),
+      mimeType: mimeRaw ? mimeRaw.trim() : null,
+      originalName: origRaw ? origRaw.trim() : null,
+      title: titleRaw ? titleRaw.trim() : null,
     };
   });
   if (normalized.length > 0) {
@@ -68,23 +125,24 @@ const parseRubricCriteria = (rawCriteria, maxScore) => {
   const seenCodes = new Set();
   let sum = 0;
   const parsed = rawCriteria.map((item, idx) => {
-    if (!item || isBlank(item.criterionCode) || isBlank(item.title)) {
+    if (!item || typeof item !== "object" || Array.isArray(item) || isBlank(item.criterionCode) || isBlank(item.title)) {
       throw validationError(`rubricCriteria[${idx}] requires criterionCode and title`);
     }
-    const criterionCode = String(item.criterionCode).trim().toUpperCase();
+    const criterionCode = item.criterionCode.trim().toUpperCase();
     if (seenCodes.has(criterionCode)) {
       throw validationError(`Duplicate criterionCode "${criterionCode}" in rubricCriteria`);
     }
     seenCodes.add(criterionCode);
-    const maxPoints = Number(item.maxPoints);
-    if (!Number.isFinite(maxPoints) || maxPoints <= 0) {
+    const maxPoints = assertFiniteNumeric(item.maxPoints, `rubricCriteria[${idx}].maxPoints`);
+    if (maxPoints <= 0) {
       throw validationError(`rubricCriteria[${idx}].maxPoints must be > 0`);
     }
+    const descRaw = assertOptionalString(item.description, `rubricCriteria[${idx}].description`);
     sum += maxPoints;
     return {
       criterionCode,
-      title: String(item.title).trim(),
-      description: item.description ? String(item.description).trim() : "",
+      title: item.title.trim(),
+      description: descRaw ? descRaw.trim() : "",
       maxPoints: Math.round(maxPoints * 100) / 100,
     };
   });
@@ -112,9 +170,8 @@ const presentSubmission = (doc, role, studentMap = null) => {
   if (!doc) return doc;
   const plain = typeof doc.toObject === "function" ? doc.toObject() : { ...doc };
   const id = plain._id ? plain._id.toString() : plain.id;
-  const includeKey = role === "ADMIN" || role === "TEACHER" || role === "STUDENT";
-  // Notice: for Student viewing OWN submission attachments, signed URLs allow safe access;
-  // staff internal IDs never leak because GradedBy isn't exposed raw if Admin.
+  // Raw internal storageKey stays hidden from STUDENT views; students access files via signed downloadUrl.
+  const includeKey = role === "ADMIN" || role === "TEACHER";
   const out = {
     id,
     assignmentId: plain.assignmentId.toString(),
@@ -213,26 +270,29 @@ const createAssignment = async (teacherId, classId, body = {}) => {
   }
 
   if (isBlank(body.title)) throw validationError("title is required");
-  const title = String(body.title).trim();
+  const title = body.title.trim();
+  const descRaw = assertOptionalString(body.description, "description");
+  const instrRaw = assertOptionalString(body.instructions, "instructions");
 
   let sessionId = null;
   if (body.sessionId !== undefined && body.sessionId !== null && body.sessionId !== "") {
-    assertId(body.sessionId, "Session not found", "SESSION_NOT_FOUND");
+    assertQueryObjectId(body.sessionId, "Session not found", "SESSION_NOT_FOUND", "sessionId");
     const session = await Session.findOne({ _id: body.sessionId, classId: cls._id }).lean();
     if (!session) throw new AppError("Session does not belong to this class", "SESSION_NOT_FOUND", 404);
     sessionId = session._id;
   }
 
   const dueAt = parseDate(body.dueAt, "dueAt");
-  const allowLateSubmission = body.allowLateSubmission !== undefined ? Boolean(body.allowLateSubmission) : true;
+  const allowLateRaw = assertOptionalBoolean(body.allowLateSubmission, "allowLateSubmission");
+  const allowLateSubmission = allowLateRaw !== undefined ? allowLateRaw : true;
 
-  const maxAttempts = body.maxAttempts !== undefined ? Number(body.maxAttempts) : 1;
+  const maxAttempts = body.maxAttempts !== undefined ? assertFiniteNumeric(body.maxAttempts, "maxAttempts") : 1;
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
     throw validationError("maxAttempts must be an integer between 1 and 20");
   }
 
-  const maxScore = body.maxScore !== undefined ? Number(body.maxScore) : 100;
-  if (!Number.isFinite(maxScore) || maxScore < 1 || maxScore > 1000) {
+  const maxScore = body.maxScore !== undefined ? assertFiniteNumeric(body.maxScore, "maxScore") : 100;
+  if (maxScore < 1 || maxScore > 1000) {
     throw validationError("maxScore must be a number between 1 and 1000");
   }
 
@@ -241,14 +301,16 @@ const createAssignment = async (teacherId, classId, body = {}) => {
 
   let status = "DRAFT";
   let publishedAt = null;
+  const publishNowFlag = assertOptionalBoolean(body.publishNow, "publishNow");
   if (body.status !== undefined) {
-    const requested = String(body.status).trim().toUpperCase();
+    if (typeof body.status !== "string") throw validationError("status must be a string");
+    const requested = body.status.trim().toUpperCase();
     if (!["DRAFT", "PUBLISHED"].includes(requested)) {
       throw validationError("status on create must be DRAFT or PUBLISHED");
     }
     status = requested;
     if (status === "PUBLISHED") publishedAt = new Date();
-  } else if (body.publishNow === true) {
+  } else if (publishNowFlag === true) {
     status = "PUBLISHED";
     publishedAt = new Date();
   }
@@ -260,8 +322,8 @@ const createAssignment = async (teacherId, classId, body = {}) => {
       sessionId,
       teacherId,
       title,
-      description: body.description ? String(body.description).trim() : "",
-      instructions: body.instructions ? String(body.instructions).trim() : "",
+      description: descRaw ? descRaw.trim() : "",
+      instructions: instrRaw ? instrRaw.trim() : "",
       attachments,
       dueAt,
       allowLateSubmission,
@@ -277,9 +339,11 @@ const createAssignment = async (teacherId, classId, body = {}) => {
   return presentAssignmentForTeacher(created);
 };
 
-const getOwnAssignmentOrThrow = async (teacherId, assignmentId) => {
+const getOwnAssignmentOrThrow = async (teacherId, assignmentId, dbSession = null) => {
   assertId(assignmentId, "Assignment not found", "ASSIGNMENT_NOT_FOUND");
-  const assignment = await Assignment.findOne({ _id: assignmentId, ...NOT_DELETED });
+  const q = Assignment.findOne({ _id: assignmentId, ...NOT_DELETED });
+  if (dbSession) q.session(dbSession);
+  const assignment = await q;
   if (!assignment) throw assignmentNotFound();
   if (String(assignment.teacherId) !== String(teacherId)) {
     throw FORBIDDEN("You can only manage assignments of your own classes");
@@ -289,124 +353,187 @@ const getOwnAssignmentOrThrow = async (teacherId, assignmentId) => {
 
 const updateAssignment = async (teacherId, assignmentId, body = {}) => {
   await getVerifiedTeacher(teacherId);
-  const assignment = await getOwnAssignmentOrThrow(teacherId, assignmentId);
-  if (assignment.status === "CLOSED") {
+  const pre = await getOwnAssignmentOrThrow(teacherId, assignmentId);
+  if (pre.status === "CLOSED") {
     throw new AppError("Closed assignment cannot be edited", "ASSIGNMENT_CLOSED", 409);
   }
 
-  const submissionCount = await Submission.countDocuments({ assignmentId: assignment._id });
-  const highestAttemptDoc = submissionCount
-    ? await Submission.findOne({ assignmentId: assignment._id }).sort({ attemptNumber: -1 }).select("attemptNumber").lean()
-    : null;
-
-  if (body.title !== undefined) {
-    if (isBlank(body.title)) throw validationError("title must not be empty");
-    assignment.title = String(body.title).trim();
+  if (body.title !== undefined && isBlank(body.title)) {
+    throw validationError("title must not be empty");
   }
-  if (body.description !== undefined) {
-    assignment.description = body.description ? String(body.description).trim() : "";
-  }
-  if (body.instructions !== undefined) {
-    assignment.instructions = body.instructions ? String(body.instructions).trim() : "";
-  }
-  if (body.dueAt !== undefined) {
-    assignment.dueAt = parseDate(body.dueAt, "dueAt");
-  }
-  if (body.allowLateSubmission !== undefined) {
-    assignment.allowLateSubmission = Boolean(body.allowLateSubmission);
-  }
-  if (body.maxAttempts !== undefined) {
-    const nextMaxAttempts = Number(body.maxAttempts);
-    if (!Number.isInteger(nextMaxAttempts) || nextMaxAttempts < 1 || nextMaxAttempts > 20) {
-      throw validationError("maxAttempts must be an integer between 1 and 20");
-    }
-    if (highestAttemptDoc && nextMaxAttempts < highestAttemptDoc.attemptNumber) {
-      throw new AppError(
-        `Cannot reduce maxAttempts below existing submission attempt (${highestAttemptDoc.attemptNumber})`,
-        "ASSIGNMENT_HAS_SUBMISSIONS",
-        409
-      );
-    }
-    assignment.maxAttempts = nextMaxAttempts;
+  const descRaw = assertOptionalString(body.description, "description");
+  const instrRaw = assertOptionalString(body.instructions, "instructions");
+  const dueAt = body.dueAt !== undefined ? parseDate(body.dueAt, "dueAt") : undefined;
+  const allowLate = assertOptionalBoolean(body.allowLateSubmission, "allowLateSubmission");
+  const nextMaxAttempts =
+    body.maxAttempts !== undefined ? assertFiniteNumeric(body.maxAttempts, "maxAttempts") : undefined;
+  if (nextMaxAttempts !== undefined && (!Number.isInteger(nextMaxAttempts) || nextMaxAttempts < 1 || nextMaxAttempts > 20)) {
+    throw validationError("maxAttempts must be an integer between 1 and 20");
   }
 
-  if (body.maxScore !== undefined || body.rubricCriteria !== undefined) {
-    if (submissionCount > 0) {
-      throw new AppError("Cannot change maxScore or rubricCriteria after students have submitted", "ASSIGNMENT_HAS_SUBMISSIONS", 409);
-    }
-    const nextMaxScore = body.maxScore !== undefined ? Number(body.maxScore) : assignment.maxScore;
-    if (!Number.isFinite(nextMaxScore) || nextMaxScore < 1 || nextMaxScore > 1000) {
+  let nextMaxScore;
+  if (body.maxScore !== undefined) {
+    nextMaxScore = assertFiniteNumeric(body.maxScore, "maxScore");
+    if (nextMaxScore < 1 || nextMaxScore > 1000) {
       throw validationError("maxScore must be a number between 1 and 1000");
     }
-    assignment.maxScore = nextMaxScore;
-    assignment.rubricCriteria =
-      body.rubricCriteria !== undefined
-        ? parseRubricCriteria(body.rubricCriteria, nextMaxScore)
-        : parseRubricCriteria(assignment.rubricCriteria, nextMaxScore);
   }
 
-  if (body.attachments !== undefined) {
-    assignment.attachments = await parseAttachments(teacherId, body.attachments);
+  const parsedAttachments = body.attachments !== undefined ? await parseAttachments(teacherId, body.attachments) : undefined;
+
+  const dbSession = await mongoose.startSession();
+  let updated;
+  try {
+    await dbSession.withTransaction(async () => {
+      const assignment = await Assignment.findOneAndUpdate(
+        { _id: assignmentId, ...NOT_DELETED, status: { $ne: "CLOSED" } },
+        { $inc: { __v: 1 } },
+        { session: dbSession, returnDocument: "after" }
+      );
+      if (!assignment) {
+        const current = await Assignment.findOne({ _id: assignmentId, ...NOT_DELETED }).session(dbSession).lean();
+        if (!current) throw assignmentNotFound();
+        if (String(current.teacherId) !== String(teacherId)) {
+          throw FORBIDDEN("You can only manage assignments of your own classes");
+        }
+        throw new AppError("Closed assignment cannot be edited", "ASSIGNMENT_CLOSED", 409);
+      }
+      if (String(assignment.teacherId) !== String(teacherId)) {
+        throw FORBIDDEN("You can only manage assignments of your own classes");
+      }
+
+      const submissionCount = await Submission.countDocuments({ assignmentId: assignment._id }).session(dbSession);
+      const highestAttemptDoc = submissionCount
+        ? await Submission.findOne({ assignmentId: assignment._id })
+            .sort({ attemptNumber: -1 })
+            .select("attemptNumber")
+            .session(dbSession)
+            .lean()
+        : null;
+
+      if (body.title !== undefined) assignment.title = body.title.trim();
+      if (body.description !== undefined) assignment.description = descRaw ? descRaw.trim() : "";
+      if (body.instructions !== undefined) assignment.instructions = instrRaw ? instrRaw.trim() : "";
+      if (dueAt !== undefined) assignment.dueAt = dueAt;
+      if (allowLate !== undefined) assignment.allowLateSubmission = allowLate;
+      if (nextMaxAttempts !== undefined) {
+        if (highestAttemptDoc && nextMaxAttempts < highestAttemptDoc.attemptNumber) {
+          throw new AppError(
+            `Cannot reduce maxAttempts below existing submission attempt (${highestAttemptDoc.attemptNumber})`,
+            "ASSIGNMENT_HAS_SUBMISSIONS",
+            409
+          );
+        }
+        assignment.maxAttempts = nextMaxAttempts;
+      }
+
+      if (body.maxScore !== undefined || body.rubricCriteria !== undefined) {
+        if (submissionCount > 0) {
+          throw new AppError("Cannot change maxScore or rubricCriteria after students have submitted", "ASSIGNMENT_HAS_SUBMISSIONS", 409);
+        }
+        const effectiveMaxScore = nextMaxScore !== undefined ? nextMaxScore : assignment.maxScore;
+        assignment.maxScore = effectiveMaxScore;
+        assignment.rubricCriteria =
+          body.rubricCriteria !== undefined
+            ? parseRubricCriteria(body.rubricCriteria, effectiveMaxScore)
+            : parseRubricCriteria(assignment.rubricCriteria, effectiveMaxScore);
+      }
+
+      if (parsedAttachments !== undefined) {
+        assignment.attachments = parsedAttachments;
+      }
+
+      assignment.updatedBy = teacherId;
+      await assignment.save({ session: dbSession });
+      updated = assignment;
+    });
+  } finally {
+    await dbSession.endSession();
   }
 
-  assignment.updatedBy = teacherId;
-  await assignment.save();
-  return presentAssignmentForTeacher(assignment);
+  return presentAssignmentForTeacher(updated);
 };
 
 const publishAssignment = async (teacherId, assignmentId) => {
   await getVerifiedTeacher(teacherId);
-  const assignment = await getOwnAssignmentOrThrow(teacherId, assignmentId);
-  if (assignment.status === "CLOSED") {
+  await getOwnAssignmentOrThrow(teacherId, assignmentId);
+
+  const updated = await Assignment.findOneAndUpdate(
+    { _id: assignmentId, teacherId, ...NOT_DELETED, status: "DRAFT" },
+    { $set: { status: "PUBLISHED", publishedAt: new Date(), updatedBy: teacherId } },
+    { returnDocument: "after" }
+  );
+  if (updated) return presentAssignmentForTeacher(updated);
+
+  const current = await getOwnAssignmentOrThrow(teacherId, assignmentId);
+  if (current.status === "CLOSED") {
     throw new AppError("Closed assignment cannot be published", "ASSIGNMENT_CLOSED", 409);
   }
-  if (assignment.status === "PUBLISHED") {
-    return presentAssignmentForTeacher(assignment);
-  }
-  assignment.status = "PUBLISHED";
-  assignment.publishedAt = new Date();
-  assignment.updatedBy = teacherId;
-  await assignment.save();
-  return presentAssignmentForTeacher(assignment);
+  return presentAssignmentForTeacher(current);
 };
 
 const closeAssignment = async (teacherId, assignmentId) => {
   await getVerifiedTeacher(teacherId);
-  const assignment = await getOwnAssignmentOrThrow(teacherId, assignmentId);
-  if (assignment.status === "CLOSED") {
-    return presentAssignmentForTeacher(assignment);
-  }
-  assignment.status = "CLOSED";
-  assignment.closedAt = new Date();
-  assignment.updatedBy = teacherId;
-  await assignment.save();
-  return presentAssignmentForTeacher(assignment);
+  await getOwnAssignmentOrThrow(teacherId, assignmentId);
+
+  const updated = await Assignment.findOneAndUpdate(
+    { _id: assignmentId, teacherId, ...NOT_DELETED, status: { $in: ["DRAFT", "PUBLISHED"] } },
+    { $set: { status: "CLOSED", closedAt: new Date(), updatedBy: teacherId } },
+    { returnDocument: "after" }
+  );
+  if (updated) return presentAssignmentForTeacher(updated);
+
+  const current = await getOwnAssignmentOrThrow(teacherId, assignmentId);
+  return presentAssignmentForTeacher(current);
 };
 
 const deleteAssignment = async (teacherId, assignmentId) => {
   await getVerifiedTeacher(teacherId);
-  const assignment = await getOwnAssignmentOrThrow(teacherId, assignmentId);
-  const submissionCount = await Submission.countDocuments({ assignmentId: assignment._id });
-  if (submissionCount > 0) {
-    throw new AppError("Cannot delete assignment with existing submissions; close it instead", "ASSIGNMENT_HAS_SUBMISSIONS", 409);
+  await getOwnAssignmentOrThrow(teacherId, assignmentId);
+
+  const dbSession = await mongoose.startSession();
+  let deletedId;
+  try {
+    await dbSession.withTransaction(async () => {
+      const assignment = await Assignment.findOneAndUpdate(
+        { _id: assignmentId, teacherId, ...NOT_DELETED },
+        {
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: teacherId,
+            updatedBy: teacherId,
+          },
+        },
+        { session: dbSession, returnDocument: "after" }
+      );
+      if (!assignment) {
+        await getOwnAssignmentOrThrow(teacherId, assignmentId, dbSession);
+      }
+
+      const submissionCount = await Submission.countDocuments({ assignmentId: assignment._id }).session(dbSession);
+      if (submissionCount > 0) {
+        throw new AppError("Cannot delete assignment with existing submissions; close it instead", "ASSIGNMENT_HAS_SUBMISSIONS", 409);
+      }
+      deletedId = assignment._id.toString();
+    });
+  } finally {
+    await dbSession.endSession();
   }
-  assignment.isDeleted = true;
-  assignment.deletedAt = new Date();
-  assignment.deletedBy = teacherId;
-  assignment.updatedBy = teacherId;
-  await assignment.save();
-  return { deleted: true, id: assignment._id.toString() };
+
+  return { deleted: true, id: deletedId };
 };
 
 const listTeacherAssignments = async (teacherId, query = {}, paging) => {
   await getVerifiedTeacher(teacherId);
   const filter = { teacherId, ...NOT_DELETED };
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
+  if (query.classId !== undefined && query.classId !== "") {
+    assertQueryObjectId(query.classId, "Class not found", "CLASS_NOT_FOUND", "classId");
     await getOwnClass(teacherId, query.classId);
     filter.classId = query.classId;
   }
-  if (query.status) filter.status = String(query.status).trim().toUpperCase();
+  const status = assertOptionalEnum(query.status, ASSIGNMENT_STATUSES, "status", true);
+  if (status) filter.status = status;
 
   const [items, total] = await Promise.all([
     Assignment.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
@@ -426,7 +553,8 @@ const listTeacherAssignmentSubmissions = async (teacherId, assignmentId, query =
   const assignment = await getOwnAssignmentOrThrow(teacherId, assignmentId);
 
   const filter = { assignmentId: assignment._id };
-  if (query.status) filter.status = String(query.status).trim().toLowerCase();
+  const status = assertOptionalEnum(query.status, SUBMISSION_STATUSES, "status", false);
+  if (status) filter.status = status;
 
   const [items, total] = await Promise.all([
     Submission.find(filter).sort({ submittedAt: -1, attemptNumber: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
@@ -457,11 +585,11 @@ const getTeacherSubmission = async (teacherId, submissionId) => {
 
 const adminListAssignments = async (query = {}, paging) => {
   const filter = { ...NOT_DELETED };
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
-    filter.classId = query.classId;
+  if (query.classId !== undefined && query.classId !== "") {
+    filter.classId = assertQueryObjectId(query.classId, "Class not found", "CLASS_NOT_FOUND", "classId");
   }
-  if (query.status) filter.status = String(query.status).trim().toUpperCase();
+  const status = assertOptionalEnum(query.status, ASSIGNMENT_STATUSES, "status", true);
+  if (status) filter.status = status;
   const [items, total] = await Promise.all([
     Assignment.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
     Assignment.countDocuments(filter),
@@ -484,7 +612,7 @@ const adminListAssignmentSubmissions = async (assignmentId, paging) => {
 // ---------- Student endpoints ----------
 
 const listMyClassAssignments = async (studentId, classId, query = {}, paging) => {
-  assertId(classId, "Class not found", "CLASS_NOT_FOUND");
+  assertQueryObjectId(classId, "Class not found", "CLASS_NOT_FOUND", "classId");
   const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
   if (!cls) throw CLASS_NOT_FOUND();
 
@@ -496,6 +624,8 @@ const listMyClassAssignments = async (studentId, classId, query = {}, paging) =>
   if (!enrolled) {
     throw new AppError("You must be enrolled in this class to view assignments", "NOT_ENROLLED", 403);
   }
+
+  const targetStatus = assertOptionalEnum(query.status, ["open", ...SUBMISSION_STATUSES], "status", false);
 
   const assignments = await Assignment.find({
     classId: cls._id,
@@ -518,9 +648,8 @@ const listMyClassAssignments = async (studentId, classId, query = {}, paging) =>
   }
 
   let presented = assignments.map((a) => presentAssignmentForStudent(a, subsByAssignment.get(String(a._id)) || []));
-  if (query.status) {
-    const target = String(query.status).trim().toLowerCase();
-    presented = presented.filter((item) => item.studentStatus === target);
+  if (targetStatus) {
+    presented = presented.filter((item) => item.studentStatus === targetStatus);
   }
 
   const total = presented.length;
@@ -529,9 +658,11 @@ const listMyClassAssignments = async (studentId, classId, query = {}, paging) =>
 };
 
 const listMyAssignments = async (studentId, query = {}, paging) => {
-  if (query.classId) {
+  if (query.classId !== undefined && query.classId !== "") {
     return listMyClassAssignments(studentId, query.classId, query, paging);
   }
+  const targetStatus = assertOptionalEnum(query.status, ["open", ...SUBMISSION_STATUSES], "status", false);
+
   const enrollments = await Enrollment.find({
     studentId,
     enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
@@ -561,9 +692,8 @@ const listMyAssignments = async (studentId, query = {}, paging) => {
   }
 
   let presented = assignments.map((a) => presentAssignmentForStudent(a, subsByAssignment.get(String(a._id)) || []));
-  if (query.status) {
-    const target = String(query.status).trim().toLowerCase();
-    presented = presented.filter((item) => item.studentStatus === target);
+  if (targetStatus) {
+    presented = presented.filter((item) => item.studentStatus === targetStatus);
   }
 
   const total = presented.length;
@@ -625,13 +755,15 @@ const submitAssignment = async (studentId, assignmentId, body = {}, options = {}
 
   const idempotencyKey = normalizeIdempotencyKey(options, body);
 
+  const rawTextAnswer = assertOptionalString(body.textAnswer, "textAnswer");
   const textAnswer =
-    body.textAnswer !== undefined && body.textAnswer !== null && !isBlank(body.textAnswer)
-      ? String(body.textAnswer).trim()
+    rawTextAnswer !== undefined && rawTextAnswer !== null && !isBlank(rawTextAnswer)
+      ? rawTextAnswer.trim()
       : null;
+  const rawLinkUrl = assertOptionalString(body.linkUrl, "linkUrl");
   const linkUrl =
-    body.linkUrl !== undefined && body.linkUrl !== null && !isBlank(body.linkUrl)
-      ? validateHttpUrl(body.linkUrl, "linkUrl")
+    rawLinkUrl !== undefined && rawLinkUrl !== null && !isBlank(rawLinkUrl)
+      ? validateHttpUrl(rawLinkUrl, "linkUrl")
       : null;
   const attachments = await parseAttachments(studentId, body.attachments);
 
@@ -651,16 +783,19 @@ const submitAssignment = async (studentId, assignmentId, body = {}, options = {}
     )
     .digest("hex");
 
-  const now = new Date();
-  const dueAt = assignment.dueAt ? new Date(assignment.dueAt) : null;
-  const isLate = Boolean(dueAt && now > dueAt);
-  if (isLate && !assignment.allowLateSubmission) {
+  const preNow = new Date();
+  const preDueAt = assignment.dueAt ? new Date(assignment.dueAt) : null;
+  const preIsLate = Boolean(preDueAt && preNow > preDueAt);
+  if (preIsLate && !assignment.allowLateSubmission) {
     throw new AppError("Submission deadline has passed and late submissions are not allowed", "LATE_SUBMISSION_NOT_ALLOWED", 409);
   }
-  const lateSeconds = isLate ? Math.max(1, Math.floor((now.getTime() - dueAt.getTime()) / 1000)) : 0;
 
   let created;
   let idempotentReplay = false;
+  let txAssignmentTitle = assignment.title;
+  let txTeacherId = assignment.teacherId;
+  let txClassName = cls.className;
+
   const dbSession = await mongoose.startSession();
   try {
     await dbSession.withTransaction(async () => {
@@ -681,8 +816,62 @@ const submitAssignment = async (studentId, assignmentId, body = {}, options = {}
         }
       }
 
+      // Acquire write-lock on Assignment inside tx so deleteAssignment/closeAssignment/updateAssignment cannot race (no write skew)
+      const freshAssignment = await Assignment.findOneAndUpdate(
+        { _id: assignment._id, ...NOT_DELETED, status: "PUBLISHED" },
+        { $inc: { __v: 1 } },
+        { session: dbSession, returnDocument: "after" }
+      ).lean();
+      if (!freshAssignment) {
+        const currentAssignment = await Assignment.findOne({ _id: assignment._id, ...NOT_DELETED })
+          .session(dbSession)
+          .lean();
+        if (!currentAssignment || currentAssignment.status === "DRAFT") {
+          throw assignmentNotFound();
+        }
+        if (currentAssignment.status === "CLOSED") {
+          throw new AppError("This assignment has been closed by the teacher", "ASSIGNMENT_CLOSED", 409);
+        }
+        throw assignmentNotFound();
+      }
+
+      const freshEnrollment = await Enrollment.findOne({
+        studentId,
+        classId: freshAssignment.classId,
+        enrollmentStatus: "CONFIRMED",
+      })
+        .session(dbSession)
+        .lean();
+      if (!freshEnrollment) {
+        throw new AppError("Active confirmed enrollment is required to submit assignments", "NOT_ENROLLED", 403);
+      }
+
+      const freshClass = await Class.findOne({ _id: freshAssignment.classId, ...NOT_DELETED })
+        .select("status className")
+        .session(dbSession)
+        .lean();
+      if (!freshClass || ["CANCELLED", "REJECTED"].includes(freshClass.status)) {
+        throw new AppError("Class is no longer active for submissions", "CLASS_CLOSED", 409);
+      }
+
+      const txNow = new Date();
+      const txDueAt = freshAssignment.dueAt ? new Date(freshAssignment.dueAt) : null;
+      const isLate = Boolean(txDueAt && txNow > txDueAt);
+      if (isLate && !freshAssignment.allowLateSubmission) {
+        throw new AppError(
+          "Submission deadline has passed and late submissions are not allowed",
+          "LATE_SUBMISSION_NOT_ALLOWED",
+          409
+        );
+      }
+      const lateSeconds = isLate ? Math.max(1, Math.floor((txNow.getTime() - txDueAt.getTime()) / 1000)) : 0;
+
+      txAssignmentTitle = freshAssignment.title;
+      txTeacherId = freshAssignment.teacherId;
+      txClassName = freshClass.className;
+
       const latestSub = await Submission.findOne({
-        assignmentId: assignment._id,
+        assignmentId: freshAssignment._id,
         studentId,
       })
         .sort({ attemptNumber: -1 })
@@ -690,9 +879,9 @@ const submitAssignment = async (studentId, assignmentId, body = {}, options = {}
         .session(dbSession);
 
       const nextAttemptNumber = (latestSub ? latestSub.attemptNumber : 0) + 1;
-      if (nextAttemptNumber > assignment.maxAttempts) {
+      if (nextAttemptNumber > freshAssignment.maxAttempts) {
         throw new AppError(
-          `Maximum submission attempts (${assignment.maxAttempts}) exceeded`,
+          `Maximum submission attempts (${freshAssignment.maxAttempts}) exceeded`,
           "MAX_ATTEMPTS_EXCEEDED",
           409
         );
@@ -701,12 +890,12 @@ const submitAssignment = async (studentId, assignmentId, body = {}, options = {}
       const [sub] = await Submission.create(
         [
           {
-            assignmentId: assignment._id,
-            classId: assignment.classId,
-            courseId: assignment.courseId,
-            teacherId: assignment.teacherId,
+            assignmentId: freshAssignment._id,
+            classId: freshAssignment.classId,
+            courseId: freshAssignment.courseId,
+            teacherId: freshAssignment.teacherId,
             studentId,
-            enrollmentId: enrollment._id,
+            enrollmentId: freshEnrollment._id,
             attemptNumber: nextAttemptNumber,
             idempotencyKey,
             requestHash,
@@ -717,12 +906,12 @@ const submitAssignment = async (studentId, assignmentId, body = {}, options = {}
               mimeType,
               originalName,
             })),
-            submittedAt: now,
+            submittedAt: txNow,
             isLate,
             lateSeconds,
             status: isLate ? "late" : "submitted",
             currentScore: null,
-            maxScoreSnapshot: assignment.maxScore,
+            maxScoreSnapshot: freshAssignment.maxScore,
           },
         ],
         { session: dbSession }
@@ -761,9 +950,9 @@ const submitAssignment = async (studentId, assignmentId, body = {}, options = {}
 
   if (!idempotentReplay && created) {
     await notify(
-      assignment.teacherId,
+      txTeacherId,
       "Bài nộp mới",
-      `Lớp "${cls.className}" vừa nhận được bài nộp cho bài tập "${assignment.title}" (lần ${created.attemptNumber}).`,
+      `Lớp "${txClassName}" vừa nhận được bài nộp cho bài tập "${txAssignmentTitle}" (lần ${created.attemptNumber}).`,
       "ASSIGNMENT_SUBMITTED",
       { dedupeKey: `submission:${created._id}:teacher:submitted` }
     );

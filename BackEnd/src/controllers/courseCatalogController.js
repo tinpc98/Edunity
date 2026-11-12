@@ -1,6 +1,8 @@
 const catalog = require("../services/courseCatalogService");
 const proposals = require("../services/courseProposalService");
 const syllabusService = require("../services/syllabusService");
+const learningPathService = require("../services/learningPathService");
+const coursePricingPolicyService = require("../services/coursePricingPolicyService");
 const { handle, parsePaging } = require("../utils/http");
 
 const body = (req) => req.body || {};
@@ -61,4 +63,56 @@ exports.deleteCurriculumUnit = handle((req) =>
 );
 exports.reorderCurriculumUnits = handle((req) =>
   syllabusService.reorderUnits(req.user.id, req.params.id, req.params.versionId, body(req))
+);
+
+// Learning Paths (CUR-03)
+exports.listPublicLearningPaths = handle((req) =>
+  learningPathService.listPublicLearningPaths(req.query, parsePaging(req.query))
+);
+exports.getPublicLearningPath = handle((req) => learningPathService.getPublicLearningPath(req.params.id));
+exports.adminListLearningPaths = handle((req) =>
+  learningPathService.adminListLearningPaths(req.query, parsePaging(req.query))
+);
+exports.adminGetLearningPath = handle((req) => learningPathService.adminGetLearningPath(req.params.id));
+exports.createLearningPath = handle((req) => learningPathService.createLearningPath(req.user.id, body(req)), 201);
+exports.updateLearningPath = handle((req) =>
+  learningPathService.updateLearningPath(req.user.id, req.params.id, body(req))
+);
+exports.publishLearningPath = handle((req) =>
+  learningPathService.publishLearningPath(req.user.id, req.params.id)
+);
+exports.archiveLearningPath = handle((req) =>
+  learningPathService.archiveLearningPath(req.user.id, req.params.id)
+);
+exports.deleteLearningPath = handle((req) =>
+  learningPathService.deleteLearningPath(req.user.id, req.params.id)
+);
+
+// Course Pricing Policies (CUR-07)
+exports.listPricingPolicies = handle((req) =>
+  coursePricingPolicyService.listPolicies(req.query, parsePaging(req.query))
+);
+exports.getPricingPolicy = handle((req) => coursePricingPolicyService.getPolicyDetail(req.params.id));
+exports.createPricingPolicy = handle(
+  (req) => coursePricingPolicyService.createPolicyVersion(req.user.id, body(req)),
+  201
+);
+exports.createNextPricingPolicyVersion = handle(
+  (req) => coursePricingPolicyService.createNextVersionFromId(req.user.id, req.params.id, body(req)),
+  201
+);
+exports.activatePricingPolicy = handle((req) =>
+  coursePricingPolicyService.activatePolicy(req.user.id, req.params.id, body(req))
+);
+exports.rollbackPricingPolicy = handle((req) =>
+  coursePricingPolicyService.rollbackToPolicyVersion(req.user.id, req.params.id, body(req))
+);
+exports.archivePricingPolicy = handle((req) =>
+  coursePricingPolicyService.archivePolicy(req.user.id, req.params.id)
+);
+exports.verifyPricingPreview = handle((req) =>
+  coursePricingPolicyService.previewVerificationForCourse(body(req))
+);
+exports.getTeacherCoursePricingPolicy = handle((req) =>
+  coursePricingPolicyService.getEffectivePolicyForCourse(req.params.courseId, req.query)
 );

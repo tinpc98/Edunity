@@ -41,11 +41,26 @@ const parseIntRating = (value, field, { required = false } = {}) => {
     if (required) throw validationError(`${field} must be an integer from 1 to 5`);
     return null;
   }
-  const num = Number(value);
+  if (typeof value === "boolean" || typeof value === "object") {
+    throw validationError(`${field} must be an integer from 1 to 5`);
+  }
+  const num = typeof value === "number" ? value : Number(String(value).trim());
   if (!Number.isInteger(num) || num < 1 || num > 5) {
     throw validationError(`${field} must be an integer from 1 to 5`);
   }
   return num;
+};
+
+const parseOptionalReason = (value, field = "reason", maxLen = 1000) => {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") {
+    throw validationError(`${field} must be a string`);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLen) {
+    throw validationError(`${field} must not exceed ${maxLen} characters`);
+  }
+  return trimmed || null;
 };
 
 /**
@@ -55,55 +70,66 @@ const parseIntRating = (value, field, { required = false } = {}) => {
  */
 const createReview = async (studentId, classId, body = {}) => {
   if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
-  const cls = await Class.findOne({ _id: classId, ...NOT_DELETED });
-  if (!cls) throw CLASS_NOT_FOUND();
+  const preCls = await Class.findOne({ _id: classId, ...NOT_DELETED });
+  if (!preCls) throw CLASS_NOT_FOUND();
 
   const rating = parseIntRating(body.rating, "rating", { required: true });
   if (body.comment !== undefined && body.comment !== null && typeof body.comment !== "string") {
     throw validationError("comment must be a string");
   }
-  if (typeof body.comment === "string" && body.comment.trim().length > 2000) {
+  const trimmedComment = typeof body.comment === "string" ? body.comment.trim() : "";
+  if (trimmedComment.length > 2000) {
     throw validationError("comment must not exceed 2000 characters");
-  }
-
-  const enrollment = await Enrollment.findOne({
-    studentId,
-    classId: cls._id,
-    enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
-  });
-  if (!enrollment) throw new AppError("Only enrolled students can review this class", "REVIEW_NOT_ALLOWED", 403);
-
-  const hasStartedLearning =
-    enrollment.enrollmentStatus === "COMPLETED" ||
-    ["IN_PROGRESS", "COMPLETED"].includes(cls.status) ||
-    (await Session.exists({ classId: cls._id, status: "COMPLETED" }));
-  if (!hasStartedLearning) {
-    throw new AppError("You can review this class after attending it", "REVIEW_NOT_ALLOWED", 403);
-  }
-
-  // Real attendance check (LMS-10) when class has tracked/finalized attendance records
-  const hasTrackedAttendance =
-    (await SessionAttendance.exists({ classId: cls._id })) ||
-    (await Session.exists({ classId: cls._id, status: "COMPLETED", attendanceFinalizedAt: { $ne: null } }));
-  if (hasTrackedAttendance) {
-    const attended = await SessionAttendance.exists({
-      classId: cls._id,
-      studentId,
-      $or: [{ attendanceStatus: { $in: PRESENT_STATUSES } }, { hasVerifiedConnection: true }],
-    });
-    if (!attended) {
-      throw new AppError("You can review this class only after attending at least one session", "REVIEW_NOT_ALLOWED", 403);
-    }
-  }
-
-  if (await Review.exists({ enrollmentId: enrollment._id })) {
-    throw new AppError("You have already reviewed this class", "DUPLICATE_REVIEW", 409);
   }
 
   const session = await mongoose.startSession();
   let review;
+  let teacherIdForNotify = preCls.teacherId;
+  let classNameForNotify = preCls.className;
   try {
     await session.withTransaction(async () => {
+      const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).session(session);
+      if (!cls) throw CLASS_NOT_FOUND();
+      teacherIdForNotify = cls.teacherId;
+      classNameForNotify = cls.className;
+
+      const enrollment = await Enrollment.findOne({
+        studentId,
+        classId: cls._id,
+        enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
+      }).session(session);
+      if (!enrollment) throw new AppError("Only enrolled students can review this class", "REVIEW_NOT_ALLOWED", 403);
+
+      const hasStartedLearning =
+        enrollment.enrollmentStatus === "COMPLETED" ||
+        ["IN_PROGRESS", "COMPLETED"].includes(cls.status) ||
+        (await Session.exists({ classId: cls._id, status: "COMPLETED" }).session(session));
+      if (!hasStartedLearning) {
+        throw new AppError("You can review this class after attending it", "REVIEW_NOT_ALLOWED", 403);
+      }
+
+      // Real attendance check (LMS-10) when class has tracked/finalized attendance records
+      const hasAnyAttendance = await SessionAttendance.exists({ classId: cls._id }).session(session);
+      const hasFinalizedSession = await Session.exists({
+        classId: cls._id,
+        status: "COMPLETED",
+        attendanceFinalizedAt: { $ne: null },
+      }).session(session);
+      if (hasAnyAttendance || hasFinalizedSession) {
+        const attended = await SessionAttendance.exists({
+          classId: cls._id,
+          studentId,
+          $or: [{ attendanceStatus: { $in: PRESENT_STATUSES } }, { hasVerifiedConnection: true }],
+        }).session(session);
+        if (!attended) {
+          throw new AppError("You can review this class only after attending at least one session", "REVIEW_NOT_ALLOWED", 403);
+        }
+      }
+
+      if (await Review.exists({ enrollmentId: enrollment._id }).session(session)) {
+        throw new AppError("You have already reviewed this class", "DUPLICATE_REVIEW", 409);
+      }
+
       [review] = await Review.create(
         [
           {
@@ -112,7 +138,7 @@ const createReview = async (studentId, classId, body = {}) => {
             teacherId: cls.teacherId,
             classId: cls._id,
             rating,
-            comment: body.comment ? body.comment.trim() : undefined,
+            comment: trimmedComment || undefined,
           },
         ],
         { session }
@@ -133,13 +159,18 @@ const createReview = async (studentId, classId, body = {}) => {
       );
     });
   } catch (err) {
-    if (err.code === 11000) throw new AppError("You have already reviewed this class", "DUPLICATE_REVIEW", 409);
+    if (err && err.code === 11000) throw new AppError("You have already reviewed this class", "DUPLICATE_REVIEW", 409);
     throw err;
   } finally {
-    session.endSession();
+    await session.endSession();
   }
 
-  await notify(cls.teacherId, "Đánh giá mới", `Lớp "${cls.className}" vừa nhận được đánh giá ${rating} sao.`, "REVIEW_CREATED");
+  await notify(
+    teacherIdForNotify,
+    "Đánh giá mới",
+    `Lớp "${classNameForNotify}" vừa nhận được đánh giá ${rating} sao.`,
+    "REVIEW_CREATED"
+  );
   return review.toObject();
 };
 
@@ -206,12 +237,6 @@ const getTeacherReviews = async (teacherId, paging) => {
  */
 const createSessionReview = async (studentId, sessionId, body = {}) => {
   assertId(sessionId, "Session not found", "SESSION_NOT_FOUND");
-  const sessionDoc = await Session.findById(sessionId).lean();
-  if (!sessionDoc) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
-
-  const cls = await Class.findOne({ _id: sessionDoc.classId, ...NOT_DELETED }).lean();
-  if (!cls) throw CLASS_NOT_FOUND();
-
   const rating = parseIntRating(body.rating, "rating", { required: true });
   const teacherPreparednessRating = parseIntRating(body.teacherPreparednessRating, "teacherPreparednessRating");
   const clarityRating = parseIntRating(body.clarityRating, "clarityRating");
@@ -224,77 +249,105 @@ const createSessionReview = async (studentId, sessionId, body = {}) => {
     throw validationError("comment must not exceed 2000 characters");
   }
 
-  // Timing window guard: session must actually be completed (not upcoming/live/cancelled/rescheduled)
-  if (sessionDoc.status !== "COMPLETED" || sessionDoc.lifecycleState === "RESCHEDULED") {
-    throw new AppError("Session reviews open only after the session has completed", "SESSION_REVIEW_NOT_OPEN", 409);
-  }
-  const now = new Date();
-  const endedAt = sessionDoc.actualEndAt ? new Date(sessionDoc.actualEndAt) : new Date(sessionDoc.endDatetime);
-  if (sessionDoc.actualEndAt && endedAt > now) {
-    throw new AppError("Session reviews open only after the session has ended", "SESSION_REVIEW_NOT_OPEN", 409);
-  }
-  const windowDays = Number(process.env.SESSION_REVIEW_WINDOW_DAYS || 0);
-  if (windowDays > 0 && now.getTime() - endedAt.getTime() > windowDays * 24 * 60 * 60 * 1000) {
-    throw new AppError("The review window for this session has closed", "SESSION_REVIEW_WINDOW_CLOSED", 409);
-  }
-
-  const enrollment = await Enrollment.findOne({
-    studentId,
-    classId: cls._id,
-    enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
-  }).lean();
-  if (!enrollment) {
-    throw new AppError("Only enrolled students can review this session", "REVIEW_NOT_ALLOWED", 403);
-  }
-
-  const attendance = await SessionAttendance.findOne({
-    sessionId: sessionDoc._id,
-    studentId,
-  }).lean();
-  const isParticipant =
-    Boolean(attendance) &&
-    (PRESENT_STATUSES.includes(attendance.attendanceStatus) || Boolean(attendance.hasVerifiedConnection));
-  if (!isParticipant) {
-    throw new AppError("Only students with verified attendance in this session can review it", "REVIEW_NOT_ALLOWED", 403);
-  }
-
-  if (await SessionReview.exists({ sessionId: sessionDoc._id, studentId })) {
-    throw new AppError("You have already reviewed this session", "DUPLICATE_REVIEW", 409);
-  }
-
+  const dbSession = await mongoose.startSession();
   let created;
+  let notifyTeacherId;
+  let notifySessionTitle;
+  let notifyClassName;
+  let notifySessionId;
+
   try {
-    [created] = await SessionReview.create([
-      {
-        sessionId: sessionDoc._id,
-        classId: cls._id,
-        courseId: cls.courseId,
-        teacherId: cls.teacherId,
+    await dbSession.withTransaction(async () => {
+      const sessionDoc = await Session.findById(sessionId).session(dbSession).lean();
+      if (!sessionDoc) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
+
+      const cls = await Class.findOne({ _id: sessionDoc.classId, ...NOT_DELETED }).session(dbSession).lean();
+      if (!cls) throw CLASS_NOT_FOUND();
+
+      // Timing window guard: session must actually be completed (not upcoming/live/cancelled/rescheduled)
+      if (sessionDoc.status !== "COMPLETED" || sessionDoc.lifecycleState === "RESCHEDULED") {
+        throw new AppError("Session reviews open only after the session has completed", "SESSION_REVIEW_NOT_OPEN", 409);
+      }
+      const now = new Date();
+      const endedAt = sessionDoc.actualEndAt ? new Date(sessionDoc.actualEndAt) : new Date(sessionDoc.endDatetime);
+      if (sessionDoc.actualEndAt && endedAt > now) {
+        throw new AppError("Session reviews open only after the session has ended", "SESSION_REVIEW_NOT_OPEN", 409);
+      }
+      const windowDays = Number(process.env.SESSION_REVIEW_WINDOW_DAYS || 0);
+      if (windowDays > 0 && now.getTime() - endedAt.getTime() > windowDays * 24 * 60 * 60 * 1000) {
+        throw new AppError("The review window for this session has closed", "SESSION_REVIEW_WINDOW_CLOSED", 409);
+      }
+
+      const enrollment = await Enrollment.findOne({
         studentId,
-        enrollmentId: enrollment._id,
-        attendanceId: attendance._id,
-        attendanceStatusSnapshot: attendance.attendanceStatus,
-        reviewedSessionEndedAt: endedAt,
-        rating,
-        teacherPreparednessRating,
-        clarityRating,
-        comment,
-      },
-    ]);
+        classId: cls._id,
+        enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
+      })
+        .session(dbSession)
+        .lean();
+      if (!enrollment) {
+        throw new AppError("Only enrolled students can review this session", "REVIEW_NOT_ALLOWED", 403);
+      }
+
+      const attendance = await SessionAttendance.findOne({
+        sessionId: sessionDoc._id,
+        studentId,
+      })
+        .session(dbSession)
+        .lean();
+      const isParticipant =
+        Boolean(attendance) &&
+        (PRESENT_STATUSES.includes(attendance.attendanceStatus) || Boolean(attendance.hasVerifiedConnection));
+      if (!isParticipant) {
+        throw new AppError("Only students with verified attendance in this session can review it", "REVIEW_NOT_ALLOWED", 403);
+      }
+
+      if (await SessionReview.exists({ sessionId: sessionDoc._id, studentId, ...NOT_DELETED }).session(dbSession)) {
+        throw new AppError("You have already reviewed this session", "DUPLICATE_REVIEW", 409);
+      }
+
+      [created] = await SessionReview.create(
+        [
+          {
+            sessionId: sessionDoc._id,
+            classId: cls._id,
+            courseId: cls.courseId,
+            teacherId: cls.teacherId,
+            studentId,
+            enrollmentId: enrollment._id,
+            attendanceId: attendance._id,
+            attendanceStatusSnapshot: attendance.attendanceStatus,
+            reviewedSessionEndedAt: endedAt,
+            rating,
+            teacherPreparednessRating,
+            clarityRating,
+            comment,
+          },
+        ],
+        { session: dbSession }
+      );
+
+      notifyTeacherId = cls.teacherId;
+      notifySessionTitle = sessionDoc.title;
+      notifyClassName = cls.className;
+      notifySessionId = sessionDoc._id;
+    });
   } catch (err) {
     if (err && err.code === 11000) {
       throw new AppError("You have already reviewed this session", "DUPLICATE_REVIEW", 409);
     }
     throw err;
+  } finally {
+    await dbSession.endSession();
   }
 
   // Informational notification only — strictly zero disciplinary or remuneration impact
   await notify(
-    cls.teacherId,
+    notifyTeacherId,
     "Đánh giá buổi học mới",
-    `Buổi học "${sessionDoc.title}" (${cls.className}) vừa nhận được đánh giá ${rating} sao.`,
+    `Buổi học "${notifySessionTitle}" (${notifyClassName}) vừa nhận được đánh giá ${rating} sao.`,
     "SESSION_REVIEW_CREATED",
-    { dedupeKey: `session-review:${created._id}:teacher`, sessionId: sessionDoc._id }
+    { dedupeKey: `session-review:${created._id}:teacher`, sessionId: notifySessionId }
   );
 
   return { ...created.toObject(), id: created._id.toString() };
@@ -442,16 +495,25 @@ const getMyReviews = async (studentId, paging) => {
 
 const adminDeleteSessionReview = async (adminId, reviewId, body = {}) => {
   assertId(reviewId, "Session review not found", "SESSION_REVIEW_NOT_FOUND");
-  const review = await SessionReview.findOne({ _id: reviewId, ...NOT_DELETED });
-  if (!review) throw new AppError("Session review not found", "SESSION_REVIEW_NOT_FOUND", 404);
+  const reason = parseOptionalReason(body.reason, "reason", 1000);
 
   const dbSession = await mongoose.startSession();
+  let deletedId = null;
   try {
     await dbSession.withTransaction(async () => {
-      review.isDeleted = true;
-      review.deletedAt = new Date();
-      review.deletedBy = adminId;
-      await review.save({ session: dbSession });
+      const review = await SessionReview.findOneAndUpdate(
+        { _id: reviewId, ...NOT_DELETED },
+        {
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: adminId,
+          },
+        },
+        { session: dbSession, returnDocument: "before" }
+      );
+      if (!review) throw new AppError("Session review not found", "SESSION_REVIEW_NOT_FOUND", 404);
+      deletedId = review._id.toString();
 
       await audit(
         {
@@ -460,7 +522,7 @@ const adminDeleteSessionReview = async (adminId, reviewId, body = {}) => {
           targetType: "SessionReview",
           targetId: review._id,
           beforeState: { sessionId: review.sessionId, rating: review.rating, comment: review.comment },
-          afterState: { isDeleted: true, reason: body.reason || null },
+          afterState: { isDeleted: true, reason },
         },
         dbSession
       );
@@ -469,7 +531,7 @@ const adminDeleteSessionReview = async (adminId, reviewId, body = {}) => {
     await dbSession.endSession();
   }
 
-  return { deleted: true, id: review._id.toString() };
+  return { deleted: true, id: deletedId };
 };
 
 module.exports = {

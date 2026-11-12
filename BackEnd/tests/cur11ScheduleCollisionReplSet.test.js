@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const request = require("supertest");
 const app = require("../src/app");
-const { User, Category, Subject, Course, Class, Session, TeacherScheduleLock, TeacherSubjectAuthorization } = require("../src/models");
+const { User, Category, Subject, Course, Class, Session, TeacherScheduleLock, TeacherSubjectAuthorization, CoursePricingPolicy } = require("../src/models");
 const { hashPassword } = require("../src/utils/password");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
 
@@ -114,14 +114,17 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
     };
 
     try {
-      const req1 = request(app)
-        .post(`/api/teacher/classes/${classA._id}/sessions`)
-        .set(as(teacher))
-        .send({
-          title: "Class A Mon 19:00",
-          startDatetime: "2028-05-08T19:00:00",
-          endDatetime: "2028-05-08T21:00:00",
-        });
+      // Supertest Test instances are lazy thenables; attach .then() immediately so req1 starts before polling the barrier
+      const req1 = Promise.resolve(
+        request(app)
+          .post(`/api/teacher/classes/${classA._id}/sessions`)
+          .set(as(teacher))
+          .send({
+            title: "Class A Mon 19:00",
+            startDatetime: "2028-05-08T19:00:00",
+            endDatetime: "2028-05-08T21:00:00",
+          })
+      );
 
       const start = Date.now();
       while (!firstPaused && Date.now() - start < 4000) {
@@ -130,14 +133,16 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
       expect(firstPaused).toBe(true);
 
       // Second request hits WiredTiger lock WriteConflict -> retries after req1 commits -> sees Session A -> 409!
-      const req2 = request(app)
-        .post(`/api/teacher/classes/${classB._id}/sessions`)
-        .set(as(teacher))
-        .send({
-          title: "Class B Overlap Mon 20:00",
-          startDatetime: "2028-05-08T20:00:00",
-          endDatetime: "2028-05-08T22:00:00",
-        });
+      const req2 = Promise.resolve(
+        request(app)
+          .post(`/api/teacher/classes/${classB._id}/sessions`)
+          .set(as(teacher))
+          .send({
+            title: "Class B Overlap Mon 20:00",
+            startDatetime: "2028-05-08T20:00:00",
+            endDatetime: "2028-05-08T22:00:00",
+          })
+      );
 
       await new Promise((r) => setTimeout(r, 60));
       releaseFirst();
@@ -278,7 +283,38 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
     expect(dupErr).not.toBeNull();
     expect(dupErr.code).toBe(11000);
 
-    // Even with VERIFIED teacher + APPROVED TEA-07, POST /api/teacher/classes fails closed (503) because CUR-07 / TEA-12 are absent
+    // Without an active CoursePricingPolicy, CUR-07 gate rejects with 400 PRICING_POLICY_NOT_CONFIGURED
+    const noPolicyRes = await request(app)
+      .post("/api/teacher/classes")
+      .set(as(teacher))
+      .send({
+        courseId: langCourse._id,
+        className: "IELTS Blocked",
+        classType: "PAID",
+        price: 500000,
+        capacity: 15,
+      });
+    expect(noPolicyRes.statusCode).toBe(400);
+    expect(noPolicyRes.body.error).toBe("PRICING_POLICY_NOT_CONFIGURED");
+    expect(await Class.countDocuments({ className: "IELTS Blocked" })).toBe(0);
+
+    // Seed an active CoursePricingPolicy (CUR-07 satisfied): POST /api/teacher/classes MUST still fail closed (503) because TEA-12 contract is absent
+    await CoursePricingPolicy.create({
+      policyKey: "GLOBAL:PAID:ALL:ALL",
+      version: 1,
+      name: "Global Paid Policy",
+      scopeType: "GLOBAL",
+      classType: "PAID",
+      allowFree: false,
+      minPrice: 100000,
+      maxPrice: 2000000,
+      minSessions: 1,
+      maxSessions: 50,
+      effectiveFrom: new Date(Date.now() - 60000),
+      status: "ACTIVE",
+      createdBy: admin._id,
+    });
+
     const res = await request(app)
       .post("/api/teacher/classes")
       .set(as(teacher))
@@ -290,7 +326,7 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
         capacity: 15,
       });
     expect(res.statusCode).toBe(503);
-    expect(res.body.error).toBe("PRICING_POLICY_DEPENDENCY_BLOCKED");
+    expect(res.body.error).toBe("CONTRACT_DEPENDENCY_BLOCKED");
     expect(await Class.countDocuments({ className: "IELTS Blocked" })).toBe(0);
   });
 });

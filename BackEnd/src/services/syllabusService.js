@@ -164,6 +164,7 @@ const createDraftVersion = async (adminId, courseId, body = {}) => {
       const latest = await SyllabusVersion.findOne({ courseId: course._id })
         .sort({ versionNumber: -1 })
         .select("versionNumber")
+        .session(session)
         .lean();
       const versionNumber = latest ? latest.versionNumber + 1 : 1;
 
@@ -584,7 +585,7 @@ const publishVersion = async (adminId, courseId, versionId) => {
         courseId: course._id,
         status: "PUBLISHED",
         ...NOT_DELETED,
-      });
+      }).session(session);
 
       if (priorPublished) {
         const archiveRes = await SyllabusVersion.updateOne(

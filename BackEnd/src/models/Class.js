@@ -12,6 +12,25 @@ const scheduleEntrySchema = new Schema(
   { _id: false }
 );
 
+const pricingPolicySnapshotSchema = new Schema(
+  {
+    policyId: { type: Schema.Types.ObjectId, ref: "CoursePricingPolicy", default: null },
+    policyKey: { type: String, trim: true, default: null },
+    version: { type: Number, min: 1, default: null },
+    scopeType: { type: String, default: null },
+    classType: { type: String, default: null },
+    allowFree: { type: Boolean, default: null },
+    minPrice: { type: Schema.Types.Decimal128, default: null },
+    maxPrice: { type: Schema.Types.Decimal128, default: null },
+    minSessions: { type: Number, default: null },
+    maxSessions: { type: Number, default: null },
+    effectiveFrom: { type: Date, default: null },
+    effectiveTo: { type: Date, default: null },
+    capturedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
 const classSchema = new Schema(
   {
     courseId: { type: Schema.Types.ObjectId, ref: "Course", required: true },
@@ -43,6 +62,14 @@ const classSchema = new Schema(
     updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null }, // Teacher hoặc Admin chỉnh sửa gần nhất
 
     schedule: [scheduleEntrySchema],
+
+    // CUR-09: Course SyllabusVersion & PricingPolicy snapshots captured before/at opening
+    syllabusVersionId: { type: Schema.Types.ObjectId, ref: "SyllabusVersion", default: null },
+    syllabusVersionNumber: { type: Number, min: 1, default: null },
+    pricingPolicyId: { type: Schema.Types.ObjectId, ref: "CoursePricingPolicy", default: null },
+    pricingPolicyKey: { type: String, trim: true, default: null },
+    pricingPolicyVersion: { type: Number, min: 1, default: null },
+    pricingPolicySnapshot: { type: pricingPolicySnapshotSchema, default: null },
 
     ratingAverage: { type: Number, default: 0 },
     ratingCount: { type: Number, default: 0 },

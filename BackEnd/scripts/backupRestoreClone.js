@@ -2,25 +2,95 @@
  * EDUNITY V3 — BACKUP, RESTORE, DB CLONE & RECONCILIATION ENGINE (TASK QA-07)
  *
  * Implements:
- * 1. BSON Canonical EJSON snapshot backup & restore with index metadata preservation.
+ * 1. BSON Canonical EJSON snapshot backup & restore with SHA-256 manifest verification,
+ *    index metadata preservation, real MongoDB driver `indexes()` compatibility, and atomic temp-staging restore.
  * 2. Recovery Time Objective (RTO) benchmark & measurement utility.
- * 3. Database cloning between namespaces / in-memory environments.
- * 4. 4-part automated reconciliation (Document Count, Index Parity, Financial Ledger, Referential Integrity).
+ * 3. Database cloning between namespaces / in-memory environments with self-clone & prod guards.
+ * 4. 4-part automated reconciliation (Document Count, Full Unique Index Parity, Financial Ledger, Referential Integrity).
  */
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { toNum } = require("../src/utils/money");
 const { UNIQUE_INDEX_SPECS, ORPHAN_CHECK_SPECS } = require("./migrationPreflight");
+
+const BACKUP_BATCH_SIZE = 500;
+const MANIFEST_FILENAME = "backup-manifest.json";
+
+const sha256 = (content) => crypto.createHash("sha256").update(content, "utf8").digest("hex");
+
+const canonicalStringify = (value) => {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalStringify(value[k])}`).join(",")}}`;
+};
+
+// Compatible with MongoDB Node Driver v7 (`indexes()`, `listIndexes()`) AND unit-test mocks (`getIndexes()`)
+const getCollectionIndexes = async (coll) => {
+  if (!coll) return [];
+  if (typeof coll.indexes === "function") {
+    return await coll.indexes();
+  }
+  if (typeof coll.listIndexes === "function") {
+    return await coll.listIndexes().toArray();
+  }
+  if (typeof coll.getIndexes === "function") {
+    const res = await coll.getIndexes();
+    return Array.isArray(res) ? res : Object.values(res || {});
+  }
+  return [];
+};
+
+const readCollectionDocs = async (coll, batchSize = BACKUP_BATCH_SIZE) => {
+  const cursor = coll.find({});
+  if (cursor && typeof cursor.batchSize === "function" && typeof cursor[Symbol.asyncIterator] === "function") {
+    cursor.batchSize(batchSize);
+    const docs = [];
+    for await (const doc of cursor) {
+      docs.push(doc);
+    }
+    return docs;
+  }
+  return await cursor.toArray();
+};
+
+const insertInBatches = async (coll, docs, batchSize = BACKUP_BATCH_SIZE) => {
+  if (!docs || docs.length === 0) return 0;
+  let inserted = 0;
+  for (let i = 0; i < docs.length; i += batchSize) {
+    const slice = docs.slice(i, i + batchSize);
+    const res = await coll.insertMany(slice, { ordered: true });
+    inserted += res && typeof res.insertedCount === "number" ? res.insertedCount : slice.length;
+  }
+  return inserted;
+};
+
+const extractCustomIndexes = (indexes) => {
+  const rawList = Array.isArray(indexes) ? indexes : Object.values(indexes || {});
+  return rawList
+    .filter((idx) => idx && idx.name !== "_id_")
+    .map((idx) => {
+      const spec = {
+        key: idx.key,
+        name: idx.name,
+      };
+      if (idx.unique !== undefined) spec.unique = idx.unique;
+      if (idx.sparse !== undefined) spec.sparse = idx.sparse;
+      if (idx.partialFilterExpression !== undefined) spec.partialFilterExpression = idx.partialFilterExpression;
+      if (idx.expireAfterSeconds !== undefined) spec.expireAfterSeconds = idx.expireAfterSeconds;
+      if (idx.weights !== undefined) spec.weights = idx.weights;
+      if (idx.default_language !== undefined) spec.default_language = idx.default_language;
+      return spec;
+    });
+};
 
 // =============================================================================
 // 1. RTO BENCHMARK & TIMING MEASUREMENT
 // =============================================================================
 
-/**
- * Measures the execution time (RTO) of a backup, restore, or migration operation.
- */
 const measureRTO = async (operationFn) => {
   const startMs = Date.now();
   const startISO = new Date(startMs).toISOString();
@@ -71,39 +141,40 @@ const deserializeFromEJSON = (jsonString) => {
 };
 
 // =============================================================================
-// 3. BACKUP & RESTORE WITH INDEX METADATA PRESERVATION
+// 3. BACKUP & RESTORE WITH CHECKSUM MANIFEST & ATOMIC STAGING
 // =============================================================================
 
-/**
- * Dumps a single collection and its index definitions to canonical EJSON files.
- */
 const backupCollectionWithIndexes = async (db, collectionName, outputDir) => {
   fs.mkdirSync(outputDir, { recursive: true });
 
   const coll = db.collection(collectionName);
   const [docs, indexes] = await Promise.all([
-    coll.find({}).toArray(),
-    coll.getIndexes ? coll.getIndexes() : [],
+    readCollectionDocs(coll),
+    getCollectionIndexes(coll),
   ]);
+
+  const dataContent = serializeToEJSON(docs);
+  const indexContent = JSON.stringify(indexes, null, 2);
 
   const dataFilePath = path.join(outputDir, `${collectionName}.json`);
   const indexFilePath = path.join(outputDir, `${collectionName}.indexes.json`);
 
-  fs.writeFileSync(dataFilePath, serializeToEJSON(docs), "utf8");
-  fs.writeFileSync(indexFilePath, JSON.stringify(indexes, null, 2), "utf8");
+  fs.writeFileSync(dataFilePath, dataContent, "utf8");
+  fs.writeFileSync(indexFilePath, indexContent, "utf8");
 
   return {
     collectionName,
     count: docs.length,
     indexCount: Array.isArray(indexes) ? indexes.length : Object.keys(indexes || {}).length,
+    dataFile: `${collectionName}.json`,
+    indexFile: `${collectionName}.indexes.json`,
+    dataSha256: sha256(dataContent),
+    indexesSha256: sha256(indexContent),
     dataFilePath,
     indexFilePath,
   };
 };
 
-/**
- * Backs up all non-system collections in the database.
- */
 const backupDatabase = async (db, baseDir = path.join(__dirname, "..", "backups")) => {
   const now = new Date();
   const timestamp = now.toISOString().replace(/[:.]/g, "-");
@@ -121,9 +192,29 @@ const backupDatabase = async (db, baseDir = path.join(__dirname, "..", "backups"
   }
 
   const totalDocuments = results.reduce((sum, item) => sum + item.count, 0);
+  const manifestPayload = {
+    version: "3.0",
+    timestamp: now.toISOString(),
+    dbName: db.databaseName || null,
+    collectionCount: results.length,
+    totalDocuments,
+    collections: results.map((r) => ({
+      collectionName: r.collectionName,
+      count: r.count,
+      indexCount: r.indexCount,
+      dataFile: r.dataFile,
+      indexFile: r.indexFile,
+      dataSha256: r.dataSha256,
+      indexesSha256: r.indexesSha256,
+    })),
+  };
+
+  const manifestPath = path.join(targetDir, MANIFEST_FILENAME);
+  fs.writeFileSync(manifestPath, JSON.stringify(manifestPayload, null, 2), "utf8");
 
   return {
     backupDir: targetDir,
+    manifestPath,
     timestamp,
     collectionCount: results.length,
     totalDocuments,
@@ -131,9 +222,42 @@ const backupDatabase = async (db, baseDir = path.join(__dirname, "..", "backups"
   };
 };
 
-/**
- * Restores a collection from EJSON files with optional clean drop and index recreation.
- */
+const verifyBackupManifest = (inputDir) => {
+  const manifestPath = path.join(inputDir, MANIFEST_FILENAME);
+  if (!fs.existsSync(manifestPath)) {
+    return { verified: false, hasManifest: false };
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  for (const entry of manifest.collections || []) {
+    const dataPath = path.join(inputDir, entry.dataFile || `${entry.collectionName}.json`);
+    if (!fs.existsSync(dataPath)) {
+      throw new Error(`BACKUP_CHECKSUM_MISMATCH: Missing data file ${entry.dataFile}`);
+    }
+    const actualDataHash = sha256(fs.readFileSync(dataPath, "utf8"));
+    if (entry.dataSha256 && actualDataHash !== entry.dataSha256) {
+      throw new Error(
+        `BACKUP_CHECKSUM_MISMATCH: Data checksum mismatch for collection "${entry.collectionName}"`
+      );
+    }
+
+    const indexPath = path.join(inputDir, entry.indexFile || `${entry.collectionName}.indexes.json`);
+    if (entry.indexesSha256) {
+      if (!fs.existsSync(indexPath)) {
+        throw new Error(`BACKUP_CHECKSUM_MISMATCH: Missing index file ${entry.indexFile}`);
+      }
+      const actualIdxHash = sha256(fs.readFileSync(indexPath, "utf8"));
+      if (actualIdxHash !== entry.indexesSha256) {
+        throw new Error(
+          `BACKUP_CHECKSUM_MISMATCH: Index metadata checksum mismatch for collection "${entry.collectionName}"`
+        );
+      }
+    }
+  }
+
+  return { verified: true, hasManifest: true, manifest };
+};
+
 const restoreCollectionWithIndexes = async (db, collectionName, inputDir, { drop = false } = {}) => {
   const dataFilePath = path.join(inputDir, `${collectionName}.json`);
   const indexFilePath = path.join(inputDir, `${collectionName}.indexes.json`);
@@ -142,41 +266,60 @@ const restoreCollectionWithIndexes = async (db, collectionName, inputDir, { drop
     throw new Error(`Data file not found for collection ${collectionName} at ${dataFilePath}`);
   }
 
-  const coll = db.collection(collectionName);
-  if (drop && coll.drop) {
-    try {
-      await coll.drop();
-    } catch (err) {
-      // Ignore ns not found
-      if (err.code !== 26) throw err;
-    }
+  // Parse and validate BEFORE touching the target collection
+  const rawData = fs.readFileSync(dataFilePath, "utf8");
+  const docs = deserializeFromEJSON(rawData);
+  if (!Array.isArray(docs)) {
+    throw new Error(`Invalid EJSON payload for collection ${collectionName}: expected array`);
   }
 
-  const docs = deserializeFromEJSON(fs.readFileSync(dataFilePath, "utf8"));
-  let insertedCount = 0;
-  if (docs.length > 0) {
-    const res = await coll.insertMany(docs, { ordered: false });
-    insertedCount = res.insertedCount || docs.length;
-  }
-
-  // Restore indexes if available
-  let indexesRestored = 0;
-  if (fs.existsSync(indexFilePath) && coll.createIndexes) {
+  let customIndexes = [];
+  if (fs.existsSync(indexFilePath)) {
     const indexes = JSON.parse(fs.readFileSync(indexFilePath, "utf8"));
-    const rawList = Array.isArray(indexes) ? indexes : Object.values(indexes);
-    // Filter out default _id_ index
-    const customIndexes = rawList
-      .filter((idx) => idx.name !== "_id_")
-      .map((idx) => ({
-        key: idx.key,
-        name: idx.name,
-        unique: idx.unique,
-        sparse: idx.sparse,
-        partialFilterExpression: idx.partialFilterExpression,
-        expireAfterSeconds: idx.expireAfterSeconds,
-      }));
+    customIndexes = extractCustomIndexes(indexes);
+  }
 
-    if (customIndexes.length > 0) {
+  const coll = db.collection(collectionName);
+  const canStageAtomically = drop && typeof coll.rename === "function";
+
+  let insertedCount = 0;
+  let indexesRestored = 0;
+
+  if (canStageAtomically) {
+    const tempName = `__restore_tmp_${collectionName}_${crypto.randomBytes(4).toString("hex")}`.slice(0, 60);
+    const tempColl = db.collection(tempName);
+    try {
+      if (docs.length === 0 && typeof db.createCollection === "function") {
+        await db.createCollection(tempName);
+      }
+      if (docs.length > 0) {
+        insertedCount = await insertInBatches(tempColl, docs);
+      }
+      if (customIndexes.length > 0 && typeof tempColl.createIndexes === "function") {
+        await tempColl.createIndexes(customIndexes);
+        indexesRestored = customIndexes.length;
+      }
+      await tempColl.rename(collectionName, { dropTarget: true });
+    } catch (err) {
+      if (typeof tempColl.drop === "function") {
+        await tempColl.drop().catch(() => {});
+      }
+      throw err;
+    }
+  } else {
+    if (drop && coll.drop) {
+      try {
+        await coll.drop();
+      } catch (err) {
+        if (err.code !== 26) throw err;
+      }
+    }
+
+    if (docs.length > 0) {
+      insertedCount = await insertInBatches(coll, docs);
+    }
+
+    if (customIndexes.length > 0 && coll.createIndexes) {
       await coll.createIndexes(customIndexes);
       indexesRestored = customIndexes.length;
     }
@@ -189,17 +332,30 @@ const restoreCollectionWithIndexes = async (db, collectionName, inputDir, { drop
   };
 };
 
-/**
- * Restores entire database from a timestamped backup directory.
- */
 const restoreDatabase = async (db, inputDir, { drop = true } = {}) => {
   if (!fs.existsSync(inputDir)) {
     throw new Error(`Backup directory not found: ${inputDir}`);
   }
 
-  const files = fs.readdirSync(inputDir).filter((f) => f.endsWith(".json") && !f.endsWith(".indexes.json"));
-  const results = [];
+  // Verify manifest checksums & pre-parse ALL backup files BEFORE any destructive action
+  verifyBackupManifest(inputDir);
 
+  const files = fs
+    .readdirSync(inputDir)
+    .filter(
+      (f) =>
+        f.endsWith(".json") &&
+        !f.endsWith(".indexes.json") &&
+        f !== MANIFEST_FILENAME &&
+        f !== "migration-manifest.json"
+    );
+
+  // Pre-validate readability / EJSON validity before mutating DB even if no manifest exists
+  for (const file of files) {
+    deserializeFromEJSON(fs.readFileSync(path.join(inputDir, file), "utf8"));
+  }
+
+  const results = [];
   for (const file of files) {
     const collectionName = file.replace(/\.json$/, "");
     const res = await restoreCollectionWithIndexes(db, collectionName, inputDir, { drop });
@@ -220,10 +376,38 @@ const restoreDatabase = async (db, inputDir, { drop = true } = {}) => {
 // 4. DATABASE CLONING (Between Namespaces or In-Memory Instances)
 // =============================================================================
 
-/**
- * Clones all documents from sourceDb to targetDb without mutating source.
- */
-const cloneCollections = async (sourceDb, targetDb, { dropTarget = true } = {}) => {
+const assertSafeTarget = (db, { confirmProduction = false } = {}) => {
+  const dbName = db && db.databaseName ? String(db.databaseName).trim().toLowerCase() : "";
+  if ((process.env.NODE_ENV === "production" || dbName === "edunity") && !confirmProduction) {
+    throw new Error(
+      `[SECURITY GUARD] Refusing destructive operation on target database "${dbName || "production"}" without --confirm-production`
+    );
+  }
+};
+
+const cloneCollections = async (sourceDb, targetDb, { dropTarget = true, confirmProduction = false } = {}) => {
+  if (
+    sourceDb &&
+    targetDb &&
+    sourceDb === targetDb
+  ) {
+    throw new Error("CLONE_SELF_FORBIDDEN: sourceDb and targetDb must not be the same instance");
+  }
+  if (
+    sourceDb &&
+    targetDb &&
+    sourceDb.databaseName &&
+    targetDb.databaseName &&
+    sourceDb.databaseName === targetDb.databaseName &&
+    sourceDb.client === targetDb.client
+  ) {
+    throw new Error(
+      `CLONE_SELF_FORBIDDEN: sourceDb and targetDb resolve to identical database "${sourceDb.databaseName}"`
+    );
+  }
+
+  assertSafeTarget(targetDb, { confirmProduction });
+
   const collections = (await sourceDb.listCollections().toArray()).filter(
     (c) => !c.name.startsWith("system.")
   );
@@ -233,36 +417,49 @@ const cloneCollections = async (sourceDb, targetDb, { dropTarget = true } = {}) 
     const sourceColl = sourceDb.collection(c.name);
     const targetColl = targetDb.collection(c.name);
 
-    if (dropTarget && targetColl.drop) {
-      try {
-        await targetColl.drop();
-      } catch (err) {
-        if (err.code !== 26) throw err;
-      }
-    }
+    const [docs, rawIndexes] = await Promise.all([
+      readCollectionDocs(sourceColl),
+      getCollectionIndexes(sourceColl),
+    ]);
+    const customIndexes = extractCustomIndexes(rawIndexes);
 
-    const docs = await sourceColl.find({}).toArray();
     let clonedCount = 0;
-    if (docs.length > 0) {
-      const res = await targetColl.insertMany(docs, { ordered: false });
-      clonedCount = res.insertedCount || docs.length;
-    }
+    const canStageAtomically = dropTarget && typeof targetColl.rename === "function";
 
-    // Replicate indexes if available
-    if (sourceColl.getIndexes && targetColl.createIndexes) {
-      const indexes = await sourceColl.getIndexes();
-      const rawList = Array.isArray(indexes) ? indexes : Object.values(indexes || {});
-      const customIndexes = rawList
-        .filter((idx) => idx.name !== "_id_")
-        .map((idx) => ({
-          key: idx.key,
-          name: idx.name,
-          unique: idx.unique,
-          sparse: idx.sparse,
-          partialFilterExpression: idx.partialFilterExpression,
-          expireAfterSeconds: idx.expireAfterSeconds,
-        }));
-      if (customIndexes.length > 0) {
+    if (canStageAtomically) {
+      const tempName = `__clone_tmp_${c.name}_${crypto.randomBytes(4).toString("hex")}`.slice(0, 60);
+      const tempColl = targetDb.collection(tempName);
+      try {
+        if (docs.length === 0 && typeof targetDb.createCollection === "function") {
+          await targetDb.createCollection(tempName);
+        }
+        if (docs.length > 0) {
+          clonedCount = await insertInBatches(tempColl, docs);
+        }
+        if (customIndexes.length > 0 && typeof tempColl.createIndexes === "function") {
+          await tempColl.createIndexes(customIndexes);
+        }
+        await tempColl.rename(c.name, { dropTarget: true });
+      } catch (err) {
+        if (typeof tempColl.drop === "function") {
+          await tempColl.drop().catch(() => {});
+        }
+        throw err;
+      }
+    } else {
+      if (dropTarget && targetColl.drop) {
+        try {
+          await targetColl.drop();
+        } catch (err) {
+          if (err.code !== 26) throw err;
+        }
+      }
+
+      if (docs.length > 0) {
+        clonedCount = await insertInBatches(targetColl, docs);
+      }
+
+      if (customIndexes.length > 0 && targetColl.createIndexes) {
         await targetColl.createIndexes(customIndexes);
       }
     }
@@ -282,9 +479,6 @@ const cloneCollections = async (sourceDb, targetDb, { dropTarget = true } = {}) 
 // 5. 4-PART AUTOMATED RECONCILIATION SUITE
 // =============================================================================
 
-/**
- * Part 1: Compares document counts per collection between source and target database.
- */
 const reconcileDocumentCounts = async (sourceDb, targetDb, collectionNames) => {
   const names =
     collectionNames ||
@@ -297,8 +491,12 @@ const reconcileDocumentCounts = async (sourceDb, targetDb, collectionNames) => {
 
   for (const name of names) {
     const [sourceCount, targetCount] = await Promise.all([
-      sourceDb.collection(name).countDocuments ? sourceDb.collection(name).countDocuments({}) : (await sourceDb.collection(name).find({}).toArray()).length,
-      targetDb.collection(name).countDocuments ? targetDb.collection(name).countDocuments({}) : (await targetDb.collection(name).find({}).toArray()).length,
+      sourceDb.collection(name).countDocuments
+        ? sourceDb.collection(name).countDocuments({})
+        : (await sourceDb.collection(name).find({}).toArray()).length,
+      targetDb.collection(name).countDocuments
+        ? targetDb.collection(name).countDocuments({})
+        : (await targetDb.collection(name).find({}).toArray()).length,
     ]);
 
     const matched = sourceCount === targetCount;
@@ -318,31 +516,43 @@ const reconcileDocumentCounts = async (sourceDb, targetDb, collectionNames) => {
   };
 };
 
-/**
- * Part 2: Verifies index parity (19 Unique Indexes present on target).
- */
 const reconcileIndexes = async (targetDb, specs = UNIQUE_INDEX_SPECS) => {
   const missing = [];
   const checked = [];
 
   for (const spec of specs) {
     const coll = targetDb.collection(spec.collection);
-    let targetIndexes = [];
-    if (coll.getIndexes) {
-      const idxObj = await coll.getIndexes();
-      targetIndexes = Array.isArray(idxObj) ? idxObj : Object.values(idxObj || {});
-    }
+    const targetIndexes = await getCollectionIndexes(coll);
 
+    const specKeys = Object.keys(spec.keys);
     const found = targetIndexes.some((idx) => {
-      // Check if all keys match
-      const keyFields = Object.keys(spec.keys);
-      const matchKey = keyFields.every((k) => idx.key && idx.key[k] === spec.keys[k]);
-      return matchKey && (spec.unique ? idx.unique === true : true);
+      if (!idx || !idx.key) return false;
+      const idxKeys = Object.keys(idx.key);
+      if (idxKeys.length !== specKeys.length) return false;
+      const matchKey = specKeys.every((k, i) => idxKeys[i] === k && idx.key[k] === spec.keys[k]);
+      if (!matchKey) return false;
+      if (spec.unique && idx.unique !== true) return false;
+      if (spec.partialFilterExpression) {
+        return (
+          idx.partialFilterExpression &&
+          canonicalStringify(idx.partialFilterExpression) ===
+            canonicalStringify(spec.partialFilterExpression)
+        );
+      }
+      if (idx.partialFilterExpression) {
+        return false;
+      }
+      return true;
     });
 
     checked.push({ collection: spec.collection, indexName: spec.indexName, found });
     if (!found) {
-      missing.push({ collection: spec.collection, indexName: spec.indexName, expectedKeys: spec.keys });
+      missing.push({
+        collection: spec.collection,
+        indexName: spec.indexName,
+        expectedKeys: spec.keys,
+        expectedPartialFilter: spec.partialFilterExpression || null,
+      });
     }
   }
 
@@ -354,9 +564,6 @@ const reconcileIndexes = async (targetDb, specs = UNIQUE_INDEX_SPECS) => {
   };
 };
 
-/**
- * Part 3: Financial Ledger Reconciliation (Châu's 4 Invariant Equations).
- */
 const reconcileFinancialLedgers = async (db) => {
   const checks = {};
 
@@ -419,9 +626,7 @@ const reconcileFinancialLedgers = async (db) => {
   // Eq 3: Campaign.fundedAmount == Sum(SponsorContribution.amount where COMPLETED)
   const campaignsAgg = await db
     .collection("scholarshipcampaigns")
-    .aggregate([
-      { $group: { _id: null, total: { $sum: { $toDecimal: "$fundedAmount" } } } },
-    ])
+    .aggregate([{ $group: { _id: null, total: { $sum: { $toDecimal: "$fundedAmount" } } } }])
     .toArray();
 
   const contribsAgg = await db
@@ -486,9 +691,6 @@ const reconcileFinancialLedgers = async (db) => {
   };
 };
 
-/**
- * Part 4: Referential Integrity Check (Orphans).
- */
 const reconcileOrphans = async (db) => {
   const results = [];
   for (const spec of ORPHAN_CHECK_SPECS) {
@@ -528,9 +730,6 @@ const reconcileOrphans = async (db) => {
   };
 };
 
-/**
- * Master 4-part automated reconciliation runner.
- */
 const runFullReconciliation = async (sourceDb, targetDb) => {
   const startMs = Date.now();
 
@@ -559,10 +758,74 @@ const runFullReconciliation = async (sourceDb, targetDb) => {
   };
 };
 
+// =============================================================================
+// 6. CLI ENTRYPOINT (backup | restore | clone | reconcile)
+// =============================================================================
+if (require.main === module) {
+  require("dotenv").config();
+  const connectDB = require("../src/config/db");
+
+  const args = process.argv.slice(2);
+  const command = args[0];
+  const hasFlag = (f) => args.includes(f);
+  const getArgValue = (prefix) => {
+    const hit = args.find((a) => a.startsWith(`${prefix}=`));
+    if (hit) return hit.slice(prefix.length + 1);
+    const idx = args.indexOf(prefix);
+    return idx >= 0 ? args[idx + 1] : "";
+  };
+
+  const runCLI = async () => {
+    try {
+      const uri = process.env.MONGODB_URI;
+      await connectDB(uri);
+      const db = mongoose.connection.db;
+      const confirmProduction = hasFlag("--confirm-production");
+
+      if (command === "backup") {
+        const outDir = getArgValue("--out") || undefined;
+        const res = await measureRTO(() => backupDatabase(db, outDir));
+        console.log(JSON.stringify(res, null, 2));
+      } else if (command === "restore") {
+        assertSafeTarget(db, { confirmProduction });
+        const inDir = getArgValue("--in");
+        const res = await measureRTO(() => restoreDatabase(db, inDir, { drop: true }));
+        console.log(JSON.stringify(res, null, 2));
+      } else if (command === "clone") {
+        const targetDbName = getArgValue("--target-db");
+        if (!targetDbName) throw new Error("--target-db is required for clone");
+        const targetDb = mongoose.connection.getClient().db(targetDbName);
+        const res = await measureRTO(() =>
+          cloneCollections(db, targetDb, { dropTarget: true, confirmProduction })
+        );
+        console.log(JSON.stringify(res, null, 2));
+      } else if (command === "reconcile") {
+        const sourceDbName = getArgValue("--source-db");
+        const sourceDb = sourceDbName ? mongoose.connection.getClient().db(sourceDbName) : db;
+        const res = await runFullReconciliation(sourceDb, db);
+        console.log(JSON.stringify(res, null, 2));
+      } else {
+        throw new Error(`Unknown command "${command}". Expected one of: backup, restore, clone, reconcile`);
+      }
+
+      await mongoose.disconnect();
+      process.exit(0);
+    } catch (err) {
+      console.error("[QA-07 ERROR]:", err.message);
+      await mongoose.disconnect().catch(() => {});
+      process.exit(1);
+    }
+  };
+
+  runCLI();
+}
+
 module.exports = {
   measureRTO,
   serializeToEJSON,
   deserializeFromEJSON,
+  getCollectionIndexes,
+  verifyBackupManifest,
   backupCollectionWithIndexes,
   backupDatabase,
   restoreCollectionWithIndexes,
@@ -574,4 +837,3 @@ module.exports = {
   reconcileOrphans,
   runFullReconciliation,
 };
-

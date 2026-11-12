@@ -315,16 +315,21 @@ describe("TASK QA-07: Backup, Restore, DB Clone & Reconciliation Verification", 
     });
 
     // Part 2: Index Parity
-    test("QA-07.REC.2: reconcileIndexes verifies all 19 unique indexes are present", async () => {
+    test("QA-07.REC.2: reconcileIndexes verifies all model-synced unique indexes are present", async () => {
       // Mock db containing all required indexes
       const mockTargetDb = {
         collection: (collectionName) => ({
-          getIndexes: async () => {
-            const spec = UNIQUE_INDEX_SPECS.find((s) => s.collection === collectionName);
-            if (!spec) return [{ key: { _id: 1 }, name: "_id_" }];
+          indexes: async () => {
+            const matchingSpecs = UNIQUE_INDEX_SPECS.filter((s) => s.collection === collectionName);
             return [
               { key: { _id: 1 }, name: "_id_" },
-              { key: spec.keys, name: spec.indexName, unique: true },
+              ...matchingSpecs.map((spec) => ({
+                key: spec.keys,
+                name: spec.indexName,
+                unique: true,
+                ...(spec.partialFilterExpression ? { partialFilterExpression: spec.partialFilterExpression } : {}),
+                ...(spec.sparse ? { sparse: spec.sparse } : {}),
+              })),
             ];
           },
         }),
@@ -333,21 +338,27 @@ describe("TASK QA-07: Backup, Restore, DB Clone & Reconciliation Verification", 
       const result = await reconcileIndexes(mockTargetDb);
       expect(result.allIndexesPresent).toBe(true);
       expect(result.missingCount).toBe(0);
-      expect(result.checkedCount).toBe(19);
+      expect(result.checkedCount).toBe(UNIQUE_INDEX_SPECS.length);
     });
 
     test("QA-07.REC.3: reconcileIndexes detects missing unique index", async () => {
       const mockTargetDb = {
         collection: (collectionName) => ({
-          getIndexes: async () => {
+          indexes: async () => {
             // Suppose payments unique index is missing
             if (collectionName === "payments") {
               return [{ key: { _id: 1 }, name: "_id_" }];
             }
-            const spec = UNIQUE_INDEX_SPECS.find((s) => s.collection === collectionName);
+            const matchingSpecs = UNIQUE_INDEX_SPECS.filter((s) => s.collection === collectionName);
             return [
               { key: { _id: 1 }, name: "_id_" },
-              { key: spec.keys, name: spec.indexName, unique: true },
+              ...matchingSpecs.map((spec) => ({
+                key: spec.keys,
+                name: spec.indexName,
+                unique: true,
+                ...(spec.partialFilterExpression ? { partialFilterExpression: spec.partialFilterExpression } : {}),
+                ...(spec.sparse ? { sparse: spec.sparse } : {}),
+              })),
             ];
           },
         }),
@@ -508,12 +519,17 @@ describe("TASK QA-07: Backup, Restore, DB Clone & Reconciliation Verification", 
         }),
         collection: (name) => ({
           countDocuments: async () => 10,
-          getIndexes: async () => {
-            const spec = UNIQUE_INDEX_SPECS.find((s) => s.collection === name);
-            if (!spec) return [{ key: { _id: 1 }, name: "_id_" }];
+          indexes: async () => {
+            const matchingSpecs = UNIQUE_INDEX_SPECS.filter((s) => s.collection === name);
             return [
               { key: { _id: 1 }, name: "_id_" },
-              { key: spec.keys, name: spec.indexName, unique: true },
+              ...matchingSpecs.map((spec) => ({
+                key: spec.keys,
+                name: spec.indexName,
+                unique: true,
+                ...(spec.partialFilterExpression ? { partialFilterExpression: spec.partialFilterExpression } : {}),
+                ...(spec.sparse ? { sparse: spec.sparse } : {}),
+              })),
             ];
           },
           aggregate: (pipeline) => ({

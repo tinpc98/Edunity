@@ -37,6 +37,81 @@ const REPORT_TRANSITIONS = {
 };
 
 const toId = (val) => (val && val._id ? val._id.toString() : val ? String(val) : null);
+const isValidIdValue = (val) =>
+  (typeof val === "string" ||
+    val instanceof mongoose.Types.ObjectId ||
+    Boolean(val && typeof val === "object" && val._bsontype === "ObjectId")) &&
+  mongoose.isValidObjectId(val);
+const isPlainObjectOrArray = (val) => val !== null && typeof val === "object";
+const assertOptionalString = (val, field, maxLen = 1000) => {
+  if (val === undefined || val === null) return null;
+  if (typeof val !== "string") {
+    throw validationError(`${field} must be a string`);
+  }
+  const trimmed = val.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > maxLen) {
+    throw validationError(`${field} must be at most ${maxLen} characters`);
+  }
+  return trimmed;
+};
+const assertRequiredEnumString = (val, allowed, field) => {
+  if (typeof val !== "string") {
+    throw validationError(`${field} must be one of ${allowed.join(", ")}`);
+  }
+  const upper = val.trim().toUpperCase();
+  if (!allowed.includes(upper)) {
+    throw validationError(`${field} must be one of ${allowed.join(", ")}`);
+  }
+  return upper;
+};
+const assertOptionalQueryString = (val, field) => {
+  if (val === undefined || val === null || val === "") return null;
+  if (typeof val !== "string") {
+    throw validationError(`${field} query parameter must be a string`);
+  }
+  const trimmed = val.trim();
+  return trimmed ? trimmed : null;
+};
+const assertQueryIdValue = (val, field, notFoundMsg, notFoundCode) => {
+  if (val === undefined || val === null || val === "") return null;
+  if (Array.isArray(val) || (typeof val === "object" && !(val instanceof mongoose.Types.ObjectId) && val._bsontype !== "ObjectId")) {
+    throw validationError(`${field} must be a valid ID string`);
+  }
+  assertId(val, notFoundMsg, notFoundCode);
+  return toId(val);
+};
+const parsePositiveDurationMinutes = (raw) => {
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (typeof raw === "boolean" || isPlainObjectOrArray(raw)) {
+    throw validationError("durationMinutes must be a number between 1 and 43200 (30 days)");
+  }
+  if (typeof raw === "string" && !/^\d+(\.\d+)?$/.test(raw.trim())) {
+    throw validationError("durationMinutes must be a number between 1 and 43200 (30 days)");
+  }
+  const mins = Number(raw);
+  if (!Number.isFinite(mins) || mins < 1 || mins > 43200) {
+    throw validationError("durationMinutes must be between 1 and 43200 (30 days)");
+  }
+  return mins;
+};
+const runInTx = async (work) => {
+  const dbSession = await mongoose.startSession();
+  try {
+    return await dbSession.withTransaction(async () => work(dbSession));
+  } finally {
+    await dbSession.endSession();
+  }
+};
+const getOwnClassInTx = async (teacherId, classId, dbSession) => {
+  if (!isValidIdValue(classId)) throw CLASS_NOT_FOUND();
+  const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).session(dbSession);
+  if (!cls) throw CLASS_NOT_FOUND();
+  if (cls.teacherId.toString() !== teacherId.toString()) {
+    throw FORBIDDEN("You can only manage your own classes");
+  }
+  return cls;
+};
 const conversationNotFound = () => new AppError("Conversation not found", "CONVERSATION_NOT_FOUND", 404);
 const messageNotFound = () => new AppError("Message not found", "MESSAGE_NOT_FOUND", 404);
 const reportNotFound = () => new AppError("Message report not found", "MESSAGE_REPORT_NOT_FOUND", 404);
@@ -80,17 +155,22 @@ const assertActiveAccount = async (userId) => {
  * Used on every CLASS channel open, read, list, report, or send so cancelled/expired
  * enrollments lose access immediately.
  */
-const assertLiveClassMember = async (userId, classId, { forPosting = false, hideExistence = false } = {}) => {
-  if (!mongoose.isValidObjectId(classId)) {
+const assertLiveClassMember = async (
+  userId,
+  classId,
+  { forPosting = false, hideExistence = false, dbSession = null } = {}
+) => {
+  if (!isValidIdValue(classId)) {
     throw hideExistence ? conversationNotFound() : CLASS_NOT_FOUND();
   }
-  const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
+  const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).session(dbSession).lean();
   if (!cls) {
     throw hideExistence ? conversationNotFound() : CLASS_NOT_FOUND();
   }
 
   const user = await User.findOne({ _id: userId, status: "ACTIVE", ...NOT_DELETED })
     .select("role status")
+    .session(dbSession)
     .lean();
   if (!user) {
     throw hideExistence ? conversationNotFound() : new AppError("Your account is not active", "ACCOUNT_NOT_ACTIVE", 403);
@@ -100,13 +180,15 @@ const assertLiveClassMember = async (userId, classId, { forPosting = false, hide
   if (user.role === "TEACHER") {
     isMember = toId(cls.teacherId) === toId(userId);
   } else if (user.role === "STUDENT") {
-    isMember = Boolean(
-      await Enrollment.exists({
-        classId: cls._id,
-        studentId: userId,
-        enrollmentStatus: { $in: LIVE_ENROLLMENT_STATUSES },
-      })
-    );
+    const enrolled = await Enrollment.findOne({
+      classId: cls._id,
+      studentId: userId,
+      enrollmentStatus: { $in: LIVE_ENROLLMENT_STATUSES },
+    })
+      .select("_id")
+      .session(dbSession)
+      .lean();
+    isMember = Boolean(enrolled);
   }
 
   if (!isMember) {
@@ -125,12 +207,13 @@ const assertLiveClassMember = async (userId, classId, { forPosting = false, hide
   return { cls, user };
 };
 
-const getLiveClassMemberIds = async (cls) => {
+const getLiveClassMemberIds = async (cls, dbSession = null) => {
   const enrollments = await Enrollment.find({
     classId: cls._id,
     enrollmentStatus: { $in: LIVE_ENROLLMENT_STATUSES },
   })
     .select("studentId")
+    .session(dbSession)
     .lean();
   const ids = new Set([toId(cls.teacherId)]);
   for (const e of enrollments) {
@@ -143,13 +226,16 @@ const ensureClassConversationDoc = async (cls) => {
   const memberIds = await getLiveClassMemberIds(cls);
   const existing = await Conversation.findOne({ channelType: "CLASS", classId: cls._id });
   if (existing) {
-    // Keep participantIds in sync with current live membership
+    // Keep participantIds in sync with current live membership atomically (avoid OCC VersionError)
     const currentSet = new Set(existing.participantIds.map(toId));
     const changed =
       currentSet.size !== memberIds.length || memberIds.some((id) => !currentSet.has(id));
     if (changed) {
-      existing.participantIds = memberIds.map((id) => new mongoose.Types.ObjectId(id));
-      await existing.save();
+      return Conversation.findOneAndUpdate(
+        { _id: existing._id },
+        { $set: { participantIds: memberIds.map((id) => new mongoose.Types.ObjectId(id)) } },
+        { returnDocument: "after" }
+      );
     }
     return existing;
   }
@@ -237,15 +323,16 @@ const presentModerationForStaff = (conversation, audienceRole = "TEACHER", userM
   };
 };
 
-const getMyConversation = async (userId, conversationId, { forPosting = false } = {}) => {
-  if (!mongoose.isValidObjectId(conversationId)) throw conversationNotFound();
-  const conversation = await Conversation.findById(conversationId);
+const getMyConversation = async (userId, conversationId, { forPosting = false, dbSession = null } = {}) => {
+  if (!isValidIdValue(conversationId)) throw conversationNotFound();
+  const conversation = await Conversation.findById(conversationId).session(dbSession);
   if (!conversation) throw conversationNotFound();
 
   if (conversation.channelType === "CLASS") {
     await assertLiveClassMember(userId, conversation.classId, {
       forPosting,
       hideExistence: true,
+      dbSession,
     });
     return conversation;
   }
@@ -305,8 +392,11 @@ const present = async (conversations, userId) => {
  * optionally about one of that Teacher's classes. Other role pairs cannot message each other.
  */
 const openConversation = async (user, body = {}) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw validationError("Request body must be an object");
+  }
   const { participantId, classId } = body;
-  if (!mongoose.isValidObjectId(participantId)) throw validationError("participantId is required");
+  if (!isValidIdValue(participantId)) throw validationError("participantId is required");
   if (toId(participantId) === toId(user.id)) throw validationError("You cannot start a conversation with yourself");
 
   const other = await User.findOne({ _id: participantId, status: "ACTIVE", ...NOT_DELETED }).select("role").lean();
@@ -319,9 +409,14 @@ const openConversation = async (user, body = {}) => {
   if (user.role === "TEACHER") await assertTeacherMayContact(user.id, other._id);
 
   let conversationClassId = null;
-  if (classId) {
+  if (classId !== undefined && classId !== null && classId !== "") {
+    if (!isValidIdValue(classId)) {
+      throw Array.isArray(classId) || isPlainObjectOrArray(classId)
+        ? validationError("classId must be a valid ID")
+        : new AppError("Class not found for this teacher", "CLASS_NOT_FOUND", 404);
+    }
     const teacherId = user.role === "TEACHER" ? user.id : other._id;
-    const cls = mongoose.isValidObjectId(classId) ? await Class.findOne({ _id: classId, teacherId }).select("_id").lean() : null;
+    const cls = await Class.findOne({ _id: classId, teacherId }).select("_id").lean();
     if (!cls) throw new AppError("Class not found for this teacher", "CLASS_NOT_FOUND", 404);
     conversationClassId = cls._id;
   }
@@ -425,12 +520,19 @@ const presentMessage = (message, { senderMap = null, includeModeratedBy = false 
 // Newest page first via `before` (ISO date cursor); items are returned in chronological order
 const listMessages = async (userId, conversationId, query = {}) => {
   const conversation = await getMyConversation(userId, conversationId);
-  const limit = Math.min(Math.max(parseInt(query.limit, 10) || 30, 1), 100);
+  const rawLimit = assertOptionalQueryString(query.limit, "limit");
+  let parsedLimit = 30;
+  if (rawLimit !== null) {
+    if (!/^\d+$/.test(rawLimit)) throw validationError("limit must be a positive integer");
+    parsedLimit = Number(rawLimit);
+  }
+  const limit = Math.min(Math.max(parsedLimit || 30, 1), 100);
+  const rawBefore = assertOptionalQueryString(query.before, "before");
   const filter = { conversationId: conversation._id };
-  const before = parseDate(query.before, "before");
+  const before = parseDate(rawBefore, "before");
   if (before) filter.createdAt = { $lt: before };
 
-  const rows = await Message.find(filter).sort({ createdAt: -1 }).limit(limit + 1).lean();
+  const rows = await Message.find(filter).sort({ createdAt: -1, _id: -1 }).limit(limit + 1).lean();
   const hasMore = rows.length > limit;
   const sliced = rows.slice(0, limit).reverse();
 
@@ -451,14 +553,23 @@ const listClassMessages = async (user, classId, query = {}) => {
   return listMessages(user.id, conversation._id, query);
 };
 
-const sendMessageToConversationDoc = async (user, conversation, body = {}) => {
-  await assertActiveAccount(user.id);
-  if (isBlank(body.content)) throw validationError("content is required");
-  const content = body.content.trim();
-  if (content.length > MAX_MESSAGE_LENGTH) throw validationError(`content must be at most ${MAX_MESSAGE_LENGTH} characters`);
+const assertActiveAccountInTx = async (userId, dbSession) => {
+  const user = await User.findOne({ _id: userId, status: "ACTIVE", ...NOT_DELETED })
+    .select("role status")
+    .session(dbSession)
+    .lean();
+  if (!user) {
+    throw new AppError("Your account is not active", "ACCOUNT_NOT_ACTIVE", 403);
+  }
+  return user;
+};
+
+const sendMessageInsideTx = async (user, conversationId, content, dbSession) => {
+  await assertActiveAccountInTx(user.id, dbSession);
+  const conversation = await getMyConversation(user.id, conversationId, { forPosting: true, dbSession });
 
   if (conversation.channelType === "CLASS") {
-    const cls = await Class.findOne({ _id: conversation.classId, ...NOT_DELETED }).lean();
+    const cls = await Class.findOne({ _id: conversation.classId, ...NOT_DELETED }).session(dbSession).lean();
     if (!cls) throw CLASS_NOT_FOUND();
     if (!POSTABLE_CLASS_STATUSES.includes(cls.status)) {
       throw new AppError("Class is not open for new messages; history remains read-only", "CLASS_CHANNEL_READ_ONLY", 409);
@@ -490,16 +601,27 @@ const sendMessageToConversationDoc = async (user, conversation, body = {}) => {
       throw err;
     }
 
-    const liveMembers = await getLiveClassMemberIds(cls);
-    const message = await Message.create({ conversationId: conversation._id, senderId: user.id, content });
-    conversation.lastMessagePreview = content.slice(0, PREVIEW_LENGTH);
-    conversation.lastMessageAt = message.createdAt;
-    conversation.participantIds = liveMembers.map((id) => new mongoose.Types.ObjectId(id));
-    await conversation.save();
+    const liveMembers = await getLiveClassMemberIds(cls, dbSession);
+    const [message] = await Message.create(
+      [{ conversationId: conversation._id, senderId: user.id, content }],
+      { session: dbSession }
+    );
+    await Conversation.updateOne(
+      { _id: conversation._id },
+      {
+        $set: {
+          lastMessagePreview: content.slice(0, PREVIEW_LENGTH),
+          lastMessageAt: message.createdAt,
+          participantIds: liveMembers.map((id) => new mongoose.Types.ObjectId(id)),
+        },
+      },
+      { session: dbSession }
+    );
 
-    const sender = await User.findById(user.id).select(PROFILE_SELECT).lean();
+    const sender = await User.findById(user.id).select(PROFILE_SELECT).session(dbSession).lean();
     const senderName = getDisplayProfile(sender).fullName || "Thành viên lớp";
     const recipientIds = liveMembers.filter((id) => id !== toId(user.id));
+    let activeRecipientIds = [];
     if (recipientIds.length) {
       const activeRecipients = await User.find({
         _id: { $in: recipientIds },
@@ -507,71 +629,138 @@ const sendMessageToConversationDoc = async (user, conversation, body = {}) => {
         ...NOT_DELETED,
       })
         .select("_id")
+        .session(dbSession)
         .lean();
-      await Promise.all(
-        activeRecipients.map((r) =>
-          notify(
-            r._id,
-            `[${cls.className}] Tin nhắn mới từ ${senderName}`,
-            content.slice(0, PREVIEW_LENGTH),
-            "CLASS_MESSAGE"
-          )
-        )
-      );
+      activeRecipientIds = activeRecipients.map((r) => r._id);
     }
 
     const senderMap = sender ? new Map([[toId(sender._id), sender]]) : null;
-    return presentMessage(message.toObject(), { senderMap });
+    return {
+      presented: presentMessage(message.toObject(), { senderMap }),
+      postCommitNotify: {
+        kind: "CLASS",
+        className: cls.className,
+        senderName,
+        recipientIds: activeRecipientIds,
+      },
+    };
   }
 
-  // DIRECT 1-1 message (existing behavior preserved)
-  const message = await Message.create({ conversationId: conversation._id, senderId: user.id, content });
-  conversation.lastMessagePreview = content.slice(0, PREVIEW_LENGTH);
-  conversation.lastMessageAt = message.createdAt;
-  await conversation.save();
+  // DIRECT 1-1 message: serialize preview update & message creation in tx
+  const [message] = await Message.create(
+    [{ conversationId: conversation._id, senderId: user.id, content }],
+    { session: dbSession }
+  );
+  await Conversation.updateOne(
+    { _id: conversation._id },
+    {
+      $set: {
+        lastMessagePreview: content.slice(0, PREVIEW_LENGTH),
+        lastMessageAt: message.createdAt,
+      },
+    },
+    { session: dbSession }
+  );
 
   const recipientId = conversation.participantIds.find((id) => toId(id) !== toId(user.id));
-  if (recipientId) {
-    const sender = await User.findById(user.id).select(PROFILE_SELECT).lean();
+  const sender = recipientId ? await User.findById(user.id).select(PROFILE_SELECT).session(dbSession).lean() : null;
+  return {
+    presented: presentMessage(message.toObject()),
+    postCommitNotify: recipientId
+      ? {
+          kind: "DIRECT",
+          recipientId,
+          senderName: getDisplayProfile(sender).fullName || "người dùng",
+        }
+      : null,
+  };
+};
+
+const dispatchSendNotifications = async (content, postCommitNotify) => {
+  if (!postCommitNotify) return;
+  if (postCommitNotify.kind === "CLASS" && postCommitNotify.recipientIds.length) {
+    await Promise.all(
+      postCommitNotify.recipientIds.map((rid) =>
+        notify(
+          rid,
+          `[${postCommitNotify.className}] Tin nhắn mới từ ${postCommitNotify.senderName}`,
+          content.slice(0, PREVIEW_LENGTH),
+          "CLASS_MESSAGE"
+        )
+      )
+    );
+  } else if (postCommitNotify.kind === "DIRECT" && postCommitNotify.recipientId) {
     await notify(
-      recipientId,
-      `Tin nhắn mới từ ${getDisplayProfile(sender).fullName || "người dùng"}`,
+      postCommitNotify.recipientId,
+      `Tin nhắn mới từ ${postCommitNotify.senderName}`,
       content.slice(0, PREVIEW_LENGTH),
       "NEW_MESSAGE"
     );
   }
-  return presentMessage(message.toObject());
+};
+
+const validateMessageContent = (body = {}) => {
+  if (isBlank(body.content)) throw validationError("content is required");
+  const content = body.content.trim();
+  if (content.length > MAX_MESSAGE_LENGTH) {
+    throw validationError(`content must be at most ${MAX_MESSAGE_LENGTH} characters`);
+  }
+  return content;
 };
 
 const sendMessage = async (user, conversationId, body = {}) => {
-  const conversation = await getMyConversation(user.id, conversationId, { forPosting: true });
-  return sendMessageToConversationDoc(user, conversation, body);
+  const content = validateMessageContent(body);
+  if (!isValidIdValue(conversationId)) throw conversationNotFound();
+
+  const txResult = await runInTx((dbSession) => sendMessageInsideTx(user, conversationId, content, dbSession));
+  await dispatchSendNotifications(content, txResult.postCommitNotify);
+  return txResult.presented;
 };
 
 const sendClassMessage = async (user, classId, body = {}) => {
+  const content = validateMessageContent(body);
   const { cls } = await assertLiveClassMember(user.id, classId, { forPosting: true });
   const conversation = await ensureClassConversationDoc(cls);
-  return sendMessageToConversationDoc(user, conversation, body);
+
+  const txResult = await runInTx((dbSession) => sendMessageInsideTx(user, conversation._id, content, dbSession));
+  await dispatchSendNotifications(content, txResult.postCommitNotify);
+  return txResult.presented;
+};
+
+const syncLatestConversationPreview = async (conversationId, dbSession) => {
+  const latest = await Message.findOne({ conversationId })
+    .sort({ createdAt: -1, _id: -1 })
+    .session(dbSession)
+    .lean();
+  if (!latest) return;
+  const preview = latest.isDeleted
+    ? RECALLED_PREVIEW
+    : latest.moderationStatus === "HIDDEN_BY_MODERATOR"
+      ? HIDDEN_PREVIEW
+      : String(latest.content || "").slice(0, PREVIEW_LENGTH);
+  await Conversation.updateOne({ _id: conversationId }, { $set: { lastMessagePreview: preview } }, { session: dbSession });
 };
 
 // Thu hồi tin nhắn của chính mình (soft delete; không xóa dữ liệu lịch sử khỏi DB)
 const deleteMessage = async (userId, messageId) => {
-  if (!mongoose.isValidObjectId(messageId)) throw messageNotFound();
-  const message = await Message.findById(messageId);
-  if (!message || message.isDeleted) throw messageNotFound();
-  await getMyConversation(userId, message.conversationId);
-  if (toId(message.senderId) !== toId(userId)) throw FORBIDDEN("You can only recall your own messages");
+  if (!isValidIdValue(messageId)) throw messageNotFound();
 
-  message.isDeleted = true;
-  message.deletedAt = new Date();
-  message.deletedBy = userId;
-  await message.save();
+  return runInTx(async (dbSession) => {
+    const message = await Message.findById(messageId).session(dbSession);
+    if (!message || message.isDeleted) throw messageNotFound();
+    await getMyConversation(userId, message.conversationId, { dbSession });
+    if (toId(message.senderId) !== toId(userId)) throw FORBIDDEN("You can only recall your own messages");
 
-  const latest = await Message.findOne({ conversationId: message.conversationId }).sort({ createdAt: -1 }).select("_id").lean();
-  if (latest && toId(latest._id) === toId(message._id)) {
-    await Conversation.updateOne({ _id: message.conversationId }, { $set: { lastMessagePreview: RECALLED_PREVIEW } });
-  }
-  return presentMessage(message.toObject());
+    const updated = await Message.findOneAndUpdate(
+      { _id: messageId, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: userId } },
+      { session: dbSession, returnDocument: "after" }
+    );
+    if (!updated) throw messageNotFound();
+
+    await syncLatestConversationPreview(updated.conversationId, dbSession);
+    return presentMessage(updated.toObject());
+  });
 };
 
 // ---------- LMS-13: Message Reporting & Moderation ----------
@@ -613,66 +802,77 @@ const reportMessage = async (user, messageId, body = {}) => {
   if (!["STUDENT", "TEACHER"].includes(user.role)) {
     throw FORBIDDEN("Only Students or Teachers can report messages");
   }
-  if (!mongoose.isValidObjectId(messageId)) throw messageNotFound();
+  if (!isValidIdValue(messageId)) throw messageNotFound();
 
-  const category = body.category ? String(body.category).trim().toUpperCase() : "";
-  if (!MESSAGE_REPORT_CATEGORIES.includes(category)) {
-    throw validationError(`category must be one of ${MESSAGE_REPORT_CATEGORIES.join(", ")}`);
-  }
+  const category = assertRequiredEnumString(body.category, MESSAGE_REPORT_CATEGORIES, "category");
   if (isBlank(body.reason) || body.reason.trim().length < 3 || body.reason.trim().length > 1000) {
     throw validationError("reason must be between 3 and 1000 characters");
   }
   const reason = body.reason.trim();
 
-  const message = await Message.findById(messageId);
-  if (!message || message.isDeleted) throw messageNotFound();
+  const report = await runInTx(async (dbSession) => {
+    const message = await Message.findById(messageId).session(dbSession);
+    if (!message || message.isDeleted) throw messageNotFound();
 
-  const conversation = await getMyConversation(user.id, message.conversationId);
-  if (toId(message.senderId) === toId(user.id)) {
-    throw new AppError("You cannot report your own message", "CANNOT_REPORT_OWN_MESSAGE", 400);
-  }
+    const conversation = await getMyConversation(user.id, message.conversationId, { dbSession });
+    if (toId(message.senderId) === toId(user.id)) {
+      throw new AppError("You cannot report your own message", "CANNOT_REPORT_OWN_MESSAGE", 400);
+    }
 
-  const existingOpen = await MessageModerationReport.exists({
-    messageId: message._id,
-    reporterId: user.id,
-    status: { $in: ["OPEN", "IN_REVIEW"] },
-  });
-  if (existingOpen) {
-    throw new AppError("You already have an active report for this message", "DUPLICATE_MESSAGE_REPORT", 409);
-  }
-
-  let report;
-  try {
-    report = await MessageModerationReport.create({
-      reportCode: generateReportCode(),
+    const existingOpen = await MessageModerationReport.findOne({
       messageId: message._id,
-      conversationId: conversation._id,
-      classId: conversation.classId || null,
-      channelType: conversation.channelType || "DIRECT",
       reporterId: user.id,
-      reporterRole: user.role,
-      reportedUserId: message.senderId,
-      category,
-      reason,
-      messageSnapshot: {
-        content: message.content,
-        moderationStatusAtReport: message.moderationStatus || "VISIBLE",
-        sentAt: message.createdAt,
-      },
-      status: "OPEN",
-      moderationActionTaken: "NONE",
-    });
-  } catch (err) {
-    if (err && err.code === 11000) {
+      status: { $in: ["OPEN", "IN_REVIEW"] },
+    })
+      .select("_id")
+      .session(dbSession)
+      .lean();
+    if (existingOpen) {
       throw new AppError("You already have an active report for this message", "DUPLICATE_MESSAGE_REPORT", 409);
     }
-    throw err;
-  }
 
-  if (message.moderationStatus === "VISIBLE") {
-    message.moderationStatus = "FLAGGED";
-    await message.save();
-  }
+    let createdReport;
+    try {
+      const [doc] = await MessageModerationReport.create(
+        [
+          {
+            reportCode: generateReportCode(),
+            messageId: message._id,
+            conversationId: conversation._id,
+            classId: conversation.classId || null,
+            channelType: conversation.channelType || "DIRECT",
+            reporterId: user.id,
+            reporterRole: user.role,
+            reportedUserId: message.senderId,
+            category,
+            reason,
+            messageSnapshot: {
+              content: message.content,
+              moderationStatusAtReport: message.moderationStatus || "VISIBLE",
+              sentAt: message.createdAt,
+            },
+            status: "OPEN",
+            moderationActionTaken: "NONE",
+          },
+        ],
+        { session: dbSession }
+      );
+      createdReport = doc;
+    } catch (err) {
+      if (err && err.code === 11000) {
+        throw new AppError("You already have an active report for this message", "DUPLICATE_MESSAGE_REPORT", 409);
+      }
+      throw err;
+    }
+
+    await Message.updateOne(
+      { _id: message._id, isDeleted: { $ne: true }, moderationStatus: "VISIBLE" },
+      { $set: { moderationStatus: "FLAGGED" } },
+      { session: dbSession }
+    );
+
+    return createdReport;
+  });
 
   await notifyAdmins(
     "Báo cáo vi phạm tin nhắn mới",
@@ -700,52 +900,82 @@ const getMyMessageReports = async (userId, paging) => {
   );
 };
 
-const applyHideMessage = async (message, actorId, actorRole, reason) => {
-  message.moderationStatus = "HIDDEN_BY_MODERATOR";
-  message.moderatedBy = actorId;
-  message.moderatedByRole = actorRole;
-  message.moderatedAt = new Date();
-  message.hiddenReason = reason;
-  await message.save();
-
-  const latest = await Message.findOne({ conversationId: message.conversationId }).sort({ createdAt: -1 }).select("_id").lean();
-  if (latest && toId(latest._id) === toId(message._id)) {
-    await Conversation.updateOne({ _id: message.conversationId }, { $set: { lastMessagePreview: HIDDEN_PREVIEW } });
-  }
-  return message;
+const applyHideMessage = async (message, actorId, actorRole, reason, dbSession = null) => {
+  const updated = await Message.findOneAndUpdate(
+    { _id: message._id },
+    {
+      $set: {
+        moderationStatus: "HIDDEN_BY_MODERATOR",
+        moderatedBy: actorId,
+        moderatedByRole: actorRole,
+        moderatedAt: new Date(),
+        hiddenReason: reason,
+      },
+    },
+    { session: dbSession, returnDocument: "after" }
+  );
+  await syncLatestConversationPreview(message.conversationId, dbSession);
+  return updated;
 };
 
-const applyRestoreMessage = async (message, actorId, actorRole) => {
-  message.moderationStatus = "VISIBLE";
-  message.moderatedBy = actorId;
-  message.moderatedByRole = actorRole;
-  message.moderatedAt = new Date();
-  message.hiddenReason = null;
-  await message.save();
-
-  const latest = await Message.findOne({ conversationId: message.conversationId }).sort({ createdAt: -1 }).lean();
-  if (latest && toId(latest._id) === toId(message._id)) {
-    const preview = latest.isDeleted ? RECALLED_PREVIEW : String(latest.content || "").slice(0, PREVIEW_LENGTH);
-    await Conversation.updateOne({ _id: message.conversationId }, { $set: { lastMessagePreview: preview } });
-  }
-  return message;
+const applyRestoreMessage = async (message, actorId, actorRole, dbSession = null) => {
+  const updated = await Message.findOneAndUpdate(
+    { _id: message._id },
+    {
+      $set: {
+        moderationStatus: "VISIBLE",
+        moderatedBy: actorId,
+        moderatedByRole: actorRole,
+        moderatedAt: new Date(),
+        hiddenReason: null,
+      },
+    },
+    { session: dbSession, returnDocument: "after" }
+  );
+  await syncLatestConversationPreview(message.conversationId, dbSession);
+  return updated;
 };
 
-const applyChannelModerationSettings = async (conversation, actorId, actorRole, body = {}) => {
-  const mod = conversation.moderation || {};
+const validateChannelModerationBody = (body = {}, actorRole = "TEACHER") => {
+  const reason = assertOptionalString(body.reason, "reason", 500);
+  const lockedReasonInput = assertOptionalString(body.lockedReason, "lockedReason", 500);
+
+  if (body.isLocked !== undefined && typeof body.isLocked !== "boolean") {
+    throw validationError("isLocked must be a boolean");
+  }
+  if (body.allowStudentPosts !== undefined && typeof body.allowStudentPosts !== "boolean") {
+    throw validationError("allowStudentPosts must be a boolean");
+  }
+  if (body.isLocked === true && !reason && !lockedReasonInput) {
+    throw validationError("reason is required when locking a class channel");
+  }
+
+  let nextStatus = undefined;
+  if (body.status !== undefined && actorRole === "ADMIN") {
+    nextStatus = assertRequiredEnumString(body.status, ["ACTIVE", "ARCHIVED"], "status");
+  }
+
+  return { reason, lockedReasonInput, nextStatus };
+};
+
+const cloneModerationState = (moderation) => {
+  if (!moderation) return {};
+  return typeof moderation.toObject === "function" ? moderation.toObject() : { ...moderation };
+};
+
+const applyChannelModerationSettings = async (conversation, actorId, actorRole, body = {}, dbSession = null) => {
+  const { reason, lockedReasonInput, nextStatus } = validateChannelModerationBody(body, actorRole);
+  const mod = cloneModerationState(conversation.moderation);
   const now = new Date();
-  const reason = body.reason ? String(body.reason).trim().slice(0, 500) : null;
+  let updatedConvStatus = conversation.status;
 
   if (body.isLocked !== undefined) {
-    const wantLock = Boolean(body.isLocked);
+    const wantLock = body.isLocked;
     if (!wantLock && mod.isLocked && mod.lockedByRole === "ADMIN" && actorRole !== "ADMIN") {
       throw new AppError("This channel was locked by Administrator and cannot be unlocked by teacher", "LOCKED_BY_ADMIN", 403);
     }
-    if (wantLock && isBlank(reason || body.lockedReason)) {
-      throw validationError("reason is required when locking a class channel");
-    }
     mod.isLocked = wantLock;
-    mod.lockedReason = wantLock ? (reason || String(body.lockedReason).trim().slice(0, 500)) : null;
+    mod.lockedReason = wantLock ? reason || lockedReasonInput : null;
     mod.lockedBy = wantLock ? actorId : null;
     mod.lockedByRole = wantLock ? actorRole : null;
     mod.lockedAt = wantLock ? now : null;
@@ -760,7 +990,7 @@ const applyChannelModerationSettings = async (conversation, actorId, actorRole, 
   }
 
   if (body.allowStudentPosts !== undefined) {
-    const allow = Boolean(body.allowStudentPosts);
+    const allow = body.allowStudentPosts;
     mod.allowStudentPosts = allow;
     mod.moderationHistory = mod.moderationHistory || [];
     mod.moderationHistory.push({
@@ -772,48 +1002,56 @@ const applyChannelModerationSettings = async (conversation, actorId, actorRole, 
     });
   }
 
-  if (body.status !== undefined && actorRole === "ADMIN") {
-    const nextStatus = String(body.status).trim().toUpperCase();
-    if (!["ACTIVE", "ARCHIVED"].includes(nextStatus)) {
-      throw validationError("status must be ACTIVE or ARCHIVED");
-    }
-    conversation.status = nextStatus;
+  if (nextStatus !== undefined && actorRole === "ADMIN") {
+    updatedConvStatus = nextStatus;
   }
 
-  conversation.moderation = mod;
-  await conversation.save();
-  return conversation;
+  return Conversation.findOneAndUpdate(
+    { _id: conversation._id },
+    { $set: { status: updatedConvStatus, moderation: mod } },
+    { session: dbSession, returnDocument: "after" }
+  );
 };
 
-const applyMuteParticipant = async (conversation, cls, actorId, actorRole, studentId, body = {}) => {
+const applyMuteParticipant = async (
+  conversation,
+  cls,
+  actorId,
+  actorRole,
+  studentId,
+  body = {},
+  { dbSession = null, deferNotify = false } = {}
+) => {
+  if (!isValidIdValue(studentId)) {
+    throw Array.isArray(studentId) || isPlainObjectOrArray(studentId)
+      ? validationError("studentId must be a valid ID")
+      : new AppError("Student not found", "USER_NOT_FOUND", 404);
+  }
   assertId(studentId, "Student not found", "USER_NOT_FOUND");
   if (toId(studentId) === toId(cls.teacherId)) {
     throw validationError("Cannot mute the class teacher");
   }
-  const isEnrolled = await Enrollment.exists({
+  const enrolled = await Enrollment.findOne({
     classId: cls._id,
     studentId,
     enrollmentStatus: { $in: LIVE_ENROLLMENT_STATUSES },
-  });
-  if (!isEnrolled) {
+  })
+    .select("_id")
+    .session(dbSession)
+    .lean();
+  if (!enrolled) {
     throw new AppError("Target student does not have an active or completed enrollment in this class", "USER_NOT_IN_CLASS", 404);
   }
   if (isBlank(body.reason)) {
     throw validationError("reason is required when muting a participant");
   }
-  const reason = String(body.reason).trim().slice(0, 500);
+  const reason = body.reason.trim().slice(0, 500);
 
-  let expiresAt = null;
-  if (body.durationMinutes !== undefined && body.durationMinutes !== null && body.durationMinutes !== "") {
-    const mins = Number(body.durationMinutes);
-    if (!Number.isFinite(mins) || mins < 1 || mins > 43200) {
-      throw validationError("durationMinutes must be between 1 and 43200 (30 days)");
-    }
-    expiresAt = new Date(Date.now() + mins * 60 * 1000);
-  }
+  const mins = parsePositiveDurationMinutes(body.durationMinutes);
+  const expiresAt = mins !== null ? new Date(Date.now() + mins * 60 * 1000) : null;
 
   const now = new Date();
-  const mod = conversation.moderation || {};
+  const mod = cloneModerationState(conversation.moderation);
   const existing = (mod.mutedParticipants || []).find((m) => toId(m.userId) === toId(studentId));
   if (existing && existing.mutedByRole === "ADMIN" && actorRole !== "ADMIN") {
     throw new AppError("Student mute was set by Administrator and cannot be altered by teacher", "MUTED_BY_ADMIN", 403);
@@ -838,21 +1076,32 @@ const applyMuteParticipant = async (conversation, cls, actorId, actorRole, stude
     actedAt: now,
   });
 
-  conversation.moderation = mod;
-  await conversation.save();
-
-  await notify(
-    studentId,
-    `[${cls.className}] Tạm khóa quyền gửi tin nhắn`,
-    reason,
-    "CLASS_CHANNEL_MUTED"
+  const updated = await Conversation.findOneAndUpdate(
+    { _id: conversation._id },
+    { $set: { moderation: mod } },
+    { session: dbSession, returnDocument: "after" }
   );
-  return conversation;
+
+  const muteNotifyPayload = {
+    userId: studentId,
+    title: `[${cls.className}] Tạm khóa quyền gửi tin nhắn`,
+    content: reason,
+    type: "CLASS_CHANNEL_MUTED",
+  };
+  if (!deferNotify) {
+    await notify(muteNotifyPayload.userId, muteNotifyPayload.title, muteNotifyPayload.content, muteNotifyPayload.type);
+  }
+  return { conversation: updated, reason, muteNotifyPayload };
 };
 
-const applyUnmuteParticipant = async (conversation, actorId, actorRole, targetUserId) => {
+const applyUnmuteParticipant = async (conversation, actorId, actorRole, targetUserId, dbSession = null) => {
+  if (!isValidIdValue(targetUserId)) {
+    throw Array.isArray(targetUserId) || isPlainObjectOrArray(targetUserId)
+      ? validationError("userId must be a valid ID")
+      : new AppError("User not found", "USER_NOT_FOUND", 404);
+  }
   assertId(targetUserId, "User not found", "USER_NOT_FOUND");
-  const mod = conversation.moderation || {};
+  const mod = cloneModerationState(conversation.moderation);
   const existing = (mod.mutedParticipants || []).find((m) => toId(m.userId) === toId(targetUserId));
   if (!existing) {
     throw new AppError("User is not currently muted in this class channel", "MUTE_NOT_FOUND", 404);
@@ -871,9 +1120,11 @@ const applyUnmuteParticipant = async (conversation, actorId, actorRole, targetUs
     reason: null,
     actedAt: new Date(),
   });
-  conversation.moderation = mod;
-  await conversation.save();
-  return conversation;
+  return Conversation.findOneAndUpdate(
+    { _id: conversation._id },
+    { $set: { moderation: mod } },
+    { session: dbSession, returnDocument: "after" }
+  );
 };
 
 const staffClassConversationSummary = async (conversation, cls, audienceRole) => {
@@ -902,87 +1153,123 @@ const teacherUpdateClassConversationModeration = async (teacherId, classId, body
   if (body.isLocked === undefined && body.allowStudentPosts === undefined) {
     throw validationError("At least one of isLocked or allowStudentPosts must be provided");
   }
-  const conversation = await ensureClassConversationDoc(cls);
-  await applyChannelModerationSettings(conversation, teacherId, "TEACHER", body);
-  return staffClassConversationSummary(conversation.toObject(), cls, "TEACHER");
+  validateChannelModerationBody(body, "TEACHER");
+
+  const ensured = await ensureClassConversationDoc(cls);
+  const updatedConv = await runInTx(async (dbSession) => {
+    const freshCls = await getOwnClassInTx(teacherId, classId, dbSession);
+    if (!READABLE_CLASS_STATUSES.includes(freshCls.status)) {
+      throw new AppError("Class does not have an active messaging channel", "CLASS_CHANNEL_UNAVAILABLE", 409);
+    }
+    const freshConv = await Conversation.findById(ensured._id).session(dbSession);
+    if (!freshConv) throw conversationNotFound();
+    return applyChannelModerationSettings(freshConv, teacherId, "TEACHER", body, dbSession);
+  });
+  return staffClassConversationSummary(updatedConv.toObject(), cls, "TEACHER");
 };
 
 const teacherMuteClassParticipant = async (teacherId, classId, body = {}) => {
   await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (!body.studentId) throw validationError("studentId is required");
-  const conversation = await ensureClassConversationDoc(cls);
-  await applyMuteParticipant(conversation, cls, teacherId, "TEACHER", body.studentId, body);
-  return staffClassConversationSummary(conversation.toObject(), cls, "TEACHER");
+  const ensured = await ensureClassConversationDoc(cls);
+
+  const txOut = await runInTx(async (dbSession) => {
+    const freshCls = await getOwnClassInTx(teacherId, classId, dbSession);
+    const freshConv = await Conversation.findById(ensured._id).session(dbSession);
+    if (!freshConv) throw conversationNotFound();
+    return applyMuteParticipant(freshConv, freshCls, teacherId, "TEACHER", body.studentId, body, {
+      dbSession,
+      deferNotify: true,
+    });
+  });
+
+  if (txOut.muteNotifyPayload) {
+    await notify(
+      txOut.muteNotifyPayload.userId,
+      txOut.muteNotifyPayload.title,
+      txOut.muteNotifyPayload.content,
+      txOut.muteNotifyPayload.type
+    );
+  }
+  return staffClassConversationSummary(txOut.conversation.toObject(), cls, "TEACHER");
 };
 
 const teacherUnmuteClassParticipant = async (teacherId, classId, studentId) => {
   await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
-  const conversation = await ensureClassConversationDoc(cls);
-  await applyUnmuteParticipant(conversation, teacherId, "TEACHER", studentId);
-  return staffClassConversationSummary(conversation.toObject(), cls, "TEACHER");
+  const ensured = await ensureClassConversationDoc(cls);
+
+  const updatedConv = await runInTx(async (dbSession) => {
+    await getOwnClassInTx(teacherId, classId, dbSession);
+    const freshConv = await Conversation.findById(ensured._id).session(dbSession);
+    if (!freshConv) throw conversationNotFound();
+    return applyUnmuteParticipant(freshConv, teacherId, "TEACHER", studentId, dbSession);
+  });
+  return staffClassConversationSummary(updatedConv.toObject(), cls, "TEACHER");
 };
 
 const teacherModerateMessage = async (teacherId, classId, messageId, body = {}) => {
   await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
-  if (!mongoose.isValidObjectId(messageId)) throw messageNotFound();
+  if (!isValidIdValue(messageId)) throw messageNotFound();
 
-  const action = body.action ? String(body.action).trim().toUpperCase() : "";
-  if (!["HIDE", "RESTORE"].includes(action)) {
-    throw validationError("action must be HIDE or RESTORE");
-  }
+  const action = assertRequiredEnumString(body.action, ["HIDE", "RESTORE"], "action");
   if (action === "HIDE" && isBlank(body.reason)) {
     throw validationError("reason is required when hiding a message");
   }
+  const cleanReason = action === "HIDE" ? body.reason.trim().slice(0, 500) : null;
 
-  const conversation = await ensureClassConversationDoc(cls);
-  const message = await Message.findOne({ _id: messageId, conversationId: conversation._id });
-  if (!message) throw messageNotFound();
-  if (message.isDeleted) {
-    throw new AppError("Cannot moderate a message already recalled by its sender", "MESSAGE_ALREADY_RECALLED", 409);
-  }
-
-  if (action === "RESTORE") {
-    if (message.moderationStatus !== "HIDDEN_BY_MODERATOR") {
-      throw new AppError("Message is not currently hidden by moderator", "MESSAGE_NOT_HIDDEN", 409);
+  const ensured = await ensureClassConversationDoc(cls);
+  const updatedMsg = await runInTx(async (dbSession) => {
+    await getOwnClassInTx(teacherId, classId, dbSession);
+    const message = await Message.findOne({ _id: messageId, conversationId: ensured._id }).session(dbSession);
+    if (!message) throw messageNotFound();
+    if (message.isDeleted) {
+      throw new AppError("Cannot moderate a message already recalled by its sender", "MESSAGE_ALREADY_RECALLED", 409);
     }
-    if (message.moderatedByRole === "ADMIN") {
-      throw new AppError("Message hidden by Administrator cannot be restored by teacher", "MODERATED_BY_ADMIN", 403);
-    }
-    await applyRestoreMessage(message, teacherId, "TEACHER");
-  } else {
-    await applyHideMessage(message, teacherId, "TEACHER", String(body.reason).trim().slice(0, 500));
-  }
 
-  return presentMessage(message.toObject());
+    if (action === "RESTORE") {
+      if (message.moderationStatus !== "HIDDEN_BY_MODERATOR") {
+        throw new AppError("Message is not currently hidden by moderator", "MESSAGE_NOT_HIDDEN", 409);
+      }
+      if (message.moderatedByRole === "ADMIN") {
+        throw new AppError("Message hidden by Administrator cannot be restored by teacher", "MODERATED_BY_ADMIN", 403);
+      }
+      return applyRestoreMessage(message, teacherId, "TEACHER", dbSession);
+    }
+    return applyHideMessage(message, teacherId, "TEACHER", cleanReason, dbSession);
+  });
+
+  return presentMessage(updatedMsg.toObject());
 };
 
 // --- Admin Moderation APIs (strictly audited with AuditLog) ---
 
 const adminListMessageReports = async (query = {}, paging) => {
   const filter = {};
-  if (query.status) {
-    const statuses = String(query.status)
+  const rawStatus = assertOptionalQueryString(query.status, "status");
+  if (rawStatus) {
+    const statuses = rawStatus
       .split(",")
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean);
-    if (statuses.some((s) => !MESSAGE_REPORT_STATUSES.includes(s))) {
+    if (!statuses.length || statuses.some((s) => !MESSAGE_REPORT_STATUSES.includes(s))) {
       throw validationError(`status must be subset of ${MESSAGE_REPORT_STATUSES.join(", ")}`);
     }
     filter.status = { $in: statuses };
   }
-  if (query.category) {
-    const cat = String(query.category).trim().toUpperCase();
+  const rawCategory = assertOptionalQueryString(query.category, "category");
+  if (rawCategory) {
+    const cat = rawCategory.toUpperCase();
     if (!MESSAGE_REPORT_CATEGORIES.includes(cat)) {
       throw validationError(`category must be one of ${MESSAGE_REPORT_CATEGORIES.join(", ")}`);
     }
     filter.category = cat;
   }
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
-    filter.classId = query.classId;
+  const validClassId = assertQueryIdValue(query.classId, "classId", "Class not found", "CLASS_NOT_FOUND");
+  if (validClassId) {
+    filter.classId = validClassId;
   }
 
   const [items, total] = await Promise.all([
@@ -1007,7 +1294,7 @@ const adminListMessageReports = async (query = {}, paging) => {
 };
 
 const adminGetMessageReport = async (reportId) => {
-  if (!mongoose.isValidObjectId(reportId)) throw reportNotFound();
+  if (!isValidIdValue(reportId)) throw reportNotFound();
   const report = await MessageModerationReport.findById(reportId).lean();
   if (!report) throw reportNotFound();
 
@@ -1023,237 +1310,348 @@ const adminGetMessageReport = async (reportId) => {
 };
 
 const adminReviewMessageReport = async (adminId, reportId, body = {}) => {
-  if (!mongoose.isValidObjectId(reportId)) throw reportNotFound();
-  const current = await MessageModerationReport.findById(reportId);
-  if (!current) throw reportNotFound();
+  if (!isValidIdValue(reportId)) throw reportNotFound();
 
-  const nextStatus = body.status ? String(body.status).trim().toUpperCase() : "";
-  if (!MESSAGE_REPORT_STATUSES.includes(nextStatus)) {
-    throw validationError(`status must be one of ${MESSAGE_REPORT_STATUSES.join(", ")}`);
-  }
-  const allowedNext = REPORT_TRANSITIONS[current.status] || [];
-  if (!allowedNext.includes(nextStatus)) {
-    throw new AppError(
-      `A ${current.status} message report cannot transition to ${nextStatus}`,
-      "INVALID_REPORT_STATUS",
-      409
-    );
-  }
+  const nextStatus = assertRequiredEnumString(body.status, MESSAGE_REPORT_STATUSES, "status");
   if (["RESOLVED", "DISMISSED"].includes(nextStatus) && isBlank(body.reviewNote)) {
     throw validationError("reviewNote is required when resolving or dismissing a message report");
   }
 
-  let moderationAction = body.moderationAction
-    ? String(body.moderationAction).trim().toUpperCase()
-    : "NONE";
-  if (!MESSAGE_MODERATION_ACTIONS.includes(moderationAction)) {
-    throw validationError(`moderationAction must be one of ${MESSAGE_MODERATION_ACTIONS.join(", ")}`);
-  }
+  let moderationAction =
+    body.moderationAction === undefined || body.moderationAction === null || body.moderationAction === ""
+      ? "NONE"
+      : assertRequiredEnumString(body.moderationAction, MESSAGE_MODERATION_ACTIONS, "moderationAction");
   if (nextStatus === "IN_REVIEW" || nextStatus === "DISMISSED") {
     moderationAction = "NONE";
   }
 
-  const beforeStatus = current.status;
-  const note = body.reviewNote ? String(body.reviewNote).trim().slice(0, 1000) : current.reviewNote || null;
+  const parsedReviewNote = assertOptionalString(body.reviewNote, "reviewNote", 1000);
+  if (body.durationMinutes !== undefined && body.durationMinutes !== null && body.durationMinutes !== "") {
+    parsePositiveDurationMinutes(body.durationMinutes);
+  }
 
-  if (nextStatus === "RESOLVED" && moderationAction !== "NONE") {
-    if (["LOCK_CHANNEL", "MUTE_USER"].includes(moderationAction) && current.channelType !== "CLASS") {
-      throw validationError("LOCK_CHANNEL and MUTE_USER moderation actions are only available on CLASS channels");
+  const txResult = await runInTx(async (dbSession) => {
+    const current = await MessageModerationReport.findById(reportId).session(dbSession);
+    if (!current) throw reportNotFound();
+
+    const allowedNext = REPORT_TRANSITIONS[current.status] || [];
+    if (!allowedNext.includes(nextStatus)) {
+      throw new AppError(
+        `A ${current.status} message report cannot transition to ${nextStatus}`,
+        "INVALID_REPORT_STATUS",
+        409
+      );
     }
-    if (moderationAction === "HIDE_MESSAGE") {
-      const msg = await Message.findById(current.messageId);
-      if (msg) await applyHideMessage(msg, adminId, "ADMIN", note);
-    } else if (moderationAction === "RESTORE_MESSAGE") {
-      const msg = await Message.findById(current.messageId);
-      if (msg && msg.isDeleted) {
-        throw new AppError("Message was already recalled by sender and cannot be restored to visible", "MESSAGE_ALREADY_RECALLED", 409);
+
+    const beforeStatus = current.status;
+    const note = parsedReviewNote || current.reviewNote || null;
+
+    if (nextStatus === "RESOLVED" && moderationAction !== "NONE") {
+      if (["LOCK_CHANNEL", "MUTE_USER"].includes(moderationAction) && current.channelType !== "CLASS") {
+        throw validationError("LOCK_CHANNEL and MUTE_USER moderation actions are only available on CLASS channels");
       }
-      if (msg) await applyRestoreMessage(msg, adminId, "ADMIN");
-    } else if (moderationAction === "LOCK_CHANNEL") {
-      const conv = await Conversation.findById(current.conversationId);
-      if (conv && conv.channelType === "CLASS") {
-        await applyChannelModerationSettings(conv, adminId, "ADMIN", { isLocked: true, reason: note });
+    }
+
+    // Atomic CAS lock on report status inside transaction
+    const locked = await MessageModerationReport.findOneAndUpdate(
+      { _id: reportId, status: beforeStatus },
+      {
+        $set: {
+          status: nextStatus,
+          moderationActionTaken: moderationAction,
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          reviewNote: note,
+        },
+      },
+      { session: dbSession, returnDocument: "after" }
+    );
+    if (!locked) {
+      throw new AppError("Message report state changed concurrently", "INVALID_REPORT_STATUS", 409);
+    }
+
+    let muteNotifyPayload = null;
+    if (nextStatus === "RESOLVED" && moderationAction !== "NONE") {
+      if (moderationAction === "HIDE_MESSAGE") {
+        const msg = await Message.findById(current.messageId).session(dbSession);
+        if (msg) await applyHideMessage(msg, adminId, "ADMIN", note, dbSession);
+      } else if (moderationAction === "RESTORE_MESSAGE") {
+        const msg = await Message.findById(current.messageId).session(dbSession);
+        if (msg && msg.isDeleted) {
+          throw new AppError(
+            "Message was already recalled by sender and cannot be restored to visible",
+            "MESSAGE_ALREADY_RECALLED",
+            409
+          );
+        }
+        if (msg) await applyRestoreMessage(msg, adminId, "ADMIN", dbSession);
+      } else if (moderationAction === "LOCK_CHANNEL") {
+        const conv = await Conversation.findById(current.conversationId).session(dbSession);
+        if (conv && conv.channelType === "CLASS") {
+          await applyChannelModerationSettings(conv, adminId, "ADMIN", { isLocked: true, reason: note }, dbSession);
+        }
+      } else if (moderationAction === "MUTE_USER") {
+        const conv = await Conversation.findById(current.conversationId).session(dbSession);
+        if (conv && conv.channelType === "CLASS") {
+          const cls = await Class.findOne({ _id: conv.classId, ...NOT_DELETED }).session(dbSession).lean();
+          if (cls) {
+            const muteOut = await applyMuteParticipant(
+              conv,
+              cls,
+              adminId,
+              "ADMIN",
+              current.reportedUserId,
+              { reason: note, durationMinutes: body.durationMinutes },
+              { dbSession, deferNotify: true }
+            );
+            muteNotifyPayload = muteOut.muteNotifyPayload;
+          }
+        }
       }
-    } else if (moderationAction === "MUTE_USER") {
-      const conv = await Conversation.findById(current.conversationId);
-      if (conv && conv.channelType === "CLASS") {
-        const cls = await Class.findOne({ _id: conv.classId, ...NOT_DELETED }).lean();
-        if (cls) {
-          await applyMuteParticipant(conv, cls, adminId, "ADMIN", current.reportedUserId, {
-            reason: note,
-            durationMinutes: body.durationMinutes,
-          });
+    } else if (nextStatus === "DISMISSED") {
+      // Unflag message only if no other active reports exist on it and it was merely FLAGGED
+      const msg = await Message.findById(current.messageId).session(dbSession);
+      if (msg && msg.moderationStatus === "FLAGGED") {
+        const otherOpen = await MessageModerationReport.findOne({
+          messageId: msg._id,
+          _id: { $ne: current._id },
+          status: { $in: ["OPEN", "IN_REVIEW"] },
+        })
+          .select("_id")
+          .session(dbSession)
+          .lean();
+        if (!otherOpen) {
+          await Message.updateOne({ _id: msg._id }, { $set: { moderationStatus: "VISIBLE" } }, { session: dbSession });
         }
       }
     }
-  } else if (nextStatus === "DISMISSED") {
-    // Unflag message only if no other active reports exist on it and it was merely FLAGGED
-    const msg = await Message.findById(current.messageId);
-    if (msg && msg.moderationStatus === "FLAGGED") {
-      const otherOpen = await MessageModerationReport.exists({
-        messageId: msg._id,
-        _id: { $ne: current._id },
-        status: { $in: ["OPEN", "IN_REVIEW"] },
-      });
-      if (!otherOpen) {
-        msg.moderationStatus = "VISIBLE";
-        await msg.save();
-      }
-    }
-  }
 
-  current.status = nextStatus;
-  current.moderationActionTaken = moderationAction;
-  current.reviewedBy = adminId;
-  current.reviewedAt = new Date();
-  current.reviewNote = note;
-  await current.save();
+    await audit(
+      {
+        actorAdminId: adminId,
+        action: `MESSAGE_REPORT_${nextStatus}`,
+        targetType: "MessageModerationReport",
+        targetId: current._id,
+        beforeState: { status: beforeStatus },
+        afterState: {
+          status: nextStatus,
+          moderationActionTaken: moderationAction,
+          reviewNote: note,
+        },
+      },
+      dbSession
+    );
 
-  await audit({
-    actorAdminId: adminId,
-    action: `MESSAGE_REPORT_${nextStatus}`,
-    targetType: "MessageModerationReport",
-    targetId: current._id,
-    beforeState: { status: beforeStatus },
-    afterState: {
-      status: nextStatus,
-      moderationActionTaken: moderationAction,
-      reviewNote: note,
-    },
+    return {
+      reportId: current._id,
+      reportCode: current.reportCode,
+      reporterId: current.reporterId,
+      note,
+      muteNotifyPayload,
+    };
   });
 
+  if (txResult.muteNotifyPayload) {
+    await notify(
+      txResult.muteNotifyPayload.userId,
+      txResult.muteNotifyPayload.title,
+      txResult.muteNotifyPayload.content,
+      txResult.muteNotifyPayload.type
+    );
+  }
   if (["RESOLVED", "DISMISSED"].includes(nextStatus)) {
     await notify(
-      current.reporterId,
-      `[${current.reportCode}] Kết quả xử lý báo cáo tin nhắn`,
-      note,
+      txResult.reporterId,
+      `[${txResult.reportCode}] Kết quả xử lý báo cáo tin nhắn`,
+      txResult.note,
       `MESSAGE_REPORT_${nextStatus}`
     );
   }
 
-  return adminGetMessageReport(current._id);
+  return adminGetMessageReport(txResult.reportId);
 };
 
 const adminUpdateClassConversationModeration = async (adminId, classId, body = {}) => {
-  assertId(classId, "Class not found", "CLASS_NOT_FOUND");
+  if (!isValidIdValue(classId)) {
+    throw Array.isArray(classId) || isPlainObjectOrArray(classId)
+      ? validationError("classId must be a valid ID")
+      : CLASS_NOT_FOUND();
+  }
   const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
   if (!cls) throw CLASS_NOT_FOUND();
   if (body.isLocked === undefined && body.allowStudentPosts === undefined && body.status === undefined) {
     throw validationError("At least one of isLocked, allowStudentPosts, or status is required");
   }
+  validateChannelModerationBody(body, "ADMIN");
 
-  const conversation = await ensureClassConversationDoc(cls);
-  const beforeState = {
-    status: conversation.status,
-    isLocked: Boolean(conversation.moderation?.isLocked),
-    allowStudentPosts: conversation.moderation?.allowStudentPosts !== false,
-  };
+  const ensured = await ensureClassConversationDoc(cls);
+  const updatedConv = await runInTx(async (dbSession) => {
+    const freshConv = await Conversation.findById(ensured._id).session(dbSession);
+    if (!freshConv) throw conversationNotFound();
 
-  await applyChannelModerationSettings(conversation, adminId, "ADMIN", body);
+    const beforeState = {
+      status: freshConv.status,
+      isLocked: Boolean(freshConv.moderation?.isLocked),
+      allowStudentPosts: freshConv.moderation?.allowStudentPosts !== false,
+    };
 
-  await audit({
-    actorAdminId: adminId,
-    action: "CLASS_CONVERSATION_MODERATED",
-    targetType: "Conversation",
-    targetId: conversation._id,
-    beforeState,
-    afterState: {
-      status: conversation.status,
-      isLocked: Boolean(conversation.moderation?.isLocked),
-      allowStudentPosts: conversation.moderation?.allowStudentPosts !== false,
-      lockedReason: conversation.moderation?.lockedReason || null,
-    },
+    const nextConv = await applyChannelModerationSettings(freshConv, adminId, "ADMIN", body, dbSession);
+
+    await audit(
+      {
+        actorAdminId: adminId,
+        action: "CLASS_CONVERSATION_MODERATED",
+        targetType: "Conversation",
+        targetId: nextConv._id,
+        beforeState,
+        afterState: {
+          status: nextConv.status,
+          isLocked: Boolean(nextConv.moderation?.isLocked),
+          allowStudentPosts: nextConv.moderation?.allowStudentPosts !== false,
+          lockedReason: nextConv.moderation?.lockedReason || null,
+        },
+      },
+      dbSession
+    );
+
+    return nextConv;
   });
 
-  return staffClassConversationSummary(conversation.toObject(), cls, "ADMIN");
+  return staffClassConversationSummary(updatedConv.toObject(), cls, "ADMIN");
 };
 
 const adminMuteClassParticipant = async (adminId, classId, body = {}) => {
-  assertId(classId, "Class not found", "CLASS_NOT_FOUND");
+  if (!isValidIdValue(classId)) {
+    throw Array.isArray(classId) || isPlainObjectOrArray(classId)
+      ? validationError("classId must be a valid ID")
+      : CLASS_NOT_FOUND();
+  }
   const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
   if (!cls) throw CLASS_NOT_FOUND();
   const targetUserId = body.userId || body.studentId;
   if (!targetUserId) throw validationError("userId is required");
 
-  const conversation = await ensureClassConversationDoc(cls);
-  await applyMuteParticipant(conversation, cls, adminId, "ADMIN", targetUserId, body);
+  const ensured = await ensureClassConversationDoc(cls);
+  const txOut = await runInTx(async (dbSession) => {
+    const freshCls = await Class.findOne({ _id: classId, ...NOT_DELETED }).session(dbSession).lean();
+    if (!freshCls) throw CLASS_NOT_FOUND();
+    const freshConv = await Conversation.findById(ensured._id).session(dbSession);
+    if (!freshConv) throw conversationNotFound();
 
-  await audit({
-    actorAdminId: adminId,
-    action: "CLASS_PARTICIPANT_MUTED",
-    targetType: "Conversation",
-    targetId: conversation._id,
-    beforeState: null,
-    afterState: { mutedUserId: toId(targetUserId), reason: body.reason },
+    const muteOut = await applyMuteParticipant(freshConv, freshCls, adminId, "ADMIN", targetUserId, body, {
+      dbSession,
+      deferNotify: true,
+    });
+
+    await audit(
+      {
+        actorAdminId: adminId,
+        action: "CLASS_PARTICIPANT_MUTED",
+        targetType: "Conversation",
+        targetId: muteOut.conversation._id,
+        beforeState: null,
+        afterState: { mutedUserId: toId(targetUserId), reason: muteOut.reason },
+      },
+      dbSession
+    );
+
+    return muteOut;
   });
 
-  return staffClassConversationSummary(conversation.toObject(), cls, "ADMIN");
+  if (txOut.muteNotifyPayload) {
+    await notify(
+      txOut.muteNotifyPayload.userId,
+      txOut.muteNotifyPayload.title,
+      txOut.muteNotifyPayload.content,
+      txOut.muteNotifyPayload.type
+    );
+  }
+
+  return staffClassConversationSummary(txOut.conversation.toObject(), cls, "ADMIN");
 };
 
 const adminUnmuteClassParticipant = async (adminId, classId, targetUserId) => {
-  assertId(classId, "Class not found", "CLASS_NOT_FOUND");
+  if (!isValidIdValue(classId)) {
+    throw Array.isArray(classId) || isPlainObjectOrArray(classId)
+      ? validationError("classId must be a valid ID")
+      : CLASS_NOT_FOUND();
+  }
   const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
   if (!cls) throw CLASS_NOT_FOUND();
 
-  const conversation = await ensureClassConversationDoc(cls);
-  await applyUnmuteParticipant(conversation, adminId, "ADMIN", targetUserId);
+  const ensured = await ensureClassConversationDoc(cls);
+  const updatedConv = await runInTx(async (dbSession) => {
+    const freshConv = await Conversation.findById(ensured._id).session(dbSession);
+    if (!freshConv) throw conversationNotFound();
 
-  await audit({
-    actorAdminId: adminId,
-    action: "CLASS_PARTICIPANT_UNMUTED",
-    targetType: "Conversation",
-    targetId: conversation._id,
-    beforeState: { mutedUserId: toId(targetUserId) },
-    afterState: { mutedUserId: null },
+    const nextConv = await applyUnmuteParticipant(freshConv, adminId, "ADMIN", targetUserId, dbSession);
+
+    await audit(
+      {
+        actorAdminId: adminId,
+        action: "CLASS_PARTICIPANT_UNMUTED",
+        targetType: "Conversation",
+        targetId: nextConv._id,
+        beforeState: { mutedUserId: toId(targetUserId) },
+        afterState: { mutedUserId: null },
+      },
+      dbSession
+    );
+
+    return nextConv;
   });
 
-  return staffClassConversationSummary(conversation.toObject(), cls, "ADMIN");
+  return staffClassConversationSummary(updatedConv.toObject(), cls, "ADMIN");
 };
 
 const adminModerateMessage = async (adminId, messageId, body = {}) => {
-  if (!mongoose.isValidObjectId(messageId)) throw messageNotFound();
-  const action = body.action ? String(body.action).trim().toUpperCase() : "";
-  if (!["HIDE", "RESTORE"].includes(action)) {
-    throw validationError("action must be HIDE or RESTORE");
-  }
+  if (!isValidIdValue(messageId)) throw messageNotFound();
+  const action = assertRequiredEnumString(body.action, ["HIDE", "RESTORE"], "action");
   if (action === "HIDE" && isBlank(body.reason)) {
     throw validationError("reason is required when hiding a message");
   }
+  const cleanReason = action === "HIDE" ? body.reason.trim().slice(0, 500) : null;
 
-  const message = await Message.findById(messageId);
-  if (!message) throw messageNotFound();
-  if (action === "RESTORE") {
-    if (message.isDeleted) {
-      throw new AppError("Message was recalled by sender and cannot be restored", "MESSAGE_ALREADY_RECALLED", 409);
+  const updatedMsg = await runInTx(async (dbSession) => {
+    const message = await Message.findById(messageId).session(dbSession);
+    if (!message) throw messageNotFound();
+    if (action === "RESTORE") {
+      if (message.isDeleted) {
+        throw new AppError("Message was recalled by sender and cannot be restored", "MESSAGE_ALREADY_RECALLED", 409);
+      }
+      if (message.moderationStatus !== "HIDDEN_BY_MODERATOR") {
+        throw new AppError("Message is not currently hidden by moderator", "MESSAGE_NOT_HIDDEN", 409);
+      }
     }
-    if (message.moderationStatus !== "HIDDEN_BY_MODERATOR") {
-      throw new AppError("Message is not currently hidden by moderator", "MESSAGE_NOT_HIDDEN", 409);
-    }
-  }
-  const beforeState = {
-    moderationStatus: message.moderationStatus || "VISIBLE",
-    hiddenReason: message.hiddenReason || null,
-  };
-
-  if (action === "HIDE") {
-    await applyHideMessage(message, adminId, "ADMIN", String(body.reason).trim().slice(0, 500));
-  } else {
-    await applyRestoreMessage(message, adminId, "ADMIN");
-  }
-
-  await audit({
-    actorAdminId: adminId,
-    action: `MESSAGE_${action}`,
-    targetType: "Message",
-    targetId: message._id,
-    beforeState,
-    afterState: {
-      moderationStatus: message.moderationStatus,
+    const beforeState = {
+      moderationStatus: message.moderationStatus || "VISIBLE",
       hiddenReason: message.hiddenReason || null,
-    },
+    };
+
+    const nextMsg =
+      action === "HIDE"
+        ? await applyHideMessage(message, adminId, "ADMIN", cleanReason, dbSession)
+        : await applyRestoreMessage(message, adminId, "ADMIN", dbSession);
+
+    await audit(
+      {
+        actorAdminId: adminId,
+        action: `MESSAGE_${action}`,
+        targetType: "Message",
+        targetId: nextMsg._id,
+        beforeState,
+        afterState: {
+          moderationStatus: nextMsg.moderationStatus,
+          hiddenReason: nextMsg.hiddenReason || null,
+        },
+      },
+      dbSession
+    );
+
+    return nextMsg;
   });
 
-  return presentMessage(message.toObject(), { includeModeratedBy: true });
+  return presentMessage(updatedMsg.toObject(), { includeModeratedBy: true });
 };
 
 module.exports = {

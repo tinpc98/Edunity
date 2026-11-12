@@ -214,7 +214,8 @@ const listMyAuthorizations = async (teacherId, query = {}, paging = { page: 1, p
     filter.subjectId = query.subjectId;
   }
   if (query.level) {
-    filter.level = catalog.resolveLevel(query.level);
+    const resolvedLevel = catalog.resolveLevel(query.level);
+    if (resolvedLevel) filter.level = resolvedLevel;
   }
   if (query.gradeLevel !== undefined && query.gradeLevel !== "") {
     if (query.gradeLevel === "null") filter.gradeLevel = null;
@@ -263,7 +264,8 @@ const adminListAuthorizations = async (query = {}, paging = { page: 1, pageSize:
     }
   }
   if (query.level) {
-    filter.level = catalog.resolveLevel(query.level);
+    const resolvedLevel = catalog.resolveLevel(query.level);
+    if (resolvedLevel) filter.level = resolvedLevel;
   }
   if (query.gradeLevel !== undefined && query.gradeLevel !== "") {
     if (query.gradeLevel === "null") filter.gradeLevel = null;

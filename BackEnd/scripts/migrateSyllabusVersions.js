@@ -10,6 +10,7 @@
 
 const mongoose = require("mongoose");
 const defaultModels = require("../src/models");
+const jobLock = require("../src/jobs/jobLock");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const ALLOWED_MIGRATION_DATABASES = ["edunity_demo_v3", "edunity_test", "test"];
@@ -146,10 +147,17 @@ const migrateForward = async (options = {}) => {
 
   const models = injectedModels || defaultModels;
   const { Course, SyllabusVersion, CurriculumUnit } = models;
+  const shouldUseLock =
+    !injectedModels &&
+    !dryRun &&
+    options.useLock !== false &&
+    mongoose.connection.readyState === 1 &&
+    mongoose.models.JobLock;
 
-  const courses = await Course.find(NOT_DELETED)
-    .select("_id title syllabus publishedSyllabusVersionId createdBy createdAt")
-    .lean();
+  const runCore = async () => {
+    const courses = await Course.find(NOT_DELETED)
+      .select("_id title syllabus publishedSyllabusVersionId createdBy createdAt")
+      .lean();
 
   const stats = {
     dryRun,
@@ -274,6 +282,21 @@ const migrateForward = async (options = {}) => {
   );
 
   return stats;
+  };
+
+  if (shouldUseLock) {
+    let lockInner;
+    const lockRes = await jobLock.runExclusive("migration_syllabus_versions_forward", 10 * 60 * 1000, async () => {
+      lockInner = await runCore();
+      return lockInner;
+    });
+    if (lockRes && lockRes.skipped) {
+      throw new Error(`MIGRATION_LOCKED: ${lockRes.reason || "Another syllabus migration holds the lock"}`);
+    }
+    return lockInner || lockRes;
+  }
+
+  return runCore();
 };
 
 /**

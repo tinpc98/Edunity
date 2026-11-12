@@ -59,7 +59,6 @@ const ACADEMIC_USERS = [
     email: "admin@edunity.vn",
     role: "ADMIN",
     status: "ACTIVE",
-    adminProfile: { fullName: "Quản trị viên Hệ thống" },
   },
   {
     email: "duc.nguyen@edunity.vn",
@@ -458,26 +457,27 @@ const seedAcademicV3 = async (options = {}) => {
   const classMap = new Map();
 
   // ---------------------------------------------------------------------------
-  // Step 1: Upsert Users (Natural Key: email)
+  // Step 1: Upsert Users (Natural Key: email) — preserve runtime password/status/profiles on rerun
   // ---------------------------------------------------------------------------
   logger("[seedAcademicV3] 1/6: Upserting Users by email...");
   for (const userDef of ACADEMIC_USERS) {
     const existing = await User.findOne({ email: userDef.email.toLowerCase() });
-    const updateData = {
+    const immutableUpdate = {
       role: userDef.role,
-      status: userDef.status,
-      passwordHash,
       isDeleted: false,
       deletedAt: null,
+    };
+    const insertOnly = {
+      status: userDef.status,
+      passwordHash,
       ...(userDef.teacherProfile ? { teacherProfile: userDef.teacherProfile } : {}),
       ...(userDef.studentProfile ? { studentProfile: userDef.studentProfile } : {}),
-      ...(userDef.adminProfile ? { adminProfile: userDef.adminProfile } : {}),
     };
 
     const doc = await User.findOneAndUpdate(
       { email: userDef.email.toLowerCase() },
-      { $set: updateData },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { $set: immutableUpdate, $setOnInsert: insertOnly },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     );
 
     userMap.set(userDef.email, doc);
@@ -626,17 +626,21 @@ const seedAcademicV3 = async (options = {}) => {
       price: priceDecimal,
       capacity: classDef.capacity,
       schedule: classDef.schedule,
-      status: classDef.status,
-      startDate,
-      endDate,
       isDeleted: false,
       deletedAt: null,
     };
 
+    const insertOnly = {
+      status: classDef.status,
+      startDate,
+      endDate,
+      enrolledCount: 0,
+    };
+
     const doc = await Class.findOneAndUpdate(
       naturalFilter,
-      { $set: updateData },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { $set: updateData, $setOnInsert: insertOnly },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     );
 
     const classKey = `${classDef.courseSlug}:${classDef.className}`;
@@ -668,6 +672,8 @@ const seedAcademicV3 = async (options = {}) => {
         className: doc.className,
         teacherId: teacher._id,
         title: topics[i],
+      };
+      const sessionInsertOnly = {
         startDatetime: sessionStart,
         endDatetime: sessionEnd,
         status: "SCHEDULED",
@@ -677,8 +683,8 @@ const seedAcademicV3 = async (options = {}) => {
 
       await Session.findOneAndUpdate(
         sessionFilter,
-        { $set: sessionUpdate },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { $set: sessionUpdate, $setOnInsert: sessionInsertOnly },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
       );
 
       stats.sessions.total++;
@@ -703,9 +709,7 @@ const seedAcademicV3 = async (options = {}) => {
       };
 
       const existingEnrollment = await Enrollment.findOne(enrollmentFilter);
-      const enrollmentUpdate = {
-        courseId: firstClass.courseId,
-        teacherId: firstClass.teacherId,
+      const enrollmentInsertOnly = {
         enrollmentStatus: "CONFIRMED",
         paymentSource: firstClass.classType === "FREE" ? "FREE" : "DIRECT_PAYMENT",
         tuitionAmount: firstClass.price,
@@ -716,14 +720,26 @@ const seedAcademicV3 = async (options = {}) => {
 
       await Enrollment.findOneAndUpdate(
         enrollmentFilter,
-        { $set: enrollmentUpdate },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { $set: { courseId: firstClass.courseId, teacherId: firstClass.teacherId }, $setOnInsert: enrollmentInsertOnly },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
       );
 
       stats.enrollments.total++;
       if (existingEnrollment) stats.enrollments.updated++;
       else stats.enrollments.created++;
     }
+  }
+
+  // Recompute enrolledCount from actual active enrollments for all seeded classes
+  for (const [, clsDoc] of classMap.entries()) {
+    const activeCount = await Enrollment.countDocuments({
+      classId: clsDoc._id,
+      enrollmentStatus: { $in: ["PENDING_PAYMENT", "CONFIRMED", "COMPLETED"] },
+    });
+    if (typeof Class.updateOne === "function") {
+      await Class.updateOne({ _id: clsDoc._id }, { $set: { enrolledCount: activeCount } });
+    }
+    clsDoc.enrolledCount = activeCount;
   }
 
   logger("[seedAcademicV3] Seeding completed successfully with zero deletions.");

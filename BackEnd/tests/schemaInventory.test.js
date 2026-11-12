@@ -12,8 +12,15 @@ const EXPECTED_MODELS = [
   "Subject",
   "Course",
   "CourseProposal",
+  "SyllabusVersion",
+  "CurriculumUnit",
+  "LearningPath",
+  "CoursePricingPolicy",
   "Class",
   "Session",
+  "ScheduleIdempotencyKey",
+  "TeacherScheduleLock",
+  "TeacherSubjectAuthorization",
   "SessionAttendance",
   "Enrollment",
   "Payment",
@@ -24,6 +31,7 @@ const EXPECTED_MODELS = [
   "ScholarshipCampaign",
   "SponsorContribution",
   "ScholarshipApplication",
+  "PaperDossierReceipt",
   "Scholarship",
   "ScholarshipUsage",
   "VerificationDocument",
@@ -32,6 +40,7 @@ const EXPECTED_MODELS = [
   "Message",
   "Report",
   "AuditLog",
+  "PlatformSetting",
   "SessionPresenceInterval",
   "TeacherViolation",
   "TeacherDisciplineCase",
@@ -39,6 +48,21 @@ const EXPECTED_MODELS = [
   "SessionRescheduleRequest",
   "SessionRefundReview",
   "JobLock",
+  "LearningResource",
+  "Assignment",
+  "Submission",
+  "Grade",
+  "GradeHistory",
+  "Assessment",
+  "Question",
+  "Attempt",
+  "PlacementResult",
+  "SessionReview",
+  "StudentProgressReview",
+  "TeacherContractReviewPacket",
+  "MessageModerationReport",
+  "AiAuditLog",
+  "AiGeneratedDraft",
 ];
 
 const SOFT_DELETED_MODELS = [
@@ -46,10 +70,19 @@ const SOFT_DELETED_MODELS = [
   "Category",
   "Subject",
   "Course",
+  "SyllabusVersion",
+  "CurriculumUnit",
+  "LearningPath",
   "Class",
   "Review",
   "ScholarshipCampaign",
   "Message",
+  "LearningResource",
+  "Assignment",
+  "Assessment",
+  "Question",
+  "SessionReview",
+  "AiGeneratedDraft",
 ];
 
 const NON_SOFT_DELETED_FINANCIAL_OR_LIFECYCLE_MODELS = [
@@ -77,7 +110,7 @@ describe("TASK G0-02: Mongoose Schema Inventory & Validation", () => {
   });
 
   describe("1. Registry, Exports and Constants Verification", () => {
-    test("G0-02.1.1: Models/index.js exports all 33 expected Mongoose models", () => {
+    test("G0-02.1.1: Models/index.js exports all expected Mongoose models (57 models)", () => {
       expect(Object.keys(models)).toHaveLength(EXPECTED_MODELS.length);
       for (const modelName of EXPECTED_MODELS) {
         expect(models[modelName]).toBeDefined();

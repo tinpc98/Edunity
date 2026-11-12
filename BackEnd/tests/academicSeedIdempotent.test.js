@@ -131,6 +131,15 @@ describe("TASK G0-04: Idempotent Academic Fixture Seed & Natural Key Upsert Engi
         enrollments: new Map(),
       };
 
+      const matchFilter = (doc, filter = {}) =>
+        Object.entries(filter).every(([k, cond]) => {
+          const val = doc[k];
+          if (cond && typeof cond === "object" && Array.isArray(cond.$in)) {
+            return cond.$in.includes(val);
+          }
+          return String(val) === String(cond);
+        });
+
       const createMockModel = (collectionName, keyFn) => ({
         findOne: async (filter) => {
           const key = keyFn(filter);
@@ -143,18 +152,35 @@ describe("TASK G0-04: Idempotent Academic Fixture Seed & Natural Key Upsert Engi
             doc = {
               _id: new mongoose.Types.ObjectId(),
               ...filter,
-              ...update.$set,
+              ...(update.$setOnInsert || {}),
+              ...(update.$set || {}),
               createdAt: new Date(),
               updatedAt: new Date(),
             };
             storage[collectionName].set(key, doc);
           } else {
-            Object.assign(doc, update.$set);
+            if (update.$set) Object.assign(doc, update.$set);
             doc.updatedAt = new Date();
           }
           return doc;
         },
-        countDocuments: async () => storage[collectionName].size,
+        updateOne: async (filter, update) => {
+          for (const doc of storage[collectionName].values()) {
+            if (matchFilter(doc, filter)) {
+              if (update.$set) Object.assign(doc, update.$set);
+              return { matchedCount: 1, modifiedCount: 1 };
+            }
+          }
+          return { matchedCount: 0, modifiedCount: 0 };
+        },
+        countDocuments: async (filter = {}) => {
+          if (!filter || Object.keys(filter).length === 0) return storage[collectionName].size;
+          let count = 0;
+          for (const doc of storage[collectionName].values()) {
+            if (matchFilter(doc, filter)) count += 1;
+          }
+          return count;
+        },
       });
 
       const mockModels = {
@@ -231,6 +257,14 @@ describe("TASK G0-04: Idempotent Academic Fixture Seed & Natural Key Upsert Engi
         expect(countAfterPass2.classes).toBe(countAfterPass1.classes);
         expect(countAfterPass2.sessions).toBe(countAfterPass1.sessions);
         expect(countAfterPass2.enrollments).toBe(countAfterPass1.enrollments);
+
+        const adminDoc = storage.users.get("admin@edunity.vn");
+        expect(adminDoc.adminProfile).toBeUndefined();
+
+        const firstClassDoc = Array.from(storage.classes.values()).find(
+          (c) => c.className === "Toán 12 – Luyện đề Chuyên sâu Khóa 01"
+        );
+        expect(firstClassDoc.enrolledCount).toBe(2);
       });
 
     test("G0-04.IDEMP.2: Upsert updates existing document attributes without changing _id", async () => {

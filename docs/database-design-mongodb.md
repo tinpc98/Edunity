@@ -4,7 +4,9 @@ Nguồn: tài liệu đặc tả dự án (Chương 1–16), chuyển đổi t�
 
 > **Cập nhật (đợt 2)**: bổ sung field audit/lifecycle theo các archetype chuẩn hoá (mục 1.6), sửa cardinality Enrollment↔Payment, thêm entity `Payout`, mở rộng `Session` với nội dung buổi học + recording, mở rộng `VerificationDocument` cho upload CCCD 2 mặt.
 >
-> **Cập nhật (đợt 3 — rà soát lần cuối)**: sửa `scholarshipCampaigns.status` (bỏ state `OPEN_FOR_APPLICATION` không có transition nào dùng tới), thêm idempotency key cho `sponsorContributions` (cùng rủi ro duplicate webhook như `payments`), thêm entity `refreshTokens` để hỗ trợ logout từng thiết bị và Admin force-logout khi suspend/ban tài khoản.
+> **Cập nhật (đợt 3 — rà soát lần cuối):** sửa `scholarshipCampaigns.status` (bỏ state `OPEN_FOR_APPLICATION` không có transition nào dùng tới), thêm idempotency key cho `sponsorContributions` (cùng rủi ro duplicate webhook như `payments`), thêm entity `refreshTokens` để hỗ trợ logout từng thiết bị và Admin force-logout khi suspend/ban tài khoản.
+>
+> **Cập nhật V3 (Final Phase 0 → Phase 6 Sync — 12/11/2026):** Bổ sung collection `platformSettings` (Task `G0-05` — tham số vận hành theo version + `effectiveFrom` + rollback), `learningPaths` (`CUR-03`), `coursePricingPolicies` (`CUR-07`), các trường snapshot `CUR-09` trên `classes`/`enrollments`, và đồng bộ đầy đủ **57 Mongoose models** (trong đó **17 soft-delete models**) + **54 unique/partial index specs** tại [`BackEnd/docs/schema-inventory-g0-02.md`](../BackEnd/docs/schema-inventory-g0-02.md) và `BackEnd/scripts/migrationPreflight.js`.
 
 ## 1. Nguyên tắc thiết kế
 
@@ -475,6 +477,29 @@ Không có trong Chương 10 gốc nhưng **bắt buộc** theo BR-35 và NFR-15
 }
 ```
 **Index**: `{ tokenHash: 1 }` unique · `{ userId: 1, revokedAt: 1 }` (liệt kê/thu hồi toàn bộ phiên của 1 User khi suspend/ban) · TTL index trên `expiresAt` (`expireAfterSeconds: 0`) để tự xoá sau khi hết hạn — đây là **ngoại lệ hợp lý** cho nguyên tắc "không dùng TTL để xoá" ở mục 1.4, vì refresh token hết hạn không phải dữ liệu tài chính/lịch sử cần giữ lại.
+
+### 2.27. `platformSettings` *(Mới V3 — G0-05)*
+Lưu tham số cấu hình vận hành hệ thống theo version bất biến (không ghi đè lịch sử), hỗ trợ `effectiveFrom` trong tương lai và rollback bằng version tăng tiến đơn điệu.
+```jsonc
+{
+  _id,
+  key: String,                    // UPPERCASE (SEAT_HOLD_MINUTES, COMMISSION_RATE, SCHOLARSHIP_VALID_DAYS, ...)
+  version: Number,                // monotonic >= 1 per key
+  value: Mixed,                   // NUMBER | INTEGER | BOOLEAN | STRING | JSON (0-safe)
+  valueType: "NUMBER" | "INTEGER" | "BOOLEAN" | "STRING" | "JSON",
+  effectiveFrom: Date,
+  status: "ACTIVE" | "SUPERSEDED" | "ROLLED_BACK" | "ARCHIVED",
+  description: String,
+  changeReason: String,
+  rolledBackFromVersion: Number | null,
+  rolledBackToVersion: Number | null,
+  createdBy, updatedBy,           // adminManagedPlugin
+  createdAt, updatedAt
+}
+```
+**Index**: `{ key: 1, version: 1 }` unique · `{ key: 1, status: 1, effectiveFrom: -1, version: -1 }`.
+
+> **Lưu ý kiến trúc V3:** Tài liệu gốc mô tả 26 collections lõi (+ `jobLocks` & các collection V3 mới từ Phase 0–6). Bảng kiểm kê đầy đủ 100% các Mongoose models, plugins và 50+ unique/partial indexes luôn được duy trì đồng bộ theo source code tại [`BackEnd/docs/schema-inventory-g0-02.md`](../BackEnd/docs/schema-inventory-g0-02.md).
 
 ---
 

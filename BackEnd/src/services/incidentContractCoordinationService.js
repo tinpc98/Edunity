@@ -23,6 +23,19 @@ const { audit } = require("./auditService");
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const toId = (val) => (val && val._id ? val._id.toString() : val ? String(val) : null);
 
+const assertOptionalString = (val, fieldName, { max = 2000 } = {}) => {
+  if (val === undefined || val === null) return null;
+  if (typeof val !== "string") {
+    throw validationError(`${fieldName} must be a string`);
+  }
+  const trimmed = val.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > max) {
+    throw validationError(`${fieldName} must not exceed ${max} characters`);
+  }
+  return trimmed;
+};
+
 const TRANSITIONS = {
   DRAFT: ["READY_FOR_CONTRACT_TEAM", "ON_HOLD", "CLOSED"],
   READY_FOR_CONTRACT_TEAM: ["ACKNOWLEDGED_PENDING_TEA12", "ON_HOLD", "CLOSED"],
@@ -417,22 +430,27 @@ const adminListContractReviewQueue = async (query = {}, paging, options = {}) =>
     assertId(query.teacherId, "Teacher not found", "TEACHER_NOT_FOUND");
     filter.teacherId = query.teacherId;
   }
-  if (query.status) {
-    const status = String(query.status).trim().toUpperCase();
+  if (query.status !== undefined && query.status !== null && query.status !== "") {
+    if (typeof query.status !== "string") throw validationError("status must be a string");
+    const status = query.status.trim().toUpperCase();
     if (!CONTRACT_REVIEW_PACKET_STATUSES.includes(status)) {
       throw validationError(`status must be one of ${CONTRACT_REVIEW_PACKET_STATUSES.join(", ")}`);
     }
     filter.status = status;
   }
-  if (query.triggerSource) {
-    const triggerSource = String(query.triggerSource).trim().toUpperCase();
+  if (query.triggerSource !== undefined && query.triggerSource !== null && query.triggerSource !== "") {
+    if (typeof query.triggerSource !== "string") throw validationError("triggerSource must be a string");
+    const triggerSource = query.triggerSource.trim().toUpperCase();
     if (!CONTRACT_REVIEW_TRIGGER_SOURCES.includes(triggerSource)) {
       throw validationError(`triggerSource must be one of ${CONTRACT_REVIEW_TRIGGER_SOURCES.join(", ")}`);
     }
     filter.triggerSource = triggerSource;
   }
-  if (query.recommendedContractAction) {
-    const action = String(query.recommendedContractAction).trim().toUpperCase();
+  if (query.recommendedContractAction !== undefined && query.recommendedContractAction !== null && query.recommendedContractAction !== "") {
+    if (typeof query.recommendedContractAction !== "string") {
+      throw validationError("recommendedContractAction must be a string");
+    }
+    const action = query.recommendedContractAction.trim().toUpperCase();
     if (!CONTRACT_REVIEW_RECOMMENDED_ACTIONS.includes(action)) {
       throw validationError(
         `recommendedContractAction must be one of ${CONTRACT_REVIEW_RECOMMENDED_ACTIONS.join(", ")}`
@@ -539,8 +557,11 @@ const adminCreateContractReviewPacket = async (adminId, body = {}, options = {})
   if (!body.teacherId) throw validationError("teacherId is required");
   const data = await gatherTeacherCorrelationData(body.teacherId, options);
 
+  if (body.triggerSource !== undefined && body.triggerSource !== null && body.triggerSource !== "" && typeof body.triggerSource !== "string") {
+    throw validationError("triggerSource must be a string");
+  }
   const triggerSource = body.triggerSource
-    ? String(body.triggerSource).trim().toUpperCase()
+    ? body.triggerSource.trim().toUpperCase()
     : data.disciplineCases.some((c) => ["OPEN_ADMIN_REVIEW", "NEEDS_POLICY_CONFIGURATION"].includes(c.status))
       ? "DISCIPLINE_CASE"
       : "MANUAL_ADMIN_COORDINATION";
@@ -548,8 +569,16 @@ const adminCreateContractReviewPacket = async (adminId, body = {}, options = {})
     throw validationError(`triggerSource must be one of ${CONTRACT_REVIEW_TRIGGER_SOURCES.join(", ")}`);
   }
 
+  if (
+    body.recommendedContractAction !== undefined &&
+    body.recommendedContractAction !== null &&
+    body.recommendedContractAction !== "" &&
+    typeof body.recommendedContractAction !== "string"
+  ) {
+    throw validationError("recommendedContractAction must be a string");
+  }
   const recommendedContractAction = body.recommendedContractAction
-    ? String(body.recommendedContractAction).trim().toUpperCase()
+    ? body.recommendedContractAction.trim().toUpperCase()
     : data.suggestedRecommendedAction;
   if (!CONTRACT_REVIEW_RECOMMENDED_ACTIONS.includes(recommendedContractAction)) {
     throw validationError(
@@ -557,14 +586,14 @@ const adminCreateContractReviewPacket = async (adminId, body = {}, options = {})
     );
   }
 
-  if (isBlank(body.coordinationSummary)) {
+  if (typeof body.coordinationSummary !== "string" || isBlank(body.coordinationSummary)) {
     throw validationError("coordinationSummary is required");
   }
-  const coordinationSummary = String(body.coordinationSummary).trim();
+  const coordinationSummary = body.coordinationSummary.trim();
   if (coordinationSummary.length > 4000) {
     throw validationError("coordinationSummary must not exceed 4000 characters");
   }
-  const severitySummary = body.severitySummary ? String(body.severitySummary).trim().slice(0, 2000) : "";
+  const severitySummary = assertOptionalString(body.severitySummary, "severitySummary", { max: 2000 }) || "";
 
   const autoCorrelate = body.autoCorrelate !== false;
 
@@ -596,11 +625,29 @@ const adminCreateContractReviewPacket = async (adminId, body = {}, options = {})
     );
   }
 
-  const initialStatus = body.status ? String(body.status).trim().toUpperCase() : "DRAFT";
+  if (body.status !== undefined && body.status !== null && body.status !== "" && typeof body.status !== "string") {
+    throw validationError("status must be a string");
+  }
+  const initialStatus = body.status ? body.status.trim().toUpperCase() : "DRAFT";
   if (!["DRAFT", "READY_FOR_CONTRACT_TEAM", "ACKNOWLEDGED_PENDING_TEA12"].includes(initialStatus)) {
     throw validationError(
       "Initial status must be DRAFT, READY_FOR_CONTRACT_TEAM, or ACKNOWLEDGED_PENDING_TEA12"
     );
+  }
+
+  const activeExisting = data.existingPackets.find((p) => p.status !== "CLOSED");
+  if (activeExisting) {
+    const err = new AppError(
+      "An active contract review packet already exists for this teacher",
+      "ACTIVE_CONTRACT_REVIEW_PACKET_EXISTS",
+      409
+    );
+    err.details = {
+      existingPacketId: toId(activeExisting._id),
+      packetCode: activeExisting.packetCode,
+      status: activeExisting.status,
+    };
+    throw err;
   }
 
   const auditTrailSnapshot = data.auditLogs.slice(0, 50).map((log) => ({
@@ -611,60 +658,105 @@ const adminCreateContractReviewPacket = async (adminId, body = {}, options = {})
     createdAt: log.createdAt,
   }));
 
-  const now = new Date();
-  const [packet] = await TeacherContractReviewPacket.create([
-    {
-      packetCode: generatePacketCode(),
-      teacherId: data.teacher._id,
-      triggerSource,
-      recommendedContractAction,
-      severitySummary,
-      coordinationSummary,
-      status: initialStatus,
-      tea12DependencyStatus: data.tea12State.tea12DependencyStatus,
-      tea12BlockerCode: data.tea12State.tea12Dependency.code || null,
-      tea12BlockerNote: data.tea12State.tea12Dependency.note,
-      contractSnapshot: data.tea12State.contractSnapshot,
-      autoExecutionBlocked: true,
-      autoContractMutationApplied: false,
-      linkedDisciplineCaseIds,
-      linkedViolationIds,
-      linkedIncidentReportIds,
-      linkedSubjectAuthIds,
-      linkedRefundReviewIds,
-      metricsSnapshot: data.metricsSnapshot,
-      auditTrailSnapshot,
-      history: [
-        {
-          action: "CREATED",
-          previousStatus: null,
-          newStatus: initialStatus,
-          note: coordinationSummary,
-          tea12DependencyStatus: data.tea12State.tea12DependencyStatus,
-          actorId: adminId,
-          actorRole: "ADMIN",
-          recordedAt: now,
-        },
-      ],
-      createdBy: adminId,
-    },
-  ]);
+  const session = await mongoose.startSession();
+  let packet;
+  try {
+    await session.withTransaction(async () => {
+      const concurrentActive = await TeacherContractReviewPacket.findOne({
+        teacherId: data.teacher._id,
+        status: { $ne: "CLOSED" },
+      })
+        .select("_id packetCode status")
+        .session(session)
+        .lean();
+      if (concurrentActive) {
+        const err = new AppError(
+          "An active contract review packet already exists for this teacher",
+          "ACTIVE_CONTRACT_REVIEW_PACKET_EXISTS",
+          409
+        );
+        err.details = {
+          existingPacketId: toId(concurrentActive._id),
+          packetCode: concurrentActive.packetCode,
+          status: concurrentActive.status,
+        };
+        throw err;
+      }
 
-  await audit({
-    actorAdminId: adminId,
-    action: "CONTRACT_REVIEW_PACKET_CREATED",
-    targetType: "TeacherContractReviewPacket",
-    targetId: packet._id,
-    beforeState: null,
-    afterState: {
-      packetCode: packet.packetCode,
-      teacherId: toId(packet.teacherId),
-      status: packet.status,
-      recommendedContractAction: packet.recommendedContractAction,
-      tea12DependencyStatus: packet.tea12DependencyStatus,
-      autoExecutionBlocked: true,
-    },
-  });
+      const now = new Date();
+      const [created] = await TeacherContractReviewPacket.create(
+        [
+          {
+            packetCode: generatePacketCode(),
+            teacherId: data.teacher._id,
+            triggerSource,
+            recommendedContractAction,
+            severitySummary,
+            coordinationSummary,
+            status: initialStatus,
+            tea12DependencyStatus: data.tea12State.tea12DependencyStatus,
+            tea12BlockerCode: data.tea12State.tea12Dependency.code || null,
+            tea12BlockerNote: data.tea12State.tea12Dependency.note,
+            contractSnapshot: data.tea12State.contractSnapshot,
+            autoExecutionBlocked: true,
+            autoContractMutationApplied: false,
+            linkedDisciplineCaseIds,
+            linkedViolationIds,
+            linkedIncidentReportIds,
+            linkedSubjectAuthIds,
+            linkedRefundReviewIds,
+            metricsSnapshot: data.metricsSnapshot,
+            auditTrailSnapshot,
+            history: [
+              {
+                action: "CREATED",
+                previousStatus: null,
+                newStatus: initialStatus,
+                note: coordinationSummary,
+                tea12DependencyStatus: data.tea12State.tea12DependencyStatus,
+                actorId: adminId,
+                actorRole: "ADMIN",
+                recordedAt: now,
+              },
+            ],
+            createdBy: adminId,
+          },
+        ],
+        { session }
+      );
+      packet = created;
+
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: "CONTRACT_REVIEW_PACKET_CREATED",
+          targetType: "TeacherContractReviewPacket",
+          targetId: packet._id,
+          beforeState: null,
+          afterState: {
+            packetCode: packet.packetCode,
+            teacherId: toId(packet.teacherId),
+            status: packet.status,
+            recommendedContractAction: packet.recommendedContractAction,
+            tea12DependencyStatus: packet.tea12DependencyStatus,
+            autoExecutionBlocked: true,
+          },
+        },
+        session
+      );
+    });
+  } catch (err) {
+    if (err && err.code === 11000) {
+      throw new AppError(
+        "An active contract review packet already exists for this teacher",
+        "ACTIVE_CONTRACT_REVIEW_PACKET_EXISTS",
+        409
+      );
+    }
+    throw err;
+  } finally {
+    session.endSession();
+  }
 
   const teacherMap = new Map([[toId(data.teacher._id), data.teacher]]);
   return presentPacket(packet.toObject(), { audience: "ADMIN", teacherMap });
@@ -690,7 +782,10 @@ const adminUpdateContractReviewPacketStatus = async (adminId, packetId, body = {
     throw new AppError("Contract review packet not found", "CONTRACT_REVIEW_PACKET_NOT_FOUND", 404);
   }
 
-  const nextStatus = body.status ? String(body.status).trim().toUpperCase() : "";
+  if (typeof body.status !== "string" || isBlank(body.status)) {
+    throw validationError(`status must be one of ${CONTRACT_REVIEW_PACKET_STATUSES.join(", ")}`);
+  }
+  const nextStatus = body.status.trim().toUpperCase();
   if (!CONTRACT_REVIEW_PACKET_STATUSES.includes(nextStatus)) {
     throw validationError(`status must be one of ${CONTRACT_REVIEW_PACKET_STATUSES.join(", ")}`);
   }
@@ -704,7 +799,10 @@ const adminUpdateContractReviewPacketStatus = async (adminId, packetId, body = {
     );
   }
 
-  if (nextStatus === "CLOSED" && isBlank(body.resolutionNote || body.note)) {
+  const parsedResolutionNote = assertOptionalString(body.resolutionNote, "resolutionNote", { max: 2000 });
+  const parsedNote = assertOptionalString(body.note, "note", { max: 2000 });
+  const noteText = parsedResolutionNote || parsedNote || null;
+  if (nextStatus === "CLOSED" && !noteText) {
     throw validationError("resolutionNote is required when closing a contract review packet");
   }
 
@@ -712,58 +810,84 @@ const adminUpdateContractReviewPacketStatus = async (adminId, packetId, body = {
   const tea12State = await resolveTea12Dependency(teacher || { _id: packet.teacherId }, options);
 
   const prevStatus = packet.status;
-  const now = new Date();
-  const noteText = body.resolutionNote || body.note || null;
+  const session = await mongoose.startSession();
+  let updated;
+  try {
+    await session.withTransaction(async () => {
+      const now = new Date();
+      const setUpdate = {
+        status: nextStatus,
+        tea12DependencyStatus: tea12State.tea12DependencyStatus,
+        tea12BlockerCode: tea12State.tea12Dependency.code || null,
+        tea12BlockerNote: tea12State.tea12Dependency.note,
+        contractSnapshot: tea12State.contractSnapshot,
+        autoExecutionBlocked: true,
+        autoContractMutationApplied: false,
+        updatedBy: adminId,
+        reviewedBy: adminId,
+        reviewedAt: now,
+      };
+      if (nextStatus === "CLOSED") {
+        setUpdate.closedAt = now;
+        setUpdate.resolutionNote = noteText;
+      }
 
-  packet.status = nextStatus;
-  packet.tea12DependencyStatus = tea12State.tea12DependencyStatus;
-  packet.tea12BlockerCode = tea12State.tea12Dependency.code || null;
-  packet.tea12BlockerNote = tea12State.tea12Dependency.note;
-  packet.contractSnapshot = tea12State.contractSnapshot;
-  packet.autoExecutionBlocked = true;
-  packet.autoContractMutationApplied = false;
-  packet.updatedBy = adminId;
-  packet.reviewedBy = adminId;
-  packet.reviewedAt = now;
-  if (nextStatus === "CLOSED") {
-    packet.closedAt = now;
-    packet.resolutionNote = String(noteText).trim();
+      updated = await TeacherContractReviewPacket.findOneAndUpdate(
+        { _id: packet._id, status: prevStatus },
+        {
+          $set: setUpdate,
+          $push: {
+            history: {
+              action: "STATUS_UPDATED",
+              previousStatus: prevStatus,
+              newStatus: nextStatus,
+              note: noteText,
+              tea12DependencyStatus: tea12State.tea12DependencyStatus,
+              actorId: adminId,
+              actorRole: "ADMIN",
+              recordedAt: now,
+            },
+          },
+        },
+        { returnDocument: "after", session }
+      ).lean();
+
+      if (!updated) {
+        throw new AppError(
+          "Contract review packet status changed concurrently",
+          "INVALID_PACKET_STATUS_TRANSITION",
+          409
+        );
+      }
+
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: "CONTRACT_REVIEW_PACKET_STATUS_UPDATED",
+          targetType: "TeacherContractReviewPacket",
+          targetId: packet._id,
+          beforeState: { status: prevStatus },
+          afterState: {
+            status: nextStatus,
+            tea12DependencyStatus: tea12State.tea12DependencyStatus,
+            note: noteText,
+            autoContractMutationApplied: false,
+          },
+        },
+        session
+      );
+    });
+  } finally {
+    session.endSession();
   }
 
-  packet.history.push({
-    action: "STATUS_UPDATED",
-    previousStatus: prevStatus,
-    newStatus: nextStatus,
-    note: noteText ? String(noteText).trim() : null,
-    tea12DependencyStatus: tea12State.tea12DependencyStatus,
-    actorId: adminId,
-    actorRole: "ADMIN",
-    recordedAt: now,
-  });
-
-  await packet.save();
-
-  await audit({
-    actorAdminId: adminId,
-    action: "CONTRACT_REVIEW_PACKET_STATUS_UPDATED",
-    targetType: "TeacherContractReviewPacket",
-    targetId: packet._id,
-    beforeState: { status: prevStatus },
-    afterState: {
-      status: nextStatus,
-      tea12DependencyStatus: tea12State.tea12DependencyStatus,
-      note: noteText || null,
-      autoContractMutationApplied: false,
-    },
-  });
-
   const teacherMap = teacher ? new Map([[toId(teacher._id), teacher]]) : new Map();
-  return presentPacket(packet.toObject(), { audience: "ADMIN", teacherMap });
+  return presentPacket(updated, { audience: "ADMIN", teacherMap });
 };
 
 /**
  * Guard fail-closed khi cố thực thi thay đổi trạng thái hợp đồng trực tiếp từ TEA-16.
- * Luôn ghi nhận AuditLog + history nhưng KHÔNG bao giờ tự chấm dứt hoặc sửa hợp đồng.
+ * Luôn ghi nhận AuditLog + history trong transaction TRƯỚC KHI fail-closed, KHÔNG bao giờ tự chấm dứt hoặc sửa hợp đồng.
  */
 const adminAttemptContractExecutionHandoff = async (adminId, packetId, body = {}, options = {}) => {
   assertId(packetId, "Contract review packet not found", "CONTRACT_REVIEW_PACKET_NOT_FOUND");
@@ -772,41 +896,66 @@ const adminAttemptContractExecutionHandoff = async (adminId, packetId, body = {}
     throw new AppError("Contract review packet not found", "CONTRACT_REVIEW_PACKET_NOT_FOUND", 404);
   }
 
+  const parsedNote = assertOptionalString(body.note, "note", { max: 2000 });
+  const note = parsedNote || "Attempted contract lifecycle execution via TEA-16";
+
   const teacher = await User.findById(packet.teacherId).lean();
   const tea12State = await resolveTea12Dependency(teacher || { _id: packet.teacherId }, options);
-  const now = new Date();
-  const note = body.note ? String(body.note).trim() : "Attempted contract lifecycle execution via TEA-16";
 
-  packet.tea12DependencyStatus = tea12State.tea12DependencyStatus;
-  packet.tea12BlockerCode = tea12State.tea12Dependency.code || null;
-  packet.tea12BlockerNote = tea12State.tea12Dependency.note;
-  packet.autoExecutionBlocked = true;
-  packet.autoContractMutationApplied = false;
-  packet.updatedBy = adminId;
-  packet.history.push({
-    action: "EXECUTION_BLOCKED",
-    previousStatus: packet.status,
-    newStatus: packet.status,
-    note,
-    tea12DependencyStatus: tea12State.tea12DependencyStatus,
-    actorId: adminId,
-    actorRole: "ADMIN",
-    recordedAt: now,
-  });
-  await packet.save();
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const now = new Date();
+      const freshPacket = await TeacherContractReviewPacket.findOneAndUpdate(
+        { _id: packet._id },
+        {
+          $set: {
+            tea12DependencyStatus: tea12State.tea12DependencyStatus,
+            tea12BlockerCode: tea12State.tea12Dependency.code || null,
+            tea12BlockerNote: tea12State.tea12Dependency.note,
+            autoExecutionBlocked: true,
+            autoContractMutationApplied: false,
+            updatedBy: adminId,
+          },
+          $push: {
+            history: {
+              action: "EXECUTION_BLOCKED",
+              previousStatus: packet.status,
+              newStatus: packet.status,
+              note,
+              tea12DependencyStatus: tea12State.tea12DependencyStatus,
+              actorId: adminId,
+              actorRole: "ADMIN",
+              recordedAt: now,
+            },
+          },
+        },
+        { returnDocument: "after", session }
+      ).lean();
 
-  await audit({
-    actorAdminId: adminId,
-    action: "CONTRACT_REVIEW_EXECUTION_BLOCKED",
-    targetType: "TeacherContractReviewPacket",
-    targetId: packet._id,
-    beforeState: { status: packet.status },
-    afterState: {
-      tea12DependencyStatus: tea12State.tea12DependencyStatus,
-      autoContractMutationApplied: false,
-      note,
-    },
-  });
+      if (!freshPacket) {
+        throw new AppError("Contract review packet not found", "CONTRACT_REVIEW_PACKET_NOT_FOUND", 404);
+      }
+
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: "CONTRACT_REVIEW_EXECUTION_BLOCKED",
+          targetType: "TeacherContractReviewPacket",
+          targetId: packet._id,
+          beforeState: { status: freshPacket.status },
+          afterState: {
+            tea12DependencyStatus: tea12State.tea12DependencyStatus,
+            autoContractMutationApplied: false,
+            note,
+          },
+        },
+        session
+      );
+    });
+  } finally {
+    session.endSession();
+  }
 
   if (tea12State.tea12DependencyStatus === "BLOCKED") {
     const err = new AppError(

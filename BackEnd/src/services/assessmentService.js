@@ -15,6 +15,8 @@ const {
   ASSESSMENT_PURPOSES,
   ASSESSMENT_SCOPES,
   ASSESSMENT_STATUSES,
+  ATTEMPT_STATUSES,
+  ATTEMPT_GRADING_STATUSES,
   QUESTION_TYPES,
   COURSE_LEVELS,
   GRADE_LEVELS,
@@ -30,6 +32,68 @@ const questionNotFound = () => new AppError("Question not found", "QUESTION_NOT_
 const attemptNotFound = () => new AppError("Attempt not found", "ATTEMPT_NOT_FOUND", 404);
 
 const round2 = (n) => Math.round(n * 100) / 100;
+
+const assertOptionalString = (value, field) => {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "string") {
+    throw validationError(`${field} must be a string`);
+  }
+  return value;
+};
+
+const assertOptionalBoolean = (value, field) => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw validationError(`${field} must be a boolean`);
+  }
+  return value;
+};
+
+const assertOptionalEnum = (value, allowed, field, upper = true) => {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") {
+    throw validationError(`${field} must be a string`);
+  }
+  const normalized = upper ? value.trim().toUpperCase() : value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (!allowed.includes(normalized)) {
+    throw validationError(`${field} must be one of ${allowed.join(", ")}`);
+  }
+  return normalized;
+};
+
+const assertQueryObjectId = (value, message, code, field = "id") => {
+  if (typeof value !== "string" && !(value instanceof mongoose.Types.ObjectId)) {
+    throw validationError(`${field} must be a valid identifier string`);
+  }
+  assertId(value, message, code);
+  return value;
+};
+
+const assertFiniteNumeric = (value, field) => {
+  if (
+    typeof value === "boolean" ||
+    Array.isArray(value) ||
+    (typeof value === "object" && value !== null) ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    throw validationError(`${field} must be a finite number`);
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    throw validationError(`${field} must be a finite number`);
+  }
+  return num;
+};
+
+const shuffleArray = (arr) => {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+};
 
 const stableStringify = (value) => {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -59,20 +123,25 @@ const parsePlacementConfig = (rawConfig) => {
   if (!Array.isArray(bandsRaw)) throw validationError("placementConfig.bands must be an array");
 
   const bands = bandsRaw.map((band, idx) => {
-    const minPercentage = Number(band && band.minPercentage);
-    const maxPercentage = Number(band && band.maxPercentage);
-    const recommendedLevel = band && band.recommendedLevel ? String(band.recommendedLevel).trim().toUpperCase() : "";
-    if (!Number.isFinite(minPercentage) || !Number.isFinite(maxPercentage) || minPercentage < 0 || maxPercentage > 100 || minPercentage > maxPercentage) {
+    if (!band || typeof band !== "object" || Array.isArray(band)) {
+      throw validationError(`placementConfig.bands[${idx}] must be an object`);
+    }
+    const minPercentage = assertFiniteNumeric(band.minPercentage, `placementConfig.bands[${idx}].minPercentage`);
+    const maxPercentage = assertFiniteNumeric(band.maxPercentage, `placementConfig.bands[${idx}].maxPercentage`);
+    const recLvlRaw = assertOptionalString(band.recommendedLevel, `placementConfig.bands[${idx}].recommendedLevel`);
+    const recommendedLevel = recLvlRaw ? recLvlRaw.trim().toUpperCase() : "";
+    if (minPercentage < 0 || maxPercentage > 100 || minPercentage > maxPercentage) {
       throw validationError(`placementConfig.bands[${idx}] minPercentage/maxPercentage must satisfy 0 <= min <= max <= 100`);
     }
     if (!COURSE_LEVELS.includes(recommendedLevel)) {
       throw validationError(`placementConfig.bands[${idx}].recommendedLevel must be one of ${COURSE_LEVELS.join(", ")}`);
     }
+    const summaryRaw = assertOptionalString(band.summary, `placementConfig.bands[${idx}].summary`);
     return {
       minPercentage: round2(minPercentage),
       maxPercentage: round2(maxPercentage),
       recommendedLevel,
-      summary: band.summary ? String(band.summary).trim() : "",
+      summary: summaryRaw ? summaryRaw.trim() : "",
     };
   });
 
@@ -89,16 +158,17 @@ const parsePlacementConfig = (rawConfig) => {
     if (!Array.isArray(rawConfig.recommendedCourseIds)) {
       throw validationError("placementConfig.recommendedCourseIds must be an array");
     }
-    recommendedCourseIds = rawConfig.recommendedCourseIds.map((id) => {
-      assertId(id, "Course not found", "COURSE_NOT_FOUND");
-      return id;
-    });
+    recommendedCourseIds = rawConfig.recommendedCourseIds.map((id) =>
+      assertQueryObjectId(id, "Course not found", "COURSE_NOT_FOUND", "recommendedCourseIds")
+    );
   }
+
+  const autoRecommendFlag = assertOptionalBoolean(rawConfig.autoRecommendCourses, "placementConfig.autoRecommendCourses");
 
   return {
     bands: sorted,
     recommendedCourseIds,
-    autoRecommendCourses: rawConfig.autoRecommendCourses !== undefined ? Boolean(rawConfig.autoRecommendCourses) : true,
+    autoRecommendCourses: autoRecommendFlag !== undefined ? autoRecommendFlag : true,
   };
 };
 
@@ -200,14 +270,22 @@ const presentAttemptForStudent = (attempt, assessment = null) => {
   };
 };
 
-const resolveAssessmentScope = async (actor, body = {}, existing = null) => {
-  const purpose = (body.purpose !== undefined ? String(body.purpose) : existing?.purpose || "QUIZ").trim().toUpperCase();
+const resolveAssessmentScope = async (actor, body = {}, existing = null, dbSession = null) => {
+  const withSess = (q) => (dbSession ? q.session(dbSession) : q);
+  if (body.purpose !== undefined && typeof body.purpose !== "string") {
+    throw validationError("purpose must be a string");
+  }
+  if (body.scopeType !== undefined && typeof body.scopeType !== "string") {
+    throw validationError("scopeType must be a string");
+  }
+
+  const purpose = (body.purpose !== undefined ? body.purpose : existing?.purpose || "QUIZ").trim().toUpperCase();
   if (!ASSESSMENT_PURPOSES.includes(purpose)) {
     throw validationError(`purpose must be one of ${ASSESSMENT_PURPOSES.join(", ")}`);
   }
 
   const defaultScope = purpose === "PLACEMENT" ? "GLOBAL_PLACEMENT" : "CLASS";
-  const scopeType = (body.scopeType !== undefined ? String(body.scopeType) : existing?.scopeType || defaultScope)
+  const scopeType = (body.scopeType !== undefined ? body.scopeType : existing?.scopeType || defaultScope)
     .trim()
     .toUpperCase();
   if (!ASSESSMENT_SCOPES.includes(scopeType)) {
@@ -233,8 +311,8 @@ const resolveAssessmentScope = async (actor, body = {}, existing = null) => {
 
   if (scopeType === "CLASS") {
     if (!classId) throw validationError("classId is required when scopeType is CLASS");
-    assertId(classId, "Class not found", "CLASS_NOT_FOUND");
-    const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
+    assertQueryObjectId(classId, "Class not found", "CLASS_NOT_FOUND", "classId");
+    const cls = await withSess(Class.findOne({ _id: classId, ...NOT_DELETED })).lean();
     if (!cls) throw CLASS_NOT_FOUND();
     if (actor.role === "TEACHER" && String(cls.teacherId) !== String(actor.id)) {
       throw FORBIDDEN("You can only manage assessments of your own classes");
@@ -247,10 +325,10 @@ const resolveAssessmentScope = async (actor, body = {}, existing = null) => {
     sessionId = null;
   } else if (scopeType === "SESSION") {
     if (!sessionId) throw validationError("sessionId is required when scopeType is SESSION");
-    assertId(sessionId, "Session not found", "SESSION_NOT_FOUND");
-    const session = await Session.findById(sessionId).lean();
+    assertQueryObjectId(sessionId, "Session not found", "SESSION_NOT_FOUND", "sessionId");
+    const session = await withSess(Session.findById(sessionId)).lean();
     if (!session) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
-    const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).lean();
+    const cls = await withSess(Class.findOne({ _id: session.classId, ...NOT_DELETED })).lean();
     if (!cls) throw CLASS_NOT_FOUND();
     if (actor.role === "TEACHER" && String(cls.teacherId) !== String(actor.id)) {
       throw FORBIDDEN("You can only manage assessments of your own classes");
@@ -263,8 +341,8 @@ const resolveAssessmentScope = async (actor, body = {}, existing = null) => {
     gradeLevel = gradeLevel || cls.gradeLevel || null;
   } else if (scopeType === "COURSE") {
     if (!courseId) throw validationError("courseId is required when scopeType is COURSE");
-    assertId(courseId, "Course not found", "COURSE_NOT_FOUND");
-    const course = await Course.findOne({ _id: courseId, ...NOT_DELETED }).lean();
+    assertQueryObjectId(courseId, "Course not found", "COURSE_NOT_FOUND", "courseId");
+    const course = await withSess(Course.findOne({ _id: courseId, ...NOT_DELETED })).lean();
     if (!course) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
     courseId = course._id;
     subjectId = subjectId || course.subjectId;
@@ -278,8 +356,8 @@ const resolveAssessmentScope = async (actor, body = {}, existing = null) => {
     sessionId = null;
     teacherId = null;
     if (courseId) {
-      assertId(courseId, "Course not found", "COURSE_NOT_FOUND");
-      const course = await Course.findOne({ _id: courseId, ...NOT_DELETED }).lean();
+      assertQueryObjectId(courseId, "Course not found", "COURSE_NOT_FOUND", "courseId");
+      const course = await withSess(Course.findOne({ _id: courseId, ...NOT_DELETED })).lean();
       if (!course) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
       courseId = course._id;
       subjectId = subjectId || course.subjectId;
@@ -288,14 +366,17 @@ const resolveAssessmentScope = async (actor, body = {}, existing = null) => {
   }
 
   if (subjectId) {
-    assertId(subjectId, "Subject not found", "SUBJECT_NOT_FOUND");
-    const subject = await Subject.findOne({ _id: subjectId, ...NOT_DELETED }).lean();
+    assertQueryObjectId(subjectId, "Subject not found", "SUBJECT_NOT_FOUND", "subjectId");
+    const subject = await withSess(Subject.findOne({ _id: subjectId, ...NOT_DELETED })).lean();
     if (!subject) throw new AppError("Subject not found", "SUBJECT_NOT_FOUND", 404);
     subjectId = subject._id;
   }
 
   if (gradeLevel !== null && gradeLevel !== undefined && gradeLevel !== "") {
-    gradeLevel = String(gradeLevel).trim().toUpperCase();
+    if (typeof gradeLevel !== "string") {
+      throw new AppError("gradeLevel must be a string", "INVALID_GRADE_LEVEL", 400);
+    }
+    gradeLevel = gradeLevel.trim().toUpperCase();
     if (!GRADE_LEVELS.includes(gradeLevel)) {
       throw new AppError(`gradeLevel must be one of ${GRADE_LEVELS.join(", ")}`, "INVALID_GRADE_LEVEL", 400);
     }
@@ -308,7 +389,16 @@ const resolveAssessmentScope = async (actor, body = {}, existing = null) => {
     if (!Array.isArray(body.targetCourseLevels)) {
       throw validationError("targetCourseLevels must be an array");
     }
-    targetCourseLevels = [...new Set(body.targetCourseLevels.map((l) => String(l).trim().toUpperCase()))];
+    targetCourseLevels = [
+      ...new Set(
+        body.targetCourseLevels.map((l, idx) => {
+          if (typeof l !== "string") {
+            throw validationError(`targetCourseLevels[${idx}] must be a string`);
+          }
+          return l.trim().toUpperCase();
+        })
+      ),
+    ];
     for (const lvl of targetCourseLevels) {
       if (!COURSE_LEVELS.includes(lvl)) {
         throw validationError(`targetCourseLevels contains invalid level "${lvl}"`);
@@ -346,14 +436,7 @@ const syncAssessmentMetadataFromQuestions = async (assessment, dbSession = null)
   return { totalMaxScore, gradingMode, questionCount: questions.length };
 };
 
-const assertManageableAssessment = async (actor, assessmentId) => {
-  if (!actor || !["ADMIN", "TEACHER"].includes(actor.role)) {
-    throw FORBIDDEN("Only ADMIN or TEACHER can manage assessments");
-  }
-  assertId(assessmentId, "Assessment not found", "ASSESSMENT_NOT_FOUND");
-  const assessment = await Assessment.findOne({ _id: assessmentId, ...NOT_DELETED });
-  if (!assessment) throw assessmentNotFound();
-
+const assertManageableAssessmentDoc = async (actor, assessment) => {
   if (actor.role === "TEACHER") {
     await getVerifiedTeacher(actor.id);
     if (assessment.purpose === "PLACEMENT" || !["CLASS", "SESSION"].includes(assessment.scopeType)) {
@@ -363,7 +446,46 @@ const assertManageableAssessment = async (actor, assessmentId) => {
       throw FORBIDDEN("You can only manage assessments of your own classes");
     }
   }
+};
+
+const assertManageableAssessment = async (actor, assessmentId) => {
+  if (!actor || !["ADMIN", "TEACHER"].includes(actor.role)) {
+    throw FORBIDDEN("Only ADMIN or TEACHER can manage assessments");
+  }
+  assertId(assessmentId, "Assessment not found", "ASSESSMENT_NOT_FOUND");
+  const assessment = await Assessment.findOne({ _id: assessmentId, ...NOT_DELETED });
+  if (!assessment) throw assessmentNotFound();
+  await assertManageableAssessmentDoc(actor, assessment);
   return assessment;
+};
+
+const lockManageableAssessmentInTx = async (
+  actor,
+  assessmentId,
+  dbSession,
+  { allowedStatuses = null, rejectArchivedError = null, notEditableError = null } = {}
+) => {
+  const statusFilter = allowedStatuses ? { status: { $in: allowedStatuses } } : {};
+  const locked = await Assessment.findOneAndUpdate(
+    { _id: assessmentId, ...NOT_DELETED, ...statusFilter },
+    { $inc: { __v: 1 } },
+    { session: dbSession, returnDocument: "after" }
+  );
+  if (locked) {
+    await assertManageableAssessmentDoc(actor, locked);
+    return locked;
+  }
+
+  const current = await Assessment.findOne({ _id: assessmentId, ...NOT_DELETED }).session(dbSession).lean();
+  if (!current) throw assessmentNotFound();
+  await assertManageableAssessmentDoc(actor, current);
+  if (current.status === "ARCHIVED" && rejectArchivedError) {
+    throw rejectArchivedError();
+  }
+  if (notEditableError) {
+    throw notEditableError();
+  }
+  throw new AppError("Assessment cannot be modified in current state", "ASSESSMENT_NOT_EDITABLE", 409);
 };
 
 const createAssessment = async (actor, body = {}) => {
@@ -371,26 +493,28 @@ const createAssessment = async (actor, body = {}) => {
     throw FORBIDDEN("Only ADMIN or TEACHER can create assessments");
   }
   if (isBlank(body.title)) throw validationError("title is required");
+  const descRaw = assertOptionalString(body.description, "description");
+  const instrRaw = assertOptionalString(body.instructions, "instructions");
 
   const scope = await resolveAssessmentScope(actor, body);
   const timeLimitMinutes =
     body.timeLimitMinutes !== undefined && body.timeLimitMinutes !== null && body.timeLimitMinutes !== ""
-      ? Number(body.timeLimitMinutes)
+      ? assertFiniteNumeric(body.timeLimitMinutes, "timeLimitMinutes")
       : null;
   if (timeLimitMinutes !== null && (!Number.isInteger(timeLimitMinutes) || timeLimitMinutes < 1 || timeLimitMinutes > 300)) {
     throw validationError("timeLimitMinutes must be an integer between 1 and 300");
   }
 
-  const maxAttempts = body.maxAttempts !== undefined ? Number(body.maxAttempts) : 1;
+  const maxAttempts = body.maxAttempts !== undefined ? assertFiniteNumeric(body.maxAttempts, "maxAttempts") : 1;
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
     throw validationError("maxAttempts must be an integer between 1 and 20");
   }
 
   const passingScore =
     body.passingScore !== undefined && body.passingScore !== null && body.passingScore !== ""
-      ? Number(body.passingScore)
+      ? assertFiniteNumeric(body.passingScore, "passingScore")
       : null;
-  if (passingScore !== null && (!Number.isFinite(passingScore) || passingScore < 0)) {
+  if (passingScore !== null && passingScore < 0) {
     throw validationError("passingScore must be >= 0");
   }
 
@@ -400,57 +524,99 @@ const createAssessment = async (actor, body = {}) => {
     throw validationError("availableFrom must be before availableUntil");
   }
 
+  const shuffleFlag = assertOptionalBoolean(body.shuffleQuestions, "shuffleQuestions");
+  const showResultFlag = assertOptionalBoolean(body.showResultImmediately, "showResultImmediately");
   const placementConfig = parsePlacementConfig(body.placementConfig);
 
-  const [created] = await Assessment.create([
-    {
-      title: String(body.title).trim(),
-      description: body.description ? String(body.description).trim() : "",
-      instructions: body.instructions ? String(body.instructions).trim() : "",
-      ...scope,
-      status: "DRAFT",
-      timeLimitMinutes,
-      maxAttempts,
-      totalMaxScore: 0,
-      passingScore,
-      gradingMode: "AUTO",
-      shuffleQuestions: Boolean(body.shuffleQuestions),
-      showResultImmediately: body.showResultImmediately !== undefined ? Boolean(body.showResultImmediately) : true,
-      availableFrom,
-      availableUntil,
-      placementConfig,
-      createdBy: actor.id,
-    },
-  ]);
+  const dbSession = await mongoose.startSession();
+  let created;
+  try {
+    await dbSession.withTransaction(async () => {
+      [created] = await Assessment.create(
+        [
+          {
+            title: body.title.trim(),
+            description: descRaw ? descRaw.trim() : "",
+            instructions: instrRaw ? instrRaw.trim() : "",
+            ...scope,
+            status: "DRAFT",
+            timeLimitMinutes,
+            maxAttempts,
+            totalMaxScore: 0,
+            passingScore,
+            gradingMode: "AUTO",
+            shuffleQuestions: shuffleFlag !== undefined ? shuffleFlag : false,
+            showResultImmediately: showResultFlag !== undefined ? showResultFlag : true,
+            availableFrom,
+            availableUntil,
+            placementConfig,
+            createdBy: actor.id,
+          },
+        ],
+        { session: dbSession }
+      );
 
-  if (actor.role === "ADMIN") {
-    await audit({
-      actorAdminId: actor.id,
-      action: "ASSESSMENT_CREATE",
-      targetType: "Assessment",
-      targetId: created._id,
-      beforeState: null,
-      afterState: { title: created.title, purpose: created.purpose, scopeType: created.scopeType, status: created.status },
+      if (actor.role === "ADMIN") {
+        await audit(
+          {
+            actorAdminId: actor.id,
+            action: "ASSESSMENT_CREATE",
+            targetType: "Assessment",
+            targetId: created._id,
+            beforeState: null,
+            afterState: { title: created.title, purpose: created.purpose, scopeType: created.scopeType, status: created.status },
+          },
+          dbSession
+        );
+      }
     });
+  } finally {
+    await dbSession.endSession();
   }
 
   return { ...created.toObject(), id: created._id.toString() };
 };
 
 const updateAssessment = async (actor, assessmentId, body = {}) => {
-  const assessment = await assertManageableAssessment(actor, assessmentId);
-  if (assessment.status !== "DRAFT") {
+  const pre = await assertManageableAssessment(actor, assessmentId);
+  if (pre.status !== "DRAFT") {
     throw new AppError("Only DRAFT assessments can be modified", "ASSESSMENT_NOT_EDITABLE", 409);
   }
 
-  if (body.title !== undefined) {
-    if (isBlank(body.title)) throw validationError("title must not be empty");
-    assessment.title = String(body.title).trim();
+  if (body.title !== undefined && isBlank(body.title)) {
+    throw validationError("title must not be empty");
   }
-  if (body.description !== undefined) assessment.description = body.description ? String(body.description).trim() : "";
-  if (body.instructions !== undefined) assessment.instructions = body.instructions ? String(body.instructions).trim() : "";
+  const descRaw = assertOptionalString(body.description, "description");
+  const instrRaw = assertOptionalString(body.instructions, "instructions");
+  const nextTimeLimit =
+    body.timeLimitMinutes !== undefined
+      ? body.timeLimitMinutes === null || body.timeLimitMinutes === ""
+        ? null
+        : assertFiniteNumeric(body.timeLimitMinutes, "timeLimitMinutes")
+      : undefined;
+  if (nextTimeLimit !== undefined && nextTimeLimit !== null && (!Number.isInteger(nextTimeLimit) || nextTimeLimit < 1 || nextTimeLimit > 300)) {
+    throw validationError("timeLimitMinutes must be an integer between 1 and 300");
+  }
+  const nextMaxAttempts = body.maxAttempts !== undefined ? assertFiniteNumeric(body.maxAttempts, "maxAttempts") : undefined;
+  if (nextMaxAttempts !== undefined && (!Number.isInteger(nextMaxAttempts) || nextMaxAttempts < 1 || nextMaxAttempts > 20)) {
+    throw validationError("maxAttempts must be an integer between 1 and 20");
+  }
+  const nextPassingScore =
+    body.passingScore !== undefined
+      ? body.passingScore === null || body.passingScore === ""
+        ? null
+        : assertFiniteNumeric(body.passingScore, "passingScore")
+      : undefined;
+  if (nextPassingScore !== undefined && nextPassingScore !== null && nextPassingScore < 0) {
+    throw validationError("passingScore must be >= 0");
+  }
+  const nextShuffle = assertOptionalBoolean(body.shuffleQuestions, "shuffleQuestions");
+  const nextShowResult = assertOptionalBoolean(body.showResultImmediately, "showResultImmediately");
+  const nextAvailFrom = body.availableFrom !== undefined ? parseDate(body.availableFrom, "availableFrom") : undefined;
+  const nextAvailUntil = body.availableUntil !== undefined ? parseDate(body.availableUntil, "availableUntil") : undefined;
+  const nextPlacementConfig = body.placementConfig !== undefined ? parsePlacementConfig(body.placementConfig) : undefined;
 
-  if (
+  const hasScopeChange =
     body.purpose !== undefined ||
     body.scopeType !== undefined ||
     body.courseId !== undefined ||
@@ -458,51 +624,52 @@ const updateAssessment = async (actor, assessmentId, body = {}) => {
     body.sessionId !== undefined ||
     body.subjectId !== undefined ||
     body.gradeLevel !== undefined ||
-    body.targetCourseLevels !== undefined
-  ) {
-    const scope = await resolveAssessmentScope(actor, body, assessment);
-    Object.assign(assessment, scope);
+    body.targetCourseLevels !== undefined;
+
+  const dbSession = await mongoose.startSession();
+  let updated;
+  try {
+    await dbSession.withTransaction(async () => {
+      const assessment = await lockManageableAssessmentInTx(actor, assessmentId, dbSession, {
+        allowedStatuses: ["DRAFT"],
+        notEditableError: () => new AppError("Only DRAFT assessments can be modified", "ASSESSMENT_NOT_EDITABLE", 409),
+      });
+
+      if (body.title !== undefined) assessment.title = body.title.trim();
+      if (body.description !== undefined) assessment.description = descRaw ? descRaw.trim() : "";
+      if (body.instructions !== undefined) assessment.instructions = instrRaw ? instrRaw.trim() : "";
+      if (hasScopeChange) {
+        const scope = await resolveAssessmentScope(actor, body, assessment, dbSession);
+        Object.assign(assessment, scope);
+      }
+      if (nextTimeLimit !== undefined) assessment.timeLimitMinutes = nextTimeLimit;
+      if (nextMaxAttempts !== undefined) assessment.maxAttempts = nextMaxAttempts;
+      if (nextPassingScore !== undefined) assessment.passingScore = nextPassingScore;
+      if (nextShuffle !== undefined) assessment.shuffleQuestions = nextShuffle;
+      if (nextShowResult !== undefined) assessment.showResultImmediately = nextShowResult;
+      if (nextAvailFrom !== undefined) assessment.availableFrom = nextAvailFrom;
+      if (nextAvailUntil !== undefined) assessment.availableUntil = nextAvailUntil;
+      if (assessment.availableFrom && assessment.availableUntil && assessment.availableFrom >= assessment.availableUntil) {
+        throw validationError("availableFrom must be before availableUntil");
+      }
+      if (nextPlacementConfig !== undefined) assessment.placementConfig = nextPlacementConfig;
+
+      assessment.updatedBy = actor.id;
+      await assessment.save({ session: dbSession });
+      updated = assessment;
+    });
+  } finally {
+    await dbSession.endSession();
   }
 
-  if (body.timeLimitMinutes !== undefined) {
-    const val = body.timeLimitMinutes === null || body.timeLimitMinutes === "" ? null : Number(body.timeLimitMinutes);
-    if (val !== null && (!Number.isInteger(val) || val < 1 || val > 300)) {
-      throw validationError("timeLimitMinutes must be an integer between 1 and 300");
-    }
-    assessment.timeLimitMinutes = val;
-  }
-  if (body.maxAttempts !== undefined) {
-    const val = Number(body.maxAttempts);
-    if (!Number.isInteger(val) || val < 1 || val > 20) {
-      throw validationError("maxAttempts must be an integer between 1 and 20");
-    }
-    assessment.maxAttempts = val;
-  }
-  if (body.passingScore !== undefined) {
-    const val = body.passingScore === null || body.passingScore === "" ? null : Number(body.passingScore);
-    if (val !== null && (!Number.isFinite(val) || val < 0)) {
-      throw validationError("passingScore must be >= 0");
-    }
-    assessment.passingScore = val;
-  }
-  if (body.shuffleQuestions !== undefined) assessment.shuffleQuestions = Boolean(body.shuffleQuestions);
-  if (body.showResultImmediately !== undefined) assessment.showResultImmediately = Boolean(body.showResultImmediately);
-  if (body.availableFrom !== undefined) assessment.availableFrom = parseDate(body.availableFrom, "availableFrom");
-  if (body.availableUntil !== undefined) assessment.availableUntil = parseDate(body.availableUntil, "availableUntil");
-  if (assessment.availableFrom && assessment.availableUntil && assessment.availableFrom >= assessment.availableUntil) {
-    throw validationError("availableFrom must be before availableUntil");
-  }
-  if (body.placementConfig !== undefined) {
-    assessment.placementConfig = parsePlacementConfig(body.placementConfig);
-  }
-
-  assessment.updatedBy = actor.id;
-  await assessment.save();
-  return { ...assessment.toObject(), id: assessment._id.toString() };
+  return { ...updated.toObject(), id: updated._id.toString() };
 };
 
 const parseQuestionPayload = (body = {}, defaultOrder = 1, existing = null) => {
-  const questionType = (body.questionType !== undefined ? String(body.questionType) : existing?.questionType || "")
+  if (body.questionType !== undefined && typeof body.questionType !== "string") {
+    throw validationError("questionType must be a string");
+  }
+  const questionType = (body.questionType !== undefined ? body.questionType : existing?.questionType || "")
     .trim()
     .toUpperCase();
   if (!QUESTION_TYPES.includes(questionType)) {
@@ -511,25 +678,26 @@ const parseQuestionPayload = (body = {}, defaultOrder = 1, existing = null) => {
 
   const promptRaw = body.prompt !== undefined ? body.prompt : existing?.prompt;
   if (isBlank(promptRaw)) throw validationError("prompt is required");
-  const prompt = String(promptRaw).trim();
+  const prompt = promptRaw.trim();
 
   const questionOrder =
-    body.questionOrder !== undefined ? Number(body.questionOrder) : existing?.questionOrder || defaultOrder;
+    body.questionOrder !== undefined ? assertFiniteNumeric(body.questionOrder, "questionOrder") : existing?.questionOrder || defaultOrder;
   if (!Number.isInteger(questionOrder) || questionOrder < 1) {
     throw validationError("questionOrder must be an integer >= 1");
   }
 
   const pointsRaw = body.points !== undefined ? body.points : existing?.points ?? 1;
-  const points = Number(pointsRaw);
-  if (!Number.isFinite(points) || points < 0.5 || points > 1000) {
+  const points = assertFiniteNumeric(pointsRaw, "points");
+  if (points < 0.5 || points > 1000) {
     throw validationError("points must be a number between 0.5 and 1000");
   }
 
   let options = [];
   let correctOptionIds = [];
   let acceptedAnswers = [];
+  const caseSensitiveFlag = assertOptionalBoolean(body.caseSensitive, "caseSensitive");
   const caseSensitive =
-    body.caseSensitive !== undefined ? Boolean(body.caseSensitive) : Boolean(existing?.caseSensitive);
+    caseSensitiveFlag !== undefined ? caseSensitiveFlag : Boolean(existing?.caseSensitive);
 
   if (["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(questionType)) {
     const rawOptions = body.options !== undefined ? body.options : existing?.options || [];
@@ -538,22 +706,29 @@ const parseQuestionPayload = (body = {}, defaultOrder = 1, existing = null) => {
     }
     const seenOptionIds = new Set();
     options = rawOptions.map((opt, idx) => {
-      if (!opt || isBlank(opt.optionId) || isBlank(opt.text)) {
+      if (!opt || typeof opt !== "object" || Array.isArray(opt) || isBlank(opt.optionId) || isBlank(opt.text)) {
         throw validationError(`options[${idx}] requires non-empty optionId and text`);
       }
-      const optionId = String(opt.optionId).trim();
+      const optionId = opt.optionId.trim();
       if (seenOptionIds.has(optionId)) {
         throw validationError(`Duplicate optionId "${optionId}" in options`);
       }
       seenOptionIds.add(optionId);
-      return { optionId, text: String(opt.text).trim() };
+      return { optionId, text: opt.text.trim() };
     });
 
     const rawCorrect = body.correctOptionIds !== undefined ? body.correctOptionIds : existing?.correctOptionIds || [];
     if (!Array.isArray(rawCorrect) || rawCorrect.length === 0) {
       throw validationError(`${questionType} requires correctOptionIds`);
     }
-    correctOptionIds = [...new Set(rawCorrect.map((id) => String(id).trim()))];
+    correctOptionIds = [
+      ...new Set(
+        rawCorrect.map((id, idx) => {
+          if (typeof id !== "string") throw validationError(`correctOptionIds[${idx}] must be a string`);
+          return id.trim();
+        })
+      ),
+    ];
     for (const cid of correctOptionIds) {
       if (!seenOptionIds.has(cid)) {
         throw validationError(`correctOptionId "${cid}" does not match any optionId`);
@@ -565,15 +740,27 @@ const parseQuestionPayload = (body = {}, defaultOrder = 1, existing = null) => {
   } else if (questionType === "SHORT_TEXT") {
     const rawAccepted = body.acceptedAnswers !== undefined ? body.acceptedAnswers : existing?.acceptedAnswers || [];
     if (!Array.isArray(rawAccepted)) throw validationError("acceptedAnswers must be an array");
-    acceptedAnswers = rawAccepted.map((ans) => String(ans).trim()).filter((ans) => ans !== "");
+    acceptedAnswers = rawAccepted
+      .map((ans, idx) => {
+        if (typeof ans !== "string") throw validationError(`acceptedAnswers[${idx}] must be a string`);
+        return ans.trim();
+      })
+      .filter((ans) => ans !== "");
   }
 
+  const explanationRaw = assertOptionalString(body.explanation, "explanation");
   const explanation =
-    body.explanation !== undefined ? (body.explanation ? String(body.explanation).trim() : "") : existing?.explanation || "";
-  const tags =
-    body.tags !== undefined && Array.isArray(body.tags)
-      ? body.tags.map((t) => String(t).trim()).filter(Boolean)
-      : existing?.tags || [];
+    body.explanation !== undefined ? (explanationRaw ? explanationRaw.trim() : "") : existing?.explanation || "";
+  let tags = existing?.tags || [];
+  if (body.tags !== undefined) {
+    if (!Array.isArray(body.tags)) throw validationError("tags must be an array");
+    tags = body.tags
+      .map((t, idx) => {
+        if (typeof t !== "string") throw validationError(`tags[${idx}] must be a string`);
+        return t.trim();
+      })
+      .filter(Boolean);
+  }
 
   return {
     questionOrder,
@@ -590,149 +777,251 @@ const parseQuestionPayload = (body = {}, defaultOrder = 1, existing = null) => {
 };
 
 const addQuestion = async (actor, assessmentId, body = {}) => {
-  const assessment = await assertManageableAssessment(actor, assessmentId);
-  if (assessment.status !== "DRAFT") {
+  const pre = await assertManageableAssessment(actor, assessmentId);
+  if (pre.status !== "DRAFT") {
     throw new AppError("Questions can only be added while assessment is DRAFT", "ASSESSMENT_NOT_EDITABLE", 409);
   }
+  parseQuestionPayload(body, 1);
 
-  const maxOrderDoc = await Question.findOne({ assessmentId: assessment._id, ...NOT_DELETED })
-    .sort({ questionOrder: -1 })
-    .select("questionOrder")
-    .lean();
-  const defaultOrder = (maxOrderDoc ? maxOrderDoc.questionOrder : 0) + 1;
-  const parsed = parseQuestionPayload(body, defaultOrder);
-
+  const dbSession = await mongoose.startSession();
   let question;
   try {
-    [question] = await Question.create([
-      {
-        assessmentId: assessment._id,
-        ...parsed,
-        createdBy: actor.id,
-      },
-    ]);
-  } catch (err) {
-    if (err && err.code === 11000) {
-      throw new AppError(`questionOrder ${parsed.questionOrder} is already in use in this assessment`, "DUPLICATE_QUESTION_ORDER", 409);
-    }
-    throw err;
+    await dbSession.withTransaction(async () => {
+      const assessment = await lockManageableAssessmentInTx(actor, assessmentId, dbSession, {
+        allowedStatuses: ["DRAFT"],
+        notEditableError: () =>
+          new AppError("Questions can only be added while assessment is DRAFT", "ASSESSMENT_NOT_EDITABLE", 409),
+      });
+
+      const maxOrderDoc = await Question.findOne({ assessmentId: assessment._id, ...NOT_DELETED })
+        .sort({ questionOrder: -1 })
+        .select("questionOrder")
+        .session(dbSession)
+        .lean();
+      const defaultOrder = (maxOrderDoc ? maxOrderDoc.questionOrder : 0) + 1;
+      const parsed = parseQuestionPayload(body, defaultOrder);
+
+      try {
+        [question] = await Question.create(
+          [
+            {
+              assessmentId: assessment._id,
+              ...parsed,
+              createdBy: actor.id,
+            },
+          ],
+          { session: dbSession }
+        );
+      } catch (err) {
+        if (err && err.code === 11000) {
+          throw new AppError(`questionOrder ${parsed.questionOrder} is already in use in this assessment`, "DUPLICATE_QUESTION_ORDER", 409);
+        }
+        throw err;
+      }
+
+      await syncAssessmentMetadataFromQuestions(assessment, dbSession);
+    });
+  } finally {
+    await dbSession.endSession();
   }
 
-  await syncAssessmentMetadataFromQuestions(assessment);
   return presentQuestionForStaff(question.toObject());
 };
 
 const updateQuestion = async (actor, assessmentId, questionId, body = {}) => {
-  const assessment = await assertManageableAssessment(actor, assessmentId);
-  if (assessment.status !== "DRAFT") {
+  const pre = await assertManageableAssessment(actor, assessmentId);
+  if (pre.status !== "DRAFT") {
     throw new AppError("Questions can only be modified while assessment is DRAFT", "ASSESSMENT_NOT_EDITABLE", 409);
   }
   assertId(questionId, "Question not found", "QUESTION_NOT_FOUND");
-  const question = await Question.findOne({ _id: questionId, assessmentId: assessment._id, ...NOT_DELETED });
-  if (!question) throw questionNotFound();
 
-  const parsed = parseQuestionPayload(body, question.questionOrder, question);
-  Object.assign(question, parsed);
-  question.updatedBy = actor.id;
-
+  const dbSession = await mongoose.startSession();
+  let updatedQuestion;
   try {
-    await question.save();
-  } catch (err) {
-    if (err && err.code === 11000) {
-      throw new AppError(`questionOrder ${parsed.questionOrder} is already in use`, "DUPLICATE_QUESTION_ORDER", 409);
-    }
-    throw err;
+    await dbSession.withTransaction(async () => {
+      const assessment = await lockManageableAssessmentInTx(actor, assessmentId, dbSession, {
+        allowedStatuses: ["DRAFT"],
+        notEditableError: () =>
+          new AppError("Questions can only be modified while assessment is DRAFT", "ASSESSMENT_NOT_EDITABLE", 409),
+      });
+
+      const question = await Question.findOne({
+        _id: questionId,
+        assessmentId: assessment._id,
+        ...NOT_DELETED,
+      }).session(dbSession);
+      if (!question) throw questionNotFound();
+
+      const parsed = parseQuestionPayload(body, question.questionOrder, question);
+      Object.assign(question, parsed);
+      question.updatedBy = actor.id;
+
+      try {
+        await question.save({ session: dbSession });
+      } catch (err) {
+        if (err && err.code === 11000) {
+          throw new AppError(`questionOrder ${parsed.questionOrder} is already in use`, "DUPLICATE_QUESTION_ORDER", 409);
+        }
+        throw err;
+      }
+
+      await syncAssessmentMetadataFromQuestions(assessment, dbSession);
+      updatedQuestion = question;
+    });
+  } finally {
+    await dbSession.endSession();
   }
 
-  await syncAssessmentMetadataFromQuestions(assessment);
-  return presentQuestionForStaff(question.toObject());
+  return presentQuestionForStaff(updatedQuestion.toObject());
 };
 
 const deleteQuestion = async (actor, assessmentId, questionId) => {
-  const assessment = await assertManageableAssessment(actor, assessmentId);
-  if (assessment.status !== "DRAFT") {
+  const pre = await assertManageableAssessment(actor, assessmentId);
+  if (pre.status !== "DRAFT") {
     throw new AppError("Questions can only be removed while assessment is DRAFT", "ASSESSMENT_NOT_EDITABLE", 409);
   }
   assertId(questionId, "Question not found", "QUESTION_NOT_FOUND");
-  const question = await Question.findOne({ _id: questionId, assessmentId: assessment._id, ...NOT_DELETED });
-  if (!question) throw questionNotFound();
 
-  question.isDeleted = true;
-  question.deletedAt = new Date();
-  question.deletedBy = actor.id;
-  question.updatedBy = actor.id;
-  await question.save();
+  const dbSession = await mongoose.startSession();
+  let deletedId;
+  try {
+    await dbSession.withTransaction(async () => {
+      const assessment = await lockManageableAssessmentInTx(actor, assessmentId, dbSession, {
+        allowedStatuses: ["DRAFT"],
+        notEditableError: () =>
+          new AppError("Questions can only be removed while assessment is DRAFT", "ASSESSMENT_NOT_EDITABLE", 409),
+      });
 
-  await syncAssessmentMetadataFromQuestions(assessment);
-  return { deleted: true, id: question._id.toString() };
+      const question = await Question.findOneAndUpdate(
+        { _id: questionId, assessmentId: assessment._id, ...NOT_DELETED },
+        {
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: actor.id,
+            updatedBy: actor.id,
+          },
+        },
+        { session: dbSession, returnDocument: "after" }
+      );
+      if (!question) throw questionNotFound();
+      deletedId = question._id.toString();
+
+      await syncAssessmentMetadataFromQuestions(assessment, dbSession);
+    });
+  } finally {
+    await dbSession.endSession();
+  }
+
+  return { deleted: true, id: deletedId };
 };
 
 const publishAssessment = async (actor, assessmentId) => {
-  const assessment = await assertManageableAssessment(actor, assessmentId);
-  if (assessment.status === "ARCHIVED") {
+  const pre = await assertManageableAssessment(actor, assessmentId);
+  if (pre.status === "ARCHIVED") {
     throw new AppError("Archived assessment cannot be published", "ASSESSMENT_ARCHIVED", 409);
   }
-  if (assessment.status === "PUBLISHED") {
-    return { ...assessment.toObject(), id: assessment._id.toString() };
+  if (pre.status === "PUBLISHED") {
+    return { ...pre.toObject(), id: pre._id.toString() };
   }
 
-  const { totalMaxScore, questionCount } = await syncAssessmentMetadataFromQuestions(assessment);
-  if (questionCount === 0 || totalMaxScore <= 0) {
-    throw validationError("Assessment must have at least one active question before publishing");
-  }
-  if (assessment.passingScore !== null && assessment.passingScore > totalMaxScore) {
-    throw validationError(`passingScore (${assessment.passingScore}) cannot exceed totalMaxScore (${totalMaxScore})`);
-  }
-  if (assessment.purpose === "PLACEMENT") {
-    const bands = assessment.placementConfig && assessment.placementConfig.bands;
-    if (!Array.isArray(bands) || bands.length === 0) {
-      throw validationError("PLACEMENT assessment requires at least one placementConfig.bands entry before publishing");
-    }
-  }
+  const dbSession = await mongoose.startSession();
+  let publishedDoc;
+  let alreadyPublished = false;
+  try {
+    await dbSession.withTransaction(async () => {
+      const assessment = await lockManageableAssessmentInTx(actor, assessmentId, dbSession, {
+        allowedStatuses: ["DRAFT", "PUBLISHED"],
+        rejectArchivedError: () => new AppError("Archived assessment cannot be published", "ASSESSMENT_ARCHIVED", 409),
+      });
 
-  assessment.status = "PUBLISHED";
-  assessment.publishedAt = new Date();
-  assessment.publishedBy = actor.id;
-  assessment.updatedBy = actor.id;
-  await assessment.save();
+      if (assessment.status === "PUBLISHED") {
+        publishedDoc = assessment;
+        alreadyPublished = true;
+        return;
+      }
 
-  if (actor.role === "ADMIN") {
-    await audit({
-      actorAdminId: actor.id,
-      action: "ASSESSMENT_PUBLISH",
-      targetType: "Assessment",
-      targetId: assessment._id,
-      beforeState: { status: "DRAFT" },
-      afterState: { status: "PUBLISHED", totalMaxScore },
+      const { totalMaxScore, questionCount } = await syncAssessmentMetadataFromQuestions(assessment, dbSession);
+      if (questionCount === 0 || totalMaxScore <= 0) {
+        throw validationError("Assessment must have at least one active question before publishing");
+      }
+      if (assessment.passingScore !== null && assessment.passingScore > totalMaxScore) {
+        throw validationError(`passingScore (${assessment.passingScore}) cannot exceed totalMaxScore (${totalMaxScore})`);
+      }
+      if (assessment.purpose === "PLACEMENT") {
+        const bands = assessment.placementConfig && assessment.placementConfig.bands;
+        if (!Array.isArray(bands) || bands.length === 0) {
+          throw validationError("PLACEMENT assessment requires at least one placementConfig.bands entry before publishing");
+        }
+      }
+
+      assessment.status = "PUBLISHED";
+      assessment.publishedAt = new Date();
+      assessment.publishedBy = actor.id;
+      assessment.updatedBy = actor.id;
+      await assessment.save({ session: dbSession });
+      publishedDoc = assessment;
+
+      if (actor.role === "ADMIN" && !alreadyPublished) {
+        await audit(
+          {
+            actorAdminId: actor.id,
+            action: "ASSESSMENT_PUBLISH",
+            targetType: "Assessment",
+            targetId: assessment._id,
+            beforeState: { status: "DRAFT" },
+            afterState: { status: "PUBLISHED", totalMaxScore },
+          },
+          dbSession
+        );
+      }
     });
+  } finally {
+    await dbSession.endSession();
   }
 
-  return { ...assessment.toObject(), id: assessment._id.toString() };
+  return { ...publishedDoc.toObject(), id: publishedDoc._id.toString() };
 };
 
 const archiveAssessment = async (actor, assessmentId) => {
-  const assessment = await assertManageableAssessment(actor, assessmentId);
-  if (assessment.status === "ARCHIVED") {
-    return { ...assessment.toObject(), id: assessment._id.toString() };
-  }
-  const prev = assessment.status;
-  assessment.status = "ARCHIVED";
-  assessment.archivedAt = new Date();
-  assessment.archivedBy = actor.id;
-  assessment.updatedBy = actor.id;
-  await assessment.save();
+  await assertManageableAssessment(actor, assessmentId);
 
-  if (actor.role === "ADMIN") {
-    await audit({
-      actorAdminId: actor.id,
-      action: "ASSESSMENT_ARCHIVE",
-      targetType: "Assessment",
-      targetId: assessment._id,
-      beforeState: { status: prev },
-      afterState: { status: "ARCHIVED" },
+  const dbSession = await mongoose.startSession();
+  let archivedDoc;
+  try {
+    await dbSession.withTransaction(async () => {
+      const assessment = await lockManageableAssessmentInTx(actor, assessmentId, dbSession);
+      if (assessment.status === "ARCHIVED") {
+        archivedDoc = assessment;
+        return;
+      }
+      const prev = assessment.status;
+      assessment.status = "ARCHIVED";
+      assessment.archivedAt = new Date();
+      assessment.archivedBy = actor.id;
+      assessment.updatedBy = actor.id;
+      await assessment.save({ session: dbSession });
+      archivedDoc = assessment;
+
+      if (actor.role === "ADMIN") {
+        await audit(
+          {
+            actorAdminId: actor.id,
+            action: "ASSESSMENT_ARCHIVE",
+            targetType: "Assessment",
+            targetId: assessment._id,
+            beforeState: { status: prev },
+            afterState: { status: "ARCHIVED" },
+          },
+          dbSession
+        );
+      }
     });
+  } finally {
+    await dbSession.endSession();
   }
-  return { ...assessment.toObject(), id: assessment._id.toString() };
+
+  return { ...archivedDoc.toObject(), id: archivedDoc._id.toString() };
 };
 
 const listStaffAssessments = async (actor, query = {}, paging) => {
@@ -740,17 +1029,26 @@ const listStaffAssessments = async (actor, query = {}, paging) => {
     throw FORBIDDEN("Only ADMIN or TEACHER can list staff assessments");
   }
   const filter = { ...NOT_DELETED };
+  const scopeType = assertOptionalEnum(query?.scopeType, ASSESSMENT_SCOPES, "scopeType");
+  const purpose = assertOptionalEnum(query?.purpose, ASSESSMENT_PURPOSES, "purpose");
+  const status = assertOptionalEnum(query?.status, ASSESSMENT_STATUSES, "status");
+
   if (actor.role === "TEACHER") {
     await getVerifiedTeacher(actor.id);
     filter.teacherId = actor.id;
-    filter.scopeType = { $in: ["CLASS", "SESSION"] };
-  } else {
-    if (query.scopeType) filter.scopeType = String(query.scopeType).trim().toUpperCase();
+    if (scopeType) {
+      filter.scopeType = ["CLASS", "SESSION"].includes(scopeType) ? scopeType : "__NONE__";
+    } else {
+      filter.scopeType = { $in: ["CLASS", "SESSION"] };
+    }
+  } else if (scopeType) {
+    filter.scopeType = scopeType;
   }
-  if (query.purpose) filter.purpose = String(query.purpose).trim().toUpperCase();
-  if (query.status) filter.status = String(query.status).trim().toUpperCase();
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
+
+  if (purpose) filter.purpose = purpose;
+  if (status) filter.status = status;
+  if (query?.classId !== undefined && query?.classId !== "") {
+    assertQueryObjectId(query.classId, "Class not found", "CLASS_NOT_FOUND", "classId");
     filter.classId = query.classId;
   }
 
@@ -776,8 +1074,10 @@ const getStaffAssessment = async (actor, assessmentId) => {
 const listStaffAssessmentAttempts = async (actor, assessmentId, query = {}, paging) => {
   const assessment = await assertManageableAssessment(actor, assessmentId);
   const filter = { assessmentId: assessment._id };
-  if (query.status) filter.status = String(query.status).trim().toUpperCase();
-  if (query.gradingStatus) filter.gradingStatus = String(query.gradingStatus).trim().toUpperCase();
+  const status = assertOptionalEnum(query?.status, ATTEMPT_STATUSES, "status");
+  const gradingStatus = assertOptionalEnum(query?.gradingStatus, ATTEMPT_GRADING_STATUSES, "gradingStatus");
+  if (status) filter.status = status;
+  if (gradingStatus) filter.gradingStatus = gradingStatus;
 
   const [items, total] = await Promise.all([
     Attempt.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
@@ -788,35 +1088,38 @@ const listStaffAssessmentAttempts = async (actor, assessmentId, query = {}, pagi
 
 // ---------- Student Eligibility & Taking Attempts ----------
 
-const verifyStudentAssessmentEligibility = async (studentId, assessment) => {
+const verifyStudentAssessmentEligibility = async (studentId, assessment, dbSession = null) => {
   if (assessment.scopeType === "GLOBAL_PLACEMENT") {
     return { enrollmentId: null };
   }
   if (assessment.scopeType === "CLASS" || assessment.scopeType === "SESSION") {
-    const enrollment = await Enrollment.findOne({
+    let enrollmentQuery = Enrollment.findOne({
       studentId,
       classId: assessment.classId,
       enrollmentStatus: "CONFIRMED",
-    })
-      .select("_id")
-      .lean();
+    }).select("_id");
+    if (dbSession) enrollmentQuery = enrollmentQuery.session(dbSession);
+    const enrollment = await enrollmentQuery.lean();
     if (!enrollment) {
       throw new AppError("Active confirmed enrollment in this class is required", "NOT_ENROLLED", 403);
     }
     return { enrollmentId: enrollment._id };
   }
   if (assessment.scopeType === "COURSE") {
-    const classes = await Class.find({ courseId: assessment.courseId, ...NOT_DELETED }).select("_id").lean();
+    let classQuery = Class.find({ courseId: assessment.courseId, ...NOT_DELETED }).select("_id");
+    if (dbSession) classQuery = classQuery.session(dbSession);
+    const classes = await classQuery.lean();
     const classIds = classes.map((c) => c._id);
-    const enrollment = classIds.length
-      ? await Enrollment.findOne({
-          studentId,
-          classId: { $in: classIds },
-          enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
-        })
-          .select("_id")
-          .lean()
-      : null;
+    let enrollment = null;
+    if (classIds.length) {
+      let enrollQuery = Enrollment.findOne({
+        studentId,
+        classId: { $in: classIds },
+        enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
+      }).select("_id");
+      if (dbSession) enrollQuery = enrollQuery.session(dbSession);
+      enrollment = await enrollQuery.lean();
+    }
     if (!enrollment) {
       throw new AppError("Enrollment in a class of this course is required", "NOT_ENROLLED", 403);
     }
@@ -826,6 +1129,15 @@ const verifyStudentAssessmentEligibility = async (studentId, assessment) => {
 };
 
 const listMyAssessments = async (studentId, query = {}, paging) => {
+  const purpose = assertOptionalEnum(query?.purpose, ASSESSMENT_PURPOSES, "purpose");
+  const gradeLevel = assertOptionalEnum(query?.gradeLevel, GRADE_LEVELS, "gradeLevel");
+  if (query?.subjectId !== undefined && query?.subjectId !== "") {
+    assertQueryObjectId(query.subjectId, "Subject not found", "SUBJECT_NOT_FOUND", "subjectId");
+  }
+  if (query?.classId !== undefined && query?.classId !== "") {
+    assertQueryObjectId(query.classId, "Class not found", "CLASS_NOT_FOUND", "classId");
+  }
+
   const enrollments = await Enrollment.find({
     studentId,
     enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
@@ -846,16 +1158,14 @@ const listMyAssessments = async (studentId, query = {}, paging) => {
     ],
   };
 
-  if (query.purpose) filter.purpose = String(query.purpose).trim().toUpperCase();
-  if (query.subjectId) {
-    assertId(query.subjectId, "Subject not found", "SUBJECT_NOT_FOUND");
+  if (purpose) filter.purpose = purpose;
+  if (query?.subjectId !== undefined && query?.subjectId !== "") {
     filter.subjectId = query.subjectId;
   }
-  if (query.gradeLevel) {
-    filter.gradeLevel = String(query.gradeLevel).trim().toUpperCase();
+  if (gradeLevel) {
+    filter.gradeLevel = gradeLevel;
   }
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
+  if (query?.classId !== undefined && query?.classId !== "") {
     if (!confirmedClassIds.some((id) => String(id) === String(query.classId))) {
       throw new AppError("You must have confirmed enrollment in this class", "NOT_ENROLLED", 403);
     }
@@ -892,26 +1202,26 @@ const getMyAssessment = async (studentId, assessmentId) => {
  */
 const startAttempt = async (studentId, assessmentId, options = {}) => {
   assertId(assessmentId, "Assessment not found", "ASSESSMENT_NOT_FOUND");
-  const assessment = await Assessment.findOne({ _id: assessmentId, ...NOT_DELETED }).lean();
-  if (!assessment || assessment.status !== "PUBLISHED") {
+  const preAssessment = await Assessment.findOne({ _id: assessmentId, ...NOT_DELETED }).lean();
+  if (!preAssessment || preAssessment.status !== "PUBLISHED") {
     throw assessmentNotFound();
   }
 
   const now = new Date();
-  if (assessment.availableFrom && now < new Date(assessment.availableFrom)) {
+  if (preAssessment.availableFrom && now < new Date(preAssessment.availableFrom)) {
     throw new AppError("Assessment is not open yet", "ASSESSMENT_NOT_AVAILABLE", 409);
   }
-  if (assessment.availableUntil && now > new Date(assessment.availableUntil)) {
+  if (preAssessment.availableUntil && now > new Date(preAssessment.availableUntil)) {
     throw new AppError("Assessment availability window has closed", "ASSESSMENT_NOT_AVAILABLE", 409);
   }
 
-  const { enrollmentId } = await verifyStudentAssessmentEligibility(studentId, assessment);
+  await verifyStudentAssessmentEligibility(studentId, preAssessment);
   const idempotencyKey = normalizeIdempotencyKey(options?.idempotencyKey);
 
   // Expire any stale IN_PROGRESS attempt that has already passed expiresAt outside rollback-prone tx
   await Attempt.updateMany(
     {
-      assessmentId: assessment._id,
+      assessmentId: preAssessment._id,
       studentId,
       status: "IN_PROGRESS",
       expiresAt: { $ne: null, $lt: now },
@@ -928,39 +1238,15 @@ const startAttempt = async (studentId, assessmentId, options = {}) => {
     }
   );
 
-  const questionsRaw = await Question.find({ assessmentId: assessment._id, ...NOT_DELETED })
-    .sort({ questionOrder: 1 })
-    .lean();
-  if (!questionsRaw.length) {
-    throw new AppError("Assessment has no questions", "ASSESSMENT_EMPTY", 409);
-  }
-
-  const orderedQuestions = assessment.shuffleQuestions
-    ? [...questionsRaw].sort(() => Math.random() - 0.5)
-    : questionsRaw;
-
-  const questionSnapshots = orderedQuestions.map((q) => ({
-    questionId: q._id,
-    questionOrder: q.questionOrder,
-    questionType: q.questionType,
-    prompt: q.prompt,
-    options: (q.options || []).map((o) => ({ optionId: o.optionId, text: o.text })),
-    points: q.points,
-  }));
-
-  const maxScoreSnapshot = round2(questionSnapshots.reduce((sum, q) => sum + Number(q.points), 0));
-  const expiresAt = assessment.timeLimitMinutes
-    ? new Date(now.getTime() + Number(assessment.timeLimitMinutes) * 60 * 1000)
-    : null;
-
   let attempt;
+  let attemptAssessment = preAssessment;
   let idempotentReplay = false;
   const dbSession = await mongoose.startSession();
   try {
     await dbSession.withTransaction(async () => {
       if (idempotencyKey) {
         const existingByKey = await Attempt.findOne({
-          assessmentId: assessment._id,
+          assessmentId: preAssessment._id,
           studentId,
           startIdempotencyKey: idempotencyKey,
         }).session(dbSession);
@@ -971,8 +1257,28 @@ const startAttempt = async (studentId, assessmentId, options = {}) => {
         }
       }
 
+      const txAssessment = await Assessment.findOneAndUpdate(
+        { _id: preAssessment._id, ...NOT_DELETED, status: "PUBLISHED" },
+        { $inc: { __v: 1 } },
+        { session: dbSession, returnDocument: "after" }
+      ).lean();
+      if (!txAssessment) {
+        throw assessmentNotFound();
+      }
+      attemptAssessment = txAssessment;
+
+      const txNow = new Date();
+      if (txAssessment.availableFrom && txNow < new Date(txAssessment.availableFrom)) {
+        throw new AppError("Assessment is not open yet", "ASSESSMENT_NOT_AVAILABLE", 409);
+      }
+      if (txAssessment.availableUntil && txNow > new Date(txAssessment.availableUntil)) {
+        throw new AppError("Assessment availability window has closed", "ASSESSMENT_NOT_AVAILABLE", 409);
+      }
+
+      const { enrollmentId } = await verifyStudentAssessmentEligibility(studentId, txAssessment, dbSession);
+
       const activeAttempt = await Attempt.findOne({
-        assessmentId: assessment._id,
+        assessmentId: txAssessment._id,
         studentId,
         status: "IN_PROGRESS",
       }).session(dbSession);
@@ -984,25 +1290,47 @@ const startAttempt = async (studentId, assessmentId, options = {}) => {
       }
 
       const usedCount = await Attempt.countDocuments({
-        assessmentId: assessment._id,
+        assessmentId: txAssessment._id,
         studentId,
       }).session(dbSession);
-      if (usedCount >= assessment.maxAttempts) {
+      if (usedCount >= txAssessment.maxAttempts) {
         throw new AppError(
-          `Maximum attempts (${assessment.maxAttempts}) exceeded for this assessment`,
+          `Maximum attempts (${txAssessment.maxAttempts}) exceeded for this assessment`,
           "MAX_ATTEMPTS_EXCEEDED",
           409
         );
       }
 
+      const questionsRaw = await Question.find({ assessmentId: txAssessment._id, ...NOT_DELETED })
+        .sort({ questionOrder: 1 })
+        .session(dbSession)
+        .lean();
+      if (!questionsRaw.length) {
+        throw new AppError("Assessment has no questions", "ASSESSMENT_EMPTY", 409);
+      }
+
+      const orderedQuestions = txAssessment.shuffleQuestions ? shuffleArray(questionsRaw) : questionsRaw;
+      const questionSnapshots = orderedQuestions.map((q) => ({
+        questionId: q._id,
+        questionOrder: q.questionOrder,
+        questionType: q.questionType,
+        prompt: q.prompt,
+        options: (q.options || []).map((o) => ({ optionId: o.optionId, text: o.text })),
+        points: q.points,
+      }));
+      const maxScoreSnapshot = round2(questionSnapshots.reduce((sum, q) => sum + Number(q.points), 0));
+      const expiresAt = txAssessment.timeLimitMinutes
+        ? new Date(txNow.getTime() + Number(txAssessment.timeLimitMinutes) * 60 * 1000)
+        : null;
+
       const [created] = await Attempt.create(
         [
           {
-            assessmentId: assessment._id,
-            purpose: assessment.purpose,
-            classId: assessment.classId,
-            courseId: assessment.courseId,
-            sessionId: assessment.sessionId,
+            assessmentId: txAssessment._id,
+            purpose: txAssessment.purpose,
+            classId: txAssessment.classId,
+            courseId: txAssessment.courseId,
+            sessionId: txAssessment.sessionId,
             studentId,
             enrollmentId,
             attemptNumber: usedCount + 1,
@@ -1011,7 +1339,7 @@ const startAttempt = async (studentId, assessmentId, options = {}) => {
             gradingStatus: "PENDING",
             questionSnapshots,
             answers: [],
-            startedAt: now,
+            startedAt: txNow,
             expiresAt,
             maxScoreSnapshot,
           },
@@ -1024,15 +1352,15 @@ const startAttempt = async (studentId, assessmentId, options = {}) => {
     if (err && err.code === 11000) {
       if (idempotencyKey) {
         const existingByKey = await Attempt.findOne({
-          assessmentId: assessment._id,
+          assessmentId: preAssessment._id,
           studentId,
           startIdempotencyKey: idempotencyKey,
         }).lean();
         if (existingByKey) {
-          return { ...presentAttemptForStudent(existingByKey, assessment), idempotent: true };
+          return { ...presentAttemptForStudent(existingByKey, preAssessment), idempotent: true };
         }
       }
-      const active = await Attempt.findOne({ assessmentId: assessment._id, studentId, status: "IN_PROGRESS" }).lean();
+      const active = await Attempt.findOne({ assessmentId: preAssessment._id, studentId, status: "IN_PROGRESS" }).lean();
       if (active) {
         throw Object.assign(
           new AppError("You already have an active attempt in progress", "ATTEMPT_ALREADY_IN_PROGRESS", 409),
@@ -1047,7 +1375,7 @@ const startAttempt = async (studentId, assessmentId, options = {}) => {
   }
 
   return {
-    ...presentAttemptForStudent(attempt, assessment),
+    ...presentAttemptForStudent(attempt, attemptAssessment),
     idempotent: idempotentReplay,
   };
 };
@@ -1140,6 +1468,9 @@ const evaluateObjectiveAnswer = (question, answerInput) => {
  */
 const submitAttempt = async (studentId, attemptId, body = {}, options = {}) => {
   assertId(attemptId, "Attempt not found", "ATTEMPT_NOT_FOUND");
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw validationError("Request body must be a JSON object");
+  }
   const idempotencyKey = normalizeIdempotencyKey(
     options?.idempotencyKey !== undefined ? options.idempotencyKey : body?.idempotencyKey
   );
@@ -1158,7 +1489,14 @@ const submitAttempt = async (studentId, attemptId, body = {}, options = {}) => {
   const normalizedInputs = [];
   for (let i = 0; i < rawAnswers.length; i++) {
     const entry = rawAnswers[i];
-    if (!entry || !entry.questionId || !mongoose.isValidObjectId(entry.questionId)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw validationError(`answers[${i}] must be an object`);
+    }
+    if (
+      !entry.questionId ||
+      (typeof entry.questionId !== "string" && !(entry.questionId instanceof mongoose.Types.ObjectId)) ||
+      !mongoose.isValidObjectId(entry.questionId)
+    ) {
       throw validationError(`answers[${i}].questionId must be a valid question id`);
     }
     const qid = String(entry.questionId);
@@ -1169,12 +1507,25 @@ const submitAttempt = async (studentId, attemptId, body = {}, options = {}) => {
       throw validationError(`Duplicate answer entry for question "${qid}"`);
     }
     seenAnswers.add(qid);
+
+    let selectedOptionIds = [];
+    if (entry.selectedOptionIds !== undefined && entry.selectedOptionIds !== null) {
+      if (!Array.isArray(entry.selectedOptionIds)) {
+        throw validationError(`answers[${i}].selectedOptionIds must be an array`);
+      }
+      for (let j = 0; j < entry.selectedOptionIds.length; j++) {
+        if (typeof entry.selectedOptionIds[j] !== "string") {
+          throw validationError(`answers[${i}].selectedOptionIds[${j}] must be a string`);
+        }
+      }
+      selectedOptionIds = [...new Set(entry.selectedOptionIds.map((x) => x.trim()).filter(Boolean))].sort();
+    }
+
+    const textRaw = assertOptionalString(entry.textAnswer, `answers[${i}].textAnswer`);
     normalizedInputs.push({
       questionId: qid,
-      selectedOptionIds: Array.isArray(entry.selectedOptionIds)
-        ? [...new Set(entry.selectedOptionIds.map((x) => String(x).trim()))].sort()
-        : [],
-      textAnswer: entry.textAnswer !== undefined && entry.textAnswer !== null ? String(entry.textAnswer).trim() : null,
+      selectedOptionIds,
+      textAnswer: textRaw !== undefined && textRaw !== null ? textRaw.trim() : null,
     });
   }
 
@@ -1246,9 +1597,12 @@ const submitAttempt = async (studentId, attemptId, body = {}, options = {}) => {
         throw new AppError("Attempt has already been submitted", "ATTEMPT_ALREADY_SUBMITTED", 409);
       }
 
-      if (claimed.expiresAt && now > new Date(claimed.expiresAt)) {
+      const txNow = new Date();
+      if (claimed.expiresAt && txNow > new Date(claimed.expiresAt)) {
         throw new AppError("Attempt time limit has expired", "ATTEMPT_EXPIRED", 409);
       }
+
+      const txAssessment = (await Assessment.findById(claimed.assessmentId).session(dbSession).lean()) || assessment;
 
       const questionIds = (claimed.questionSnapshots || []).map((q) => q.questionId);
       const questions = await Question.find({ _id: { $in: questionIds } }).session(dbSession).lean();
@@ -1272,7 +1626,7 @@ const submitAttempt = async (studentId, attemptId, body = {}, options = {}) => {
       const percentage = claimed.maxScoreSnapshot > 0 ? round2((totalScore / claimed.maxScoreSnapshot) * 100) : 0;
 
       claimed.answers = evaluatedAnswers;
-      claimed.submittedAt = now;
+      claimed.submittedAt = txNow;
       claimed.submitIdempotencyKey = idempotencyKey;
       claimed.submitRequestHash = requestHash;
       claimed.autoScore = autoScore;
@@ -1287,9 +1641,9 @@ const submitAttempt = async (studentId, attemptId, body = {}, options = {}) => {
       } else {
         claimed.status = "GRADED";
         claimed.gradingStatus = "AUTO_GRADED";
-        claimed.gradedAt = now;
-        claimed.passed = assessment.passingScore !== null && assessment.passingScore !== undefined
-          ? totalScore >= assessment.passingScore
+        claimed.gradedAt = txNow;
+        claimed.passed = txAssessment.passingScore !== null && txAssessment.passingScore !== undefined
+          ? totalScore >= txAssessment.passingScore
           : null;
       }
 
@@ -1338,10 +1692,15 @@ const manualGradeAttempt = async (actor, attemptId, body = {}) => {
     throw FORBIDDEN("Only ADMIN or TEACHER can grade attempts");
   }
   assertId(attemptId, "Attempt not found", "ATTEMPT_NOT_FOUND");
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw validationError("Request body must be a JSON object");
+  }
+  const feedbackRaw = assertOptionalString(body.feedback, "feedback");
+
   const preAttempt = await Attempt.findById(attemptId).lean();
   if (!preAttempt) throw attemptNotFound();
 
-  const assessment = await assertManageableAssessment(actor, preAttempt.assessmentId);
+  await assertManageableAssessment(actor, preAttempt.assessmentId);
 
   if (preAttempt.status === "IN_PROGRESS") {
     throw new AppError("Cannot grade an in-progress attempt before submission", "ATTEMPT_NOT_SUBMITTED", 409);
@@ -1355,30 +1714,73 @@ const manualGradeAttempt = async (actor, attemptId, body = {}) => {
     throw validationError("questionGrades must be a non-empty array");
   }
 
+  const allowedQuestionIds = new Set((preAttempt.questionSnapshots || []).map((q) => String(q.questionId)));
   const gradesMap = new Map();
   for (let i = 0; i < questionGrades.length; i++) {
     const g = questionGrades[i];
-    if (!g || !g.questionId || !mongoose.isValidObjectId(g.questionId)) {
+    if (!g || typeof g !== "object" || Array.isArray(g)) {
+      throw validationError(`questionGrades[${i}] must be an object`);
+    }
+    if (
+      !g.questionId ||
+      (typeof g.questionId !== "string" && !(g.questionId instanceof mongoose.Types.ObjectId)) ||
+      !mongoose.isValidObjectId(g.questionId)
+    ) {
       throw validationError(`questionGrades[${i}].questionId must be valid`);
     }
-    const pts = Number(g.awardedPoints);
-    if (!Number.isFinite(pts) || pts < 0) {
+    const qid = String(g.questionId);
+    if (!allowedQuestionIds.has(qid)) {
+      throw validationError(`questionGrades[${i}].questionId "${qid}" does not belong to this attempt`);
+    }
+    if (gradesMap.has(qid)) {
+      throw validationError(`Duplicate grade entry for question "${qid}"`);
+    }
+    const pts = assertFiniteNumeric(g.awardedPoints, `questionGrades[${i}].awardedPoints`);
+    if (pts < 0) {
       throw validationError(`questionGrades[${i}].awardedPoints must be >= 0`);
     }
-    gradesMap.set(String(g.questionId), {
+    const commentRaw = assertOptionalString(g.comment, `questionGrades[${i}].comment`);
+    gradesMap.set(qid, {
       awardedPoints: round2(pts),
-      comment: g.comment ? String(g.comment).trim() : "",
+      comment: commentRaw ? commentRaw.trim() : "",
     });
   }
 
-  const now = new Date();
   let updated;
   const dbSession = await mongoose.startSession();
   try {
     await dbSession.withTransaction(async () => {
-      const attempt = await Attempt.findById(preAttempt._id).session(dbSession);
-      if (!attempt) throw attemptNotFound();
+      const txAssessment = await Assessment.findOne({ _id: preAttempt.assessmentId, ...NOT_DELETED })
+        .session(dbSession)
+        .lean();
+      if (!txAssessment) throw assessmentNotFound();
+      await assertManageableAssessmentDoc(actor, txAssessment);
 
+      const attempt = await Attempt.findOneAndUpdate(
+        { _id: preAttempt._id, status: { $in: ["SUBMITTED", "GRADED"] } },
+        { $inc: { __v: 1 } },
+        { session: dbSession, returnDocument: "after" }
+      );
+      if (!attempt) {
+        const latest = await Attempt.findById(preAttempt._id).session(dbSession).lean();
+        if (!latest) throw attemptNotFound();
+        if (latest.status === "IN_PROGRESS") {
+          throw new AppError("Cannot grade an in-progress attempt before submission", "ATTEMPT_NOT_SUBMITTED", 409);
+        }
+        if (latest.status === "EXPIRED") {
+          throw new AppError("Expired attempts cannot be manually graded", "ATTEMPT_EXPIRED", 409);
+        }
+        throw new AppError("Attempt cannot be manually graded in current state", "ATTEMPT_CONFLICT", 409);
+      }
+
+      const answerIds = new Set((attempt.answers || []).map((a) => String(a.questionId)));
+      for (const qid of gradesMap.keys()) {
+        if (!answerIds.has(qid)) {
+          throw validationError(`questionId "${qid}" does not belong to this attempt's answers`);
+        }
+      }
+
+      const txNow = new Date();
       let autoScore = 0;
       let manualScore = 0;
       let pendingManualRemaining = false;
@@ -1395,7 +1797,7 @@ const manualGradeAttempt = async (actor, attemptId, body = {}) => {
           ans.isCorrect = override.awardedPoints === ans.maxPoints;
           ans.requiresManualGrading = false;
           ans.gradedBy = actor.id;
-          ans.gradedAt = now;
+          ans.gradedAt = txNow;
           ans.graderComment = override.comment;
         }
         if (ans.requiresManualGrading) {
@@ -1426,12 +1828,12 @@ const manualGradeAttempt = async (actor, attemptId, body = {}) => {
       attempt.status = "GRADED";
       attempt.gradingStatus = "GRADED";
       attempt.gradedBy = actor.id;
-      attempt.gradedAt = now;
-      if (body.feedback !== undefined) {
-        attempt.feedback = body.feedback ? String(body.feedback).trim() : "";
+      attempt.gradedAt = txNow;
+      if (feedbackRaw !== undefined) {
+        attempt.feedback = feedbackRaw ? feedbackRaw.trim() : "";
       }
-      attempt.passed = assessment.passingScore !== null && assessment.passingScore !== undefined
-        ? totalScore >= assessment.passingScore
+      attempt.passed = txAssessment.passingScore !== null && txAssessment.passingScore !== undefined
+        ? totalScore >= txAssessment.passingScore
         : null;
 
       await attempt.save({ session: dbSession });

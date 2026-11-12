@@ -33,6 +33,12 @@ const clearDB = async () => {
     const collection = collections[key];
     await collection.deleteMany({});
   }
+  try {
+    const { clearCache } = require("../../src/services/platformSettingService");
+    clearCache();
+  } catch {
+    // ignore if module not loaded yet
+  }
 };
 
 const syncIndexes = async () => {

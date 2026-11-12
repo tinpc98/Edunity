@@ -16,10 +16,11 @@ const { computePlannedOccurrences, parseDateTimeInZone, validateTimeZone } = req
 const videoProvider = require("./videoProvider");
 const { getVerifiedTeacher, getOwnClass, isSessionWithinClass } = require("./teacherClassService");
 const presenceService = require("./sessionPresenceService");
+const { runInTeacherScheduleTx } = require("../utils/teacherScheduleLock");
 
 const JOIN_WINDOW_BEFORE_MS = 10 * 60 * 1000; // 10 minutes pre-open waiting room window (TIN-05D)
 const LATE_AFTER_SECONDS = 5 * 60; // 5 minutes (300s) student late threshold (TIN-05D)
-const STUDENT_LATE_JITTER_SECONDS = 3; // 3s tolerance for HTTP/test boundary setup jitter
+const STUDENT_LATE_JITTER_SECONDS = 0; // Strict 300s threshold aligned with sessionPresenceService (Math.floor yields 300 at exactly 5m)
 const STUDENT_FIRST_JOIN_DEADLINE_SECONDS = 20 * 60; // 20 minutes (1200s) first-join deadline (TIN-05D)
 const STUDENT_FIRST_JOIN_JITTER_SECONDS = 2; // 2s tolerance for HTTP/test boundary jitter
 const CLOSED_CLASS_STATUSES = ["COMPLETED", "CANCELLED"];
@@ -71,47 +72,6 @@ const normalizeIdempotencyKey = (options = {}, body = {}) => {
     throw validationError("Idempotency-Key must not exceed 128 characters");
   }
   return key;
-};
-
-const ensureTeacherScheduleLock = async (teacherId) => {
-  try {
-    await TeacherScheduleLock.updateOne(
-      { teacherId },
-      { $setOnInsert: { teacherId, lockSeq: 0 } },
-      { upsert: true }
-    );
-  } catch (err) {
-    if (!err || err.code !== 11000) throw err;
-  }
-};
-
-const acquireTeacherScheduleLock = async (teacherId, dbSession) => {
-  const lock = await TeacherScheduleLock.findOneAndUpdate(
-    { teacherId },
-    { $inc: { lockSeq: 1 }, $set: { lastLockedAt: new Date() } },
-    { session: dbSession, returnDocument: "after" }
-  );
-  if (lock) return lock;
-  const [created] = await TeacherScheduleLock.create(
-    [{ teacherId, lockSeq: 1, lastLockedAt: new Date() }],
-    { session: dbSession }
-  );
-  return created;
-};
-
-const runInTeacherScheduleTx = async (teacherId, fn) => {
-  await ensureTeacherScheduleLock(teacherId);
-  const dbSession = await mongoose.startSession();
-  try {
-    let result;
-    await dbSession.withTransaction(async () => {
-      await acquireTeacherScheduleLock(teacherId, dbSession);
-      result = await fn(dbSession);
-    });
-    return result;
-  } finally {
-    await dbSession.endSession();
-  }
 };
 
 /**
@@ -270,6 +230,14 @@ const createSessions = async (teacherId, classId, body = {}, options = {}) => {
       assertSessionTimes(cls, item.startDatetime, item.endDatetime, item.label, now);
       let assignedNum;
       if (item.sessionNumber !== undefined && item.sessionNumber !== null) {
+        if (
+          typeof item.sessionNumber === "boolean" ||
+          Array.isArray(item.sessionNumber) ||
+          typeof item.sessionNumber === "object" ||
+          (typeof item.sessionNumber === "string" && item.sessionNumber.trim() === "")
+        ) {
+          throw validationError(`${item.label}: sessionNumber must be a positive integer`);
+        }
         const n = Number(item.sessionNumber);
         if (!Number.isInteger(n) || n < 1) throw validationError(`${item.label}: sessionNumber must be a positive integer`);
         assignedNum = n;
@@ -338,7 +306,10 @@ const generateSessionsFromSchedule = async (teacherId, classId, body = {}, optio
 
   const timeZone = validateTimeZone(body.timezone);
   const idempotencyKey = normalizeIdempotencyKey(options, body);
-  const skipPast = Boolean(body.skipPast);
+  if (body.skipPast !== undefined && typeof body.skipPast !== "boolean") {
+    throw validationError("skipPast must be a boolean");
+  }
+  const skipPast = body.skipPast === true;
   const fromDate = body.fromDate ? parseDateTimeInZone(body.fromDate, "fromDate", timeZone) : null;
   const untilDate = body.untilDate ? parseDateTimeInZone(body.untilDate, "untilDate", timeZone) : null;
   const titlePrefix = isBlank(body.titlePrefix) ? null : String(body.titlePrefix).trim();
@@ -540,14 +511,25 @@ const updateSession = async (teacherId, sessionId, body = {}) => {
 // Removing a planned session is only possible while the Class has not been submitted/opened
 const deleteSession = async (teacherId, sessionId) => {
   await getVerifiedTeacher(teacherId);
-  const session = await getOwnSession(teacherId, sessionId);
-  const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).select("status").lean();
-  if (!cls) throw CLASS_NOT_FOUND();
-  if (!["DRAFT", "REJECTED"].includes(cls.status)) {
-    throw new AppError("Sessions can only be deleted while the class is DRAFT or REJECTED; cancel it instead", "SESSION_NOT_DELETABLE", 409);
-  }
-  await session.deleteOne();
-  return { deleted: true };
+  const preSession = await getOwnSession(teacherId, sessionId);
+  return runInTeacherScheduleTx(preSession.teacherId, async (dbSession) => {
+    const session = await Session.findById(preSession._id).session(dbSession);
+    if (!session) throw sessionNotFound();
+    const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED })
+      .select("status")
+      .session(dbSession)
+      .lean();
+    if (!cls) throw CLASS_NOT_FOUND();
+    if (!["DRAFT", "REJECTED"].includes(cls.status)) {
+      throw new AppError(
+        "Sessions can only be deleted while the class is DRAFT or REJECTED; cancel it instead",
+        "SESSION_NOT_DELETABLE",
+        409
+      );
+    }
+    await Session.deleteOne({ _id: session._id }, { session: dbSession });
+    return { deleted: true };
+  });
 };
 
 /**
@@ -978,34 +960,15 @@ const handleLiveKitWebhook = async (event) => {
     event.event === "participant_joined" ||
     event.event === "participant_left" ||
     event.event === "participant_disconnected" ||
-    event.event === "room_finished"
+    event.event === "room_finished" ||
+    event.event === "egress_ended"
   ) {
     await presenceService.handleLiveKitEvent(event);
     return;
   }
 
   if (!event.egressInfo) return;
-  const egressId = event.egressInfo.egressId;
-  const status = event.egressInfo.status;
-  const error = event.egressInfo.error;
-
-  const session = await Session.findOne({ "recording.providerRecordingId": egressId });
-  if (!session || !session.recording) {
-    await presenceService.handleLiveKitEvent(event);
-    return;
-  }
-
-  if (event.event === "egress_ended") {
-    // 3 = EGRESS_COMPLETE
-    if (status === 3) {
-      session.recording.status = "AVAILABLE";
-      session.recording.availableAt = new Date();
-    } else {
-      session.recording.status = "FAILED";
-      session.recording.failureReason = error || "Egress failed";
-    }
-    await session.save();
-  }
+  await presenceService.handleLiveKitEvent(event);
 };
 
 module.exports = {

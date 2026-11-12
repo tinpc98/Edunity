@@ -30,6 +30,43 @@ const LEGACY_TYPE_TO_KIND = {
   ASSIGNMENT: "EXERCISE",
 };
 
+const assertOptionalString = (value, field) => {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "string") {
+    throw validationError(`${field} must be a string`);
+  }
+  return value;
+};
+
+const assertOptionalBoolean = (value, field) => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw validationError(`${field} must be a boolean`);
+  }
+  return value;
+};
+
+const assertOptionalEnum = (value, allowed, field, upper = true) => {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") {
+    throw validationError(`${field} must be a string`);
+  }
+  const normalized = upper ? value.trim().toUpperCase() : value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (!allowed.includes(normalized)) {
+    throw validationError(`${field} must be one of ${allowed.join(", ")}`);
+  }
+  return normalized;
+};
+
+const assertQueryObjectId = (value, message, code, field = "id") => {
+  if (typeof value !== "string" && !(value instanceof mongoose.Types.ObjectId)) {
+    throw validationError(`${field} must be a valid identifier string`);
+  }
+  assertId(value, message, code);
+  return value;
+};
+
 const validateExternalUrl = (value, field = "externalUrl") => {
   if (typeof value !== "string" || !/^https?:\/\/\S+$/i.test(value.trim())) {
     throw validationError(`${field} must be a valid http(s) URL`);
@@ -39,11 +76,32 @@ const validateExternalUrl = (value, field = "externalUrl") => {
 
 const normalizeOptionalInt = (val, field, min = 1) => {
   if (val === undefined || val === null || val === "") return undefined;
+  if (
+    typeof val === "boolean" ||
+    Array.isArray(val) ||
+    (typeof val === "object" && val !== null)
+  ) {
+    throw validationError(`${field} must be an integer >= ${min}`);
+  }
   const num = Number(val);
   if (!Number.isInteger(num) || num < min) {
     throw validationError(`${field} must be an integer >= ${min}`);
   }
   return num;
+};
+
+const normalizeFileSize = (val) => {
+  if (
+    typeof val === "boolean" ||
+    Array.isArray(val) ||
+    (typeof val === "object" && val !== null) ||
+    (typeof val === "string" && val.trim() === "")
+  ) {
+    throw validationError("fileSizeBytes must be >= 0");
+  }
+  const sz = Number(val);
+  if (!Number.isFinite(sz) || sz < 0) throw validationError("fileSizeBytes must be >= 0");
+  return sz;
 };
 
 const presentResource = (doc, role) => {
@@ -89,10 +147,12 @@ const presentResource = (doc, role) => {
   return safe;
 };
 
-const assertScopeHierarchy = async (body, existing = null) => {
+const assertScopeHierarchy = async (body, existing = null, dbSession = null) => {
+  const withSess = (q) => (dbSession ? q.session(dbSession) : q);
   const scopeTypeRaw = body.scopeType !== undefined ? body.scopeType : existing?.scopeType;
   if (!scopeTypeRaw) throw validationError("scopeType is required");
-  const scopeType = String(scopeTypeRaw).trim().toUpperCase();
+  if (typeof scopeTypeRaw !== "string") throw validationError("scopeType must be a string");
+  const scopeType = scopeTypeRaw.trim().toUpperCase();
   if (!LEARNING_RESOURCE_SCOPES.includes(scopeType)) {
     throw validationError(`scopeType must be one of ${LEARNING_RESOURCE_SCOPES.join(", ")}`);
   }
@@ -109,8 +169,8 @@ const assertScopeHierarchy = async (body, existing = null) => {
 
   if (scopeType === "COURSE") {
     if (!courseId) throw validationError("courseId is required when scopeType is COURSE");
-    assertId(courseId, "Course not found", "COURSE_NOT_FOUND");
-    const course = await Course.findOne({ _id: courseId, ...NOT_DELETED }).lean();
+    assertQueryObjectId(courseId, "Course not found", "COURSE_NOT_FOUND", "courseId");
+    const course = await withSess(Course.findOne({ _id: courseId, ...NOT_DELETED })).lean();
     if (!course) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
     courseId = course._id;
     classId = null;
@@ -118,11 +178,14 @@ const assertScopeHierarchy = async (body, existing = null) => {
     teacherId = null;
   } else if (scopeType === "CLASS") {
     if (!classId) throw validationError("classId is required when scopeType is CLASS");
-    assertId(classId, "Class not found", "CLASS_NOT_FOUND");
-    const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
+    assertQueryObjectId(classId, "Class not found", "CLASS_NOT_FOUND", "classId");
+    const cls = await withSess(Class.findOne({ _id: classId, ...NOT_DELETED })).lean();
     if (!cls) throw CLASS_NOT_FOUND();
-    if (courseId && String(courseId) !== String(cls.courseId)) {
-      throw new AppError("courseId does not match the class course", "COURSE_ATTRIBUTE_MISMATCH", 400);
+    if (courseId) {
+      assertQueryObjectId(courseId, "Course not found", "COURSE_NOT_FOUND", "courseId");
+      if (String(courseId) !== String(cls.courseId)) {
+        throw new AppError("courseId does not match the class course", "COURSE_ATTRIBUTE_MISMATCH", 400);
+      }
     }
     classId = cls._id;
     courseId = cls.courseId;
@@ -130,16 +193,22 @@ const assertScopeHierarchy = async (body, existing = null) => {
     sessionId = null;
   } else if (scopeType === "SESSION") {
     if (!sessionId) throw validationError("sessionId is required when scopeType is SESSION");
-    assertId(sessionId, "Session not found", "SESSION_NOT_FOUND");
-    const session = await Session.findById(sessionId).lean();
+    assertQueryObjectId(sessionId, "Session not found", "SESSION_NOT_FOUND", "sessionId");
+    const session = await withSess(Session.findById(sessionId)).lean();
     if (!session) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
-    const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).lean();
+    const cls = await withSess(Class.findOne({ _id: session.classId, ...NOT_DELETED })).lean();
     if (!cls) throw CLASS_NOT_FOUND();
-    if (classId && String(classId) !== String(cls._id)) {
-      throw new AppError("classId does not match the session class", "VALIDATION_ERROR", 400);
+    if (classId) {
+      assertQueryObjectId(classId, "Class not found", "CLASS_NOT_FOUND", "classId");
+      if (String(classId) !== String(cls._id)) {
+        throw new AppError("classId does not match the session class", "VALIDATION_ERROR", 400);
+      }
     }
-    if (courseId && String(courseId) !== String(cls.courseId)) {
-      throw new AppError("courseId does not match the session course", "COURSE_ATTRIBUTE_MISMATCH", 400);
+    if (courseId) {
+      assertQueryObjectId(courseId, "Course not found", "COURSE_NOT_FOUND", "courseId");
+      if (String(courseId) !== String(cls.courseId)) {
+        throw new AppError("courseId does not match the session course", "COURSE_ATTRIBUTE_MISMATCH", 400);
+      }
     }
     sessionId = session._id;
     classId = cls._id;
@@ -150,16 +219,16 @@ const assertScopeHierarchy = async (body, existing = null) => {
   let resolvedVersionId = null;
   let resolvedUnitId = null;
   if (syllabusVersionId) {
-    assertId(syllabusVersionId, "Syllabus version not found", "SYLLABUS_VERSION_NOT_FOUND");
-    const version = await SyllabusVersion.findOne({ _id: syllabusVersionId, ...NOT_DELETED }).lean();
+    assertQueryObjectId(syllabusVersionId, "Syllabus version not found", "SYLLABUS_VERSION_NOT_FOUND", "syllabusVersionId");
+    const version = await withSess(SyllabusVersion.findOne({ _id: syllabusVersionId, ...NOT_DELETED })).lean();
     if (!version || String(version.courseId) !== String(courseId)) {
       throw new AppError("Syllabus version does not belong to target course", "SYLLABUS_VERSION_NOT_FOUND", 404);
     }
     resolvedVersionId = version._id;
   }
   if (curriculumUnitId) {
-    assertId(curriculumUnitId, "Curriculum unit not found", "CURRICULUM_UNIT_NOT_FOUND");
-    const unit = await CurriculumUnit.findOne({ _id: curriculumUnitId, ...NOT_DELETED }).lean();
+    assertQueryObjectId(curriculumUnitId, "Curriculum unit not found", "CURRICULUM_UNIT_NOT_FOUND", "curriculumUnitId");
+    const unit = await withSess(CurriculumUnit.findOne({ _id: curriculumUnitId, ...NOT_DELETED })).lean();
     if (!unit || String(unit.courseId) !== String(courseId)) {
       throw new AppError("Curriculum unit does not belong to target course", "CURRICULUM_UNIT_NOT_FOUND", 404);
     }
@@ -253,7 +322,8 @@ const assertResourceViewAccess = async (user, scope) => {
 const parseSourcePayload = async (actorId, body, existing = null) => {
   const sourceTypeRaw = body.sourceType !== undefined ? body.sourceType : existing?.sourceType;
   if (!sourceTypeRaw) throw validationError("sourceType is required");
-  const sourceType = String(sourceTypeRaw).trim().toUpperCase();
+  if (typeof sourceTypeRaw !== "string") throw validationError("sourceType must be a string");
+  const sourceType = sourceTypeRaw.trim().toUpperCase();
   if (!LEARNING_RESOURCE_SOURCE_TYPES.includes(sourceType)) {
     throw validationError(`sourceType must be one of ${LEARNING_RESOURCE_SOURCE_TYPES.join(", ")}`);
   }
@@ -268,18 +338,21 @@ const parseSourcePayload = async (actorId, body, existing = null) => {
   if (sourceType === "STORAGE_FILE") {
     const incomingKey = body.storageKey !== undefined ? body.storageKey : storageKey;
     if (isBlank(incomingKey)) throw validationError("storageKey is required for STORAGE_FILE resources");
-    const trimmedKey = String(incomingKey).trim();
+    const trimmedKey = incomingKey.trim();
     if (!existing || trimmedKey !== existing.storageKey) {
       await storageService.assertOwnedKeys(actorId, [trimmedKey]);
     }
     storageKey = trimmedKey;
-    mimeType = body.mimeType !== undefined ? (body.mimeType ? String(body.mimeType).trim() : null) : mimeType;
-    originalName =
-      body.originalName !== undefined ? (body.originalName ? String(body.originalName).trim() : null) : originalName;
+    if (body.mimeType !== undefined) {
+      const m = assertOptionalString(body.mimeType, "mimeType");
+      mimeType = m ? m.trim() : null;
+    }
+    if (body.originalName !== undefined) {
+      const n = assertOptionalString(body.originalName, "originalName");
+      originalName = n ? n.trim() : null;
+    }
     if (body.fileSizeBytes !== undefined) {
-      const sz = Number(body.fileSizeBytes);
-      if (!Number.isFinite(sz) || sz < 0) throw validationError("fileSizeBytes must be >= 0");
-      fileSizeBytes = sz;
+      fileSizeBytes = normalizeFileSize(body.fileSizeBytes);
     }
     externalUrl = null;
   } else if (sourceType === "EXTERNAL_LINK") {
@@ -292,7 +365,7 @@ const parseSourcePayload = async (actorId, body, existing = null) => {
   } else if (sourceType === "TEXT_CONTENT") {
     const rawText = body.contentText !== undefined ? body.contentText : contentText;
     if (isBlank(rawText)) throw validationError("contentText is required for TEXT_CONTENT resources");
-    contentText = String(rawText).trim();
+    contentText = rawText.trim();
     storageKey = null;
     mimeType = null;
     originalName = null;
@@ -317,27 +390,23 @@ const createLearningResource = async (actor, body = {}) => {
   }
 
   if (isBlank(body.title)) throw validationError("title is required");
-  const title = String(body.title).trim();
-  const description = body.description !== undefined && body.description !== null ? String(body.description).trim() : "";
+  const title = body.title.trim();
+  const descRaw = assertOptionalString(body.description, "description");
+  const description = descRaw !== undefined && descRaw !== null ? descRaw.trim() : "";
 
   const resourceKind =
     body.resourceKind !== undefined
-      ? String(body.resourceKind).trim().toUpperCase()
+      ? assertOptionalEnum(body.resourceKind, LEARNING_RESOURCE_KINDS, "resourceKind", true) || (() => { throw validationError("resourceKind must not be empty"); })()
       : "DOCUMENT";
-  if (!LEARNING_RESOURCE_KINDS.includes(resourceKind)) {
-    throw validationError(`resourceKind must be one of ${LEARNING_RESOURCE_KINDS.join(", ")}`);
-  }
 
   const status =
     body.status !== undefined
-      ? String(body.status).trim().toUpperCase()
+      ? assertOptionalEnum(body.status, LEARNING_RESOURCE_STATUSES, "status", true) || (() => { throw validationError("status must not be empty"); })()
       : "PUBLISHED";
-  if (!LEARNING_RESOURCE_STATUSES.includes(status)) {
-    throw validationError(`status must be one of ${LEARNING_RESOURCE_STATUSES.join(", ")}`);
-  }
 
   const order = normalizeOptionalInt(body.order, "order", 1) || 1;
-  const isDownloadable = body.isDownloadable !== undefined ? Boolean(body.isDownloadable) : true;
+  const isDownloadableFlag = assertOptionalBoolean(body.isDownloadable, "isDownloadable");
+  const isDownloadable = isDownloadableFlag !== undefined ? isDownloadableFlag : true;
   const sourcePayload = await parseSourcePayload(actor.id, body);
 
   const dbSession = await mongoose.startSession();
@@ -394,81 +463,99 @@ const updateLearningResource = async (actor, resourceId, body = {}) => {
     throw FORBIDDEN("Only ADMIN or TEACHER can manage learning resources");
   }
   assertId(resourceId, "Learning resource not found", "LEARNING_RESOURCE_NOT_FOUND");
-  const resource = await LearningResource.findOne({ _id: resourceId, ...NOT_DELETED });
-  if (!resource) throw resourceNotFound();
+
+  const preResource = await LearningResource.findOne({ _id: resourceId, ...NOT_DELETED }).lean();
+  if (!preResource) throw resourceNotFound();
 
   if (actor.role === "TEACHER") {
-    await assertTeacherCanManageScope(actor.id, resource);
-    if (body.scopeType && String(body.scopeType).trim().toUpperCase() === "COURSE") {
-      throw FORBIDDEN("Teachers cannot move resources to COURSE scope");
+    await assertTeacherCanManageScope(actor.id, preResource);
+    if (body.scopeType !== undefined) {
+      if (typeof body.scopeType !== "string") throw validationError("scopeType must be a string");
+      if (body.scopeType.trim().toUpperCase() === "COURSE") {
+        throw FORBIDDEN("Teachers cannot move resources to COURSE scope");
+      }
     }
   }
 
-  const beforeState = {
-    title: resource.title,
-    status: resource.status,
-    sourceType: resource.sourceType,
-    order: resource.order,
-  };
+  if (body.title !== undefined && isBlank(body.title)) {
+    throw validationError("title must not be empty");
+  }
+  const descRaw = assertOptionalString(body.description, "description");
+  const nextKind =
+    body.resourceKind !== undefined
+      ? assertOptionalEnum(body.resourceKind, LEARNING_RESOURCE_KINDS, "resourceKind", true) || (() => { throw validationError("resourceKind must not be empty"); })()
+      : undefined;
+  const nextStatus =
+    body.status !== undefined
+      ? assertOptionalEnum(body.status, LEARNING_RESOURCE_STATUSES, "status", true) || (() => { throw validationError("status must not be empty"); })()
+      : undefined;
+  const nextOrder = body.order !== undefined ? normalizeOptionalInt(body.order, "order", 1) : undefined;
+  const nextDownloadable = assertOptionalBoolean(body.isDownloadable, "isDownloadable");
 
-  if (
+  const hasScopeChange =
     body.scopeType !== undefined ||
     body.courseId !== undefined ||
     body.classId !== undefined ||
     body.sessionId !== undefined ||
     body.syllabusVersionId !== undefined ||
-    body.curriculumUnitId !== undefined
-  ) {
-    const nextScope = await assertScopeHierarchy(body, resource);
-    if (actor.role === "TEACHER") {
-      await assertTeacherCanManageScope(actor.id, nextScope);
-    }
-    Object.assign(resource, nextScope);
-  }
+    body.curriculumUnitId !== undefined;
 
-  if (body.title !== undefined) {
-    if (isBlank(body.title)) throw validationError("title must not be empty");
-    resource.title = String(body.title).trim();
-  }
-  if (body.description !== undefined) {
-    resource.description = body.description === null ? "" : String(body.description).trim();
-  }
-  if (body.resourceKind !== undefined) {
-    const kind = String(body.resourceKind).trim().toUpperCase();
-    if (!LEARNING_RESOURCE_KINDS.includes(kind)) {
-      throw validationError(`resourceKind must be one of ${LEARNING_RESOURCE_KINDS.join(", ")}`);
-    }
-    resource.resourceKind = kind;
-  }
-  if (body.status !== undefined) {
-    const nextStatus = String(body.status).trim().toUpperCase();
-    if (!LEARNING_RESOURCE_STATUSES.includes(nextStatus)) {
-      throw validationError(`status must be one of ${LEARNING_RESOURCE_STATUSES.join(", ")}`);
-    }
-    resource.status = nextStatus;
-  }
-  if (body.order !== undefined) {
-    resource.order = normalizeOptionalInt(body.order, "order", 1);
-  }
-  if (body.isDownloadable !== undefined) {
-    resource.isDownloadable = Boolean(body.isDownloadable);
-  }
-  if (
+  const hasSourceChange =
     body.sourceType !== undefined ||
     body.storageKey !== undefined ||
     body.externalUrl !== undefined ||
-    body.contentText !== undefined
-  ) {
-    const sourcePayload = await parseSourcePayload(actor.id, body, resource);
-    Object.assign(resource, sourcePayload);
-  }
+    body.contentText !== undefined ||
+    body.mimeType !== undefined ||
+    body.originalName !== undefined ||
+    body.fileSizeBytes !== undefined;
 
-  resource.updatedBy = actor.id;
+  const preSourcePayload = hasSourceChange ? await parseSourcePayload(actor.id, body, preResource) : null;
 
   const dbSession = await mongoose.startSession();
+  let updatedResource;
   try {
     await dbSession.withTransaction(async () => {
+      // Lock active document inside transaction so concurrent update/delete cannot resurrect a deleted record.
+      const resource = await LearningResource.findOneAndUpdate(
+        { _id: resourceId, ...NOT_DELETED },
+        { $inc: { __v: 1 } },
+        { session: dbSession, returnDocument: "after" }
+      );
+      if (!resource) throw resourceNotFound();
+
+      if (actor.role === "TEACHER") {
+        await assertTeacherCanManageScope(actor.id, resource);
+      }
+
+      const beforeState = {
+        title: resource.title,
+        status: resource.status,
+        sourceType: resource.sourceType,
+        order: resource.order,
+      };
+
+      if (hasScopeChange) {
+        const nextScope = await assertScopeHierarchy(body, resource, dbSession);
+        if (actor.role === "TEACHER") {
+          await assertTeacherCanManageScope(actor.id, nextScope);
+        }
+        Object.assign(resource, nextScope);
+      }
+
+      if (body.title !== undefined) resource.title = body.title.trim();
+      if (body.description !== undefined) resource.description = descRaw === null ? "" : descRaw.trim();
+      if (nextKind !== undefined) resource.resourceKind = nextKind;
+      if (nextStatus !== undefined) resource.status = nextStatus;
+      if (nextOrder !== undefined) resource.order = nextOrder;
+      if (nextDownloadable !== undefined) resource.isDownloadable = nextDownloadable;
+      if (preSourcePayload) {
+        Object.assign(resource, preSourcePayload);
+      }
+
+      resource.updatedBy = actor.id;
       await resource.save({ session: dbSession });
+      updatedResource = resource;
+
       if (actor.role === "ADMIN") {
         await audit(
           {
@@ -492,7 +579,7 @@ const updateLearningResource = async (actor, resourceId, body = {}) => {
     await dbSession.endSession();
   }
 
-  return presentResource(resource, actor.role);
+  return presentResource(updatedResource, actor.role);
 };
 
 const deleteLearningResource = async (actor, resourceId) => {
@@ -500,21 +587,32 @@ const deleteLearningResource = async (actor, resourceId) => {
     throw FORBIDDEN("Only ADMIN or TEACHER can delete learning resources");
   }
   assertId(resourceId, "Learning resource not found", "LEARNING_RESOURCE_NOT_FOUND");
-  const resource = await LearningResource.findOne({ _id: resourceId, ...NOT_DELETED });
-  if (!resource) throw resourceNotFound();
-
-  if (actor.role === "TEACHER") {
-    await assertTeacherCanManageScope(actor.id, resource);
-  }
 
   const dbSession = await mongoose.startSession();
+  let deletedId;
   try {
     await dbSession.withTransaction(async () => {
-      resource.isDeleted = true;
-      resource.deletedAt = new Date();
-      resource.deletedBy = actor.id;
-      resource.updatedBy = actor.id;
-      await resource.save({ session: dbSession });
+      const resource = await LearningResource.findOne({ _id: resourceId, ...NOT_DELETED }).session(dbSession);
+      if (!resource) throw resourceNotFound();
+
+      if (actor.role === "TEACHER") {
+        await assertTeacherCanManageScope(actor.id, resource);
+      }
+
+      const deleted = await LearningResource.findOneAndUpdate(
+        { _id: resourceId, ...NOT_DELETED },
+        {
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: actor.id,
+            updatedBy: actor.id,
+          },
+        },
+        { session: dbSession, returnDocument: "after" }
+      );
+      if (!deleted) throw resourceNotFound();
+      deletedId = deleted._id.toString();
 
       if (actor.role === "ADMIN") {
         await audit(
@@ -522,8 +620,8 @@ const deleteLearningResource = async (actor, resourceId) => {
             actorAdminId: actor.id,
             action: "LEARNING_RESOURCE_DELETE",
             targetType: "LearningResource",
-            targetId: resource._id,
-            beforeState: { title: resource.title, status: resource.status },
+            targetId: deleted._id,
+            beforeState: { title: deleted.title, status: deleted.status },
             afterState: { isDeleted: true },
           },
           dbSession
@@ -534,7 +632,7 @@ const deleteLearningResource = async (actor, resourceId) => {
     await dbSession.endSession();
   }
 
-  return { deleted: true, id: resource._id.toString() };
+  return { deleted: true, id: deletedId };
 };
 
 const getLearningResource = async (user, resourceId) => {
@@ -591,9 +689,10 @@ const listCourseResources = async (user, courseId, query = {}, paging) => {
 
   await assertResourceViewAccess(user, { scopeType: "COURSE", courseId: course._id });
 
+  const requestedStatus = assertOptionalEnum(query.status, LEARNING_RESOURCE_STATUSES, "status", true);
   const filter = { scopeType: "COURSE", courseId: course._id, ...NOT_DELETED };
-  if (user.role === "ADMIN" && query.status) {
-    filter.status = String(query.status).trim().toUpperCase();
+  if (user.role === "ADMIN" && requestedStatus) {
+    filter.status = requestedStatus;
   } else {
     filter.status = "PUBLISHED";
   }
@@ -613,11 +712,12 @@ const listClassResources = async (user, classId, query = {}, paging) => {
 
   await assertResourceViewAccess(user, { scopeType: "CLASS", classId: cls._id, teacherId: cls.teacherId });
 
+  const requestedStatus = assertOptionalEnum(query.status, LEARNING_RESOURCE_STATUSES, "status", true);
   const filter = { scopeType: "CLASS", classId: cls._id, ...NOT_DELETED };
   if (user.role === "STUDENT") {
     filter.status = "PUBLISHED";
-  } else if (query.status) {
-    filter.status = String(query.status).trim().toUpperCase();
+  } else if (requestedStatus) {
+    filter.status = requestedStatus;
   }
 
   const [items, total] = await Promise.all([
@@ -646,59 +746,59 @@ const listSessionResources = async (user, sessionId, query = {}) => {
     teacherId: cls.teacherId,
   });
 
+  const requestedStatus = assertOptionalEnum(query.status, LEARNING_RESOURCE_STATUSES, "status", true);
   const filter = { scopeType: "SESSION", sessionId: session._id, ...NOT_DELETED };
   if (user.role === "STUDENT") {
     filter.status = "PUBLISHED";
-  } else if (query.status) {
-    filter.status = String(query.status).trim().toUpperCase();
+  } else if (requestedStatus) {
+    filter.status = requestedStatus;
   }
 
-  const resources = await LearningResource.find(filter).sort({ order: 1, createdAt: 1 }).lean();
-  const migratedIds = new Set(
-    resources
-      .map((r) => r.legacySessionContent && r.legacySessionContent.contentItemId && String(r.legacySessionContent.contentItemId))
-      .filter(Boolean)
-  );
-
-  // Also exclude items migrated in another status if student filtered only PUBLISHED
-  if (user.role === "STUDENT") {
-    const allMigrated = await LearningResource.find({
+  const [resources, allMigrated] = await Promise.all([
+    LearningResource.find(filter).sort({ order: 1, createdAt: 1 }).lean(),
+    LearningResource.find({
       scopeType: "SESSION",
       sessionId: session._id,
       "legacySessionContent.contentItemId": { $type: "objectId" },
       ...NOT_DELETED,
     })
       .select("legacySessionContent.contentItemId")
-      .lean();
-    for (const r of allMigrated) {
-      migratedIds.add(String(r.legacySessionContent.contentItemId));
-    }
-  }
+      .lean(),
+  ]);
 
-  const unmigratedLegacy = (session.contents || [])
-    .filter((item) => item && item._id && !migratedIds.has(String(item._id)))
-    .map((item) => {
-      const signed = item.storageKey ? storageService.createSignedUrl(item.storageKey) : null;
-      return {
-        id: String(item._id),
-        legacyContentItemId: String(item._id),
-        source: "LEGACY_SESSION_CONTENT",
-        scopeType: "SESSION",
-        sessionId: session._id.toString(),
-        classId: cls._id.toString(),
-        courseId: cls.courseId ? cls.courseId.toString() : null,
-        title: item.title,
-        description: item.description || "",
-        legacyType: item.type,
-        resourceKind: LEGACY_TYPE_TO_KIND[item.type] || "DOCUMENT",
-        sourceType: item.storageKey ? "STORAGE_FILE" : "TEXT_CONTENT",
-        hasFile: Boolean(item.storageKey),
-        downloadUrl: signed ? signed.url : null,
-        urlExpiresAt: signed ? signed.expiresAt : null,
-        order: item.order || 1,
-        migrated: false,
-      };
-    });
+  const migratedIds = new Set(
+    allMigrated
+      .map((r) => r.legacySessionContent && r.legacySessionContent.contentItemId && String(r.legacySessionContent.contentItemId))
+      .filter(Boolean)
+  );
+
+  const includeLegacy = !filter.status || filter.status === "PUBLISHED";
+  const unmigratedLegacy = includeLegacy
+    ? (session.contents || [])
+        .filter((item) => item && item._id && !migratedIds.has(String(item._id)))
+        .map((item) => {
+          const signed = item.storageKey ? storageService.createSignedUrl(item.storageKey) : null;
+          return {
+            id: String(item._id),
+            legacyContentItemId: String(item._id),
+            source: "LEGACY_SESSION_CONTENT",
+            scopeType: "SESSION",
+            sessionId: session._id.toString(),
+            classId: cls._id.toString(),
+            courseId: cls.courseId ? cls.courseId.toString() : null,
+            title: item.title,
+            description: item.description || "",
+            legacyType: item.type,
+            resourceKind: LEGACY_TYPE_TO_KIND[item.type] || "DOCUMENT",
+            sourceType: item.storageKey ? "STORAGE_FILE" : "TEXT_CONTENT",
+            hasFile: Boolean(item.storageKey),
+            downloadUrl: signed ? signed.url : null,
+            urlExpiresAt: signed ? signed.expiresAt : null,
+            order: item.order || 1,
+            migrated: false,
+          };
+        })
+    : [];
 
   const presentedResources = resources.map((item) => ({
     ...presentResource(item, user.role),
@@ -740,88 +840,116 @@ const migrateSessionContents = async (actor, sessionId, body = {}) => {
     }
   }
 
-  const dryRun = Boolean(body.dryRun);
+  const dryRunFlag = assertOptionalBoolean(body.dryRun, "dryRun");
+  const dryRun = dryRunFlag === true;
   const legacyItems = session.contents || [];
-  const existingMigrated = await LearningResource.find({
-    "legacySessionContent.sessionId": session._id,
-    ...NOT_DELETED,
-  })
-    .select("legacySessionContent.contentItemId")
-    .lean();
 
-  const existingItemIds = new Set(
-    existingMigrated
-      .map((r) => r.legacySessionContent && r.legacySessionContent.contentItemId && String(r.legacySessionContent.contentItemId))
-      .filter(Boolean)
-  );
+  const computePending = async (dbSession = null) => {
+    const q = LearningResource.find({
+      "legacySessionContent.sessionId": session._id,
+      ...NOT_DELETED,
+    }).select("legacySessionContent.contentItemId");
+    if (dbSession) q.session(dbSession);
+    const existingMigrated = await q.lean();
 
-  const toCreate = legacyItems.filter((item) => item && item._id && !existingItemIds.has(String(item._id)));
-  const skippedAlreadyMigratedCount = legacyItems.length - toCreate.length;
+    const existingItemIds = new Set(
+      existingMigrated
+        .map((r) => r.legacySessionContent && r.legacySessionContent.contentItemId && String(r.legacySessionContent.contentItemId))
+        .filter(Boolean)
+    );
 
-  if (dryRun || toCreate.length === 0) {
+    const toCreate = legacyItems.filter((item) => item && item._id && !existingItemIds.has(String(item._id)));
+    return { existingItemIds, toCreate };
+  };
+
+  if (dryRun) {
+    const { toCreate } = await computePending();
     return {
       sessionId: session._id.toString(),
-      dryRun,
+      dryRun: true,
       legacyCount: legacyItems.length,
       createdCount: 0,
-      pendingMigrationCount: dryRun ? toCreate.length : 0,
-      skippedAlreadyMigratedCount,
+      pendingMigrationCount: toCreate.length,
+      skippedAlreadyMigratedCount: legacyItems.length - toCreate.length,
       legacyPreserved: true,
       items: [],
     };
   }
 
   const now = new Date();
-  const createdDocs = [];
-  for (const item of toCreate) {
-    const sourceType = item.storageKey ? "STORAGE_FILE" : "TEXT_CONTENT";
-    const parsedKey = item.storageKey ? storageService.parsePrivateKey(item.storageKey) : null;
+  let createdDocs = [];
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    createdDocs = [];
+    const dbSession = await mongoose.startSession();
     try {
-      const [doc] = await LearningResource.create([
-        {
-          scopeType: "SESSION",
-          courseId: cls.courseId,
-          classId: cls._id,
-          sessionId: session._id,
-          teacherId: cls.teacherId,
-          title: item.title,
-          description: item.description || "",
-          resourceKind: LEGACY_TYPE_TO_KIND[item.type] || "DOCUMENT",
-          sourceType,
-          storageKey: item.storageKey || null,
-          mimeType: parsedKey && parsedKey.extension === "pdf" ? "application/pdf" : null,
-          contentText: sourceType === "TEXT_CONTENT" ? (item.description || item.title) : null,
-          order: item.order || 1,
-          isDownloadable: true,
-          status: "PUBLISHED",
-          createdBy: actor.id,
-          legacySessionContent: {
-            sessionId: session._id,
-            contentItemId: item._id,
-            legacyType: item.type,
-            migratedAt: now,
-          },
-        },
-      ]);
-      createdDocs.push(presentResource(doc, actor.role));
+      await dbSession.withTransaction(async () => {
+        const { toCreate } = await computePending(dbSession);
+        if (toCreate.length === 0) return;
+
+        for (const item of toCreate) {
+          const sourceType = item.storageKey ? "STORAGE_FILE" : "TEXT_CONTENT";
+          const parsedKey = item.storageKey ? storageService.parsePrivateKey(item.storageKey) : null;
+          const [doc] = await LearningResource.create(
+            [
+              {
+                scopeType: "SESSION",
+                courseId: cls.courseId,
+                classId: cls._id,
+                sessionId: session._id,
+                teacherId: cls.teacherId,
+                title: item.title,
+                description: item.description || "",
+                resourceKind: LEGACY_TYPE_TO_KIND[item.type] || "DOCUMENT",
+                sourceType,
+                storageKey: item.storageKey || null,
+                mimeType: parsedKey && parsedKey.extension === "pdf" ? "application/pdf" : null,
+                contentText: sourceType === "TEXT_CONTENT" ? (item.description || item.title) : null,
+                order: item.order || 1,
+                isDownloadable: true,
+                status: "PUBLISHED",
+                createdBy: actor.id,
+                legacySessionContent: {
+                  sessionId: session._id,
+                  contentItemId: item._id,
+                  legacyType: item.type,
+                  migratedAt: now,
+                },
+              },
+            ],
+            { session: dbSession }
+          );
+          createdDocs.push(presentResource(doc, actor.role));
+        }
+
+        if (actor.role === "ADMIN" && createdDocs.length > 0) {
+          await audit(
+            {
+              actorAdminId: actor.id,
+              action: "LEARNING_RESOURCE_MIGRATE_SESSION",
+              targetType: "Session",
+              targetId: session._id,
+              beforeState: { legacyCount: legacyItems.length },
+              afterState: { createdCount: createdDocs.length, legacyPreserved: true },
+            },
+            dbSession
+          );
+        }
+      });
+      break;
     } catch (err) {
-      if (err && err.code === 11000) {
-        // Idempotent under concurrent runs
+      if (err && err.code === 11000 && attempt === 0) {
+        // Concurrent migration inserted rows first and aborted this tx; retry once on fresh committed state.
         continue;
       }
+      if (err && err.code === 11000) {
+        createdDocs = [];
+        break;
+      }
       throw err;
+    } finally {
+      await dbSession.endSession();
     }
-  }
-
-  if (actor.role === "ADMIN" && createdDocs.length > 0) {
-    await audit({
-      actorAdminId: actor.id,
-      action: "LEARNING_RESOURCE_MIGRATE_SESSION",
-      targetType: "Session",
-      targetId: session._id,
-      beforeState: { legacyCount: legacyItems.length },
-      afterState: { createdCount: createdDocs.length, legacyPreserved: true },
-    });
   }
 
   return {
@@ -838,16 +966,16 @@ const migrateSessionContents = async (actor, sessionId, body = {}) => {
 const listTeacherResources = async (teacherId, query = {}, paging) => {
   await getVerifiedTeacher(teacherId);
   const filter = { teacherId, ...NOT_DELETED };
-  if (query.scopeType) filter.scopeType = String(query.scopeType).trim().toUpperCase();
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
-    filter.classId = query.classId;
+  const scopeType = assertOptionalEnum(query.scopeType, LEARNING_RESOURCE_SCOPES, "scopeType", true);
+  if (scopeType) filter.scopeType = scopeType;
+  if (query.classId !== undefined && query.classId !== "") {
+    filter.classId = assertQueryObjectId(query.classId, "Class not found", "CLASS_NOT_FOUND", "classId");
   }
-  if (query.sessionId) {
-    assertId(query.sessionId, "Session not found", "SESSION_NOT_FOUND");
-    filter.sessionId = query.sessionId;
+  if (query.sessionId !== undefined && query.sessionId !== "") {
+    filter.sessionId = assertQueryObjectId(query.sessionId, "Session not found", "SESSION_NOT_FOUND", "sessionId");
   }
-  if (query.status) filter.status = String(query.status).trim().toUpperCase();
+  const status = assertOptionalEnum(query.status, LEARNING_RESOURCE_STATUSES, "status", true);
+  if (status) filter.status = status;
 
   const [items, total] = await Promise.all([
     LearningResource.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
@@ -858,20 +986,19 @@ const listTeacherResources = async (teacherId, query = {}, paging) => {
 
 const adminListResources = async (query = {}, paging) => {
   const filter = { ...NOT_DELETED };
-  if (query.scopeType) filter.scopeType = String(query.scopeType).trim().toUpperCase();
-  if (query.courseId) {
-    assertId(query.courseId, "Course not found", "COURSE_NOT_FOUND");
-    filter.courseId = query.courseId;
+  const scopeType = assertOptionalEnum(query.scopeType, LEARNING_RESOURCE_SCOPES, "scopeType", true);
+  if (scopeType) filter.scopeType = scopeType;
+  if (query.courseId !== undefined && query.courseId !== "") {
+    filter.courseId = assertQueryObjectId(query.courseId, "Course not found", "COURSE_NOT_FOUND", "courseId");
   }
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
-    filter.classId = query.classId;
+  if (query.classId !== undefined && query.classId !== "") {
+    filter.classId = assertQueryObjectId(query.classId, "Class not found", "CLASS_NOT_FOUND", "classId");
   }
-  if (query.sessionId) {
-    assertId(query.sessionId, "Session not found", "SESSION_NOT_FOUND");
-    filter.sessionId = query.sessionId;
+  if (query.sessionId !== undefined && query.sessionId !== "") {
+    filter.sessionId = assertQueryObjectId(query.sessionId, "Session not found", "SESSION_NOT_FOUND", "sessionId");
   }
-  if (query.status) filter.status = String(query.status).trim().toUpperCase();
+  const status = assertOptionalEnum(query.status, LEARNING_RESOURCE_STATUSES, "status", true);
+  if (status) filter.status = status;
 
   const [items, total] = await Promise.all([
     LearningResource.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
@@ -902,8 +1029,8 @@ const listMyResources = async (studentId, query = {}, paging) => {
     ],
   };
 
-  if (query.classId) {
-    assertId(query.classId, "Class not found", "CLASS_NOT_FOUND");
+  if (query.classId !== undefined && query.classId !== "") {
+    assertQueryObjectId(query.classId, "Class not found", "CLASS_NOT_FOUND", "classId");
     if (!classIds.some((id) => String(id) === String(query.classId))) {
       throw new AppError("You must be enrolled in this class to view its resources", "NOT_ENROLLED", 403);
     }

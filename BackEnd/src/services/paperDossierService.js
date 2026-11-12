@@ -53,10 +53,18 @@ const generateReceiptCode = () => {
 const parsePostalInfo = (raw, receivedAt) => {
   assertPlainObject(raw, "postalInfo");
 
+  if (
+    raw.deliveryMethod !== undefined &&
+    raw.deliveryMethod !== null &&
+    raw.deliveryMethod !== "" &&
+    typeof raw.deliveryMethod !== "string"
+  ) {
+    throw validationError("postalInfo.deliveryMethod must be a string");
+  }
   const deliveryMethod =
     raw.deliveryMethod === undefined || raw.deliveryMethod === null || raw.deliveryMethod === ""
       ? "POSTAL_MAIL"
-      : String(raw.deliveryMethod).trim().toUpperCase();
+      : raw.deliveryMethod.trim().toUpperCase();
   if (!DELIVERY_METHODS.includes(deliveryMethod)) {
     throw validationError(`postalInfo.deliveryMethod must be one of ${DELIVERY_METHODS.join(", ")}`);
   }
@@ -98,11 +106,23 @@ const parsePostalInfo = (raw, receivedAt) => {
     throw validationError("postalInfo.sentAt cannot be after receivedAt");
   }
 
-  const envelopeSealed = raw.envelopeSealed === undefined ? true : Boolean(raw.envelopeSealed);
+  if (raw.envelopeSealed !== undefined && typeof raw.envelopeSealed !== "boolean") {
+    throw validationError("postalInfo.envelopeSealed must be a boolean");
+  }
+  const envelopeSealed = raw.envelopeSealed === undefined ? true : raw.envelopeSealed;
+
+  if (
+    raw.packageCondition !== undefined &&
+    raw.packageCondition !== null &&
+    raw.packageCondition !== "" &&
+    typeof raw.packageCondition !== "string"
+  ) {
+    throw validationError("postalInfo.packageCondition must be a string");
+  }
   const packageCondition =
     raw.packageCondition === undefined || raw.packageCondition === null || raw.packageCondition === ""
       ? "INTACT"
-      : String(raw.packageCondition).trim().toUpperCase();
+      : raw.packageCondition.trim().toUpperCase();
   if (!PACKAGE_CONDITIONS.includes(packageCondition)) {
     throw validationError(`postalInfo.packageCondition must be one of ${PACKAGE_CONDITIONS.join(", ")}`);
   }
@@ -418,6 +438,16 @@ const linkPaperDossierToApplication = async (adminId, receiptId, body) => {
   let updated;
   try {
     await session.withTransaction(async () => {
+      const freshApp = await ScholarshipApplication.findById(resolved.application._id).session(session).lean();
+      if (!freshApp) throw applicationNotFound();
+      if (NON_LINKABLE_APP_STATUSES.includes(freshApp.status)) {
+        throw new AppError(
+          `Cannot link paper dossier to an application in status ${freshApp.status}`,
+          "APPLICATION_NOT_ACCEPTING_PAPER",
+          409
+        );
+      }
+
       updated = await PaperDossierReceipt.findOneAndUpdate(
         {
           _id: receipt._id,
@@ -537,9 +567,29 @@ const parseReconciledItems = (rawItems, campaign, adminId, outcomeStatus) => {
       );
     }
 
-    const pageCount = entry.pageCount === undefined ? 1 : Number(entry.pageCount);
+    let pageCount = 1;
+    if (entry.pageCount !== undefined) {
+      if (
+        entry.pageCount === null ||
+        typeof entry.pageCount === "boolean" ||
+        Array.isArray(entry.pageCount) ||
+        typeof entry.pageCount === "object" ||
+        (typeof entry.pageCount === "string" && entry.pageCount.trim() === "")
+      ) {
+        pageCount = NaN;
+      } else {
+        pageCount = Number(entry.pageCount);
+      }
+    }
     if (!Number.isInteger(pageCount) || pageCount < 0 || pageCount > 500) {
       throw validationError(`reconciledItems[${idx}].pageCount must be an integer between 0 and 500`);
+    }
+
+    if (entry.isOriginal !== undefined && typeof entry.isOriginal !== "boolean") {
+      throw validationError(`reconciledItems[${idx}].isOriginal must be a boolean`);
+    }
+    if (entry.hasOfficialStamp !== undefined && typeof entry.hasOfficialStamp !== "boolean") {
+      throw validationError(`reconciledItems[${idx}].hasOfficialStamp must be a boolean`);
     }
 
     return {
@@ -549,8 +599,8 @@ const parseReconciledItems = (rawItems, campaign, adminId, outcomeStatus) => {
         max: 200,
       }) || (def ? def.title : null),
       pageCount,
-      isOriginal: Boolean(entry.isOriginal),
-      hasOfficialStamp: Boolean(entry.hasOfficialStamp),
+      isOriginal: entry.isOriginal === true,
+      hasOfficialStamp: entry.hasOfficialStamp === true,
       note: assertOptionalText(entry.note, `reconciledItems[${idx}].note`, { max: 500 }),
       verifiedBy: adminId,
       verifiedAt: now,
@@ -664,6 +714,16 @@ const reconcilePaperDossier = async (adminId, receiptId, body) => {
   let updated;
   try {
     await session.withTransaction(async () => {
+      const freshApp = await ScholarshipApplication.findById(application._id).session(session).lean();
+      if (!freshApp) throw applicationNotFound();
+      if (NON_LINKABLE_APP_STATUSES.includes(freshApp.status)) {
+        throw new AppError(
+          `Cannot reconcile receipt for an application in status ${freshApp.status}`,
+          "APPLICATION_NOT_ACCEPTING_PAPER",
+          409
+        );
+      }
+
       const now = new Date();
       const setUpdate = {
         status: targetStatus,
@@ -803,8 +863,8 @@ const closePaperDossierReceipt = async (adminId, receiptId, body, targetStatus) 
         );
       }
 
-      if (receipt.applicationId) {
-        await syncApplicationChecklistProgress(receipt.applicationId, session);
+      if (updated.applicationId) {
+        await syncApplicationChecklistProgress(updated.applicationId, session);
       }
 
       await audit(
@@ -823,9 +883,9 @@ const closePaperDossierReceipt = async (adminId, receiptId, body, targetStatus) 
     session.endSession();
   }
 
-  if (targetStatus === "REJECTED" && receipt.studentId) {
+  if (targetStatus === "REJECTED" && (updated.studentId || receipt.studentId)) {
     await notify(
-      receipt.studentId,
+      updated.studentId || receipt.studentId,
       "Hồ sơ bản giấy bị từ chối",
       `Biên nhận ${updated.receiptCode} bị từ chối: ${reason}`,
       "PAPER_DOSSIER_REJECTED"
