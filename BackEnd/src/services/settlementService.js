@@ -312,7 +312,12 @@ const evaluateEarningSettlement = async (earningId, options = {}) => {
   if (!classDoc || classDoc.status !== "COMPLETED") {
     blockers.push("CLASS_NOT_COMPLETED");
   } else {
-    milestones.classCompletedAt = classDoc.completedAt || classDoc.endDate || classDoc.updatedAt;
+    // TIN-FINAL-MERGE-READINESS: only business timestamps count as the class-completion milestone.
+    // `updatedAt` is NOT a business event — any unrelated write (e.g. Class.settlementSyncStatus
+    // tracking from classLifecycleService) would otherwise restart the 7-day hold on every retry.
+    // When neither completedAt nor endDate exists, Rule 4/5 session end times provide the milestone,
+    // and the final fallback remains earning.createdAt (see latestMilestoneMs below).
+    milestones.classCompletedAt = classDoc.completedAt || classDoc.endDate || null;
   }
 
   // Rule 4: Sessions completion & terminal state

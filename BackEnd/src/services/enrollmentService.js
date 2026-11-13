@@ -16,6 +16,29 @@ const {
 const { releaseReservation } = require("./reservationService");
 const { notify, notifyTeacherOfEnrollment } = require("./notificationService");
 
+/**
+ * CUR-09 integration point (owner of the snapshot shape: Châu — coursePricingPolicyService).
+ * Tín does NOT re-implement the snapshot logic here: the single source of truth is
+ * coursePricingPolicyService.buildEnrollmentSnapshotFromClass (dev handover, Châu §8).
+ * The guard below only tolerates the module being absent on branches that predate CUR-09
+ * (where Enrollment has no snapshot fields either). Any other load/runtime error propagates
+ * so enrollment creation fails closed instead of silently writing a divergent snapshot.
+ */
+let buildEnrollmentSnapshotFromClass = null;
+try {
+  ({ buildEnrollmentSnapshotFromClass } = require("./coursePricingPolicyService"));
+} catch (err) {
+  const missingThisModule =
+    err && err.code === "MODULE_NOT_FOUND" &&
+    String(err.message || "").startsWith("Cannot find module './coursePricingPolicyService'");
+  if (!missingThisModule) throw err;
+}
+
+const extractCur09Snapshot = (targetClass) =>
+  typeof buildEnrollmentSnapshotFromClass === "function"
+    ? buildEnrollmentSnapshotFromClass(targetClass)
+    : {};
+
 const createEnrollment = async (studentId, classId, retried = false) => {
   if (!mongoose.isValidObjectId(classId) || !mongoose.isValidObjectId(studentId)) {
     throw CLASS_NOT_FOUND();
@@ -114,7 +137,8 @@ const createEnrollment = async (studentId, classId, retried = false) => {
         throw CLASS_FULL();
       }
 
-      // 5. Create Enrollment
+      // 5. Create Enrollment (CUR-09: copy immutable syllabus and pricing policy snapshots)
+      const cur09Snapshot = extractCur09Snapshot(targetClass);
       const enrollmentDoc = new Enrollment({
         classId: targetClass._id,
         courseId: targetClass.courseId, // denormalized
@@ -124,7 +148,8 @@ const createEnrollment = async (studentId, classId, retried = false) => {
         paymentSource,
         tuitionAmount,
         enrolledAt: now,
-        holdExpiresAt
+        holdExpiresAt,
+        ...cur09Snapshot,
       });
 
       try {

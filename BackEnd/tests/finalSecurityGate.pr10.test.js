@@ -420,6 +420,10 @@ describe("PR10 Final Security Gate: Business Clock Hardening, Settlement Hold & 
     });
 
     it("2.3 Earning with settlementHoldRequired: true requires full 7 days before becoming AVAILABLE", async () => {
+      await Class.updateOne(
+        { _id: classDoc._id },
+        { $set: { completedAt: new Date("2026-10-31T03:00:00.000Z"), endDate: new Date("2026-10-31T03:00:00.000Z") } }
+      );
       const { Session } = require("../src/models");
       await Session.create({
         classId: classDoc._id,
