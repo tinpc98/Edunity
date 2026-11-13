@@ -14,51 +14,12 @@ exports.changeMyPassword = handle((req) =>
   profiles.changeMyPassword(req.user.id, body(req), { userAgent: req.headers["user-agent"], ip: req.ip })
 );
 
-// Messaging (1-1 Direct + LMS-13 Class Channels & Moderation)
+// Messaging (1-1 Direct)
 exports.openConversation = handle((req) => messaging.openConversation(req.user, body(req)));
 exports.listMyConversations = handle((req) => messaging.listMyConversations(req.user.id, parsePaging(req.query)));
 exports.listMessages = handle((req) => messaging.listMessages(req.user.id, req.params.id, req.query));
 exports.sendMessage = handle((req) => messaging.sendMessage(req.user, req.params.id, body(req)), 201);
 exports.deleteMessage = handle((req) => messaging.deleteMessage(req.user.id, req.params.id));
-
-exports.openClassConversation = handle((req) => messaging.openOrGetClassConversation(req.user, req.params.classId));
-exports.listClassMessages = handle((req) => messaging.listClassMessages(req.user, req.params.classId, req.query));
-exports.sendClassMessage = handle((req) => messaging.sendClassMessage(req.user, req.params.classId, body(req)), 201);
-exports.reportMessage = handle((req) => messaging.reportMessage(req.user, req.params.id, body(req)), 201);
-exports.getMyMessageReports = handle((req) => messaging.getMyMessageReports(req.user.id, parsePaging(req.query)));
-
-exports.teacherUpdateClassConversationModeration = handle((req) =>
-  messaging.teacherUpdateClassConversationModeration(req.user.id, req.params.classId, body(req))
-);
-exports.teacherMuteClassParticipant = handle((req) =>
-  messaging.teacherMuteClassParticipant(req.user.id, req.params.classId, body(req))
-);
-exports.teacherUnmuteClassParticipant = handle((req) =>
-  messaging.teacherUnmuteClassParticipant(req.user.id, req.params.classId, req.params.studentId)
-);
-exports.teacherModerateMessage = handle((req) =>
-  messaging.teacherModerateMessage(req.user.id, req.params.classId, req.params.messageId, body(req))
-);
-
-exports.adminListMessageReports = handle((req) =>
-  messaging.adminListMessageReports(req.query, parsePaging(req.query))
-);
-exports.adminGetMessageReport = handle((req) => messaging.adminGetMessageReport(req.params.id));
-exports.adminReviewMessageReport = handle((req) =>
-  messaging.adminReviewMessageReport(req.user.id, req.params.id, body(req))
-);
-exports.adminUpdateClassConversationModeration = handle((req) =>
-  messaging.adminUpdateClassConversationModeration(req.user.id, req.params.classId, body(req))
-);
-exports.adminMuteClassParticipant = handle((req) =>
-  messaging.adminMuteClassParticipant(req.user.id, req.params.classId, body(req))
-);
-exports.adminUnmuteClassParticipant = handle((req) =>
-  messaging.adminUnmuteClassParticipant(req.user.id, req.params.classId, req.params.userId)
-);
-exports.adminModerateMessage = handle((req) =>
-  messaging.adminModerateMessage(req.user.id, req.params.messageId, body(req))
-);
 
 // Complaints
 exports.createReport = handle((req) => reports.createReport(req.user, body(req)), 201);

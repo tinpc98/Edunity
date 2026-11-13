@@ -6,7 +6,6 @@ const {
   TeacherDisciplineCase,
   Report,
   Review,
-  SessionReview,
   SessionRefundReview,
   User,
 } = require("../models");
@@ -213,7 +212,6 @@ const computeMetricsBundle = ({
         "TeacherDisciplineCase",
         "Report",
         "Review",
-        "SessionReview",
         "SessionRefundReview",
       ],
       timestampFields: {
@@ -223,7 +221,6 @@ const computeMetricsBundle = ({
         TeacherDisciplineCase: "createdAt",
         Report: "createdAt",
         Review: "createdAt",
-        SessionReview: "createdAt",
         SessionRefundReview: "createdAt",
       },
       sourceTotals: {
@@ -327,7 +324,6 @@ const fetchScopedQualitySources = async (query = {}) => {
   const incidentFilter = scopeDocFilter(dateRange ? { createdAt: dateRange } : {});
   const refundFilter = scopeDocFilter(dateRange ? { createdAt: dateRange } : {});
   const classReviewFilter = scopeDocFilter({ ...NOT_DELETED, ...(dateRange ? { createdAt: dateRange } : {}) });
-  const sessionReviewFilter = scopeDocFilter({ ...NOT_DELETED, ...(dateRange ? { createdAt: dateRange } : {}) });
 
   let normalizedReportType = null;
   const reportFilter = { ...(dateRange ? { createdAt: dateRange } : {}) };
@@ -357,7 +353,6 @@ const fetchScopedQualitySources = async (query = {}) => {
     disciplineCasesRaw,
     reportsRaw,
     classReviews,
-    sessionReviews,
     refundReviews,
   ] = await Promise.all([
     Session.find(sessionFilter)
@@ -376,11 +371,10 @@ const fetchScopedQualitySources = async (query = {}) => {
       .lean(),
     Report.find(reportFilter).select("reportedUserId classId type status createdAt").lean(),
     Review.find(classReviewFilter).select("classId teacherId studentId rating createdAt").lean(),
-    SessionReview.find(sessionReviewFilter)
-      .select("sessionId classId teacherId studentId rating teacherPreparednessRating clarityRating createdAt")
-      .lean(),
     SessionRefundReview.find(refundFilter).select("sessionId classId teacherId triggerReason status createdAt").lean(),
   ]);
+
+  const sessionReviews = [];
 
   // Intersect discipline cases if scoped by class/subject/category
   let disciplineCases = disciplineCasesRaw;
@@ -408,7 +402,6 @@ const fetchScopedQualitySources = async (query = {}) => {
     ...incidentReports.map((i) => toId(i.teacherId)),
     ...disciplineCases.map((d) => toId(d.teacherId)),
     ...classReviews.map((r) => toId(r.teacherId)),
-    ...sessionReviews.map((r) => toId(r.teacherId)),
     ...refundReviews.map((r) => toId(r.teacherId)),
   ]);
   if (teacherFilterId) candidateTeacherIds.add(toId(teacherFilterId));

@@ -10,15 +10,7 @@ const body = (req) => req.body || {};
 exports.createReview = handle((req) => reviews.createReview(req.user.id, req.params.id, body(req)), 201);
 exports.getClassReviews = handle((req) => reviews.getClassReviews(req.params.id, parsePaging(req.query)));
 exports.getTeacherReviews = handle((req) => reviews.getTeacherReviews(req.params.id, parsePaging(req.query)));
-exports.createSessionReview = handle((req) => reviews.createSessionReview(req.user.id, req.params.id, body(req)), 201);
-exports.getSessionReviews = handle((req) =>
-  reviews.getSessionReviews({ id: req.user.id, role: req.user.role }, req.params.id, parsePaging(req.query))
-);
-exports.getClassSessionReviews = handle((req) =>
-  reviews.getClassSessionReviews({ id: req.user.id, role: req.user.role }, req.params.id, parsePaging(req.query))
-);
 exports.getMyReviews = handle((req) => reviews.getMyReviews(req.user.id, parsePaging(req.query)));
-exports.adminDeleteSessionReview = handle((req) => reviews.adminDeleteSessionReview(req.user.id, req.params.id, body(req)));
 
 // Teacher verification
 exports.submitVerification = handle((req) => verifications.submitVerification(req.user.id, body(req)), 201);

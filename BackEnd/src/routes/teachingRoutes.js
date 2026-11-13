@@ -1,8 +1,6 @@
 const express = require("express");
 const controller = require("../controllers/teachingController");
-const lmsController = require("../controllers/lmsController");
 const qualityProgressController = require("../controllers/qualityProgressController");
-const aiController = require("../controllers/aiController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const requireRole = require("../middlewares/requireRole");
 
@@ -74,97 +72,6 @@ router.post("/admin/discipline-cases/:id/review", admin, controller.reviewDiscip
 router.post("/admin/reschedule-requests/:id/review", admin, controller.reviewRescheduleRequest);
 router.post("/admin/session-refund-reviews/:id/review", admin, controller.reviewRefundCase);
 
-// ---------- Stage 4 Core LMS (LMS-03, LMS-05, LMS-07, LMS-08, LMS-01) ----------
-
-// Shared authenticated Learning Resource view & signed URL download (LMS-03)
-router.get("/learning-resources/:id", anyAuthenticatedRole, lmsController.getLearningResource);
-router.get("/learning-resources/:id/download-url", anyAuthenticatedRole, lmsController.getLearningResourceDownloadUrl);
-router.get("/courses/:courseId/learning-resources", anyAuthenticatedRole, lmsController.listCourseLearningResources);
-router.get("/classes/:classId/learning-resources", anyAuthenticatedRole, lmsController.listClassLearningResources);
-router.get("/sessions/:sessionId/learning-resources", anyAuthenticatedRole, lmsController.listSessionLearningResources);
-
-// Teacher LMS Management
-router.get("/teacher/learning-resources", teacher, lmsController.teacherListLearningResources);
-router.post("/teacher/learning-resources", teacher, lmsController.createLearningResource);
-router.patch("/teacher/learning-resources/:id", teacher, lmsController.updateLearningResource);
-router.delete("/teacher/learning-resources/:id", teacher, lmsController.deleteLearningResource);
-router.post("/teacher/sessions/:sessionId/learning-resources/migrate", teacher, lmsController.migrateSessionContents);
-
-router.post("/teacher/classes/:classId/assignments", teacher, lmsController.createAssignment);
-router.get("/teacher/assignments", teacher, lmsController.listTeacherAssignments);
-router.get("/teacher/assignments/:id", teacher, lmsController.getTeacherAssignment);
-router.patch("/teacher/assignments/:id", teacher, lmsController.updateAssignment);
-router.post("/teacher/assignments/:id/publish", teacher, lmsController.publishAssignment);
-router.post("/teacher/assignments/:id/close", teacher, lmsController.closeAssignment);
-router.delete("/teacher/assignments/:id", teacher, lmsController.deleteAssignment);
-router.get("/teacher/assignments/:id/submissions", teacher, lmsController.listTeacherAssignmentSubmissions);
-router.get("/teacher/submissions/:id", teacher, lmsController.getTeacherSubmission);
-
-router.post("/teacher/submissions/:id/grade", teacher, lmsController.gradeSubmission);
-router.patch("/teacher/submissions/:id/grade", teacher, lmsController.regradeSubmission);
-router.post("/teacher/submissions/:id/regrade", teacher, lmsController.regradeSubmission);
-router.get("/teacher/submissions/:id/grade-history", teacher, lmsController.getTeacherSubmissionGradeHistory);
-router.get("/teacher/assignments/:id/grades", teacher, lmsController.listTeacherAssignmentGrades);
-
-router.post("/teacher/assessments", teacher, lmsController.createAssessment);
-router.get("/teacher/assessments", teacher, lmsController.listStaffAssessments);
-router.get("/teacher/assessments/:id", teacher, lmsController.getStaffAssessment);
-router.patch("/teacher/assessments/:id", teacher, lmsController.updateAssessment);
-router.post("/teacher/assessments/:id/publish", teacher, lmsController.publishAssessment);
-router.post("/teacher/assessments/:id/archive", teacher, lmsController.archiveAssessment);
-router.post("/teacher/assessments/:id/questions", teacher, lmsController.addQuestion);
-router.patch("/teacher/assessments/:id/questions/:questionId", teacher, lmsController.updateQuestion);
-router.delete("/teacher/assessments/:id/questions/:questionId", teacher, lmsController.deleteQuestion);
-router.get("/teacher/assessments/:id/attempts", teacher, lmsController.listStaffAssessmentAttempts);
-router.post("/teacher/attempts/:id/grade", teacher, lmsController.manualGradeAttempt);
-
-// Admin LMS Management & Audit Oversight
-router.get("/admin/learning-resources", admin, lmsController.adminListLearningResources);
-router.post("/admin/learning-resources", admin, lmsController.createLearningResource);
-router.patch("/admin/learning-resources/:id", admin, lmsController.updateLearningResource);
-router.delete("/admin/learning-resources/:id", admin, lmsController.deleteLearningResource);
-router.post("/admin/sessions/:sessionId/learning-resources/migrate", admin, lmsController.migrateSessionContents);
-
-router.get("/admin/assignments", admin, lmsController.adminListAssignments);
-router.get("/admin/assignments/:id/submissions", admin, lmsController.adminListAssignmentSubmissions);
-router.get("/admin/submissions/:id/grade-history", admin, lmsController.adminGetSubmissionGradeHistory);
-router.get("/admin/grades/history", admin, lmsController.adminListGradeHistory);
-
-router.post("/admin/assessments", admin, lmsController.createAssessment);
-router.get("/admin/assessments", admin, lmsController.listStaffAssessments);
-router.get("/admin/assessments/:id", admin, lmsController.getStaffAssessment);
-router.patch("/admin/assessments/:id", admin, lmsController.updateAssessment);
-router.post("/admin/assessments/:id/publish", admin, lmsController.publishAssessment);
-router.post("/admin/assessments/:id/archive", admin, lmsController.archiveAssessment);
-router.post("/admin/assessments/:id/questions", admin, lmsController.addQuestion);
-router.patch("/admin/assessments/:id/questions/:questionId", admin, lmsController.updateQuestion);
-router.delete("/admin/assessments/:id/questions/:questionId", admin, lmsController.deleteQuestion);
-router.get("/admin/assessments/:id/attempts", admin, lmsController.listStaffAssessmentAttempts);
-router.post("/admin/attempts/:id/grade", admin, lmsController.manualGradeAttempt);
-
-router.get("/admin/placement-results", admin, lmsController.adminListPlacementResults);
-
-// ---------- Stage 5: Learning Progress, Contract Review Coordination & Teaching Quality (LMS-12, LMS-14, TEA-16, SPO-07) ----------
-
-// LMS-12: Student Progress Reviews (Teacher & Admin)
-router.post("/teacher/classes/:classId/students/:studentId/progress-reviews", teacher, qualityProgressController.createStudentProgressReview);
-router.get("/teacher/classes/:classId/progress-reviews", teacher, qualityProgressController.listTeacherClassProgressReviews);
-router.get("/teacher/classes/:classId/students/:studentId/progress-reviews", teacher, qualityProgressController.listTeacherStudentProgressReviews);
-router.patch("/teacher/progress-reviews/:id", teacher, qualityProgressController.updateStudentProgressReview);
-router.get("/teacher/progress-reviews/:id/history", teacher, qualityProgressController.getTeacherProgressReviewHistory);
-
-router.get("/admin/progress-reviews", admin, qualityProgressController.adminListProgressReviews);
-router.get("/admin/classes/:classId/progress-reviews", admin, qualityProgressController.adminListClassProgressReviews);
-router.get("/admin/progress-reviews/:id/history", admin, qualityProgressController.adminGetProgressReviewHistory);
-
-// LMS-14: Learning Progress Dashboard (Teacher & Admin)
-router.get("/teacher/classes/:classId/learning-progress", teacher, qualityProgressController.getTeacherClassLearningProgress);
-router.get("/teacher/classes/:classId/students/:studentId/learning-progress", teacher, qualityProgressController.getTeacherStudentLearningProgress);
-
-router.get("/admin/learning-progress/overview", admin, qualityProgressController.adminGetLearningProgressOverview);
-router.get("/admin/learning-progress/classes/:classId", admin, qualityProgressController.adminGetClassLearningProgress);
-router.get("/admin/learning-progress/students/:studentId", admin, qualityProgressController.adminGetStudentLearningProgress);
-
 // TEA-16: Incident Contract Review Coordination (Teacher self-readiness & Admin packets)
 router.get("/teacher/contract-review-readiness", teacher, qualityProgressController.getTeacherContractReviewReadiness);
 
@@ -178,20 +85,5 @@ router.post("/admin/contract-reviews/packets/:id/execute-contract-action", admin
 // SPO-07: Teaching Quality Reporting (Admin only)
 router.get("/admin/teaching-quality/report", admin, qualityProgressController.adminGetTeachingQualityReport);
 router.get("/admin/teaching-quality/teachers/:teacherId", admin, qualityProgressController.adminGetTeacherQualityDetail);
-
-// ---------- Stage 6: Governed AI Features (AI-02 Teacher Authoring & AI-03 Admin Reporting) ----------
-
-// AI-02: Teacher AI Lesson Planning & Quiz Draft Authoring (Draft-Only + Teacher Verification)
-router.post("/teacher/ai/lesson-drafts", teacher, aiController.generateTeacherLessonDraft);
-router.post("/teacher/ai/quiz-drafts", teacher, aiController.generateTeacherQuizDraft);
-router.get("/teacher/ai/drafts", teacher, aiController.listTeacherAiDrafts);
-router.get("/teacher/ai/drafts/:id", teacher, aiController.getTeacherAiDraft);
-router.post("/teacher/ai/drafts/:id/approve", teacher, aiController.approveTeacherAiDraft);
-router.post("/teacher/ai/drafts/:id/reject", teacher, aiController.rejectTeacherAiDraft);
-
-// AI-03: Admin AI Aggregate Reporting & Governance Status / Audit Logs
-router.get("/admin/ai/status", admin, aiController.adminGetAiStatus);
-router.get("/admin/ai/audit-logs", admin, aiController.adminListAiAuditLogs);
-router.post("/admin/ai/reports/summary", admin, aiController.adminGenerateReportSummary);
 
 module.exports = router;

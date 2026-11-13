@@ -31,15 +31,22 @@ const canonicalStringify = (value) => {
 // Compatible with MongoDB Node Driver v7 (`indexes()`, `listIndexes()`) AND unit-test mocks (`getIndexes()`)
 const getCollectionIndexes = async (coll) => {
   if (!coll) return [];
-  if (typeof coll.indexes === "function") {
-    return await coll.indexes();
-  }
-  if (typeof coll.listIndexes === "function") {
-    return await coll.listIndexes().toArray();
-  }
-  if (typeof coll.getIndexes === "function") {
-    const res = await coll.getIndexes();
-    return Array.isArray(res) ? res : Object.values(res || {});
+  try {
+    if (typeof coll.indexes === "function") {
+      return await coll.indexes();
+    }
+    if (typeof coll.listIndexes === "function") {
+      return await coll.listIndexes().toArray();
+    }
+    if (typeof coll.getIndexes === "function") {
+      const res = await coll.getIndexes();
+      return Array.isArray(res) ? res : Object.values(res || {});
+    }
+  } catch (err) {
+    if (err && (err.code === 26 || String(err.message).includes("ns does not exist"))) {
+      return [];
+    }
+    throw err;
   }
   return [];
 };

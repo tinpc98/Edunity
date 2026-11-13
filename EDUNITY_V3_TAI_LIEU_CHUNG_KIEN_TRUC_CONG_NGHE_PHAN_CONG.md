@@ -267,8 +267,8 @@ Admin tạo Campaign và tiêu chí → MTQ chọn ủng hộ → payOS QR
 | Tài trợ | `ContributionIntent`, fund ledger/reconciliation | Tin |
 | Thù lao | `TeacherSettlement`, `PayoutRequest`, `PayoutBatch` | Tin |
 | Ví Xu | `WalletAccount`, `WalletLedger` **chỉ ở mức dự phòng** | Tin, CHỜ CHỐT POLICY |
-| LMS | `LearningResource`, `Assignment`, `Submission`, `Assessment`, `Question`, `Attempt`, grading audit | Châu |
-| Chất lượng | `SessionReview`, `ClassReview` **hoặc mở rộng `Review` cũ**, đánh giá tiến bộ | Châu |
+| LMS | **ĐÃ LOẠI BỎ KHỎI PHẠM VI (TEAM_APPROVED)** — Toàn bộ mã nguồn, model, API LMS-only đã xóa an toàn | Châu (đã dọn dẹp) |
+| Chất lượng | `Review` (Class Review), `TeacherContractReviewPacket` (TEA-16), `TeachingQualityReport` (SPO-07). `SessionReview` đã loại bỏ | Châu |
 | Cấu hình | `PlatformSetting` versioned (giá/giữ chỗ/hoa hồng/giờ payout) | Châu phụ trách đào tạo, Tin sở hữu cấu hình tài chính |
 
 ### 6.2. Ràng buộc bắt buộc
@@ -519,14 +519,14 @@ Lưu ý: `npm ci` chỉ chạy khi có lockfile hợp lệ. Dùng **Node.js phi�
 - [ ] **SPO-02** — Giao diện Sponsor profile công khai tùy chọn _(ưu tiên P2; tiêu chí: Từng tùy chọn mặc định private)_
 - [ ] **SPO-03** — Trang chia sẻ Campaign lên Facebook có CTA Ủng hộ ngay _(ưu tiên P1; tiêu chí: Share link đúng campaign, preview phù hợp)_
 - [ ] **SPO-08** — Giao diện Admin/Supervisor quỹ, học bổng và hồ sơ sự cố _(ưu tiên P2; tiêu chí: Có queue xử lý phân quyền và audit hành động)_
-### G3 · G3 — Học tập, bài tập, đánh giá
+### G3 · G3 — Học tập, bài tập, đánh giá (LMS — ĐÃ LOẠI BỎ KHỎI PHẠM VI DỰ ÁN)
 
-- [ ] **LMS-02** — UI Student làm placement / Teacher tạo và xem kết quả _(ưu tiên P1; tiêu chí: Tự lưu bài, nộp đúng hạn, quyền riêng)_
-- [ ] **LMS-04** — Trang giáo án, tài liệu, bài tham khảo cho Student/Teacher _(ưu tiên P1; tiêu chí: Hiển thị theo Class, Session, Course)_
-- [ ] **LMS-06** — UI giao bài, nộp bài, xem feedback và hạn nộp _(ưu tiên P1; tiêu chí: Đủ trạng thái open/submitted/graded/late)_
-- [ ] **LMS-09** — UI tạo đề, thi online, kết quả, review bài thi _(ưu tiên P1; tiêu chí: Timer server-trusted, lỗi mạng có xử lý)_
-- [ ] **LMS-11** — UI đánh giá giảng viên sau buổi và cuối khóa _(ưu tiên P1; tiêu chí: Phân biệt 2 loại, có kênh khiếu nại)_
-- [ ] **LMS-15** — UI tiến bộ học tập Student và kết quả nhóm cho Teacher/Admin _(ưu tiên P2; tiêu chí: Không lộ dữ liệu điểm học sinh khác)_
+- [x] **LMS-02** — UI Student làm placement / Teacher tạo và xem kết quả — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-04** — Trang giáo án, tài liệu, bài tham khảo cho Student/Teacher — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-06** — UI giao bài, nộp bài, xem feedback và hạn nộp — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-09** — UI tạo đề, thi online, kết quả, review bài thi — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-11** — UI đánh giá giảng viên sau buổi và cuối khóa — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-15** — UI tiến bộ học tập Student và kết quả nhóm cho Teacher/Admin — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
 ### G3 · Nghiệm thu & vận hành
 
 - [ ] **QA-03** — Browser E2E Student → Enroll → Join → Homework → Review _(ưu tiên P0; tiêu chí: Kịch bản cross-role chạy được trên Staging)_
@@ -614,27 +614,29 @@ Lưu ý: `npm ci` chỉ chạy khi có lockfile hợp lệ. Dùng **Node.js phi�
 ### G2 · G2 — Nhà tài trợ & giám sát
 
 - [ ] **SPO-07** — Báo cáo chất lượng giảng dạy, vi phạm giáo viên và khiếu nại cho Admin _(ưu tiên P1; tiêu chí: Báo cáo có truy vết, đúng quyền, không auto phạt)_
-### G3 · G3 — Học tập, bài tập, đánh giá
+### G3 · G3 — Học tập, bài tập, đánh giá (LMS — ĐÃ LOẠI BỎ KHỎI PHẠM VI DỰ ÁN)
 
-- [ ] **LMS-01** — Assessment PLACEMENT đầu vào theo Class/Course/Syllabus _(ưu tiên P1; tiêu chí: Làm bài, nộp bài, trả kết quả; không chặn học mặc định)_
-- [ ] **LMS-03** — LearningResource/Tài liệu học và quyền truy cập file _(ưu tiên P1; tiêu chí: Chỉ người có quyền mới tải tài liệu riêng)_
-- [ ] **LMS-05** — Assignment + Submission + deadline + file upload _(ưu tiên P1; tiêu chí: Nộp nhiều lần theo quy định, không xem bài của bạn học)_
-- [ ] **LMS-07** — Grade/Feedback, rubric và lịch sử chấm điểm _(ưu tiên P1; tiêu chí: Không mất lịch sử sửa điểm, quyền Teacher chính xác)_
-- [ ] **LMS-08** — Assessment, Question, Attempt và chấm trắc nghiệm/tự luận _(ưu tiên P1; tiêu chí: Câu hỏi/snapshot đề thi được version, tránh lộ đáp án)_
-- [ ] **LMS-10** — Review Teacher sau mỗi Session và cuối Class _(ưu tiên P1; tiêu chí: Mỗi học viên 1 review đúng scope và điều kiện)_
-- [ ] **LMS-12** — Teacher đánh giá quá trình và tiến bộ Student theo quyền _(ưu tiên P2; tiêu chí: Lưu theo Class, không phát tán điểm riêng tư)_
-- [ ] **LMS-13** — Messaging Student–Teacher trong Class (tùy chọn) _(ưu tiên P3; tiêu chí: Chỉ thành viên lớp, có báo cáo lạm dụng)_
-- [ ] **LMS-14** — Tổng hợp kết quả học tập, tiến bộ và attendance cho dashboard _(ưu tiên P2; tiêu chí: Dữ liệu từ Assignment/Assessment/Session, không mock)_
+> **QUYẾT ĐỊNH TOÀN ĐỘI (TEAM_APPROVED):** Phạm vi LMS (Learning Resources, Assignments, Submissions, Grades, Assessments, Placements, Progress Reviews, Class Messaging) đã chính thức được loại bỏ hoàn toàn khỏi Edunity V3 theo thỏa thuận thống nhất của nhóm phát triển. Toàn bộ mã nguồn, route, service, controller, model và test suite LMS-only đã được dọn sạch an toàn. Hệ thống tập trung tối đa vào Quản lý Lớp học, Buổi học trực tuyến LiveKit, Điểm danh, Đối soát chất lượng và Quyết toán tài chính.
+
+- [x] **LMS-01** — Assessment PLACEMENT đầu vào theo Class/Course/Syllabus — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-03** — LearningResource/Tài liệu học và quyền truy cập file — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-05** — Assignment + Submission + deadline + file upload — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-07** — Grade/Feedback, rubric và lịch sử chấm điểm — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-08** — Assessment, Question, Attempt và chấm trắc nghiệm/tự luận — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-10** — Review Teacher sau mỗi Session và cuối Class — `REMOVED_FROM_SCOPE — TEAM_APPROVED` _(Ghi chú: Đã loại bỏ SessionReview riêng lẻ; Giữ nguyên Class Review cốt lõi qua Review schema)_
+- [x] **LMS-12** — Teacher đánh giá quá trình và tiến bộ Student theo quyền — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **LMS-13** — Messaging Student–Teacher trong Class (tùy chọn) — `REMOVED_FROM_SCOPE — TEAM_APPROVED` _(Ghi chú: Giữ nguyên Direct 1-1 Messaging an toàn)_
+- [x] **LMS-14** — Tổng hợp kết quả học tập, tiến bộ và attendance cho dashboard — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
 ### G0 · Nghiệm thu & vận hành
 
 - [ ] **QA-01** — Hồi quy Session 05D/E: pre-open 10p, join 20p, online, attendance 70% (bảo trì từ code Tin) _(ưu tiên P0; tiêu chí: Có test webhook mất/trùng và auto-close đúng rule)_
 - [ ] **QA-07** — Backup/restore và migration thử nghiệm trên DB clone _(ưu tiên P0; tiêu chí: Có log khôi phục và thời gian phục hồi kiểm chứng)_
-### G4 · G4 — AI (sau MVP)
+### G4 · G4 — AI (ĐÃ LOẠI BỎ KHỎI PHẠM VI DỰ ÁN)
 
-- [ ] **AI-01** — Đánh giá AI hỗ trợ gợi ý tài liệu cho Student (chỉ từ dữ liệu được phép) _(ưu tiên P3; tiêu chí: Không dùng hồ sơ KYC hay dữ liệu cá nhân nhạy cảm)_
-- [ ] **AI-02** — AI hỗ trợ giáo viên soạn giáo án, câu hỏi, bài tập _(ưu tiên P3; tiêu chí: Có người duyệt nội dung, không tự publish)_
-- [ ] **AI-03** — AI báo cáo tổng hợp Admin và giám sát chất lượng _(ưu tiên P3; tiêu chí: Sử dụng dữ liệu tổng hợp, bảo mật quyền)_
-- [ ] **AI-04** — AI tổng hợp báo cáo tác động nhà tài trợ _(ưu tiên P3; tiêu chí: Không lộ dữ liệu người thụ hưởng)_
+- [x] **AI-01** — Đánh giá AI hỗ trợ gợi ý tài liệu cho Student — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **AI-02** — AI hỗ trợ giáo viên soạn giáo án, câu hỏi, bài tập — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **AI-03** — AI báo cáo tổng hợp Admin và giám sát chất lượng — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
+- [x] **AI-04** — AI tổng hợp báo cáo tác động nhà tài trợ — `REMOVED_FROM_SCOPE — TEAM_APPROVED`
 
 ---
 
