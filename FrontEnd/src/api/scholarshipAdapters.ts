@@ -37,6 +37,14 @@ export function adaptScholarshipApplication(api: ApiScholarshipApplication): Sch
     statement: api.statement || "",
     status: api.status,
     submittedAt: api.submittedAt,
+    createdAt: api.createdAt,
+    updatedAt: api.updatedAt,
+    applicationCode: api.applicationCode,
+    submissionMode: api.submissionMode,
+    guardianInfo: api.guardianInfo,
+    schoolInfo: api.schoolInfo,
+    checklistProgress: api.checklistProgress,
+    dossierVerification: api.dossierVerification,
     reviewedBy: api.reviewedBy,
     reviewedAt: api.reviewedAt,
     reviewNote: api.reviewNote,
@@ -57,6 +65,8 @@ export function adaptScholarshipApplication(api: ApiScholarshipApplication): Sch
       }),
     })),
     campaign: api.campaign,
+    paperReceipts: api.paperReceipts,
+    checklistSummary: api.checklistSummary,
     scholarship: api.scholarship ? adaptScholarship(api.scholarship) : undefined,
   };
 }

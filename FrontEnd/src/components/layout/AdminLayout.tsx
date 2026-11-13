@@ -16,6 +16,7 @@ import {
   BarChartOutlined,
   AuditOutlined,
   CloudSyncOutlined,
+  InboxOutlined,
 } from "@ant-design/icons";
 
 const adminMenuItems = [
@@ -68,6 +69,11 @@ const adminMenuItems = [
         key: ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS,
         icon: <ProfileOutlined className="text-[18px]" />,
         label: <Link to={ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS}>Hồ sơ ứng tuyển</Link>,
+      },
+      {
+        key: ROUTES.ADMIN.PAPER_DOSSIERS,
+        icon: <InboxOutlined className="text-[18px]" />,
+        label: <Link to={ROUTES.ADMIN.PAPER_DOSSIERS}>Hồ sơ giấy</Link>,
       },
     ]
   },

@@ -2,6 +2,7 @@ import { apiClient } from "../api/apiClient";
 import type {
   ScholarshipCampaign,
   ApiScholarshipCampaign,
+  ScholarshipCampaignChecklist,
   CreateCampaignPayload,
   UpdateCampaignPayload,
   SponsorContribution,
@@ -17,6 +18,7 @@ export const campaignKeys = {
   all: ["campaigns"] as const,
   list: (params?: Record<string, any>) => ["campaigns", "list", params] as const,
   detail: (id: string) => ["campaigns", "detail", id] as const,
+  checklist: (id: string) => ["campaigns", "checklist", id] as const,
   adminList: (params?: Record<string, any>) => ["campaigns", "adminList", params] as const,
   adminDetail: (id: string) => ["campaigns", "adminDetail", id] as const,
   adminContributions: (id: string, params?: Record<string, any>) =>
@@ -69,6 +71,11 @@ export const campaignService = {
   async getCampaign(id: string): Promise<ScholarshipCampaign> {
     const data = await apiClient<ApiScholarshipCampaign>(`/campaigns/${id}`);
     return adaptCampaign(data);
+  },
+
+  /** Student/Admin: read the campaign's configured dossier checklist and policy. */
+  async getCampaignChecklist(id: string): Promise<ScholarshipCampaignChecklist> {
+    return apiClient<ScholarshipCampaignChecklist>(`/campaigns/${id}/checklist`);
   },
 
   /**

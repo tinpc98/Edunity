@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   App as AntdApp,
   Typography,
@@ -16,8 +16,9 @@ import {
   Alert,
   Segmented,
   Steps,
+  Select,
 } from "antd";
-import { ExclamationCircleOutlined, UploadOutlined } from "@ant-design/icons";
+import { ExclamationCircleOutlined, UploadOutlined, FileSearchOutlined } from "@ant-design/icons";
 import { Link } from "react-router-dom";
 import type { UploadFile } from "antd/es/upload/interface";
 import {
@@ -28,6 +29,8 @@ import type {
   ResubmitScholarshipPayload,
   ScholarshipApplication,
   ScholarshipApplicationStatus,
+  ScholarshipGuardianInfo,
+  ScholarshipSchoolInfo,
 } from "../../../types/scholarship";
 import {
   SCHOLARSHIP_APP_STATUS_LABELS,
@@ -41,12 +44,27 @@ import { useAllMyApplications } from "./hooks/useMyApplications";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+type ResubmitFormValues = {
+  statement: string;
+  submissionMode?: ScholarshipApplication["submissionMode"];
+  checklistItemCode?: string;
+  guardianInfo?: Partial<ScholarshipGuardianInfo>;
+  schoolInfo?: Partial<ScholarshipSchoolInfo>;
+};
 
 type StatusFilter = "ALL" | ScholarshipApplicationStatus;
-const STATUS_ORDER: ScholarshipApplicationStatus[] = ["SUBMITTED", "NEED_MORE_INFORMATION", "APPROVED", "REJECTED"];
+const STATUS_ORDER: ScholarshipApplicationStatus[] = [
+  "DRAFT",
+  "SUBMITTED",
+  "NEED_MORE_INFORMATION",
+  "DOSSIER_VERIFIED",
+  "APPROVED",
+  "REJECTED",
+  "WITHDRAWN",
+];
 const PAGE_SIZE = 10;
 
-const formatDateTime = (value?: string) =>
+const formatDateTime = (value?: string | null) =>
   value
     ? new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })
     : "";
@@ -54,11 +72,28 @@ const formatDateTime = (value?: string) =>
 /** Submitted → Under review → Result, mapped from the 4 backend statuses. */
 function ApplicationProgress({ app }: { app: ScholarshipApplication }) {
   const resultTitle =
-    app.status === "APPROVED" ? "Được cấp học bổng" : app.status === "REJECTED" ? "Không được duyệt" : "Kết quả";
+    app.status === "APPROVED"
+      ? "Được cấp học bổng"
+      : app.status === "REJECTED"
+        ? "Không được duyệt"
+        : app.status === "DOSSIER_VERIFIED"
+          ? "Đã xác minh hồ sơ"
+          : app.status === "WITHDRAWN"
+            ? "Đã rút hồ sơ"
+            : "Kết quả";
 
-  const current = app.status === "SUBMITTED" || app.status === "NEED_MORE_INFORMATION" ? 1 : 2;
+  const current =
+    app.status === "DRAFT"
+      ? 0
+      : app.status === "SUBMITTED" || app.status === "NEED_MORE_INFORMATION"
+        ? 1
+        : 2;
   const status =
-    app.status === "REJECTED" ? "error" : app.status === "APPROVED" ? "finish" : "process";
+    app.status === "REJECTED"
+      ? "error"
+      : app.status === "APPROVED" || app.status === "DOSSIER_VERIFIED" || app.status === "WITHDRAWN"
+        ? "finish"
+        : "process";
 
   return (
     <Steps
@@ -66,7 +101,10 @@ function ApplicationProgress({ app }: { app: ScholarshipApplication }) {
       current={current}
       status={status}
       items={[
-        { title: "Đã nộp hồ sơ", description: formatDateTime(app.submittedAt) },
+        {
+          title: app.status === "DRAFT" ? "Đang hoàn thiện bản nháp" : "Đã nộp hồ sơ",
+          description: formatDateTime(app.status === "DRAFT" ? app.updatedAt || app.createdAt : app.submittedAt),
+        },
         { title: app.status === "NEED_MORE_INFORMATION" ? "Cần bổ sung" : "Đang xét duyệt" },
         { title: resultTitle, description: app.reviewedAt && current === 2 ? formatDateTime(app.reviewedAt) : undefined },
       ]}
@@ -79,19 +117,42 @@ export default function StudentScholarshipApplicationsPage() {
   const { message } = AntdApp.useApp();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
+  const [expandedApplicationId, setExpandedApplicationId] = useState<string>();
 
   // Selected application for resubmission
   const [resubmitTarget, setResubmitTarget] = useState<ScholarshipApplication | null>(null);
-  const [resubmitForm] = Form.useForm<{ statement: string }>();
+  const [resubmitForm] = Form.useForm<ResubmitFormValues>();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [isResubmitting, setIsResubmitting] = useState(false);
 
   // The endpoint has no status filter: load all of the student's applications and filter locally
   const { data, isLoading, isError, refetch } = useAllMyApplications();
   const allItems = useMemo(() => data?.items ?? [], [data]);
+  const resubmitDetailQuery = useQuery({
+    queryKey: scholarshipApplicationKeys.detail(resubmitTarget?.id ?? ""),
+    queryFn: () => scholarshipApplicationService.getMyApplicationDetail(resubmitTarget?.id ?? ""),
+    enabled: Boolean(resubmitTarget),
+    retry: false,
+  });
+  const expandedDetailQuery = useQuery({
+    queryKey: scholarshipApplicationKeys.detail(expandedApplicationId ?? ""),
+    queryFn: () => scholarshipApplicationService.getMyApplicationDetail(expandedApplicationId ?? ""),
+    enabled: Boolean(expandedApplicationId),
+    retry: false,
+  });
+  const resubmitChecklist = resubmitDetailQuery.data?.campaign?.documentChecklist ?? [];
+  const requiresFullDossier = Boolean(
+    resubmitTarget &&
+      (resubmitTarget.guardianInfo ||
+        resubmitTarget.schoolInfo ||
+        (resubmitTarget.submissionMode ?? "ONLINE") !== "ONLINE" ||
+        resubmitChecklist.length > 0 ||
+        resubmitDetailQuery.data?.campaign?.dossierPolicy?.requireGuardianInfo ||
+        resubmitDetailQuery.data?.campaign?.dossierPolicy?.requireSchoolInfo),
+  );
 
   const counts = useMemo(() => {
-    const result: Record<ScholarshipApplicationStatus, number> = { SUBMITTED: 0, NEED_MORE_INFORMATION: 0, APPROVED: 0, REJECTED: 0 };
+    const result = Object.fromEntries(STATUS_ORDER.map((status) => [status, 0])) as Record<ScholarshipApplicationStatus, number>;
     for (const app of allItems) result[app.status] += 1;
     return result;
   }, [allItems]);
@@ -101,7 +162,12 @@ export default function StudentScholarshipApplicationsPage() {
 
   const handleOpenResubmit = (app: ScholarshipApplication) => {
     setResubmitTarget(app);
-    resubmitForm.setFieldsValue({ statement: app.statement });
+    resubmitForm.setFieldsValue({
+      statement: app.statement,
+      submissionMode: app.submissionMode ?? "ONLINE",
+      guardianInfo: app.guardianInfo ?? undefined,
+      schoolInfo: app.schoolInfo ?? undefined,
+    });
     setFileList([]);
   };
 
@@ -115,15 +181,26 @@ export default function StudentScholarshipApplicationsPage() {
   const handleResubmit = async () => {
     if (!resubmitTarget) return;
 
-    let values: { statement: string };
+    let values: ResubmitFormValues;
     try {
-      values = await resubmitForm.validateFields();
+      const validatedValues = await resubmitForm.validateFields();
+      values = {
+        ...validatedValues,
+        guardianInfo: resubmitForm.getFieldValue("guardianInfo"),
+        schoolInfo: resubmitForm.getFieldValue("schoolInfo"),
+      };
     } catch {
       return; // field errors are shown inline
     }
 
     setIsResubmitting(true);
     try {
+      if (resubmitDetailQuery.isError) {
+        throw new Error("Không thể tải yêu cầu hồ sơ hiện hành. Vui lòng đóng và mở lại biểu mẫu.");
+      }
+      if (fileList.length > 0 && resubmitChecklist.length > 0 && !values.checklistItemCode) {
+        throw new Error("Vui lòng chọn loại tài liệu cần bổ sung theo checklist của chiến dịch.");
+      }
       const uploadedFiles: { storageKey: string; mimeType?: string; side: "SINGLE" }[] = [];
       for (const item of fileList) {
         if (!item.originFileObj) continue;
@@ -135,8 +212,21 @@ export default function StudentScholarshipApplicationsPage() {
         }
       }
 
-      const payload: ResubmitScholarshipPayload = { statement: values.statement.trim() };
-      if (uploadedFiles.length > 0) payload.documents = [{ files: uploadedFiles }];
+      const payload: ResubmitScholarshipPayload = {
+        statement: values.statement.trim(),
+        ...(values.submissionMode ? { submissionMode: values.submissionMode } : {}),
+      };
+      if (requiresFullDossier) {
+        payload.guardianInfo = values.guardianInfo as ScholarshipGuardianInfo;
+        payload.schoolInfo = values.schoolInfo as ScholarshipSchoolInfo;
+      }
+      if (uploadedFiles.length > 0) {
+        payload.documents = [{
+          ...(values.checklistItemCode ? { checklistItemCode: values.checklistItemCode } : {}),
+          documentType: "SCHOLARSHIP_PROOF",
+          files: uploadedFiles,
+        }];
+      }
 
       await scholarshipApplicationService.resubmit(resubmitTarget.id, payload);
       message.success("Bổ sung hồ sơ thành công! Đơn đã được chuyển về trạng thái Chờ xét duyệt.");
@@ -234,6 +324,7 @@ export default function StudentScholarshipApplicationsPage() {
             const isNeedMoreInfo = app.status === "NEED_MORE_INFORMATION";
             const isApproved = app.status === "APPROVED";
             const isRejected = app.status === "REJECTED";
+            const isDraft = app.status === "DRAFT";
 
             return (
               <Card
@@ -273,7 +364,7 @@ export default function StudentScholarshipApplicationsPage() {
                         <strong className="text-indigo-700">{formatVND(app.awardAmountPerStudent)}</strong>
                       </span>
                       <span>•</span>
-                      <span>Mã hồ sơ: #{app.id.slice(-6).toUpperCase()}</span>
+                      <span>Mã hồ sơ: {app.applicationCode || `#${app.id.slice(-6).toUpperCase()}`}</span>
                     </div>
 
                     <div className="pt-1 max-w-2xl">
@@ -303,15 +394,78 @@ export default function StudentScholarshipApplicationsPage() {
                         }`}
                       >
                         <div className="font-bold text-[11px] uppercase mb-0.5">
-                          {isNeedMoreInfo ? "Yêu cầu bổ sung từ Quản trị viên:" : isRejected ? "Lý do từ chối:" : "Ghi chú phê duyệt:"}
+                          {isNeedMoreInfo
+                            ? "Yêu cầu bổ sung từ Quản trị viên:"
+                            : isRejected
+                              ? "Lý do từ chối:"
+                              : app.status === "APPROVED"
+                                ? "Ghi chú phê duyệt:"
+                                : "Phản hồi từ Quản trị viên:"}
                         </div>
                         <div className="whitespace-pre-wrap">{app.reviewNote}</div>
+                      </div>
+                    )}
+
+                    <Button
+                      size="small"
+                      type="link"
+                      icon={<FileSearchOutlined />}
+                      className="!px-0"
+                      onClick={() => setExpandedApplicationId((id) => id === app.id ? undefined : app.id)}
+                    >
+                      {expandedApplicationId === app.id ? "Ẩn chi tiết" : "Xem checklist và lịch sử hồ sơ"}
+                    </Button>
+
+                    {expandedApplicationId === app.id && (
+                      <div className="rounded-xl border border-slate-200 p-3 space-y-3">
+                        {expandedDetailQuery.isLoading ? (
+                          <Text type="secondary">Đang tải chi tiết hồ sơ...</Text>
+                        ) : expandedDetailQuery.isError ? (
+                          <Alert type="error" showIcon message="Không tải được chi tiết hồ sơ" description="Vui lòng thử lại." action={<Button size="small" onClick={() => void expandedDetailQuery.refetch()}>Thử lại</Button>} />
+                        ) : expandedDetailQuery.data?.id === app.id ? (
+                          <>
+                            <div className="text-xs text-slate-500">
+                              Mã hồ sơ: {expandedDetailQuery.data.applicationCode || "—"} · Hình thức: {expandedDetailQuery.data.submissionMode || "ONLINE"}
+                            </div>
+                            {expandedDetailQuery.data.checklistProgress?.length ? (
+                              <div className="space-y-1">
+                                {expandedDetailQuery.data.checklistProgress.map((item) => (
+                                  <div key={item.code} className="flex items-center justify-between gap-2 text-xs">
+                                    <span>{item.title || item.code}</span>
+                                    <Tag color={item.satisfied ? "success" : "warning"}>{item.satisfied ? "Đã đáp ứng" : "Còn thiếu"}</Tag>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                            {expandedDetailQuery.data.paperReceipts?.map((receipt) => (
+                              <div key={receipt._id || receipt.id} className="rounded-lg bg-slate-50 p-2 text-xs">
+                                <div className="font-semibold">Biên nhận {receipt.receiptCode} · {receipt.status}</div>
+                                <div className="text-slate-500">Tiếp nhận: {formatDateTime(receipt.receivedAt)}</div>
+                                {receipt.history?.map((event, index) => (
+                                  <div key={`${event.action}-${event.recordedAt}-${index}`} className="mt-1 text-slate-600">
+                                    {event.action} · {event.toStatus} · {formatDateTime(event.recordedAt)}
+                                    {event.note ? ` — ${event.note}` : ""}
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </>
+                        ) : null}
                       </div>
                     )}
                   </div>
 
                   {/* Right: Actions */}
                   <div className="flex flex-col items-end gap-2 shrink-0">
+                    {isDraft && (
+                      <Link
+                        to={`${ROUTES.STUDENT.SCHOLARSHIP_EXPLORE}/${app.campaignId}?draftId=${encodeURIComponent(app.id)}`}
+                      >
+                        <Button type="primary" className="bg-indigo-600 text-xs font-bold rounded-xl h-10 px-5 border-none shadow-2xs">
+                          Tiếp tục hoàn thiện
+                        </Button>
+                      </Link>
+                    )}
                     {isNeedMoreInfo && (
                       <Button
                         type="primary"
@@ -379,7 +533,47 @@ export default function StudentScholarshipApplicationsPage() {
               className="rounded-xl text-xs"
             />
 
+            {resubmitDetailQuery.isError && (
+              <Alert type="error" showIcon message="Không tải được hồ sơ của bạn" description="Yêu cầu hồ sơ hiện hành không sẵn sàng; vui lòng thử lại." action={<Button size="small" onClick={() => void resubmitDetailQuery.refetch()}>Thử lại</Button>} />
+            )}
+
             <Form form={resubmitForm} layout="vertical" className="space-y-4">
+              {requiresFullDossier && (
+                <>
+                  <div className="font-semibold text-sm text-slate-800">Cập nhật thông tin người giám hộ</div>
+                  <Form.Item name={["guardianInfo", "fullName"]} label="Họ tên người giám hộ" rules={[{ required: true, min: 2, max: 120 }]}>
+                    <Input maxLength={120} />
+                  </Form.Item>
+                  <Form.Item name={["guardianInfo", "relationship"]} label="Quan hệ với học sinh" rules={[{ required: true }]}>
+                    <Select options={[
+                      { value: "FATHER", label: "Cha" }, { value: "MOTHER", label: "Mẹ" },
+                      { value: "GRANDPARENT", label: "Ông/Bà" }, { value: "SIBLING", label: "Anh/Chị/Em" },
+                      { value: "LEGAL_GUARDIAN", label: "Người giám hộ hợp pháp" }, { value: "OTHER", label: "Khác" },
+                    ]} />
+                  </Form.Item>
+                  <Form.Item name={["guardianInfo", "phone"]} label="Số điện thoại" rules={[{ required: true, min: 8, max: 20 }]}>
+                    <Input inputMode="tel" maxLength={20} autoComplete="off" />
+                  </Form.Item>
+                  <Form.Item name={["guardianInfo", "email"]} label="Email (không bắt buộc)" rules={[{ type: "email" }]}>
+                    <Input maxLength={160} autoComplete="off" />
+                  </Form.Item>
+                  <div className="font-semibold text-sm text-slate-800">Cập nhật thông tin trường học</div>
+                  <Form.Item name={["schoolInfo", "schoolName"]} label="Tên trường" rules={[{ required: true, min: 2, max: 200 }]}>
+                    <Input maxLength={200} />
+                  </Form.Item>
+                  <Form.Item name={["schoolInfo", "gradeLevel"]} label="Cấp lớp" rules={[{ required: true }]}>
+                    <Select options={[
+                      { value: "PRE_PRIMARY", label: "Mầm non" },
+                      ...Array.from({ length: 12 }, (_, index) => ({ value: `GRADE_${index + 1}`, label: `Lớp ${index + 1}` })),
+                      { value: "UNIVERSITY", label: "Đại học" }, { value: "COLLEGE", label: "Cao đẳng" },
+                    ]} />
+                  </Form.Item>
+                  <Form.Item name={["schoolInfo", "className"]} label="Lớp" rules={[{ required: true, max: 50 }]}>
+                    <Input maxLength={50} />
+                  </Form.Item>
+                </>
+              )}
+
               <Form.Item
                 name="statement"
                 label={<span className="text-xs font-bold text-slate-700 uppercase">Cập nhật thư nguyện vọng</span>}
@@ -387,6 +581,21 @@ export default function StudentScholarshipApplicationsPage() {
               >
                 <TextArea rows={4} showCount maxLength={3000} className="rounded-xl text-sm" />
               </Form.Item>
+
+              {resubmitChecklist.length > 0 && fileList.length > 0 && (
+                <Form.Item name="checklistItemCode" label="Loại tài liệu cần bổ sung" rules={[{ required: true }]}>
+                  <Select options={resubmitChecklist.map((item) => ({ value: item.code, label: item.title }))} />
+                </Form.Item>
+              )}
+
+              {resubmitDetailQuery.data?.documents?.length ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  message={`Hồ sơ hiện có ${resubmitDetailQuery.data.documents.length} nhóm tài liệu`}
+                  description="Tải lên tài liệu mới theo yêu cầu của Admin; tài liệu cũ vẫn được giữ nguyên."
+                />
+              ) : null}
 
               <Form.Item
                 label={<span className="text-xs font-bold text-slate-700 uppercase">Tải lên tài liệu bổ sung (tùy chọn)</span>}
@@ -406,7 +615,7 @@ export default function StudentScholarshipApplicationsPage() {
                   multiple
                   maxCount={5}
                   accept={PRIVATE_DOCUMENT_ACCEPT}
-                  disabled={isResubmitting}
+                  disabled={isResubmitting || resubmitDetailQuery.isLoading || resubmitDetailQuery.isError}
                 >
                   <Button icon={<UploadOutlined />} className="rounded-xl text-xs font-medium">
                     Chọn tệp bổ sung
@@ -422,6 +631,7 @@ export default function StudentScholarshipApplicationsPage() {
                   type="primary"
                   onClick={handleResubmit}
                   loading={isResubmitting}
+                  disabled={isResubmitting || resubmitDetailQuery.isLoading || resubmitDetailQuery.isError}
                   className="bg-amber-600 hover:bg-amber-500 rounded-xl font-semibold px-6 border-none"
                 >
                   Gửi lại hồ sơ

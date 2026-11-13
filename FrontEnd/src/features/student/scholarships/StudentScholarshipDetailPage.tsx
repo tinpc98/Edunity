@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Breadcrumb, Button, Card, Progress, Skeleton, Steps, Tag, Typography } from "antd";
 import {
   CheckCircleOutlined,
@@ -25,6 +25,7 @@ import {
 } from "../../../utils/campaign";
 import ApplyScholarshipModal from "../../campaign/components/ApplyScholarshipModal";
 import { useMyApplicationByCampaign } from "./hooks/useMyApplications";
+import { scholarshipApplicationKeys } from "../../../services/scholarshipApplication.service";
 
 const { Title, Paragraph } = Typography;
 
@@ -44,7 +45,10 @@ function getStepStatus(start?: string | null, end?: string | null): "finish" | "
 
 export default function StudentScholarshipDetailPage() {
   const { campaignId = "" } = useParams<{ campaignId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isApplyOpen, setIsApplyOpen] = useState(false);
+  const draftId = searchParams.get("draftId") || undefined;
+  const queryClient = useQueryClient();
 
   const { data: campaign, isLoading, isError, error, refetch } = useQuery({
     queryKey: campaignKeys.detail(campaignId),
@@ -223,7 +227,11 @@ export default function StudentScholarshipDetailPage() {
                   />
                   <Link to={ROUTES.STUDENT.SCHOLARSHIP_APPLICATIONS} className="block">
                     <Button block className="h-10 rounded-xl font-semibold">
-                      {blockingApp.status === "NEED_MORE_INFORMATION" ? "Bổ sung hồ sơ" : "Theo dõi hồ sơ"}
+                      {blockingApp.status === "DRAFT"
+                        ? "Tiếp tục hoàn thiện bản nháp"
+                        : blockingApp.status === "NEED_MORE_INFORMATION"
+                          ? "Bổ sung hồ sơ"
+                          : "Theo dõi hồ sơ"}
                     </Button>
                   </Link>
                 </div>
@@ -237,7 +245,9 @@ export default function StudentScholarshipDetailPage() {
                     block
                     disabled={!canApply}
                     loading={isAppsLoading}
-                    onClick={() => setIsApplyOpen(true)}
+                    onClick={() => {
+                      setIsApplyOpen(true);
+                    }}
                     className="h-11 rounded-xl bg-indigo-600 font-bold"
                   >
                     {phase === "OPEN" ? "Nộp hồ sơ xin học bổng" : APPLICATION_PHASE_LABELS[phase]}
@@ -252,7 +262,22 @@ export default function StudentScholarshipDetailPage() {
         </div>
       </div>
 
-      <ApplyScholarshipModal open={isApplyOpen} onClose={() => setIsApplyOpen(false)} campaign={campaign} />
+      <ApplyScholarshipModal
+        open={isApplyOpen || Boolean(draftId)}
+        draftId={draftId}
+        onClose={() => {
+          setIsApplyOpen(false);
+          if (searchParams.has("draftId")) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete("draftId");
+            setSearchParams(nextParams, { replace: true });
+          }
+        }}
+        onSuccess={() => {
+          void queryClient.invalidateQueries({ queryKey: scholarshipApplicationKeys.all });
+        }}
+        campaign={campaign}
+      />
     </div>
   );
 }
