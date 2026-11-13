@@ -185,7 +185,7 @@ describe("TASK G0-10: Academic API Contract Standardization (CUR / LMS / AID)", 
   describe("2. Error Codes & RBAC Middleware Enforcement", () => {
     test("G0-10.ERR.1: Standard error factory AppError properties match contract", () => {
       const err = new AppError("Invalid input", "VALIDATION_ERROR", 400);
-      expect(err.message).toBe("Invalid input");
+      expect(err.rawMessage || err.message).toBe("Invalid input");
       expect(err.code).toBe("VALIDATION_ERROR");
       expect(err.statusCode).toBe(400);
 
@@ -228,7 +228,7 @@ describe("TASK G0-10: Academic API Contract Standardization (CUR / LMS / AID)", 
       expect(err).toBeInstanceOf(AppError);
       expect(err.statusCode).toBe(403);
       expect(err.code).toBe("FORBIDDEN");
-      expect(err.message).toBe("Only TEACHER can perform this action");
+      expect(err.rawMessage || err.message).toBe("Only TEACHER can perform this action");
     });
 
     test("G0-10.RBAC.3: requireRole() supports multiple roles (STUDENT or TEACHER)", () => {

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Review, SessionReview, SessionAttendance, Enrollment, Class, Session, User } = require("../models");
+const { Review, SessionAttendance, Enrollment, Class, Session, User } = require("../models");
 const { AppError, FORBIDDEN, CLASS_NOT_FOUND } = require("../utils/errors");
 const { assertId, paged, validationError } = require("../utils/http");
 const { notify } = require("./notificationService");
@@ -13,23 +13,6 @@ const recalculateRating = async (match, session) => {
     { $match: { ...match, ...NOT_DELETED } },
     { $group: { _id: null, average: { $avg: "$rating" }, count: { $sum: 1 } } },
   ]).session(session);
-  return {
-    ratingAverage: stats ? Math.round(stats.average * 100) / 100 : 0,
-    ratingCount: stats ? stats.count : 0,
-  };
-};
-
-const summarizeSessionReviews = async (match) => {
-  const [stats] = await SessionReview.aggregate([
-    { $match: { ...match, ...NOT_DELETED } },
-    {
-      $group: {
-        _id: null,
-        average: { $avg: "$rating" },
-        count: { $sum: 1 },
-      },
-    },
-  ]);
   return {
     ratingAverage: stats ? Math.round(stats.average * 100) / 100 : 0,
     ratingCount: stats ? stats.count : 0,
@@ -206,11 +189,8 @@ const getClassReviews = async (classId, paging) => {
   if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
   const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).select("ratingAverage ratingCount").lean();
   if (!cls) throw CLASS_NOT_FOUND();
-  const [reviews, sessionReviewSummary] = await Promise.all([
-    listReviews({ classId: cls._id }, paging),
-    summarizeSessionReviews({ classId: cls._id }),
-  ]);
-  return { ...reviews, ratingAverage: cls.ratingAverage, ratingCount: cls.ratingCount, sessionReviewSummary };
+  const reviews = await listReviews({ classId: cls._id }, paging);
+  return { ...reviews, ratingAverage: cls.ratingAverage, ratingCount: cls.ratingCount };
 };
 
 // FR-TEA-19 / FR-STU-09
@@ -221,259 +201,16 @@ const getTeacherReviews = async (teacherId, paging) => {
   if (!teacher) throw notFound();
 
   const profile = teacher.teacherProfile || {};
-  const [reviews, sessionReviewSummary] = await Promise.all([
-    listReviews({ teacherId: teacher._id }, paging),
-    summarizeSessionReviews({ teacherId: teacher._id }),
-  ]);
-  return { ...reviews, ratingAverage: profile.ratingAverage || 0, ratingCount: profile.ratingCount || 0, sessionReviewSummary };
-};
-
-/**
- * LMS-10: Đánh giá ở cấp độ từng buổi học (SessionReview).
- * - Xác minh tham gia thật qua Enrollment (CONFIRMED/COMPLETED) + Session (COMPLETED) + SessionAttendance.
- * - Kiểm soát thời điểm mở (chỉ sau khi buổi học kết thúc/COMPLETED) và chống đánh giá trùng (unique sessionId + studentId).
- * - Lưu đầy đủ nguồn gốc truy vết (sessionId, classId, courseId, enrollmentId, attendanceId).
- * - TUYỆT ĐỐI không phát sinh TeacherViolation, TeacherDisciplineCase hay trừ TeacherEarning/Payout.
- */
-const createSessionReview = async (studentId, sessionId, body = {}) => {
-  assertId(sessionId, "Session not found", "SESSION_NOT_FOUND");
-  const rating = parseIntRating(body.rating, "rating", { required: true });
-  const teacherPreparednessRating = parseIntRating(body.teacherPreparednessRating, "teacherPreparednessRating");
-  const clarityRating = parseIntRating(body.clarityRating, "clarityRating");
-
-  if (body.comment !== undefined && body.comment !== null && typeof body.comment !== "string") {
-    throw validationError("comment must be a string");
-  }
-  const comment = body.comment ? body.comment.trim() : "";
-  if (comment.length > 2000) {
-    throw validationError("comment must not exceed 2000 characters");
-  }
-
-  const dbSession = await mongoose.startSession();
-  let created;
-  let notifyTeacherId;
-  let notifySessionTitle;
-  let notifyClassName;
-  let notifySessionId;
-
-  try {
-    await dbSession.withTransaction(async () => {
-      const sessionDoc = await Session.findById(sessionId).session(dbSession).lean();
-      if (!sessionDoc) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
-
-      const cls = await Class.findOne({ _id: sessionDoc.classId, ...NOT_DELETED }).session(dbSession).lean();
-      if (!cls) throw CLASS_NOT_FOUND();
-
-      // Timing window guard: session must actually be completed (not upcoming/live/cancelled/rescheduled)
-      if (sessionDoc.status !== "COMPLETED" || sessionDoc.lifecycleState === "RESCHEDULED") {
-        throw new AppError("Session reviews open only after the session has completed", "SESSION_REVIEW_NOT_OPEN", 409);
-      }
-      const now = new Date();
-      const endedAt = sessionDoc.actualEndAt ? new Date(sessionDoc.actualEndAt) : new Date(sessionDoc.endDatetime);
-      if (sessionDoc.actualEndAt && endedAt > now) {
-        throw new AppError("Session reviews open only after the session has ended", "SESSION_REVIEW_NOT_OPEN", 409);
-      }
-      const windowDays = Number(process.env.SESSION_REVIEW_WINDOW_DAYS || 0);
-      if (windowDays > 0 && now.getTime() - endedAt.getTime() > windowDays * 24 * 60 * 60 * 1000) {
-        throw new AppError("The review window for this session has closed", "SESSION_REVIEW_WINDOW_CLOSED", 409);
-      }
-
-      const enrollment = await Enrollment.findOne({
-        studentId,
-        classId: cls._id,
-        enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
-      })
-        .session(dbSession)
-        .lean();
-      if (!enrollment) {
-        throw new AppError("Only enrolled students can review this session", "REVIEW_NOT_ALLOWED", 403);
-      }
-
-      const attendance = await SessionAttendance.findOne({
-        sessionId: sessionDoc._id,
-        studentId,
-      })
-        .session(dbSession)
-        .lean();
-      const isParticipant =
-        Boolean(attendance) &&
-        (PRESENT_STATUSES.includes(attendance.attendanceStatus) || Boolean(attendance.hasVerifiedConnection));
-      if (!isParticipant) {
-        throw new AppError("Only students with verified attendance in this session can review it", "REVIEW_NOT_ALLOWED", 403);
-      }
-
-      if (await SessionReview.exists({ sessionId: sessionDoc._id, studentId, ...NOT_DELETED }).session(dbSession)) {
-        throw new AppError("You have already reviewed this session", "DUPLICATE_REVIEW", 409);
-      }
-
-      [created] = await SessionReview.create(
-        [
-          {
-            sessionId: sessionDoc._id,
-            classId: cls._id,
-            courseId: cls.courseId,
-            teacherId: cls.teacherId,
-            studentId,
-            enrollmentId: enrollment._id,
-            attendanceId: attendance._id,
-            attendanceStatusSnapshot: attendance.attendanceStatus,
-            reviewedSessionEndedAt: endedAt,
-            rating,
-            teacherPreparednessRating,
-            clarityRating,
-            comment,
-          },
-        ],
-        { session: dbSession }
-      );
-
-      notifyTeacherId = cls.teacherId;
-      notifySessionTitle = sessionDoc.title;
-      notifyClassName = cls.className;
-      notifySessionId = sessionDoc._id;
-    });
-  } catch (err) {
-    if (err && err.code === 11000) {
-      throw new AppError("You have already reviewed this session", "DUPLICATE_REVIEW", 409);
-    }
-    throw err;
-  } finally {
-    await dbSession.endSession();
-  }
-
-  // Informational notification only — strictly zero disciplinary or remuneration impact
-  await notify(
-    notifyTeacherId,
-    "Đánh giá buổi học mới",
-    `Buổi học "${notifySessionTitle}" (${notifyClassName}) vừa nhận được đánh giá ${rating} sao.`,
-    "SESSION_REVIEW_CREATED",
-    { dedupeKey: `session-review:${created._id}:teacher`, sessionId: notifySessionId }
-  );
-
-  return { ...created.toObject(), id: created._id.toString() };
-};
-
-const presentSessionReview = (doc, includeTraceIds = false) => {
-  const { studentId: student, deletedBy, deletedAt, isDeleted, ...rest } = doc;
-  const profile = (student && student.studentProfile) || {};
-  const out = {
-    id: rest._id.toString(),
-    sessionId: rest.sessionId.toString(),
-    classId: rest.classId.toString(),
-    courseId: rest.courseId.toString(),
-    teacherId: rest.teacherId.toString(),
-    rating: rest.rating,
-    teacherPreparednessRating: rest.teacherPreparednessRating ?? null,
-    clarityRating: rest.clarityRating ?? null,
-    comment: rest.comment || "",
-    attendanceStatusSnapshot: rest.attendanceStatusSnapshot,
-    reviewedSessionEndedAt: rest.reviewedSessionEndedAt,
-    createdAt: rest.createdAt,
-    student: {
-      id: student && student._id ? student._id.toString() : null,
-      fullName: profile.fullName || null,
-      avatarUrl: profile.avatarUrl || null,
-    },
-  };
-  if (includeTraceIds) {
-    out.enrollmentId = rest.enrollmentId.toString();
-    out.attendanceId = rest.attendanceId.toString();
-  }
-  return out;
-};
-
-const assertSessionReviewReadAccess = async (actor, classId, teacherId) => {
-  if (actor.role === "ADMIN") return;
-  if (actor.role === "TEACHER") {
-    if (String(teacherId) !== String(actor.id)) {
-      throw FORBIDDEN("You can only view session reviews of your own classes");
-    }
-    return;
-  }
-  if (actor.role === "STUDENT") {
-    const enrolled = await Enrollment.exists({
-      studentId: actor.id,
-      classId,
-      enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] },
-    });
-    if (!enrolled) {
-      throw new AppError("Only enrolled students can view session reviews of this class", "NOT_ENROLLED", 403);
-    }
-    return;
-  }
-  throw FORBIDDEN("You are not allowed to view session reviews");
-};
-
-const getSessionReviews = async (actor, sessionId, paging) => {
-  assertId(sessionId, "Session not found", "SESSION_NOT_FOUND");
-  const sessionDoc = await Session.findById(sessionId).lean();
-  if (!sessionDoc) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
-  const cls = await Class.findOne({ _id: sessionDoc.classId, ...NOT_DELETED }).lean();
-  if (!cls) throw CLASS_NOT_FOUND();
-
-  await assertSessionReviewReadAccess(actor, cls._id, cls.teacherId);
-
-  const filter = { sessionId: sessionDoc._id, ...NOT_DELETED };
-  const [items, total, summary] = await Promise.all([
-    SessionReview.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(paging.skip)
-      .limit(paging.pageSize)
-      .populate("studentId", "studentProfile.fullName studentProfile.avatarUrl")
-      .lean(),
-    SessionReview.countDocuments(filter),
-    summarizeSessionReviews({ sessionId: sessionDoc._id }),
-  ]);
-
-  const includeTrace = actor.role === "ADMIN" || actor.role === "TEACHER";
-  return {
-    ...paged(items.map((item) => presentSessionReview(item, includeTrace)), total, paging),
-    sessionId: sessionDoc._id.toString(),
-    ...summary,
-  };
-};
-
-const getClassSessionReviews = async (actor, classId, paging) => {
-  assertId(classId, "Class not found", "CLASS_NOT_FOUND");
-  const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
-  if (!cls) throw CLASS_NOT_FOUND();
-
-  await assertSessionReviewReadAccess(actor, cls._id, cls.teacherId);
-
-  const filter = { classId: cls._id, ...NOT_DELETED };
-  const [items, total, summary] = await Promise.all([
-    SessionReview.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(paging.skip)
-      .limit(paging.pageSize)
-      .populate("studentId", "studentProfile.fullName studentProfile.avatarUrl")
-      .lean(),
-    SessionReview.countDocuments(filter),
-    summarizeSessionReviews({ classId: cls._id }),
-  ]);
-
-  const includeTrace = actor.role === "ADMIN" || actor.role === "TEACHER";
-  return {
-    ...paged(items.map((item) => presentSessionReview(item, includeTrace)), total, paging),
-    classId: cls._id.toString(),
-    ...summary,
-  };
+  const reviews = await listReviews({ teacherId: teacher._id }, paging);
+  return { ...reviews, ratingAverage: profile.ratingAverage || 0, ratingCount: profile.ratingCount || 0 };
 };
 
 const getMyReviews = async (studentId, paging) => {
-  const [classReviews, sessionReviews] = await Promise.all([
-    Review.find({ studentId, ...NOT_DELETED })
-      .sort({ createdAt: -1 })
-      .limit(paging.pageSize)
-      .populate("classId", "className")
-      .lean(),
-    SessionReview.find({ studentId, ...NOT_DELETED })
-      .sort({ createdAt: -1 })
-      .limit(paging.pageSize)
-      .populate("sessionId", "title startDatetime")
-      .populate("classId", "className")
-      .lean(),
-  ]);
+  const classReviews = await Review.find({ studentId, ...NOT_DELETED })
+    .sort({ createdAt: -1 })
+    .limit(paging.pageSize)
+    .populate("classId", "className")
+    .lean();
 
   return {
     classReviews: classReviews.map(({ deletedBy, deletedAt, isDeleted, ...r }) => ({
@@ -482,65 +219,12 @@ const getMyReviews = async (studentId, paging) => {
       className: r.classId ? r.classId.className : null,
       classId: r.classId && r.classId._id ? r.classId._id.toString() : String(r.classId),
     })),
-    sessionReviews: sessionReviews.map(({ deletedBy, deletedAt, isDeleted, ...r }) => ({
-      ...r,
-      id: r._id.toString(),
-      sessionTitle: r.sessionId ? r.sessionId.title : null,
-      sessionId: r.sessionId && r.sessionId._id ? r.sessionId._id.toString() : String(r.sessionId),
-      className: r.classId ? r.classId.className : null,
-      classId: r.classId && r.classId._id ? r.classId._id.toString() : String(r.classId),
-    })),
   };
-};
-
-const adminDeleteSessionReview = async (adminId, reviewId, body = {}) => {
-  assertId(reviewId, "Session review not found", "SESSION_REVIEW_NOT_FOUND");
-  const reason = parseOptionalReason(body.reason, "reason", 1000);
-
-  const dbSession = await mongoose.startSession();
-  let deletedId = null;
-  try {
-    await dbSession.withTransaction(async () => {
-      const review = await SessionReview.findOneAndUpdate(
-        { _id: reviewId, ...NOT_DELETED },
-        {
-          $set: {
-            isDeleted: true,
-            deletedAt: new Date(),
-            deletedBy: adminId,
-          },
-        },
-        { session: dbSession, returnDocument: "before" }
-      );
-      if (!review) throw new AppError("Session review not found", "SESSION_REVIEW_NOT_FOUND", 404);
-      deletedId = review._id.toString();
-
-      await audit(
-        {
-          actorAdminId: adminId,
-          action: "SESSION_REVIEW_DELETE",
-          targetType: "SessionReview",
-          targetId: review._id,
-          beforeState: { sessionId: review.sessionId, rating: review.rating, comment: review.comment },
-          afterState: { isDeleted: true, reason },
-        },
-        dbSession
-      );
-    });
-  } finally {
-    await dbSession.endSession();
-  }
-
-  return { deleted: true, id: deletedId };
 };
 
 module.exports = {
   createReview,
   getClassReviews,
   getTeacherReviews,
-  createSessionReview,
-  getSessionReviews,
-  getClassSessionReviews,
   getMyReviews,
-  adminDeleteSessionReview,
 };

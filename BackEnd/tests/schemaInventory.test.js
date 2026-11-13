@@ -26,6 +26,7 @@ const EXPECTED_MODELS = [
   "Payment",
   "Transaction",
   "TeacherEarning",
+  "TeacherSettlement",
   "Payout",
   "Review",
   "ScholarshipCampaign",
@@ -48,21 +49,11 @@ const EXPECTED_MODELS = [
   "SessionRescheduleRequest",
   "SessionRefundReview",
   "JobLock",
-  "LearningResource",
-  "Assignment",
-  "Submission",
-  "Grade",
-  "GradeHistory",
-  "Assessment",
-  "Question",
-  "Attempt",
-  "PlacementResult",
-  "SessionReview",
-  "StudentProgressReview",
   "TeacherContractReviewPacket",
-  "MessageModerationReport",
-  "AiAuditLog",
-  "AiGeneratedDraft",
+  "BankTransferEvent",
+  "PaymentReconciliation",
+  "RefundCase",
+  "BankProofRegistry",
 ];
 
 const SOFT_DELETED_MODELS = [
@@ -77,12 +68,6 @@ const SOFT_DELETED_MODELS = [
   "Review",
   "ScholarshipCampaign",
   "Message",
-  "LearningResource",
-  "Assignment",
-  "Assessment",
-  "Question",
-  "SessionReview",
-  "AiGeneratedDraft",
 ];
 
 const NON_SOFT_DELETED_FINANCIAL_OR_LIFECYCLE_MODELS = [
@@ -110,7 +95,7 @@ describe("TASK G0-02: Mongoose Schema Inventory & Validation", () => {
   });
 
   describe("1. Registry, Exports and Constants Verification", () => {
-    test("G0-02.1.1: Models/index.js exports all expected Mongoose models (57 models)", () => {
+    test("G0-02.1.1: Models/index.js exports all expected Mongoose models (48 models)", () => {
       expect(Object.keys(models)).toHaveLength(EXPECTED_MODELS.length);
       for (const modelName of EXPECTED_MODELS) {
         expect(models[modelName]).toBeDefined();
