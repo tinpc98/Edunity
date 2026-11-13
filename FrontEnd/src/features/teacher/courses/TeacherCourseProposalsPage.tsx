@@ -13,6 +13,7 @@ import {
   Skeleton,
   message,
   Tooltip,
+  InputNumber,
 } from "antd";
 import {
   PlusOutlined,
@@ -32,6 +33,8 @@ import type {
   CreateProposalPayload,
   UpdateProposalPayload,
   GradeLevel,
+  ProposalPricingExpectation,
+  ProposalSyllabusUnit,
 } from "../../../types/catalog";
 import {
   GRADE_LEVELS,
@@ -46,6 +49,40 @@ import {
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 
 const { TextArea } = Input;
+
+interface ProposalFormValues extends Omit<CreateProposalPayload, "syllabusDraft" | "pricingExpectation"> {
+  syllabusDraft?: {
+    summary?: string;
+    units?: Array<Omit<ProposalSyllabusUnit, "unitOrder" | "topics"> & { topicsText?: string }>;
+  };
+  pricingExpectation?: ProposalPricingExpectation;
+}
+
+function toProposalPayload(values: ProposalFormValues): CreateProposalPayload {
+  const units = values.syllabusDraft?.units
+    ?.filter((unit) => unit.title.trim())
+    .map((unit, index) => ({
+      unitOrder: index + 1,
+      title: unit.title.trim(),
+      description: unit.description?.trim() || "",
+      learningObjectives: unit.learningObjectives?.trim() || "",
+      durationMinutes: unit.durationMinutes ?? null,
+      topics: unit.topicsText?.split(/\r?\n|,/).map((topic) => topic.trim()).filter(Boolean) ?? [],
+    }));
+  const expectation = values.pricingExpectation;
+  return {
+    ...values,
+    syllabusDraft: values.syllabusDraft
+      ? { summary: values.syllabusDraft.summary?.trim() || "", units: units || [] }
+      : undefined,
+    pricingExpectation: expectation
+      ? {
+          ...expectation,
+          notes: expectation.notes?.trim() || "",
+        }
+      : undefined,
+  };
+}
 
 const STATUS_CONFIG: Record<ProposalStatus, { color: string; label: string; icon: React.ReactNode }> = {
   PENDING_REVIEW: { color: "orange", label: "Chờ duyệt", icon: <ClockCircleOutlined /> },
@@ -66,7 +103,7 @@ export default function TeacherCourseProposalsPage() {
   const [mode, setMode] = useState<FormMode>("create");
   const [editingProposal, setEditingProposal] = useState<CourseProposal | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<ProposalFormValues>();
 
   // List proposals
   const { data: proposalsData, isLoading, isError } = useQuery({
@@ -152,15 +189,26 @@ export default function TeacherCourseProposalsPage() {
       gradeLevel: proposal.gradeLevel,
       prerequisites: proposal.prerequisites,
       estimatedDuration: proposal.estimatedDuration,
+      syllabusDraft: proposal.syllabusDraft
+        ? {
+            summary: proposal.syllabusDraft.summary,
+            units: proposal.syllabusDraft.units?.map((unit) => ({
+              ...unit,
+              topicsText: unit.topics?.join("\n") || "",
+            })),
+          }
+        : undefined,
+      pricingExpectation: proposal.pricingExpectation,
     });
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (values: any) => {
+  const handleSubmit = (values: ProposalFormValues) => {
+    const payload = toProposalPayload(values);
     if (mode === "create") {
-      createMutation.mutate(values as CreateProposalPayload);
+      createMutation.mutate(payload);
     } else if (editingProposal) {
-      updateMutation.mutate({ id: editingProposal.id, payload: values });
+      updateMutation.mutate({ id: editingProposal.id, payload: payload as UpdateProposalPayload });
     }
   };
 
@@ -196,8 +244,20 @@ export default function TeacherCourseProposalsPage() {
       title: "Ghi chú Admin",
       dataIndex: "reviewNote",
       key: "reviewNote",
-      render: (note: string | null) =>
-        note ? <span className="text-gray-600 text-sm">{note}</span> : <span className="text-gray-300 text-sm">—</span>,
+      render: (note: string | null, record: CourseProposal) => (
+        <div className="space-y-1">
+          {note ? (
+            <span className="text-gray-600 text-sm">{note}</span>
+          ) : (
+            <span className="text-gray-300 text-sm">Chưa có ghi chú</span>
+          )}
+          {record.revisionHistory?.length ? (
+            <div className="text-xs text-slate-400">
+              {record.revisionHistory.length} cập nhật phản hồi/gửi lại
+            </div>
+          ) : null}
+        </div>
+      ),
     },
     {
       title: "Ngày gửi",
@@ -205,6 +265,19 @@ export default function TeacherCourseProposalsPage() {
       key: "createdAt",
       width: 120,
       render: (date: string) => <span className="text-gray-500 text-sm">{dayjs(date).format("DD/MM/YYYY")}</span>,
+    },
+    {
+      title: "Phản hồi gần nhất",
+      dataIndex: "reviewedAt",
+      key: "reviewedAt",
+      width: 150,
+      render: (date: string | null | undefined, record: CourseProposal) =>
+        date ? (
+          <div className="text-xs">
+            <div>{dayjs(date).format("DD/MM/YYYY")}</div>
+            <div className="text-slate-500">Lần nộp {record.revisionNumber || 1}</div>
+          </div>
+        ) : <span className="text-slate-400">Chưa có</span>,
     },
     {
       title: "Hành động",
@@ -259,8 +332,9 @@ export default function TeacherCourseProposalsPage() {
         description={
           <ul className="list-disc ml-4 text-sm text-gray-600 space-y-1 mt-1">
             <li>Đề xuất cần đợi Admin xem xét (thường 1-3 ngày làm việc).</li>
-            <li>Khi được duyệt, khóa học sẽ được tự động thêm vào danh mục.</li>
+            <li>Phản hồi và ghi chú của Admin sẽ hiển thị trong trạng thái đề xuất.</li>
             <li>Bạn có thể chỉnh sửa khi ở trạng thái <strong>Chờ duyệt</strong> hoặc <strong>Cần chỉnh sửa</strong>.</li>
+            <li>Quy tắc trạng thái Course khi duyệt đang chờ BA/PO xác nhận.</li>
           </ul>
         }
         className="rounded-xl"
@@ -379,6 +453,85 @@ export default function TeacherCourseProposalsPage() {
           <Form.Item label="Đề cương (syllabus)" name="syllabus">
             <TextArea rows={2} placeholder="Danh sách các chủ đề/bài học..." />
           </Form.Item>
+
+          <div className="rounded-xl border border-slate-200 p-4">
+            <div className="mb-1 font-semibold text-slate-800">Đề cương có cấu trúc (tùy chọn)</div>
+            <p className="mb-3 text-xs text-slate-500">
+              Nếu được duyệt, nội dung cấu trúc này có thể được chuyển thành syllabus version đầu tiên.
+            </p>
+            <Form.Item name={["syllabusDraft", "summary"]} label="Tóm tắt đề cương">
+              <TextArea rows={2} maxLength={2000} />
+            </Form.Item>
+            <Form.List name={["syllabusDraft", "units"]}>
+              {(fields, { add, remove }) => (
+                <div className="space-y-3">
+                  {fields.map((field, index) => (
+                    <div key={field.key} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-600">Bài học {index + 1}</span>
+                        <Button size="small" danger onClick={() => remove(field.name)}>Xóa</Button>
+                      </div>
+                      <Form.Item
+                        {...field}
+                        name={[field.name, "title"]}
+                        label="Tên bài học"
+                        rules={[{ required: true, whitespace: true, message: "Nhập tên bài học." }]}
+                      >
+                        <Input maxLength={200} />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, "description"]} label="Mô tả">
+                        <Input />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, "learningObjectives"]} label="Mục tiêu">
+                        <Input />
+                      </Form.Item>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <Form.Item {...field} name={[field.name, "durationMinutes"]} label="Thời lượng (phút)">
+                          <InputNumber min={0} precision={0} className="w-full" />
+                        </Form.Item>
+                        <Form.Item {...field} name={[field.name, "topicsText"]} label="Chủ đề (phân cách bằng dấu phẩy)">
+                          <Input />
+                        </Form.Item>
+                      </div>
+                    </div>
+                  ))}
+                  <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add()}>
+                    Thêm bài học
+                  </Button>
+                </div>
+              )}
+            </Form.List>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="mb-1 font-semibold text-amber-900">Đề xuất học phí (chỉ tham khảo)</div>
+            <p className="mb-3 text-xs text-amber-800">
+              Đây không phải giá được duyệt hay cam kết học phí. Admin xử lý theo chính sách giá hiện hành.
+            </p>
+            <div className="grid gap-x-4 md:grid-cols-2">
+              <Form.Item name={["pricingExpectation", "suggestedClassType"]} label="Loại lớp đề xuất">
+                <Select
+                  allowClear
+                  options={[
+                    { value: "FREE", label: "Miễn phí" },
+                    { value: "PAID", label: "Có học phí" },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item name={["pricingExpectation", "estimatedSessions"]} label="Số buổi dự kiến">
+                <InputNumber min={1} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name={["pricingExpectation", "suggestedMinPrice"]} label="Mức giá tham khảo từ (đ)">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name={["pricingExpectation", "suggestedMaxPrice"]} label="Mức giá tham khảo đến (đ)">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+            </div>
+            <Form.Item name={["pricingExpectation", "notes"]} label="Ghi chú về đề xuất giá" className="!mb-0">
+              <TextArea rows={2} maxLength={1000} />
+            </Form.Item>
+          </div>
 
           <Form.Item label="Điều kiện tiên quyết" name="prerequisites">
             <TextArea rows={2} placeholder="Kiến thức/kỹ năng cần có trước..." />

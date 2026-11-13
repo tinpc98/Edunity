@@ -29,6 +29,8 @@ import {
   ReloadOutlined,
   CheckCircleOutlined,
   StopOutlined,
+  FileTextOutlined,
+  DollarOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
@@ -56,6 +58,8 @@ import {
   COURSE_LEVEL_LABELS,
   COURSE_STATUS_LABELS,
 } from "../../../types/catalog";
+import AdminSyllabusManagementPage from "./AdminSyllabusManagementPage";
+import AdminPricingPoliciesPage from "./AdminPricingPoliciesPage";
 
 const { TextArea } = Input;
 
@@ -69,7 +73,7 @@ function renderCourseStatusTag(status: CourseStatus) {
   return <Tag color="default">{COURSE_STATUS_LABELS.INACTIVE}</Tag>;
 }
 
-const VALID_TABS = ["categories", "subjects", "courses"] as const;
+const VALID_TABS = ["categories", "subjects", "courses", "syllabus", "pricing"] as const;
 type CatalogTab = (typeof VALID_TABS)[number];
 
 function parseTabParam(raw: string | null): CatalogTab {
@@ -1037,6 +1041,25 @@ export default function AdminCatalogPage() {
                 )}
               </div>
             ),
+          },
+
+          {
+            key: "syllabus",
+            label: (
+              <span className="flex items-center gap-2 font-medium">
+                <FileTextOutlined /> Giáo trình / phiên bản
+              </span>
+            ),
+            children: <AdminSyllabusManagementPage />,
+          },
+          {
+            key: "pricing",
+            label: (
+              <span className="flex items-center gap-2 font-medium">
+                <DollarOutlined /> Chính sách giá
+              </span>
+            ),
+            children: <AdminPricingPoliciesPage />,
           },
         ]}
       />

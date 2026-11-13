@@ -44,6 +44,9 @@ import {
 } from "../../../types/catalog";
 
 const { TextArea } = Input;
+const PROPOSAL_APPROVAL_ENABLED = false;
+const PROPOSAL_APPROVAL_BLOCK_REASON =
+  "Phê duyệt đang tạm khóa: BA/PO chưa xác nhận trạng thái Course được tạo sau khi duyệt đề xuất.";
 
 const STATUS_CONFIG: Record<ProposalStatus, { color: string; label: string; icon: React.ReactNode }> = {
   PENDING_REVIEW: { color: "orange", label: "Chờ duyệt", icon: <ClockCircleOutlined /> },
@@ -210,6 +213,10 @@ export default function AdminCourseProposalsPage() {
   });
 
   const handleOpenReview = (proposal: CourseProposal, type: ReviewActionType) => {
+    if (type === "approve" && !PROPOSAL_APPROVAL_ENABLED) {
+      messageApi.warning(PROPOSAL_APPROVAL_BLOCK_REASON);
+      return;
+    }
     setSelectedProposal(proposal);
     setActionType(type);
     reviewForm.resetFields();
@@ -240,6 +247,10 @@ export default function AdminCourseProposalsPage() {
   const handleExecuteAction = (values: ReviewFormValues) => {
     if (!selectedProposal || !actionType) return;
     if (actionType === "approve") {
+      if (!PROPOSAL_APPROVAL_ENABLED) {
+        messageApi.warning(PROPOSAL_APPROVAL_BLOCK_REASON);
+        return;
+      }
       approveMutation.mutate({
         id: selectedProposal.id,
         payload: {
@@ -435,6 +446,8 @@ export default function AdminCourseProposalsPage() {
                         size="small"
                         type="primary"
                         className="bg-emerald-600 hover:bg-emerald-700"
+                        disabled={!PROPOSAL_APPROVAL_ENABLED}
+                        title={!PROPOSAL_APPROVAL_ENABLED ? PROPOSAL_APPROVAL_BLOCK_REASON : undefined}
                         onClick={() => handleOpenReview(record, "approve")}
                       >
                         Duyệt
@@ -509,7 +522,8 @@ export default function AdminCourseProposalsPage() {
                 <Button
                   key="approve"
                   type="primary"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !PROPOSAL_APPROVAL_ENABLED}
+                  title={!PROPOSAL_APPROVAL_ENABLED ? PROPOSAL_APPROVAL_BLOCK_REASON : undefined}
                   className="bg-emerald-600 hover:bg-emerald-700"
                   onClick={() => handleOpenReview(activeProposal, "approve")}
                 >
@@ -592,6 +606,11 @@ export default function AdminCourseProposalsPage() {
                   {dayjs(activeProposal.reviewedAt).format("DD/MM/YYYY HH:mm")}
                 </Descriptions.Item>
               )}
+              {activeProposal.revisionNumber != null && (
+                <Descriptions.Item label="Lần gửi" span={2}>
+                  {activeProposal.revisionNumber}
+                </Descriptions.Item>
+              )}
               {activeProposal.status === "APPROVED" && activeProposal.approvedCourseId && (
                 <Descriptions.Item label="Mã khóa học đã tạo (Course ID)" span={2}>
                   <span className="font-mono text-xs text-emerald-700">
@@ -615,6 +634,63 @@ export default function AdminCourseProposalsPage() {
                   <p className="text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg border border-gray-100 mt-1">
                     {activeProposal.learningObjectives}
                   </p>
+                </div>
+              )}
+
+              {activeProposal.syllabusDraft && (
+                <div>
+                  <h4 className="font-semibold text-gray-800">Đề cương có cấu trúc (Teacher đề xuất):</h4>
+                  {activeProposal.syllabusDraft.summary && (
+                    <p className="text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg border border-gray-100 mt-1">
+                      {activeProposal.syllabusDraft.summary}
+                    </p>
+                  )}
+                  {activeProposal.syllabusDraft.units?.length ? (
+                    <ol className="list-decimal space-y-2 bg-gray-50 p-3 pl-8 rounded-lg border border-gray-100 mt-1">
+                      {activeProposal.syllabusDraft.units.map((unit, index) => (
+                        <li key={`${unit.unitOrder}-${unit.title}-${index}`}>
+                          <div className="font-medium text-gray-700">{unit.title}</div>
+                          {unit.description && <div className="text-gray-600">{unit.description}</div>}
+                          {unit.learningObjectives && (
+                            <div className="text-gray-600">Mục tiêu: {unit.learningObjectives}</div>
+                          )}
+                          {unit.topics?.length ? (
+                            <div className="text-gray-500">Chủ đề: {unit.topics.join(" · ")}</div>
+                          ) : null}
+                          {unit.durationMinutes != null && (
+                            <div className="text-xs text-gray-500">{unit.durationMinutes} phút</div>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : !activeProposal.syllabusDraft.summary ? (
+                    <p className="text-gray-500 text-sm mt-1">Chưa có nội dung đề cương có cấu trúc.</p>
+                  ) : null}
+                </div>
+              )}
+
+              {activeProposal.pricingExpectation && (
+                <div>
+                  <h4 className="font-semibold text-gray-800">Kỳ vọng giá (chỉ mang tính đề xuất):</h4>
+                  <div className="text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100 mt-1 space-y-1">
+                    <div>
+                      Loại lớp: {activeProposal.pricingExpectation.suggestedClassType || "Chưa đề xuất"}
+                    </div>
+                    <div>
+                      Khoảng giá:{" "}
+                      {activeProposal.pricingExpectation.suggestedMinPrice != null ||
+                      activeProposal.pricingExpectation.suggestedMaxPrice != null
+                        ? `${activeProposal.pricingExpectation.suggestedMinPrice?.toLocaleString("vi-VN") ?? "—"} – ${activeProposal.pricingExpectation.suggestedMaxPrice?.toLocaleString("vi-VN") ?? "—"} đ`
+                        : "Chưa đề xuất"}
+                    </div>
+                    <div>Số buổi dự kiến: {activeProposal.pricingExpectation.estimatedSessions ?? "Chưa xác định"}</div>
+                    {activeProposal.pricingExpectation.notes && (
+                      <div>Ghi chú: {activeProposal.pricingExpectation.notes}</div>
+                    )}
+                    <div className="text-xs text-amber-700">
+                      Đây không phải giá áp dụng; chính sách giá cần được cấu hình riêng.
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -646,6 +722,25 @@ export default function AdminCourseProposalsPage() {
                   />
                 </div>
               )}
+              {activeProposal.revisionHistory?.length ? (
+                <div>
+                  <h4 className="font-semibold text-gray-800">Lịch sử gửi và phản hồi:</h4>
+                  <div className="mt-1 space-y-2">
+                    {activeProposal.revisionHistory.map((revision, index) => (
+                      <div
+                        key={`${revision.revisionNumber}-${revision.at}-${index}`}
+                        className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs text-gray-600"
+                      >
+                        <div className="font-medium">
+                          Lần {revision.revisionNumber} · {revision.action} · {revision.actorRole}
+                        </div>
+                        <div>{dayjs(revision.at).format("DD/MM/YYYY HH:mm")}</div>
+                        {revision.note && <div className="mt-1 whitespace-pre-wrap">{revision.note}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
@@ -678,9 +773,9 @@ export default function AdminCourseProposalsPage() {
           {actionType === "approve" && (
             <>
               <Alert
-                type="info"
-                message="Tự động thêm vào Catalog"
-                description="Khi bạn phê duyệt, Backend sẽ tự động khởi tạo một Khóa học chính thức (Course) trong danh mục tương ứng để giáo viên có thể mở lớp."
+                type="warning"
+                message="Phê duyệt đang bị khóa"
+                description={PROPOSAL_APPROVAL_BLOCK_REASON}
                 showIcon
                 className="mb-4"
               />

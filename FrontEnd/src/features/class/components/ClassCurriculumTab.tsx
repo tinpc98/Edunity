@@ -11,6 +11,7 @@ import {
   UnorderedListOutlined,
 } from "@ant-design/icons";
 import { courseService } from "../../../services/course.service";
+import { courseSyllabusService } from "../../../services/courseSyllabus.service";
 import { COURSE_LEVEL_LABELS, GRADE_LEVEL_LABELS } from "../../../types/catalog";
 import { formatScheduleEntries } from "../../../api/classAdapters";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
@@ -78,13 +79,28 @@ export default function ClassCurriculumTab({ item, sessionCount, isSessionsLoadi
     staleTime: 60_000,
     retry: false,
   });
+  const syllabusQuery = useQuery({
+    queryKey: ["public-course-syllabus", item.courseId],
+    queryFn: () => courseSyllabusService.getPublishedSyllabus(item.courseId),
+    enabled: Boolean(item.courseId),
+    staleTime: 60_000,
+    retry: false,
+  });
 
   const scheduleLines = formatScheduleEntries(item.schedule);
   const period =
     item.formattedEndDate ? `${item.startDate} – ${item.formattedEndDate}` : `Khai giảng ${item.startDate}`;
 
+  const syllabus = syllabusQuery.data;
+  const classSyllabusMismatch =
+    item.syllabusVersionNumber != null &&
+    syllabus != null &&
+    syllabus.version?.versionNumber !== item.syllabusVersionNumber;
   const hasCourseContent = Boolean(
-    course && (course.learningObjectives || course.syllabus || course.prerequisites)
+    course?.learningObjectives ||
+      course?.prerequisites ||
+      syllabus?.legacySyllabus ||
+      syllabus?.units.length
   );
 
   return (
@@ -130,31 +146,35 @@ export default function ClassCurriculumTab({ item, sessionCount, isSessionsLoadi
       </div>
 
       {/* Course curriculum (shared by every class of the course) */}
-      {isLoading ? (
+      {isLoading && syllabusQuery.isLoading ? (
         <Skeleton active paragraph={{ rows: 5 }} />
-      ) : isError || !course ? (
-        <Alert
-          type="warning"
-          showIcon
-          title="Chưa tải được lộ trình của khóa học"
-          description="Thông tin lộ trình và mục tiêu đang tạm thời không khả dụng."
-          action={
-            <Button size="small" onClick={() => refetch()}>
-              Thử lại
-            </Button>
-          }
-        />
       ) : (
         <>
-          <div className="text-xs text-slate-500">
-            Lớp học thuộc khóa{" "}
-            <Link to={`/courses/${course.id}`} className="font-semibold text-indigo-600 hover:text-indigo-700">
-              {course.title}
-            </Link>
-            . Lộ trình và mục tiêu dưới đây áp dụng theo khóa học.
-          </div>
+          {(isError || !course) && (
+            <Alert
+              type="warning"
+              showIcon
+              title="Thông tin khóa học chưa khả dụng"
+              description={
+                item.syllabusVersionNumber
+                  ? `Lớp được tạo với syllabus v${item.syllabusVersionNumber}, nhưng Backend chưa cung cấp endpoint công khai tra cứu chính xác phiên bản đã gắn với lớp.`
+                  : "Backend không trả chi tiết khóa học để hiển thị thêm mục tiêu và yêu cầu tiên quyết."
+              }
+              action={<Button size="small" onClick={() => refetch()}>Thử lại</Button>}
+            />
+          )}
 
-          {course.learningObjectives && (
+          {course && (
+            <div className="text-xs text-slate-500">
+              Lớp học thuộc khóa{" "}
+              <Link to={`/courses/${course.id}`} className="font-semibold text-indigo-600 hover:text-indigo-700">
+                {course.title}
+              </Link>
+              . Đề cương chỉ hiển thị khi khớp phiên bản syllabus được gắn với lớp.
+            </div>
+          )}
+
+          {course?.learningObjectives && (
             <Section icon={<AimOutlined className="text-emerald-500" />} title="Mục tiêu học tập">
               <p className="text-sm text-slate-600 leading-relaxed m-0 whitespace-pre-line">
                 {course.learningObjectives}
@@ -162,13 +182,61 @@ export default function ClassCurriculumTab({ item, sessionCount, isSessionsLoadi
             </Section>
           )}
 
-          {course.syllabus && (
-            <Section icon={<SnippetsOutlined className="text-amber-500" />} title="Lộ trình / Đề cương">
-              <p className="text-sm text-slate-600 leading-relaxed m-0 whitespace-pre-line">{course.syllabus}</p>
+          {syllabusQuery.isLoading ? (
+            <Skeleton active paragraph={{ rows: 3 }} />
+          ) : syllabusQuery.isError ? (
+            <Alert
+              type="warning"
+              showIcon
+              title="Chưa tải được phiên bản giáo trình công khai"
+              description="Khóa học có thể đã ngừng hoạt động; Backend hiện chỉ phục vụ syllabus công khai cho khóa ACTIVE."
+              action={<Button size="small" onClick={() => syllabusQuery.refetch()}>Thử lại</Button>}
+            />
+          ) : classSyllabusMismatch ? (
+            <Alert
+              type="warning"
+              showIcon
+              title="Phiên bản syllabus của lớp chưa truy xuất được"
+              description={`Lớp được tạo với syllabus v${item.syllabusVersionNumber}, nhưng endpoint công khai trả phiên bản hiện tại${syllabus?.version ? ` v${syllabus.version.versionNumber}` : " dạng legacy"}. Không hiển thị nội dung khác phiên bản như thể đó là syllabus của lớp.`}
+            />
+          ) : syllabus?.source === "VERSIONED" ? (
+            <Section
+              icon={<SnippetsOutlined className="text-amber-500" />}
+              title={`Lộ trình / Đề cương${syllabus.version ? ` · v${syllabus.version.versionNumber}` : ""}`}
+            >
+              {syllabus.units.length ? (
+                <ol className="m-0 list-decimal space-y-3 pl-5">
+                  {syllabus.units.map((unit) => (
+                    <li key={unit.id} className="pl-1 text-sm text-slate-700">
+                      <div className="font-semibold">{unit.title}</div>
+                      {unit.description && <p className="mb-1 mt-1 text-slate-600">{unit.description}</p>}
+                      {unit.learningObjectives && (
+                        <p className="mb-1 mt-1 text-slate-600">Mục tiêu: {unit.learningObjectives}</p>
+                      )}
+                      {unit.topics.length > 0 && (
+                        <p className="mb-0 mt-1 text-slate-500">Chủ đề: {unit.topics.join(" · ")}</p>
+                      )}
+                      {unit.durationMinutes != null && (
+                        <span className="text-xs text-slate-500">{unit.durationMinutes} phút</span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="m-0 whitespace-pre-line text-sm text-slate-600">
+                  {syllabus.legacySyllabus || "Phiên bản công bố chưa có nội dung bài học."}
+                </p>
+              )}
             </Section>
-          )}
+          ) : syllabus?.legacySyllabus ? (
+            <Section icon={<SnippetsOutlined className="text-amber-500" />} title="Lộ trình / Đề cương">
+              <p className="text-sm text-slate-600 leading-relaxed m-0 whitespace-pre-line">
+                {syllabus.legacySyllabus}
+              </p>
+            </Section>
+          ) : null}
 
-          {course.prerequisites && (
+          {course?.prerequisites && (
             <Section icon={<UnorderedListOutlined className="text-rose-500" />} title="Yêu cầu tiên quyết">
               <p className="text-sm text-slate-600 leading-relaxed m-0 whitespace-pre-line">
                 {course.prerequisites}
@@ -176,7 +244,7 @@ export default function ClassCurriculumTab({ item, sessionCount, isSessionsLoadi
             </Section>
           )}
 
-          {!hasCourseContent && (
+          {!hasCourseContent && !syllabusQuery.isLoading && !syllabusQuery.isError && (
             <div className="py-6 text-center text-sm text-slate-400 flex flex-col items-center gap-2">
               <ReadOutlined className="text-2xl text-slate-300" />
               Khóa học chưa cập nhật lộ trình và mục tiêu học tập.

@@ -128,6 +128,11 @@ export interface ApiCourseProposal {
   description?: string;
   learningObjectives?: string;
   syllabus?: string;
+  syllabusDraft?: {
+    summary?: string;
+    units?: ProposalSyllabusUnit[];
+  };
+  pricingExpectation?: ProposalPricingExpectation;
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
@@ -137,6 +142,9 @@ export interface ApiCourseProposal {
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   reviewNote?: string | null;
+  submittedAt?: string;
+  revisionNumber?: number;
+  revisionHistory?: ProposalRevision[];
   /** Enriched by Backend present() in admin endpoints */
   teacherName?: string | null;
   teacherEmail?: string | null;
@@ -144,6 +152,31 @@ export interface ApiCourseProposal {
   subjectName?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProposalSyllabusUnit {
+  unitOrder: number;
+  title: string;
+  description?: string;
+  learningObjectives?: string;
+  durationMinutes?: number | null;
+  topics?: string[];
+}
+
+export interface ProposalPricingExpectation {
+  suggestedClassType?: "FREE" | "PAID" | null;
+  suggestedMinPrice?: number | null;
+  suggestedMaxPrice?: number | null;
+  estimatedSessions?: number | null;
+  notes?: string;
+}
+
+export interface ProposalRevision {
+  revisionNumber: number;
+  action: "SUBMITTED" | "RESUBMITTED" | "NEED_CHANGES" | "APPROVED" | "REJECTED";
+  actorRole: "TEACHER" | "ADMIN";
+  note?: string | null;
+  at: string;
 }
 
 // ─── FRONTEND DOMAIN MODELS (normalized _id → id) ───────────
@@ -210,6 +243,11 @@ export interface CourseProposal {
   description?: string;
   learningObjectives?: string;
   syllabus?: string;
+  syllabusDraft?: {
+    summary?: string;
+    units?: ProposalSyllabusUnit[];
+  };
+  pricingExpectation?: ProposalPricingExpectation;
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
@@ -219,6 +257,9 @@ export interface CourseProposal {
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   reviewNote?: string | null;
+  submittedAt?: string;
+  revisionNumber?: number;
+  revisionHistory?: ProposalRevision[];
   teacherName?: string | null;
   teacherEmail?: string | null;
   categoryName?: string | null;
@@ -294,6 +335,11 @@ export interface CreateProposalPayload {
   description: string;
   learningObjectives?: string;
   syllabus?: string;
+  syllabusDraft?: {
+    summary?: string;
+    units?: ProposalSyllabusUnit[];
+  };
+  pricingExpectation?: ProposalPricingExpectation;
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
@@ -305,6 +351,10 @@ export interface UpdateProposalPayload extends Partial<CreateProposalPayload> {}
 export interface ApproveProposalPayload {
   gradeLevel?: GradeLevel | null;
   reviewNote?: string;
+  syllabusDraft?: {
+    summary?: string;
+    units?: ProposalSyllabusUnit[];
+  };
 }
 
 export interface ReviewProposalPayload {

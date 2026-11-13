@@ -1,3 +1,5 @@
+import type { PricingPolicySnapshot } from "./courseGovernance";
+
 /**
  * Types for Class Discovery Feature
  * Aligned with Backend MongoDB schema (Class, Course, Subject, User/Teacher)
@@ -58,6 +60,8 @@ export interface ClassEntity {
   startDate?: string;
   endDate?: string;
   status: BackendClassStatus;
+  syllabusVersionNumber?: number | null;
+  pricingPolicySnapshot?: PricingPolicySnapshot | null;
   schedule: ScheduleEntry[];
   ratingAverage: number;
   ratingCount: number;
@@ -125,6 +129,8 @@ export interface ClassDiscoveryItem {
   seatsLeft: number;
   isFull: boolean;
   status: BackendClassStatus;
+  syllabusVersionNumber?: number | null;
+  pricingPolicySnapshot?: PricingPolicySnapshot | null;
   statusLabel: string;
   canEnroll: boolean;
   startDate: string;
