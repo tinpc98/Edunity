@@ -20,11 +20,10 @@ export type CourseLevel = (typeof COURSE_LEVELS)[number];
 export const CATALOG_STATUSES = ["ACTIVE", "INACTIVE"] as const;
 export type CatalogStatus = (typeof CATALOG_STATUSES)[number];
 
-export const COURSE_STATUSES = ["DRAFT", "ACTIVE", "INACTIVE"] as const;
+export const COURSE_STATUSES = ["ACTIVE", "INACTIVE"] as const;
 export type CourseStatus = (typeof COURSE_STATUSES)[number];
 
 export const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
-  DRAFT: "Bản nháp",
   ACTIVE: "Hoạt động",
   INACTIVE: "Tạm ngưng",
 };
@@ -314,7 +313,6 @@ export interface CreateCoursePayload {
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
-  status?: "DRAFT";
 }
 
 export interface UpdateCoursePayload {

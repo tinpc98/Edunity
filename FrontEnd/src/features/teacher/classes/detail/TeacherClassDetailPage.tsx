@@ -139,7 +139,7 @@ export default function TeacherClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: classKeys.teacherList() });
     },
     onError: (err: any) => {
-      message.error(err?.message || "Không thể cập nhật lớp học.");
+      message.error(getFriendlyErrorMessage(err, "Không thể cập nhật lớp học."));
     },
   });
 
@@ -174,7 +174,7 @@ export default function TeacherClassDetailPage() {
         message.error("Có buổi học nằm ngoài khoảng ngày khai giảng – kết thúc của lớp.");
         return;
       }
-      message.error(err?.message || "Không thể gửi duyệt lớp học.");
+      message.error(getFriendlyErrorMessage(err, "Không thể gửi duyệt lớp học."));
     },
   });
 

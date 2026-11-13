@@ -54,6 +54,18 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
     if (err.code === "TEACHER_NOT_VERIFIED") {
       return "Bạn cần được xác minh hồ sơ giảng viên trước khi sử dụng chức năng này.";
     }
+    if (err.code === "CONTRACT_DEPENDENCY_BLOCKED") {
+      return "Chưa thể xác minh điều kiện hợp đồng vì Backend chưa kết nối bộ kiểm tra hợp đồng. Lớp chưa được tạo hoặc gửi duyệt; vui lòng liên hệ quản trị viên.";
+    }
+    if (err.code === "TEACHER_CONTRACT_NOT_FOUND") {
+      return "Bạn chưa có hợp đồng giảng dạy được ghi nhận. Vui lòng liên hệ quản trị viên để được hướng dẫn.";
+    }
+    if (err.code === "TEACHER_CONTRACT_NOT_ACTIVE") {
+      return "Hợp đồng giảng dạy của bạn chưa ở trạng thái có hiệu lực. Vui lòng liên hệ quản trị viên.";
+    }
+    if (err.code === "TEACHER_CONTRACT_EXPIRED") {
+      return "Hợp đồng giảng dạy của bạn đã hết hạn. Vui lòng liên hệ quản trị viên.";
+    }
     if (err.code === "CLASS_NOT_ACTIVE") {
       return "Lớp học chưa được phê duyệt hoặc hiện không trong trạng thái hoạt động để mở phòng học.";
     }

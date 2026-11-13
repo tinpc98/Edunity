@@ -64,9 +64,6 @@ import AdminPricingPoliciesPage from "./AdminPricingPoliciesPage";
 const { TextArea } = Input;
 
 function renderCourseStatusTag(status: CourseStatus) {
-  if (status === "DRAFT") {
-    return <Tag color="gold">{COURSE_STATUS_LABELS.DRAFT}</Tag>;
-  }
   if (status === "ACTIVE") {
     return <Tag color="success">{COURSE_STATUS_LABELS.ACTIVE}</Tag>;
   }
@@ -369,11 +366,7 @@ export default function AdminCatalogPage() {
       if (editingCourse) {
         return courseService.updateCourse(editingCourse.id, rest as UpdateCoursePayload);
       }
-      // Creating a new Course defaults to DRAFT and must never send ACTIVE
-      const createPayload: CreateCoursePayload = {
-        ...(rest as CreateCoursePayload),
-        status: "DRAFT",
-      };
+      const createPayload: CreateCoursePayload = rest as CreateCoursePayload;
       return courseService.createCourse(createPayload);
     },
     onSuccess: (savedCourse) => {
@@ -542,6 +535,14 @@ export default function AdminCatalogPage() {
                     }
                   />
                 ) : (
+                  <>
+                  <Alert
+                    type="warning"
+                    showIcon
+                    className="mb-4"
+                    message="Danh sách quản trị hiện chỉ nhận Course ACTIVE từ Backend"
+                    description="Course INACTIVE không được trả về bởi API tìm kiếm hiện tại nên chưa thể xem hoặc kích hoạt lại tại đây. Không có bộ lọc trạng thái an toàn cho đến khi Backend cung cấp Admin list/detail hỗ trợ ACTIVE và INACTIVE."
+                  />
                   <Table
                     dataSource={categories}
                     rowKey="id"
@@ -610,6 +611,7 @@ export default function AdminCatalogPage() {
                     },
                   ]}
                 />
+                </>
                 )}
               </div>
             ),
@@ -1314,19 +1316,15 @@ export default function AdminCatalogPage() {
             <Form.Item name="status" label="Trạng thái">
               <Select
                 options={[
-                  ...(editingCourse.status === "DRAFT"
-                    ? [{ value: "DRAFT", label: "Bản nháp (DRAFT)" }]
-                    : []),
                   { value: "ACTIVE", label: "Hoạt động (ACTIVE)" },
                   { value: "INACTIVE", label: "Tạm ngưng (INACTIVE)" },
                 ]}
               />
             </Form.Item>
           ) : (
-            <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-              Khóa học mới do Quản trị viên tạo sẽ có trạng thái mặc định là{" "}
-              <strong>Bản nháp (DRAFT)</strong>. Sau khi tạo và kiểm tra nội dung, bạn có thể nhấn{" "}
-              <strong>Kích hoạt</strong> để Giáo viên chọn mở lớp.
+            <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
+              Khóa học mới do Quản trị viên tạo sẽ được kích hoạt trực tiếp với trạng thái{" "}
+              <strong>ACTIVE</strong> theo quy trình hiện tại.
             </div>
           )}
 
