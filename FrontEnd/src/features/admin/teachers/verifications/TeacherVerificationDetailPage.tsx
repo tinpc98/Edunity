@@ -17,7 +17,7 @@ import PrivateDocumentCard from '../../../../components/common/PrivateDocumentCa
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import type { VerificationStatus } from '../../../../types/teacherVerification';
 import VerificationHistoryCard from './components/VerificationHistoryCard';
-import { groupVerificationSubmissions } from './verificationSubmissions';
+import { groupVerificationSubmissions } from '../../../../utils/verificationSubmissions';
 
 const { Title, Paragraph } = Typography;
 
@@ -219,7 +219,7 @@ export default function TeacherVerificationDetailPage() {
 
               {status === 'PENDING' && (
                 <div className="flex flex-col gap-3 mt-4">
-                  <Button danger block className="rounded-xl h-[44px] font-semibold" onClick={() => setIsRejectModalOpen(true)}>Từ chối / Yêu cầu bổ sung</Button>
+                  <Button danger block className="rounded-xl h-[44px] font-semibold" onClick={() => setIsRejectModalOpen(true)}>Từ chối hồ sơ</Button>
                   <Button type="primary" block className="rounded-xl h-[54px] font-bold bg-emerald-600 hover:bg-emerald-700 text-base" onClick={() => setIsApproveModalOpen(true)}>
                     Phê duyệt & Kích hoạt quyền mở lớp
                   </Button>
@@ -231,14 +231,21 @@ export default function TeacherVerificationDetailPage() {
       </Row>
 
       <Modal
-        title="Từ chối / Yêu cầu bổ sung hồ sơ"
+        title="Từ chối hồ sơ xác minh"
         open={isRejectModalOpen}
         onCancel={() => !rejectMutation.isPending && setIsRejectModalOpen(false)}
         footer={null}
       >
+        <Alert
+          type="warning"
+          showIcon
+          className="mb-4"
+          message="Backend hiện chỉ hỗ trợ trạng thái TỪ CHỐI"
+          description="Hồ sơ sẽ chuyển sang REJECTED. Giáo viên có thể cập nhật giấy tờ và gửi lại; hiện chưa có trạng thái riêng cho yêu cầu bổ sung hồ sơ."
+        />
         <Form form={form} layout="vertical" onFinish={(values) => rejectMutation.mutate(values)}>
-          <Form.Item label="Lý do từ chối (Gửi cho giáo viên)" name="reviewNote" rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập lý do để gửi cho giáo viên.' }]}>
-            <Input.TextArea rows={4} placeholder="Vui lòng cung cấp CCCD rõ nét hơn..." />
+          <Form.Item label="Lý do từ chối (Gửi cho giáo viên)" name="reviewNote" rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập lý do từ chối.' }]}>
+            <Input.TextArea rows={4} placeholder="Nêu rõ lý do từ chối..." />
           </Form.Item>
           <div className="flex justify-end gap-3">
             <Button onClick={() => setIsRejectModalOpen(false)} disabled={rejectMutation.isPending}>Hủy</Button>

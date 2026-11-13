@@ -4,6 +4,7 @@ import { FileTextOutlined, IdcardOutlined, InboxOutlined, SafetyCertificateOutli
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { teacherVerificationService } from "../../services/teacherVerification.service";
+import { profileService } from "../../services/profile.service";
 import { useAuthStore } from "../../stores/auth.store";
 import { useTeacherRegistrationStore } from "../../stores/teacherRegistration.store";
 import { ROUTES } from "../../routes/routePaths";
@@ -32,7 +33,9 @@ export default function TeacherQualificationPage() {
   const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuthStore();
   const draft = useTeacherRegistrationStore((state) => state.draft);
+  const setDraft = useTeacherRegistrationStore((state) => state.setDraft);
   const clearDraft = useTeacherRegistrationStore((state) => state.clearDraft);
+  const registrationDraft = draft?.userId === user?.userId ? draft : null;
 
   const isTeacher = isAuthenticated && user?.role === "TEACHER";
 
@@ -102,6 +105,37 @@ export default function TeacherQualificationPage() {
     },
   });
 
+  const saveDraftMutation = useMutation({
+    mutationFn: (values: { qualificationSummary: string; biography: string }) =>
+      profileService.updateMyProfile(values),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["teacherVerification", user?.userId] }),
+        queryClient.invalidateQueries({ queryKey: ["teacherProfile", user?.userId] }),
+      ]);
+      notification.success({
+        title: "Đã lưu thông tin nháp",
+        description: "Thông tin chuyên môn và giới thiệu đã được lưu an toàn trên hồ sơ tài khoản.",
+        placement: "topRight",
+      });
+    },
+    onError: (error: unknown) => {
+      notification.error({
+        title: "Không thể lưu thông tin nháp",
+        description: getFriendlyErrorMessage(error, "Vui lòng thử lại."),
+        placement: "topRight",
+      });
+    },
+  });
+
+  const saveTextDraft = () => {
+    const values = form.getFieldsValue(["qualificationSummary", "biography"]);
+    saveDraftMutation.mutate({
+      qualificationSummary: values.qualificationSummary?.trim() || "",
+      biography: values.biography?.trim() || "",
+    });
+  };
+
   const beforeUpload = (file: File) => {
     const error = validatePrivateDocument(file);
     if (error) {
@@ -151,6 +185,13 @@ export default function TeacherQualificationPage() {
           <p className="mb-3 text-sm font-semibold tracking-wide text-indigo-600">Bước 2/2 · Hồ sơ chuyên môn</p>
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Hoàn thiện hồ sơ chuyên môn</h1>
           <p className="mt-2 max-w-[600px] text-sm leading-6 text-slate-500">Cung cấp giấy tờ định danh và bằng cấp để Edunity xác minh hồ sơ giáo viên của bạn. Tài liệu được lưu trữ riêng tư, chỉ Ban quản trị xem được.</p>
+          <Alert
+            type="info"
+            showIcon
+            className="mt-4"
+            message="Có thể lưu nháp thông tin hồ sơ trên máy chủ"
+            description="Dùng nút Lưu thông tin nháp để lưu phần giới thiệu và tóm tắt chuyên môn vào hồ sơ tài khoản. Backend chưa hỗ trợ lưu tạm giấy tờ; tệp chỉ giữ trong tab hiện tại và không được ghi vào bộ nhớ trình duyệt."
+          />
         </div>
 
         {isLoading ? (
@@ -169,10 +210,21 @@ export default function TeacherQualificationPage() {
             layout="vertical"
             requiredMark
             onFinish={(values) => submitMutation.mutate(values)}
+            onValuesChange={(_, values: Partial<QualificationFormValues>) => {
+              if (!user?.userId) return;
+              setDraft({
+                userId: user.userId,
+                fullName: user.fullName,
+                email: user.email,
+                qualificationSummary:
+                  values.qualificationSummary ?? registrationDraft?.qualificationSummary ?? "",
+                biography: values.biography ?? registrationDraft?.biography,
+              });
+            }}
             scrollToFirstError
             initialValues={{
-              qualificationSummary: verification?.qualificationSummary || draft?.qualificationSummary,
-              biography: verification?.biography || draft?.biography,
+              qualificationSummary: verification?.qualificationSummary || registrationDraft?.qualificationSummary,
+              biography: verification?.biography || registrationDraft?.biography,
             }}
           >
               <Form.Item label="Tóm tắt chuyên môn" name="qualificationSummary" rules={[{ required: true, whitespace: true, message: "Vui lòng nhập tóm tắt chuyên môn." }]}>
@@ -222,9 +274,28 @@ export default function TeacherQualificationPage() {
                 </Upload.Dragger>
               </Form.Item>
 
-              <Button type="primary" htmlType="submit" loading={submitMutation.isPending} block size="large" className="h-12 rounded-lg bg-indigo-600 font-bold shadow-sm shadow-indigo-200 hover:bg-indigo-700">
-                {submitMutation.isPending ? "Đang tải tài liệu & gửi hồ sơ..." : "Gửi hồ sơ xác minh"}
-              </Button>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button
+                  htmlType="button"
+                  loading={saveDraftMutation.isPending}
+                  disabled={submitMutation.isPending}
+                  onClick={saveTextDraft}
+                  size="large"
+                  className="h-12 flex-1 rounded-lg font-semibold"
+                >
+                  Lưu thông tin nháp
+                </Button>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={submitMutation.isPending}
+                  disabled={saveDraftMutation.isPending}
+                  size="large"
+                  className="h-12 flex-1 rounded-lg bg-indigo-600 font-bold shadow-sm shadow-indigo-200 hover:bg-indigo-700"
+                >
+                  {submitMutation.isPending ? "Đang tải tài liệu & gửi hồ sơ..." : "Gửi hồ sơ xác minh"}
+                </Button>
+              </div>
               <p className="mt-4 text-center text-xs text-slate-400">
                 Bạn có thể bổ sung sau tại <Link to={ROUTES.TEACHER.PROFILE} className="font-semibold text-indigo-600">Hồ sơ giáo viên</Link>.
               </p>

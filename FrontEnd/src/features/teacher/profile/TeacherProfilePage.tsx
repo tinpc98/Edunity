@@ -26,6 +26,7 @@ import { invalidateTeacherVerificationState } from "../../../hooks/useTeacherVer
 import type { TeacherProfile, UpdateTeacherProfilePayload } from "../../../types/profile";
 import type { SubmitVerificationRequest } from "../../../types/teacherVerification";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
+import { groupVerificationSubmissions } from "../../../utils/verificationSubmissions";
 import {
   AVATAR_ACCEPT,
   PRIVATE_DOCUMENT_ACCEPT,
@@ -70,6 +71,7 @@ export default function TeacherProfilePage() {
   });
 
   const profile = profileData as TeacherProfile;
+  const verificationSubmissions = groupVerificationSubmissions(verificationStatus?.documents ?? []);
 
   // Profile Update Mutation
   const updateProfileMutation = useMutation({
@@ -408,6 +410,52 @@ export default function TeacherProfilePage() {
       <div className="bg-white rounded-2xl p-5 sm:px-6 border border-slate-100 shadow-sm flex flex-col gap-4">
         <h3 className="text-[17px] font-bold text-slate-800 m-0">Trạng thái xác minh giảng viên</h3>
         {renderVerificationStatus()}
+        {verificationSubmissions.length ? (
+          <div className="border-t border-slate-100 pt-4">
+            <h4 className="mb-3 text-sm font-bold text-slate-800">Lịch sử gửi và xử lý</h4>
+            <div className="space-y-3">
+              {verificationSubmissions.map((submission, index) => (
+                <div key={submission.key} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-800">
+                      Lần gửi {verificationSubmissions.length - index}
+                    </span>
+                    <Tag
+                      color={
+                        submission.status === "APPROVED"
+                          ? "success"
+                          : submission.status === "REJECTED"
+                            ? "error"
+                            : submission.status === "PENDING"
+                              ? "processing"
+                              : "default"
+                      }
+                    >
+                      {submission.status === "APPROVED"
+                        ? "Đã duyệt"
+                        : submission.status === "REJECTED"
+                          ? "Từ chối"
+                          : submission.status === "PENDING"
+                            ? "Chờ duyệt"
+                            : "Không rõ"}
+                    </Tag>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Gửi lúc: {submission.submittedAt ? new Date(submission.submittedAt).toLocaleString("vi-VN") : "—"}
+                    {submission.reviewedAt
+                      ? ` · Xử lý lúc: ${new Date(submission.reviewedAt).toLocaleString("vi-VN")}`
+                      : ""}
+                  </div>
+                  {submission.reviewNote && (
+                    <p className="mb-0 mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                      Ghi chú Admin: {submission.reviewNote}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Profile Header & Avatar Card */}

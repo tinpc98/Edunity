@@ -1,88 +1,162 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Input,
-  Select,
-  Tag,
-  Skeleton,
   Alert,
-  Empty,
   Button,
-  Pagination,
   Card,
+  Empty,
+  Form,
+  Input,
+  Modal,
+  Pagination,
+  Select,
+  Skeleton,
+  Space,
+  Tag,
   Tooltip,
+  App as AntdApp,
 } from "antd";
 import {
-  SearchOutlined,
-  BookOutlined,
-  PlusOutlined,
-  FileTextOutlined,
   ApartmentOutlined,
+  BookOutlined,
   EyeOutlined,
+  FileTextOutlined,
+  PlusOutlined,
+  SearchOutlined,
 } from "@ant-design/icons";
 import { courseService } from "../../../services/course.service";
+import { teacherSubjectAuthorizationService } from "../../../services/teacherSubjectAuthorization.service";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
-import type { Course, CourseSearchParams, GradeLevel, CourseLevel } from "../../../types/catalog";
+import type { Course } from "../../../types/catalog";
 import {
   GRADE_LEVELS,
   GRADE_LEVEL_LABELS,
   COURSE_LEVELS,
   COURSE_LEVEL_LABELS,
 } from "../../../types/catalog";
+import type {
+  CreateTeacherSubjectAuthorizationPayload,
+  TeacherSubjectAuthorization,
+  TeacherSubjectAuthorizationStatus,
+} from "../../../types/teacherSubjectAuthorization";
+import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 import {
   getVerificationGuidanceMessage,
   useTeacherVerification,
 } from "../../../hooks/useTeacherVerification";
+import { isCourseAuthorizedForTeacher } from "../../../utils/teacherCourseAuthorization";
+import { useAuthStore } from "../../../stores/auth.store";
+
+const AUTH_STATUS: Record<
+  TeacherSubjectAuthorizationStatus,
+  { label: string; color: string }
+> = {
+  PENDING: { label: "Đã đăng ký · Chờ duyệt", color: "processing" },
+  APPROVED: { label: "Đã được duyệt", color: "success" },
+  SUSPENDED: { label: "Chưa được phép · Đã đình chỉ", color: "error" },
+};
+
+type AuthorizationFormValues = CreateTeacherSubjectAuthorizationPayload;
 
 export default function TeacherCourseCatalogPage() {
   const navigate = useNavigate();
-  const { isVerified, verificationStatus } = useTeacherVerification();
+  const queryClient = useQueryClient();
+  const { message } = AntdApp.useApp();
+  const { user } = useAuthStore();
+  const { isVerified, verificationStatus, isTeacher } = useTeacherVerification();
   const lockTooltip = getVerificationGuidanceMessage(verificationStatus);
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedSubject, setSelectedSubject] = useState<string>("");
-  const [selectedGrade, setSelectedGrade] = useState<GradeLevel | "">("");
-  const [selectedLevel, setSelectedLevel] = useState<CourseLevel | "">("");
+  const [selectedAuthorizationId, setSelectedAuthorizationId] = useState("");
   const [page, setPage] = useState(1);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [requestForm] = Form.useForm<AuthorizationFormValues>();
   const pageSize = 12;
 
-  // Categories query
-  const { data: categories = [] } = useQuery({
+  const categoriesQuery = useQuery({
     queryKey: ["public-categories"],
     queryFn: () => catalogService.listCategories(),
     staleTime: 300_000,
   });
-
-  // Subjects query
-  const { data: subjects = [] } = useQuery({
-    queryKey: ["public-subjects", selectedCategory],
-    queryFn: () => selectedCategory ? catalogService.listSubjectsByCategory(selectedCategory) : Promise.resolve([]),
-    enabled: !!selectedCategory,
+  const categories = categoriesQuery.data ?? [];
+  const requestCategoryId = Form.useWatch("categoryId", requestForm);
+  const subjectsQuery = useQuery({
+    queryKey: ["public-subjects", requestCategoryId],
+    queryFn: () =>
+      requestCategoryId
+        ? catalogService.listSubjectsByCategory(requestCategoryId)
+        : Promise.resolve([]),
+    enabled: Boolean(requestCategoryId),
     staleTime: 120_000,
   });
+  const authorizationsQuery = useQuery({
+    queryKey: ["teacher-subject-authorizations", user?.userId],
+    queryFn: () => teacherSubjectAuthorizationService.listAllMyAuthorizations(),
+    enabled: isTeacher,
+    staleTime: 30_000,
+  });
+  const authorizations = authorizationsQuery.data ?? [];
+  const approvedAuthorizations = authorizations.filter((item) => item.status === "APPROVED");
+  const selectedAuthorization =
+    approvedAuthorizations.find((item) => item.id === selectedAuthorizationId) ??
+    approvedAuthorizations[0];
 
-  // Build params
-  const searchParams: CourseSearchParams = {
-    page,
-    pageSize,
-    search: search.trim() || undefined,
-    categoryId: selectedCategory || undefined,
-    subjectId: selectedSubject || undefined,
-    gradeLevel: selectedGrade || undefined,
-    level: selectedLevel || undefined,
-  };
-
-  // Courses query
-  const { data: coursesData, isLoading, isError, error } = useQuery({
-    queryKey: ["teacher-catalog-courses", searchParams],
-    queryFn: () => courseService.searchCourses(searchParams),
+  const coursesQuery = useQuery({
+    queryKey: [
+      "teacher-catalog-courses",
+      selectedAuthorization?.id,
+      search.trim(),
+    ],
+    queryFn: async () => {
+      if (!selectedAuthorization) return [] as Course[];
+      const baseParams = {
+        subjectId: selectedAuthorization.subjectId,
+        level: selectedAuthorization.level,
+        search: search.trim() || undefined,
+        page: 1,
+        pageSize: 100,
+      };
+      const firstPage = await courseService.searchCourses(baseParams);
+      if (firstPage.totalPages <= 1) return firstPage.items;
+      const rest = await Promise.all(
+        Array.from({ length: firstPage.totalPages - 1 }, (_, index) =>
+          courseService.searchCourses({ ...baseParams, page: index + 2 })
+        )
+      );
+      return [firstPage, ...rest].flatMap((result) => result.items);
+    },
+    enabled: Boolean(selectedAuthorization),
     staleTime: 60_000,
   });
 
-  // Only ACTIVE courses are eligible for Teacher class creation
-  const courses = (coursesData?.items || []).filter((c) => c.status === "ACTIVE");
-  const total = coursesData?.total || 0;
+  const courses = (coursesQuery.data ?? []).filter(
+    (course) =>
+      course.status === "ACTIVE" &&
+      selectedAuthorization != null &&
+      isCourseAuthorizedForTeacher(course, [selectedAuthorization])
+  );
+  const total = courses.length;
+  const visibleCourses = courses.slice((page - 1) * pageSize, page * pageSize);
+
+  const requestMutation = useMutation({
+    mutationFn: (values: AuthorizationFormValues) =>
+      teacherSubjectAuthorizationService.requestAuthorization({
+        ...values,
+        requestNote: values.requestNote?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      message.success("Đã gửi yêu cầu đăng ký môn giảng dạy.");
+      setRequestModalOpen(false);
+      requestForm.resetFields();
+      await queryClient.invalidateQueries({
+        queryKey: ["teacher-subject-authorizations", user?.userId],
+      });
+    },
+    onError: (error: unknown) =>
+      message.error(getFriendlyErrorMessage(error, "Không thể gửi yêu cầu đăng ký môn.")),
+  });
+  const requestCategory = categories.find((category) => category.id === requestCategoryId);
+  const requestGradeLevels = requestCategory?.allowedGradeLevels ?? GRADE_LEVELS;
 
   return (
     <div className="space-y-6">
@@ -94,7 +168,7 @@ export default function TeacherCourseCatalogPage() {
             Danh mục khóa học
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Tra cứu toàn bộ khóa học chuẩn trong hệ thống để mở lớp hoặc gửi đề xuất khóa học mới.
+            Chỉ hiển thị Course ACTIVE nằm trong phạm vi môn, khối và cấp độ đã được Admin duyệt.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -121,9 +195,70 @@ export default function TeacherCourseCatalogPage() {
         </div>
       </div>
 
+      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="m-0 text-base font-bold text-gray-900">Quyền giảng dạy theo môn</h2>
+            <p className="mb-0 mt-1 text-xs text-gray-500">
+              Yêu cầu đang chờ hoặc bị đình chỉ không cấp quyền tạo lớp.
+            </p>
+          </div>
+          <Button
+            icon={<PlusOutlined />}
+            onClick={() => setRequestModalOpen(true)}
+            disabled={!isTeacher}
+          >
+            Đăng ký môn giảng dạy
+          </Button>
+        </div>
+
+        {!isTeacher ? (
+          <Alert type="error" showIcon message="Danh mục này chỉ dành cho tài khoản giáo viên." />
+        ) : authorizationsQuery.isLoading ? (
+          <Skeleton active paragraph={{ rows: 2 }} />
+        ) : authorizationsQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Không tải được quyền giảng dạy"
+            description={getFriendlyErrorMessage(
+              authorizationsQuery.error,
+              "Danh mục bị khóa an toàn khi không xác định được môn đã được duyệt."
+            )}
+            action={
+              <Button size="small" onClick={() => authorizationsQuery.refetch()}>
+                Thử lại
+              </Button>
+            }
+          />
+        ) : authorizations.length ? (
+          <Space wrap>
+            {authorizations.map((authorization: TeacherSubjectAuthorization) => (
+              <Tag
+                key={authorization.id}
+                color={AUTH_STATUS[authorization.status].color}
+                className="!m-0 px-2 py-1"
+              >
+                {authorization.categoryName} · {authorization.subjectName}
+                {authorization.gradeLevel ? ` · ${GRADE_LEVEL_LABELS[authorization.gradeLevel]}` : ""}
+                {` · ${COURSE_LEVEL_LABELS[authorization.level]} · ${AUTH_STATUS[authorization.status].label}`}
+                {authorization.reviewNote ? ` · ${authorization.reviewNote}` : ""}
+              </Tag>
+            ))}
+          </Space>
+        ) : (
+          <Alert
+            type="info"
+            showIcon
+            message="Chưa có yêu cầu quyền giảng dạy"
+            description="Đăng ký môn, khối và cấp độ cần giảng dạy. Course chỉ xuất hiện sau khi Admin duyệt phạm vi đó."
+          />
+        )}
+      </section>
+
       {/* Filter toolbar */}
       <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_2fr]">
           <Input
             placeholder="Tìm theo tên hoặc mô tả..."
             prefix={<SearchOutlined className="text-gray-400" />}
@@ -134,67 +269,30 @@ export default function TeacherCourseCatalogPage() {
             }}
             allowClear
           />
-
           <Select
-            placeholder="Danh mục"
-            value={selectedCategory || undefined}
+            placeholder="Chọn môn / khối / cấp độ đã được duyệt"
+            value={selectedAuthorization?.id}
             onChange={(val) => {
-              setSelectedCategory(val || "");
-              setSelectedSubject("");
+              setSelectedAuthorizationId(val || "");
               setPage(1);
             }}
-            allowClear
             showSearch
             optionFilterProp="label"
-            options={categories.map((c) => ({ value: c.id, label: c.name }))}
-          />
-
-          <Select
-            placeholder="Môn học"
-            value={selectedSubject || undefined}
-            onChange={(val) => {
-              setSelectedSubject(val || "");
-              setPage(1);
-            }}
-            allowClear
-            disabled={!selectedCategory}
-            showSearch
-            optionFilterProp="label"
-            options={subjects.map((s) => ({ value: s.id, label: s.name }))}
-          />
-
-          <Select
-            placeholder="Khối lớp"
-            value={selectedGrade || undefined}
-            onChange={(val) => {
-              setSelectedGrade(val || "");
-              setPage(1);
-            }}
-            allowClear
-            options={GRADE_LEVELS.map((g) => ({
-              value: g,
-              label: GRADE_LEVEL_LABELS[g],
-            }))}
-          />
-
-          <Select
-            placeholder="Cấp độ"
-            value={selectedLevel || undefined}
-            onChange={(val) => {
-              setSelectedLevel(val || "");
-              setPage(1);
-            }}
-            allowClear
-            options={COURSE_LEVELS.map((lvl) => ({
-              value: lvl,
-              label: COURSE_LEVEL_LABELS[lvl],
+            disabled={!approvedAuthorizations.length}
+            options={approvedAuthorizations.map((authorization) => ({
+              value: authorization.id,
+              label: `${authorization.categoryName} · ${authorization.subjectName}${authorization.gradeLevel ? ` · ${GRADE_LEVEL_LABELS[authorization.gradeLevel]}` : ""} · ${COURSE_LEVEL_LABELS[authorization.level]}`,
             }))}
           />
         </div>
       </div>
 
       {/* Content */}
-      {isLoading ? (
+      {!isTeacher ? (
+        <Alert type="error" showIcon message="Vui lòng đăng nhập bằng tài khoản giáo viên." />
+      ) : authorizationsQuery.isLoading ? (
+        <Card><Skeleton active paragraph={{ rows: 4 }} /></Card>
+      ) : authorizationsQuery.isError ? null : coursesQuery.isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {Array.from({ length: 6 }).map((_, i) => (
             <Card key={i} className="rounded-xl border border-gray-200 shadow-sm">
@@ -202,21 +300,20 @@ export default function TeacherCourseCatalogPage() {
             </Card>
           ))}
         </div>
-      ) : isError ? (
+      ) : coursesQuery.isError ? (
         <Alert
           type="error"
           message="Lỗi tải danh mục khóa học"
-          description={(error as any)?.message || "Vui lòng thử lại sau."}
+          description="Vui lòng thử tải lại các khóa học trong phạm vi môn đã được duyệt."
           showIcon
+          action={<Button size="small" onClick={() => coursesQuery.refetch()}>Thử lại</Button>}
         />
-      ) : courses.length === 0 ? (
+      ) : !selectedAuthorization ? (
+        <Empty description="Chưa có phạm vi giảng dạy được duyệt. Đăng ký môn để Admin xem xét." />
+      ) : total === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <Empty
-            description={
-              isVerified
-                ? "Không tìm thấy khóa học nào phù hợp. Bạn có thể đề xuất khóa học mới!"
-                : "Không tìm thấy khóa học nào phù hợp."
-            }
+            description="Không có Course ACTIVE khớp chính xác với môn, khối và cấp độ được duyệt."
           />
           <div className="mt-4 inline-block">
             <Tooltip title={!isVerified ? lockTooltip : undefined}>
@@ -235,7 +332,7 @@ export default function TeacherCourseCatalogPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {courses.map((course: Course) => (
+            {visibleCourses.map((course: Course) => (
               <div
                 key={course.id}
                 className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all flex flex-col overflow-hidden"
@@ -325,6 +422,111 @@ export default function TeacherCourseCatalogPage() {
           )}
         </>
       )}
+
+      <Modal
+        title="Đăng ký quyền giảng dạy theo môn"
+        open={requestModalOpen}
+        onCancel={() => !requestMutation.isPending && setRequestModalOpen(false)}
+        footer={null}
+        destroyOnClose
+      >
+        {categoriesQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Không tải được danh mục"
+            action={<Button size="small" onClick={() => categoriesQuery.refetch()}>Thử lại</Button>}
+          />
+        ) : (
+          <Form
+            form={requestForm}
+            layout="vertical"
+            onFinish={(values) => requestMutation.mutate(values)}
+            onValuesChange={(changed) => {
+              if ("categoryId" in changed) requestForm.setFieldValue("subjectId", undefined);
+            }}
+          >
+            <Form.Item
+              name="categoryId"
+              label="Danh mục"
+              rules={[{ required: true, message: "Chọn danh mục." }]}
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                loading={categoriesQuery.isLoading}
+                options={categories.map((category) => ({ value: category.id, label: category.name }))}
+              />
+            </Form.Item>
+            <Form.Item
+              name="subjectId"
+              label="Môn học"
+              rules={[{ required: true, message: "Chọn môn học." }]}
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                loading={subjectsQuery.isLoading}
+                disabled={!requestCategoryId}
+                options={(subjectsQuery.data ?? []).map((subject) => ({
+                  value: subject.id,
+                  label: subject.name,
+                }))}
+              />
+            </Form.Item>
+            {subjectsQuery.isError && (
+              <Alert
+                type="error"
+                showIcon
+                className="mb-4"
+                message="Không tải được môn học"
+                description={getFriendlyErrorMessage(subjectsQuery.error)}
+                action={<Button size="small" onClick={() => subjectsQuery.refetch()}>Thử lại</Button>}
+              />
+            )}
+            <Form.Item
+              name="gradeLevel"
+              label="Khối lớp"
+              rules={
+                requestCategory?.allowedGradeLevels
+                  ? [{ required: true, message: "Chọn khối lớp theo phạm vi của danh mục." }]
+                  : []
+              }
+            >
+              <Select
+                allowClear
+                options={requestGradeLevels.map((grade) => ({
+                  value: grade,
+                  label: GRADE_LEVEL_LABELS[grade],
+                }))}
+              />
+            </Form.Item>
+            <Form.Item
+              name="level"
+              label="Cấp độ"
+              rules={[{ required: true, message: "Chọn cấp độ." }]}
+            >
+              <Select
+                options={COURSE_LEVELS.map((level) => ({
+                  value: level,
+                  label: COURSE_LEVEL_LABELS[level],
+                }))}
+              />
+            </Form.Item>
+            <Form.Item name="requestNote" label="Ghi chú (không bắt buộc)">
+              <Input.TextArea rows={3} maxLength={1000} />
+            </Form.Item>
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => setRequestModalOpen(false)} disabled={requestMutation.isPending}>
+                Hủy
+              </Button>
+              <Button type="primary" htmlType="submit" loading={requestMutation.isPending}>
+                Gửi yêu cầu
+              </Button>
+            </div>
+          </Form>
+        )}
+      </Modal>
     </div>
   );
 }
