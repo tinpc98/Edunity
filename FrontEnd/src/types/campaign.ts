@@ -49,6 +49,14 @@ export interface ApiScholarshipCampaign {
   contributionCount?: number;
 }
 
+export interface ScholarshipCampaignChecklist {
+  campaignId: string;
+  title: string;
+  status: CampaignStatus;
+  documentChecklist: import("./scholarship").ScholarshipChecklistItem[];
+  dossierPolicy: import("./scholarship").ScholarshipDossierPolicy;
+}
+
 export interface ScholarshipCampaign {
   id: string;
   createdBy: string;

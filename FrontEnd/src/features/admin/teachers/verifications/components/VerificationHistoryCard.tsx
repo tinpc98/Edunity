@@ -3,7 +3,7 @@ import { HistoryOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import PrivateDocumentCard from '../../../../../components/common/PrivateDocumentCard';
 import type { VerificationDocument } from '../../../../../types/teacherVerification';
-import type { VerificationSubmission } from '../verificationSubmissions';
+import type { VerificationSubmission } from '../../../../../utils/verificationSubmissions';
 
 const STATUS_META: Record<VerificationSubmission['status'], { label: string; color: string; dot: string }> = {
   PENDING: { label: 'Chờ duyệt', color: 'processing', dot: 'blue' },

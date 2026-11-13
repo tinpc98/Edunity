@@ -182,13 +182,13 @@ export default function ScholarshipApplicationReviewPage() {
               {SCHOLARSHIP_APP_STATUS_LABELS[app.status]}
             </Tag>
             <span className="text-gray-500 font-medium text-xs flex items-center gap-1">
-              <ClockCircleOutlined /> Nộp ngày {new Date(app.submittedAt).toLocaleDateString('vi-VN', {
+              <ClockCircleOutlined /> Nộp ngày {app.submittedAt ? new Date(app.submittedAt).toLocaleDateString('vi-VN', {
                 hour: '2-digit',
                 minute: '2-digit',
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric',
-              })}
+              }) : "—"}
             </span>
           </div>
         </div>

@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import type {
   VerificationDocument,
   VerificationDocumentStatus,
-} from '../../../../types/teacherVerification';
+} from "../types/teacherVerification";
 
 /** One submission round = the IDENTITY + QUALIFICATION documents sent together and reviewed together. */
 export interface VerificationSubmission {

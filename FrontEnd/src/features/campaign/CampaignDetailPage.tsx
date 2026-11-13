@@ -18,6 +18,7 @@ import {
   Radio,
   message,
   Divider,
+  Space,
 } from "antd";
 import {
   CalendarOutlined,
@@ -29,6 +30,9 @@ import {
   EyeInvisibleOutlined,
   GlobalOutlined,
   ExperimentOutlined,
+  ShareAltOutlined,
+  CopyOutlined,
+  FacebookOutlined,
 } from "@ant-design/icons";
 import { campaignService, campaignKeys } from "../../services/campaign.service";
 import {
@@ -84,6 +88,8 @@ export default function PublicCampaignDetailPage() {
   const [isClientTimerZero, setIsClientTimerZero] = useState<boolean>(false);
   const [isApplyScholarshipModalOpen, setIsApplyScholarshipModalOpen] =
     useState<boolean>(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isCopyingShareLink, setIsCopyingShareLink] = useState(false);
 
   // Fetch campaign detail
   const {
@@ -228,6 +234,46 @@ export default function PublicCampaignDetailPage() {
     (activeDonation?.provider === "SANDBOX" ||
       activeDonation?.gateway === "SANDBOX" ||
       activeDonation?.gatewayReference?.startsWith("SBX-"));
+  const campaignShareUrl = `${window.location.origin}${ROUTES.CAMPAIGN_DETAIL.replace(
+    ":campaignId",
+    encodeURIComponent(campaign.id),
+  )}`;
+  const campaignShareText = [campaign.title, campaign.description?.trim()]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const handleCopyCampaignLink = async () => {
+    setIsCopyingShareLink(true);
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Trình duyệt không hỗ trợ sao chép tự động.");
+      }
+      await navigator.clipboard.writeText(campaignShareUrl);
+      message.success("Đã sao chép liên kết chiến dịch.");
+    } catch {
+      message.error("Không thể sao chép tự động. Hãy chọn và sao chép liên kết bên dưới.");
+    } finally {
+      setIsCopyingShareLink(false);
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (!navigator.share) {
+      await handleCopyCampaignLink();
+      return;
+    }
+    try {
+      await navigator.share({
+        title: campaign.title,
+        text: campaignShareText,
+        url: campaignShareUrl,
+      });
+      message.success("Đã mở bảng chia sẻ.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      message.error("Không thể mở bảng chia sẻ. Bạn có thể sao chép liên kết thay thế.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
@@ -287,11 +333,20 @@ export default function PublicCampaignDetailPage() {
               </div>
             </div>
 
-            <Link to="/campaigns">
-              <Button icon={<ArrowLeftOutlined />} className="rounded-xl">
-                Tất cả chiến dịch
+            <Space wrap>
+              <Button
+                icon={<ShareAltOutlined />}
+                onClick={() => setIsShareModalOpen(true)}
+                className="rounded-xl"
+              >
+                Chia sẻ
               </Button>
-            </Link>
+              <Link to="/campaigns">
+                <Button icon={<ArrowLeftOutlined />} className="rounded-xl">
+                  Tất cả chiến dịch
+                </Button>
+              </Link>
+            </Space>
           </div>
 
           <Divider className="my-6" />
@@ -809,6 +864,79 @@ export default function PublicCampaignDetailPage() {
             }}
           />
         )}
+
+        <Modal
+          title={<span><ShareAltOutlined className="mr-2 text-indigo-600" />Chia sẻ chiến dịch</span>}
+          open={isShareModalOpen}
+          onCancel={() => setIsShareModalOpen(false)}
+          footer={null}
+          width={560}
+          destroyOnHidden
+        >
+          <div className="space-y-4">
+            <Card className="overflow-hidden rounded-xl border-slate-200" bodyStyle={{ padding: 0 }}>
+              <div className="h-28 bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-500 flex items-center justify-center">
+                <HeartOutlined className="text-4xl text-white/90" />
+              </div>
+              <div className="space-y-2 p-4">
+                <div className="text-xs font-medium text-slate-500">{window.location.host}</div>
+                <div className="text-lg font-bold text-slate-900">{campaign.title}</div>
+                <Paragraph
+                  ellipsis={{ rows: 3, expandable: true, symbol: "Xem thêm" }}
+                  className="!mb-0 whitespace-pre-line text-sm text-slate-600"
+                >
+                  {campaign.description || "Khám phá và đồng hành cùng chiến dịch học bổng này."}
+                </Paragraph>
+              </div>
+            </Card>
+
+            <div className="space-y-2">
+              <Text strong className="text-xs">Liên kết công khai của chiến dịch</Text>
+              <Input value={campaignShareUrl} readOnly onFocus={(event) => event.currentTarget.select()} />
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="primary"
+                icon={<ShareAltOutlined />}
+                onClick={() => void handleNativeShare()}
+                className="flex-1 bg-indigo-600"
+              >
+                Chia sẻ...
+              </Button>
+              <Button
+                icon={<FacebookOutlined />}
+                onClick={() => {
+                  const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(campaignShareUrl)}`;
+                  const shareWindow = window.open(facebookUrl, "_blank");
+                  if (shareWindow) {
+                    shareWindow.opener = null;
+                    message.success("Đã mở Facebook để chia sẻ chiến dịch.");
+                  } else {
+                    message.error("Trình duyệt đã chặn cửa sổ Facebook. Hãy sao chép liên kết để chia sẻ.");
+                  }
+                }}
+                className="flex-1"
+              >
+                Facebook
+              </Button>
+              <Button
+                icon={<CopyOutlined />}
+                loading={isCopyingShareLink}
+                onClick={() => void handleCopyCampaignLink()}
+                className="flex-1"
+              >
+                Sao chép liên kết
+              </Button>
+            </div>
+            <Alert
+              type="info"
+              showIcon
+              message="Chỉ chia sẻ thông tin chiến dịch"
+              description="Không bao gồm thông tin Sponsor, hồ sơ ứng viên hoặc dữ liệu người thụ hưởng. Facebook sẽ tạo preview theo metadata công khai của trang; hiện Backend chưa cung cấp ảnh riêng cho từng chiến dịch."
+            />
+          </div>
+        </Modal>
       </div>
     </div>
   );

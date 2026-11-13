@@ -40,6 +40,7 @@ import CreateCampaignPage from "../features/admin/campaigns/CreateCampaignPage";
 import CampaignDetailPage from "../features/admin/campaigns/CampaignDetailPage";
 import ScholarshipApplicationsPage from "../features/admin/scholarships/ScholarshipApplicationsPage";
 import ScholarshipApplicationReviewPage from "../features/admin/scholarships/ScholarshipApplicationReviewPage";
+import PaperDossierIntakePage from "../features/admin/scholarships/PaperDossierIntakePage";
 import AdminClassesPage from "../features/admin/classes/AdminClassesPage";
 import AdminClassDetailPage from "../features/admin/classes/AdminClassDetailPage";
 import AdminCatalogPage from "../features/admin/catalog/AdminCatalogPage";
@@ -347,6 +348,10 @@ const router = createBrowserRouter([
       {
         path: "scholarship-applications/:applicationId",
         element: <ScholarshipApplicationReviewPage />,
+      },
+      {
+        path: "paper-dossiers",
+        element: <PaperDossierIntakePage />,
       },
       {
         path: "finance-overview",

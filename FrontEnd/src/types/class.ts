@@ -1,3 +1,5 @@
+import type { PricingPolicySnapshot } from "./courseGovernance";
+
 export type ClassStatus =
   | "DRAFT"
   | "PENDING_APPROVAL"
@@ -49,6 +51,8 @@ export interface ApiClass {
   startDate?: string | null;
   endDate?: string | null;
   status: ClassStatus;
+  syllabusVersionNumber?: number | null;
+  pricingPolicySnapshot?: PricingPolicySnapshot | null;
   updatedBy?: string | null;
   schedule?: ScheduleEntry[];
   ratingAverage?: number;
@@ -99,6 +103,8 @@ export interface ClassModel {
   startDate?: string | null;
   endDate?: string | null;
   status: ClassStatus;
+  syllabusVersionNumber?: number | null;
+  pricingPolicySnapshot?: PricingPolicySnapshot | null;
   statusLabel: string;
   schedule: ScheduleEntry[];
   ratingAverage: number;
@@ -231,4 +237,3 @@ export interface ClassStudentRosterItem {
   paymentSource: PaymentSourceType;
   enrolledAt: string;
 }
-

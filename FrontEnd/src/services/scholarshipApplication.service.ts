@@ -3,7 +3,11 @@ import type {
   ApiScholarshipApplication,
   ScholarshipApplication,
   ApplyScholarshipPayload,
+  CreateScholarshipDossierPayload,
+  PaperDossierReceipt,
+  PaperDossierReceiptPayload,
   ResubmitScholarshipPayload,
+  ScholarshipDossierPayload,
   AdminReviewPayload,
 } from "../types/scholarship";
 import {
@@ -16,6 +20,9 @@ export const scholarshipApplicationKeys = {
   myList: (params?: Record<string, any>) => ["scholarship-applications", "me", params] as const,
   adminList: (params?: Record<string, any>) => ["scholarship-applications", "admin", params] as const,
   detail: (id: string) => ["scholarship-applications", "detail", id] as const,
+  paperReceipts: (params?: Record<string, unknown>) =>
+    params ? ["scholarship-applications", "paper-receipts", params] as const : ["scholarship-applications", "paper-receipts"] as const,
+  paperReceiptDetail: (id: string) => ["scholarship-applications", "paper-receipts", "detail", id] as const,
 };
 
 export const scholarshipApplicationService = {
@@ -27,6 +34,33 @@ export const scholarshipApplicationService = {
     const raw = await apiClient<ApiScholarshipApplication>(`/campaigns/${campaignId}/applications`, {
       method: "POST",
       body: JSON.stringify(payload),
+    });
+    return adaptScholarshipApplication(raw);
+  },
+
+  /** Student: create a dossier draft or submit through the existing dossier API. */
+  async createDossier(campaignId: string, payload: CreateScholarshipDossierPayload): Promise<ScholarshipApplication> {
+    const raw = await apiClient<ApiScholarshipApplication>(`/campaigns/${campaignId}/dossiers`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return adaptScholarshipApplication(raw);
+  },
+
+  /** Student: update an owned DRAFT or NEED_MORE_INFORMATION dossier. */
+  async updateDossier(applicationId: string, payload: ScholarshipDossierPayload & { removeDocumentIds?: string[] }): Promise<ScholarshipApplication> {
+    const raw = await apiClient<ApiScholarshipApplication>(`/me/scholarship-dossiers/${applicationId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    return adaptScholarshipApplication(raw);
+  },
+
+  /** Student: submit an owned DRAFT dossier. */
+  async submitDossier(applicationId: string, payload?: ScholarshipDossierPayload): Promise<ScholarshipApplication> {
+    const raw = await apiClient<ApiScholarshipApplication>(`/me/scholarship-dossiers/${applicationId}/submit`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
     });
     return adaptScholarshipApplication(raw);
   },
@@ -69,6 +103,12 @@ export const scholarshipApplicationService = {
       pageSize: data.pageSize || 20,
       totalPages: data.totalPages || 1,
     };
+  },
+
+  /** Student: retrieve only the current user's dossier, including short-lived private document URLs. */
+  async getMyApplicationDetail(id: string): Promise<ScholarshipApplication> {
+    const raw = await apiClient<ApiScholarshipApplication>(`/me/scholarship-applications/${id}`);
+    return adaptScholarshipApplication(raw);
   },
 
   /**
@@ -118,6 +158,63 @@ export const scholarshipApplicationService = {
   async adminGetApplication(id: string): Promise<ScholarshipApplication> {
     const raw = await apiClient<ApiScholarshipApplication>(`/admin/scholarship-applications/${id}`);
     return adaptScholarshipApplication(raw);
+  },
+
+  /** Admin: list paper dossier receipts using the Backend's supported filters. */
+  async adminListPaperReceipts(params?: {
+    status?: string;
+    campaignId?: string;
+    applicationId?: string;
+    applicationCode?: string;
+    receiptCode?: string;
+    trackingNumber?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ items: PaperDossierReceipt[]; total: number; page: number; pageSize: number; totalPages: number }> {
+    const query = new URLSearchParams();
+    for (const key of ["status", "campaignId", "applicationId", "applicationCode", "receiptCode", "trackingNumber"] as const) {
+      const value = params?.[key];
+      if (value && !(key === "status" && value === "ALL")) query.set(key, value);
+    }
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+    const queryString = query.toString();
+    return apiClient(`/admin/paper-dossiers${queryString ? `?${queryString}` : ""}`);
+  },
+
+  /** Admin: get a receipt and its linked student, application, and campaign checklist summary. */
+  async adminGetPaperReceipt(id: string): Promise<PaperDossierReceipt> {
+    return apiClient<PaperDossierReceipt>(`/admin/paper-dossiers/${id}`);
+  },
+
+  /** Admin: log a paper dossier received by the office. */
+  async adminIntakePaperDossier(payload: PaperDossierReceiptPayload): Promise<PaperDossierReceipt> {
+    return apiClient<PaperDossierReceipt>("/admin/paper-dossiers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async adminLinkPaperDossier(id: string, payload: { applicationId?: string; applicationCode?: string; note?: string }): Promise<PaperDossierReceipt> {
+    return apiClient<PaperDossierReceipt>(`/admin/paper-dossiers/${id}/link`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async adminReconcilePaperDossier(
+    id: string,
+    payload: {
+      status: "IN_RECONCILIATION" | "DISCREPANCY" | "RECONCILED";
+      reconciliationNote?: string;
+      discrepancyReason?: string;
+      reconciledItems?: NonNullable<PaperDossierReceipt["reconciledItems"]>;
+    },
+  ): Promise<PaperDossierReceipt> {
+    return apiClient<PaperDossierReceipt>(`/admin/paper-dossiers/${id}/reconcile`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
 
   /**

@@ -34,6 +34,7 @@ import {
   PAYOUT_STATUS_COLORS,
   PAYOUT_STATUS_LABELS,
 } from "../../../types/payment";
+import { maskBankAccountNumber } from "../../../utils/maskBankAccount";
 
 const { Title, Text } = Typography;
 
@@ -212,8 +213,7 @@ export default function AdminPayoutsPage() {
               render: (b: Payout["bankAccountSnapshot"]) => (
                 <div className="text-xs">
                   <div className="font-medium text-slate-700">{b.bankName}</div>
-                  <div className="font-mono text-slate-600">{b.accountNumber}</div>
-                  <div className="uppercase text-[11px] text-slate-500">{b.accountHolderName}</div>
+                  <div className="font-mono text-slate-600">{maskBankAccountNumber(b?.accountNumber)}</div>
                 </div>
               ),
             },

@@ -75,6 +75,7 @@ export const ROUTES = {
     CAMPAIGN_DETAIL: "/admin/campaigns/:campaignId",
     SCHOLARSHIP_APPLICATIONS: "/admin/scholarship-applications",
     SCHOLARSHIP_APPLICATION_REVIEW: "/admin/scholarship-applications/:applicationId",
+    PAPER_DOSSIERS: "/admin/paper-dossiers",
     PAYMENTS: "/admin/payments",
     TRANSACTIONS: "/admin/transactions",
     BANK_EVENTS: "/admin/bank-events",

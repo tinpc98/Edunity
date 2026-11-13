@@ -19,11 +19,15 @@ import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
 import { courseService } from '../../../../services/course.service';
 import { classService, classKeys } from '../../../../services/class.service';
+import { teacherSubjectAuthorizationService } from '../../../../services/teacherSubjectAuthorization.service';
 import { TeacherVerificationGateCard } from '../../../../components/guards/RequireVerifiedTeacher';
 import { useTeacherVerification } from '../../../../hooks/useTeacherVerification';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import type { Course } from '../../../../types/catalog';
+import type { TeacherSubjectAuthorization } from '../../../../types/teacherSubjectAuthorization';
 import type { ScheduleEntry, CreateClassPayload } from '../../../../types/class';
+import { isCourseAuthorizedForTeacher } from '../../../../utils/teacherCourseAuthorization';
+import { useAuthStore } from '../../../../stores/auth.store';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -31,6 +35,7 @@ export default function CreateTeacherClassPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(0);
   const [form] = Form.useForm();
   
@@ -53,7 +58,17 @@ export default function CreateTeacherClassPage() {
     refetch: refetchVerification,
   } = useTeacherVerification();
 
-  // 2. Real Courses Query from Phase 3 (only after verification confirmed)
+  const authorizationsQuery = useQuery({
+    queryKey: ["teacher-subject-authorizations", user?.userId],
+    queryFn: () => teacherSubjectAuthorizationService.listAllMyAuthorizations(),
+    enabled: isVerified,
+    staleTime: 30_000,
+  });
+  const approvedAuthorizations = (authorizationsQuery.data ?? []).filter(
+    (authorization: TeacherSubjectAuthorization) => authorization.status === "APPROVED"
+  );
+
+  // 2. Courses are available only after exact subject/grade/level authorization is confirmed.
   const {
     data: coursesData,
     isLoading: isCoursesLoading,
@@ -61,19 +76,34 @@ export default function CreateTeacherClassPage() {
     error: coursesError,
     refetch: refetchCourses,
   } = useQuery({
-    queryKey: ["courses", "active", courseSearch],
-    queryFn: () => courseService.searchCourses({ search: courseSearch || undefined, pageSize: 50 }),
-    enabled: isVerified,
+    queryKey: ["courses", "active", courseSearch, "teacher-authorized"],
+    queryFn: async () => {
+      const params = { search: courseSearch || undefined, pageSize: 100, page: 1 };
+      const firstPage = await courseService.searchCourses(params);
+      if (firstPage.totalPages <= 1) return firstPage;
+      const remainingPages = await Promise.all(
+        Array.from({ length: firstPage.totalPages - 1 }, (_, index) =>
+          courseService.searchCourses({ ...params, page: index + 2 })
+        )
+      );
+      return {
+        ...firstPage,
+        items: [firstPage, ...remainingPages].flatMap((page) => page.items),
+      };
+    },
+    enabled: isVerified && authorizationsQuery.isSuccess,
     staleTime: 1000 * 60 * 2,
   });
 
-  // Only ACTIVE courses may be selected by Teachers to create a new Class
+  // Only ACTIVE courses matching an approved Teacher authorization may be selected.
   const courses: Course[] = (coursesData?.items || []).filter(
-    (c) => c.status === "ACTIVE"
+    (course) =>
+      course.status === "ACTIVE" &&
+      isCourseAuthorizedForTeacher(course, approvedAuthorizations)
   );
   const matchedCourseInList = courses.find((c) => c.id === selectedCourseId);
 
-  // If URL or selection points to a courseId not in the current list page, verify via GET /courses/:id
+  // A URL-provided course must pass the same active status and authorization checks.
   const {
     data: fetchedSelectedCourse,
     isLoading: isVerifyingSelectedCourse,
@@ -83,6 +113,7 @@ export default function CreateTeacherClassPage() {
     queryFn: () => courseService.getCourse(selectedCourseId!),
     enabled:
       isVerified &&
+      authorizationsQuery.isSuccess &&
       Boolean(selectedCourseId) &&
       !isCoursesLoading &&
       !matchedCourseInList,
@@ -92,21 +123,26 @@ export default function CreateTeacherClassPage() {
 
   const selectedCourse: Course | undefined =
     matchedCourseInList ||
-    (fetchedSelectedCourse?.status === "ACTIVE" ? fetchedSelectedCourse : undefined);
+    (fetchedSelectedCourse?.status === "ACTIVE" &&
+    isCourseAuthorizedForTeacher(fetchedSelectedCourse, approvedAuthorizations)
+      ? fetchedSelectedCourse
+      : undefined);
 
   const isCheckingSelectedCourse =
     Boolean(selectedCourseId) &&
     !matchedCourseInList &&
-    (isCoursesLoading || isVerifyingSelectedCourse);
+    (authorizationsQuery.isLoading || isCoursesLoading || isVerifyingSelectedCourse);
 
   const isInvalidSelectedCourse =
     Boolean(selectedCourseId) &&
     !matchedCourseInList &&
+    authorizationsQuery.isSuccess &&
     !isCoursesLoading &&
     !isVerifyingSelectedCourse &&
     (isSelectedCourseError ||
       !fetchedSelectedCourse ||
-      fetchedSelectedCourse.status !== "ACTIVE");
+    fetchedSelectedCourse.status !== "ACTIVE" ||
+    !isCourseAuthorizedForTeacher(fetchedSelectedCourse, approvedAuthorizations));
 
   // Form watches
   const classType = Form.useWatch('classType', form) || 'PAID';
@@ -131,11 +167,17 @@ export default function CreateTeacherClassPage() {
         message.info("Đang kiểm tra trạng thái khóa học đã chọn, vui lòng đợi...");
         return;
       }
+      if (authorizationsQuery.isError) {
+        message.error("Không xác định được quyền giảng dạy. Vui lòng tải lại trước khi chọn Course.");
+        return;
+      }
       if (!selectedCourseId || !selectedCourse || selectedCourse.status !== "ACTIVE") {
         message.warning(
           isInvalidSelectedCourse
-            ? "Khóa học đã chọn không hợp lệ hoặc không còn hoạt động (ACTIVE). Vui lòng chọn lại một khóa học đang hoạt động."
-            : "Vui lòng chọn một khóa học đang hoạt động (ACTIVE) từ danh mục chuẩn."
+            ? "Course không ACTIVE hoặc không thuộc phạm vi môn, khối và cấp độ đã được duyệt."
+            : approvedAuthorizations.length
+              ? "Vui lòng chọn Course ACTIVE thuộc phạm vi giảng dạy được duyệt."
+              : "Bạn chưa có quyền giảng dạy được duyệt. Hãy đăng ký môn trong Danh mục khóa học."
         );
         return;
       }
@@ -226,13 +268,33 @@ export default function CreateTeacherClassPage() {
           </div>
         </div>
 
+        {authorizationsQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            className="mb-6 rounded-xl"
+            message="Không thể kiểm tra quyền giảng dạy"
+            description="Không thể xác nhận môn, khối và cấp độ đã được duyệt. Không thể tiếp tục chọn Course cho đến khi tải được dữ liệu quyền."
+            action={<Button size="small" onClick={() => authorizationsQuery.refetch()}>Thử lại</Button>}
+          />
+        ) : !authorizationsQuery.isLoading && approvedAuthorizations.length === 0 ? (
+          <Alert
+            type="warning"
+            showIcon
+            className="mb-6 rounded-xl"
+            message="Chưa có quyền giảng dạy được duyệt"
+            description="Đăng ký môn và phạm vi giảng dạy trong Danh mục khóa học. Chỉ Course thuộc phạm vi được Admin duyệt mới có thể dùng để tạo lớp."
+            action={<Button size="small" onClick={() => navigate("/teacher/courses")}>Mở Danh mục khóa học</Button>}
+          />
+        ) : null}
+
         {isInvalidSelectedCourse && (
           <Alert
             type="warning"
             showIcon
             className="mb-6 rounded-xl"
-            message="Khóa học từ đường dẫn không khả dụng"
-            description="Khóa học được chỉ định không tồn tại hoặc hiện không ở trạng thái Hoạt động (ACTIVE). Vui lòng chọn một khóa học đang hoạt động từ danh sách bên dưới để tiếp tục."
+            message="Course từ đường dẫn không khả dụng"
+            description="Course không ACTIVE hoặc không thuộc chính xác môn, khối và cấp độ đã được duyệt. Hãy chọn Course hợp lệ trong danh sách."
             action={
               <Button size="small" onClick={() => setSelectedCourseId(null)}>
                 Chọn lại
@@ -253,11 +315,11 @@ export default function CreateTeacherClassPage() {
           />
         </div>
 
-        {isCoursesLoading ? (
+        {authorizationsQuery.isLoading || isCoursesLoading ? (
           <div className="py-12 text-center">
             <Spin tip="Đang tải danh sách khóa học..." />
           </div>
-        ) : isCoursesError ? (
+        ) : authorizationsQuery.isError ? null : isCoursesError ? (
           <Alert
             type="error"
             showIcon
@@ -278,7 +340,7 @@ export default function CreateTeacherClassPage() {
               </Button>
             }
           />
-        ) : courses.length === 0 ? (
+        ) : approvedAuthorizations.length === 0 ? null : courses.length === 0 ? (
           <div className="p-8 text-center bg-gray-50 rounded-xl border border-gray-200">
             <Text className="text-gray-500">Không tìm thấy khóa học đang hoạt động nào phù hợp.</Text>
           </div>
@@ -717,7 +779,14 @@ export default function CreateTeacherClassPage() {
               type="primary" 
               onClick={handleNext} 
               loading={currentStep === 0 && isCheckingSelectedCourse}
-              disabled={currentStep === 0 && (isCheckingSelectedCourse || isInvalidSelectedCourse)}
+              disabled={
+                currentStep === 0 &&
+                (isCheckingSelectedCourse ||
+                  isInvalidSelectedCourse ||
+                  authorizationsQuery.isLoading ||
+                  authorizationsQuery.isError ||
+                  (authorizationsQuery.isSuccess && approvedAuthorizations.length === 0))
+              }
               className="h-[44px] px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-medium"
             >
               Tiếp tục

@@ -3,11 +3,12 @@ import { CheckCircleFilled, LockOutlined, MailOutlined, UserOutlined } from "@an
 import { useMutation } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { loginUser, registerTeacher } from "../../services/auth.service";
+import { profileService } from "../../services/profile.service";
 import { useAuthStore } from "../../stores/auth.store";
 import { useTeacherRegistrationStore } from "../../stores/teacherRegistration.store";
 import { ROUTES } from "../../routes/routePaths";
 import type { TeacherRegisterRequest } from "../../types/auth";
-import { getAuthErrorMessage } from "../../utils/apiErrorMap";
+import { getAuthErrorMessage, getFriendlyErrorMessage } from "../../utils/apiErrorMap";
 import { getRoleHome } from "./authRedirect";
 import { useTeacherVerification } from "../../hooks/useTeacherVerification";
 
@@ -42,19 +43,41 @@ export default function TeacherRegisterPage() {
         biography: values.biography,
       });
       // Step 2 uploads private documents, which requires an authenticated Teacher
+      let session: Awaited<ReturnType<typeof loginUser>>;
       try {
-        const session = await loginUser({ email: values.email, password: values.password });
-        setAuth(session.user, session.accessToken, session.refreshToken, true);
-        return { loggedIn: true as const };
+        session = await loginUser({ email: values.email, password: values.password });
       } catch {
-        return { loggedIn: false as const };
+        return { loggedIn: false as const, draftSaveError: null };
+      }
+
+      setAuth(session.user, session.accessToken, session.refreshToken, true);
+      try {
+        await profileService.updateMyProfile({
+          qualificationSummary: values.qualificationSummary.trim(),
+          biography: values.biography?.trim() || "",
+        });
+        return { loggedIn: true as const, draftSaveError: null };
+      } catch (error) {
+        return {
+          loggedIn: true as const,
+          draftSaveError: getFriendlyErrorMessage(error, "Không thể lưu thông tin hồ sơ."),
+        };
       }
     },
-    onSuccess: ({ loggedIn }, values) => {
+    onSuccess: ({ loggedIn, draftSaveError }, values) => {
+      if (draftSaveError) {
+        notification.warning({
+          title: "Thông tin nháp chưa được lưu trên máy chủ",
+          description: draftSaveError,
+          placement: "topRight",
+        });
+      }
       notification.success({
         title: "Tạo tài khoản giáo viên thành công",
         description: loggedIn
-          ? "Tiếp tục bổ sung giấy tờ để Edunity xác minh hồ sơ của bạn."
+          ? draftSaveError
+            ? "Tiếp tục bổ sung giấy tờ; bạn có thể lưu lại thông tin hồ sơ ở bước tiếp theo."
+            : "Thông tin chuyên môn đã được lưu. Tiếp tục bổ sung giấy tờ để xác minh hồ sơ."
           : "Vui lòng đăng nhập để bổ sung hồ sơ xác minh.",
         placement: "topRight",
       });

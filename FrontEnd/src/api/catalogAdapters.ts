@@ -88,6 +88,13 @@ export function adaptProposal(raw: ApiCourseProposal): CourseProposal {
     description: raw.description,
     learningObjectives: raw.learningObjectives,
     syllabus: raw.syllabus,
+    syllabusDraft: raw.syllabusDraft
+      ? {
+          summary: raw.syllabusDraft.summary,
+          units: raw.syllabusDraft.units?.map((unit) => ({ ...unit })),
+        }
+      : undefined,
+    pricingExpectation: raw.pricingExpectation ? { ...raw.pricingExpectation } : undefined,
     level: raw.level,
     gradeLevel: raw.gradeLevel,
     prerequisites: raw.prerequisites,
@@ -97,6 +104,9 @@ export function adaptProposal(raw: ApiCourseProposal): CourseProposal {
     reviewedBy: raw.reviewedBy,
     reviewedAt: raw.reviewedAt,
     reviewNote: raw.reviewNote,
+    submittedAt: raw.submittedAt,
+    revisionNumber: raw.revisionNumber,
+    revisionHistory: raw.revisionHistory?.map((entry) => ({ ...entry })),
     teacherName: raw.teacherName,
     teacherEmail: raw.teacherEmail,
     categoryName: raw.categoryName,
