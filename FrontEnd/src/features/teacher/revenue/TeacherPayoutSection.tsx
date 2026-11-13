@@ -33,6 +33,7 @@ import {
   PAYOUT_STATUS_COLORS,
   PAYOUT_STATUS_LABELS,
 } from "../../../types/payment";
+import { maskBankAccountNumber } from "../../../utils/maskBankAccount";
 
 const { Title, Text } = Typography;
 
@@ -46,17 +47,28 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<PayoutRequestPayload>();
 
-  const { data: payouts = [], isLoading: payoutsLoading } = useQuery({
+  const {
+    data: payouts = [],
+    isLoading: payoutsLoading,
+    isError: payoutsError,
+    refetch: refetchPayouts,
+  } = useQuery({
     queryKey: financeKeys.teacherPayouts(),
     queryFn: () => financeService.getMyPayouts(),
   });
 
-  const { data: settlementData, isLoading: settlementsLoading } = useQuery({
+  const {
+    data: settlementData,
+    isLoading: settlementsLoading,
+    isError: settlementsError,
+    refetch: refetchSettlements,
+  } = useQuery({
     queryKey: financeKeys.teacherSettlements(),
     queryFn: () => financeService.getTeacherSettlements(),
   });
 
   const isMonday = settlementData?.window?.isMondayWithdrawalWindow ?? false;
+  const payoutDataUnavailable = payoutsError || settlementsError;
   const windowNotice =
     settlementData?.window?.notice ||
     "Cổng rút tiền mở vào Thứ Hai hàng tuần từ 08:00 đến 17:00 (GMT+7)";
@@ -73,10 +85,16 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
       form.resetFields();
       queryClient.invalidateQueries({ queryKey: financeKeys.all });
     },
-    onError: (err: any) => {
-      message.error(err?.message || "Không thể gửi yêu cầu rút tiền.");
+    onError: () => {
+      message.error("Không thể gửi yêu cầu rút tiền. Vui lòng kiểm tra thông tin và thử lại.");
     },
   });
+
+  const closeRequestModal = () => {
+    if (requestMutation.isPending) return;
+    setOpen(false);
+    form.resetFields();
+  };
 
   return (
     <Card className="rounded-2xl border-slate-200/80 shadow-xs">
@@ -93,18 +111,21 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
         <Button
           type="primary"
           icon={<BankOutlined />}
-          disabled={available <= 0 || hasOpenRequest || !isMonday}
+          disabled={payoutDataUnavailable || available <= 0 || hasOpenRequest || !isMonday}
           onClick={() => {
+            form.resetFields();
             form.setFieldsValue({ amount: available });
             setOpen(true);
           }}
           className={
-            !isMonday || available <= 0 || hasOpenRequest
+            payoutDataUnavailable || !isMonday || available <= 0 || hasOpenRequest
               ? ""
               : "bg-indigo-600 hover:bg-indigo-500"
           }
         >
-          {hasOpenRequest
+          {payoutDataUnavailable
+            ? "Không thể tải thông tin rút tiền"
+            : hasOpenRequest
             ? "Đang có yêu cầu chờ xử lý"
             : !isMonday
             ? "Cổng rút chỉ mở Thứ Hai (08:00 - 17:00)"
@@ -144,6 +165,35 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
         )}
       </div>
 
+      <Alert
+        type="info"
+        showIcon
+        className="mb-4"
+        message="Thông tin ngân hàng được dùng cho từng yêu cầu rút"
+        description="Backend hiện chưa có hồ sơ tài khoản nhận thù lao riêng để lưu hoặc cập nhật. Số tài khoản bên dưới được gửi cùng yêu cầu rút tiền và lưu thành snapshot của yêu cầu đó."
+      />
+
+      {(payoutsError || settlementsError) && (
+        <Alert
+          type="error"
+          showIcon
+          className="mb-4"
+          message="Không tải được đầy đủ thông tin rút thù lao"
+          description="Vui lòng thử lại. Lỗi không kèm theo thông tin tài khoản."
+          action={
+            <Button
+              size="small"
+              onClick={() => {
+                if (payoutsError) void refetchPayouts();
+                if (settlementsError) void refetchSettlements();
+              }}
+            >
+              Thử lại
+            </Button>
+          }
+        />
+      )}
+
       {/* Table of Payout Requests */}
       <Table<Payout>
         size="small"
@@ -151,7 +201,9 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
         loading={payoutsLoading || settlementsLoading}
         dataSource={payouts}
         pagination={{ pageSize: 5 }}
-        locale={{ emptyText: "Chưa có yêu cầu rút tiền nào." }}
+        locale={{
+          emptyText: payoutsError ? "Không thể tải lịch sử yêu cầu." : "Chưa có yêu cầu rút tiền nào.",
+        }}
         columns={[
           {
             title: "Ngày yêu cầu",
@@ -177,7 +229,9 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
               <div className="text-xs">
                 <span className="font-semibold text-slate-700">{b.bankName}</span>
                 <span className="text-slate-400 mx-1">•</span>
-                <span className="font-mono text-slate-600">{b.accountNumber}</span>
+                <span className="font-mono text-slate-600">
+                  {maskBankAccountNumber(b?.accountNumber)}
+                </span>
                 <div className="text-slate-500 uppercase text-[11px]">{b.accountHolderName}</div>
               </div>
             ),
@@ -239,7 +293,10 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
           </div>
         }
         open={open}
-        onCancel={() => setOpen(false)}
+        onCancel={closeRequestModal}
+        maskClosable={!requestMutation.isPending}
+        closable={!requestMutation.isPending}
+        cancelButtonProps={{ disabled: requestMutation.isPending }}
         onOk={() => form.submit()}
         okText="Gửi yêu cầu rút tiền"
         cancelText="Hủy bỏ"
@@ -250,6 +307,13 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
             <span className="text-slate-600">Số dư khả dụng hiện tại:</span>
             <span className="font-bold text-emerald-600 text-base">{formatVND(available)}</span>
           </div>
+          <Alert
+            type="warning"
+            showIcon
+            className="mb-4"
+            message="Nhập tài khoản nhận cho yêu cầu này"
+            description="Thông tin này không tạo hoặc cập nhật tài khoản nhận mặc định."
+          />
           <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
             <InfoCircleOutlined /> Lệnh rút tiền được Admin duyệt và giải ngân vào ngày Thứ Sáu tiếp theo.
           </div>
@@ -287,7 +351,7 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
             label="Tên Ngân hàng"
             rules={[{ required: true, message: "Vui lòng nhập tên ngân hàng" }]}
           >
-            <Input placeholder="VD: Vietcombank, MB Bank, Techcombank, BIDV" />
+            <Input autoComplete="off" placeholder="Tên ngân hàng" />
           </Form.Item>
 
           <Form.Item
@@ -298,7 +362,7 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
               { min: 6, message: "Số tài khoản không hợp lệ" },
             ]}
           >
-            <Input placeholder="VD: 0123456789" />
+            <Input autoComplete="off" inputMode="numeric" placeholder="Nhập số tài khoản" />
           </Form.Item>
 
           <Form.Item
@@ -306,7 +370,7 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
             label="Tên chủ tài khoản (In hoa không dấu)"
             rules={[{ required: true, message: "Vui lòng nhập tên chủ tài khoản" }]}
           >
-            <Input placeholder="VD: NGUYEN VAN A" />
+            <Input autoComplete="off" placeholder="Tên chủ tài khoản" />
           </Form.Item>
         </Form>
       </Modal>
