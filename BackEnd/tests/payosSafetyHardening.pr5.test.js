@@ -112,6 +112,8 @@ async function buildWebhookPayload(
 
 beforeAll(async () => {
   process.env.NODE_ENV = "test";
+  process.env.ENABLE_PAYMENT_SANDBOX = "true";
+  process.env.REAL_LOCAL_RUNTIME = "false";
   process.env.PAYOS_ENABLED = "false";
   process.env.ENABLE_FINANCIAL_OUTBOX_WORKER = "false";
   process.env.PAYOS_TUITION_CLIENT_ID = "tuition_client_id_pr5";
