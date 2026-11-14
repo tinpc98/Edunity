@@ -17,6 +17,7 @@ import PrivateDocumentCard from '../../../../components/common/PrivateDocumentCa
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import type { VerificationStatus } from '../../../../types/teacherVerification';
 import VerificationHistoryCard from './components/VerificationHistoryCard';
+import TeacherContractsCard from './components/TeacherContractsCard';
 import { groupVerificationSubmissions } from '../../../../utils/verificationSubmissions';
 
 const { Title, Paragraph } = Typography;
@@ -182,6 +183,8 @@ export default function TeacherVerificationDetailPage() {
           </Card>
 
           <VerificationHistoryCard submissions={submissions} />
+
+          {teacherId && <TeacherContractsCard teacherId={teacherId} isVerified={status === 'VERIFIED'} />}
 
         </Col>
 

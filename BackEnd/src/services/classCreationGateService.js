@@ -13,14 +13,14 @@ const NOT_DELETED = { isDeleted: { $ne: true } };
 /**
  * External dependency verifier ports for CUR-10:
  * - CUR-07 (CoursePricingPolicy): WIRED by default to coursePricingPolicyService.verifyClassPricingPolicy.
- * - TEA-12 (TeacherContract ACTIVE by Bao): NOT present in codebase yet -> BLOCKED unless registered.
+ * - TEA-12 (TeacherContract ACTIVE): WIRED by default to teacherContractService.verifyContract.
  *
  * IMPORTANT: User.teacherProfile.verificationStatus === "VERIFIED" is NEVER treated as equivalent
- * to TEA-12 contract ACTIVE. Without an official contract verifier, the contract gate fails closed (503).
+ * to TEA-12 contract ACTIVE. Without a contract verifier, the contract gate fails closed (503).
  */
 const defaultVerifiers = () => ({
   pricingPolicyVerifier: pricingPolicyService.verifyClassPricingPolicy,
-  contractVerifier: null,
+  contractVerifier: (args) => require("./teacherContractService").verifyContract(args), // lazy: avoids a require cycle
 });
 
 let registeredVerifiers = defaultVerifiers();

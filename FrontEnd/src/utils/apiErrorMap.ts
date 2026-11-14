@@ -22,6 +22,18 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       return "Bạn chỉ có thể nhắn tin cho học viên thuộc lớp của mình.";
     }
 
+    // Teacher contract errors (TEA-12)
+    const contractMessages: Record<string, string> = {
+      TEACHER_CONTRACT_NOT_FOUND: "Bạn cần ký hợp đồng giảng dạy trước khi mở lớp. Xem mục Hợp đồng trong Hồ sơ giáo viên.",
+      TEACHER_CONTRACT_NOT_ACTIVE: "Hợp đồng giảng dạy chưa có hiệu lực, nên chưa thể mở lớp.",
+      TEACHER_CONTRACT_EXPIRED: "Hợp đồng giảng dạy đã hết hạn. Vui lòng liên hệ Edunity để gia hạn.",
+      CONTRACT_ALREADY_PENDING: "Giáo viên này đang có một hợp đồng chờ ký.",
+      TEACHER_NOT_VERIFIED: "Chỉ gửi được hợp đồng cho giáo viên đã xác minh.",
+      CONTRACT_NOT_PENDING: "Hợp đồng này không còn ở trạng thái chờ ký.",
+      ECONTRACT_PROVIDER_UNAVAILABLE: "Dịch vụ hợp đồng điện tử chưa sẵn sàng. Vui lòng thử lại sau.",
+    };
+    if (err.code && contractMessages[err.code]) return contractMessages[err.code];
+
     // Scholarship errors
     if (err.code === "CAMPAIGN_NOT_ACCEPTING_APPLICATIONS") {
       return "Chiến dịch này hiện không trong thời gian nhận hồ sơ.";

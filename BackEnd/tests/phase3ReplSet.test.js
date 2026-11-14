@@ -592,13 +592,13 @@ describe("Phase 3 Real MongoMemoryReplSet Verification (AID-01, AID-04, SPO-07, 
       const packetId = (c1.statusCode === 201 ? c1 : c2).body.data.id;
       expect(await TeacherContractReviewPacket.countDocuments({ teacherId: teacherA._id, status: { $ne: "CLOSED" } })).toBe(1);
 
-      // Attempt contract execution handoff -> 503 CONTRACT_DEPENDENCY_BLOCKED yet BOTH history & AuditLog commit atomically!
+      // Attempt contract execution handoff -> 409: TEA-16 never mutates contracts, yet BOTH history & AuditLog commit atomically!
       const execBlocked = await request(app)
         .post(`/api/admin/contract-reviews/packets/${packetId}/execute-contract-action`)
         .set(as("admin"))
         .send({ note: "Verify atomic audit before 503" });
-      expect(execBlocked.statusCode).toBe(503);
-      expect(execBlocked.body.error).toBe("CONTRACT_DEPENDENCY_BLOCKED");
+      expect(execBlocked.statusCode).toBe(409);
+      expect(execBlocked.body.error).toBe("CONTRACT_MUTATION_OUT_OF_AUTHORITY");
 
       const afterBlocked = await TeacherContractReviewPacket.findById(packetId).lean();
       expect(afterBlocked.history.map((h) => h.action)).toContain("EXECUTION_BLOCKED");

@@ -63,6 +63,7 @@ const PUBLIC_ROUTES = new Set([
   "post /api/payments/webhooks/payos/tuition", // signed by payOS TUITION checksumKey
   "post /api/payments/webhooks/payos/donation", // signed by payOS DONATION checksumKey
   "post /api/sessions/livekit-webhook", // signed by LiveKit (security.test.js)
+  "post /api/contracts/econtract-webhook", // HMAC-signed by the e-contract provider (teacherContract.test.js)
 ]);
 
 const routeKey = (route) => `${route.method} ${route.path}`;

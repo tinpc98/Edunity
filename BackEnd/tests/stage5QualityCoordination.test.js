@@ -234,13 +234,13 @@ describe("EDUNITY V3 — Academic Quality & Incident Coordination (TEA-16, SPO-0
       expect(updateRes.statusCode).toBe(200);
       expect(updateRes.body.data.status).toBe("READY_FOR_CONTRACT_TEAM");
 
-      // Execution handoff: fail-closed 503 when TEA-12 contract integration is absent
+      // Execution handoff: TEA-16 refuses to mutate contracts (409); termination belongs to the TEA-12 contract module
       const handoffRes = await request(app)
         .post(`/api/admin/contract-reviews/packets/${packetId}/execute-contract-action`)
         .set(as(admin))
         .send({ note: "Yêu cầu rà soát hợp đồng" });
-      expect(handoffRes.statusCode).toBe(503);
-      expect(handoffRes.body.error).toBe("CONTRACT_DEPENDENCY_BLOCKED");
+      expect(handoffRes.statusCode).toBe(409);
+      expect(handoffRes.body.error).toBe("CONTRACT_MUTATION_OUT_OF_AUTHORITY");
 
       // Packet has execution blocked history without mutating any external contract
       const refreshedPacket = await TeacherContractReviewPacket.findById(packetId).lean();

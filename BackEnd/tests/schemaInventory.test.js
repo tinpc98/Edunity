@@ -54,6 +54,7 @@ const EXPECTED_MODELS = [
   "PaymentReconciliation",
   "RefundCase",
   "BankProofRegistry",
+  "TeacherContract",
 ];
 
 const SOFT_DELETED_MODELS = [
@@ -95,7 +96,7 @@ describe("TASK G0-02: Mongoose Schema Inventory & Validation", () => {
   });
 
   describe("1. Registry, Exports and Constants Verification", () => {
-    test("G0-02.1.1: Models/index.js exports all expected Mongoose models (48 models)", () => {
+    test("G0-02.1.1: Models/index.js exports all expected Mongoose models (49 models)", () => {
       expect(Object.keys(models)).toHaveLength(EXPECTED_MODELS.length);
       for (const modelName of EXPECTED_MODELS) {
         expect(models[modelName]).toBeDefined();

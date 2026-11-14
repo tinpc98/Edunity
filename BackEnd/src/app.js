@@ -50,12 +50,13 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 const LIVEKIT_WEBHOOK_PATH = "/api/sessions/livekit-webhook";
+const ECONTRACT_WEBHOOK_PATH = "/api/contracts/econtract-webhook";
 app.use(
   express.json({
     // LiveKit posts application/webhook+json and signs the exact bytes it sent
     type: ["application/json", "application/webhook+json"],
     verify: (req, res, buffer) => {
-      if (req.originalUrl === LIVEKIT_WEBHOOK_PATH) req.rawBody = buffer;
+      if (req.originalUrl === LIVEKIT_WEBHOOK_PATH || req.originalUrl === ECONTRACT_WEBHOOK_PATH) req.rawBody = buffer;
     },
   })
 );

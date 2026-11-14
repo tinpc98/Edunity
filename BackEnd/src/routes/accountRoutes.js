@@ -22,6 +22,15 @@ router.get("/admin/teacher-verifications/:teacherId", admin, controller.adminGet
 router.post("/admin/teacher-verifications/:teacherId/approve", admin, controller.approveVerification);
 router.post("/admin/teacher-verifications/:teacherId/reject", admin, controller.rejectVerification);
 
+// Teacher contracts (TEA-12 / BAO-06..08)
+const contractController = require("../controllers/contractController");
+router.get("/teacher/contracts", teacher, contractController.listMyContracts);
+router.post("/teacher/contracts/:id/sandbox-sign", teacher, contractController.sandboxSign);
+router.get("/admin/teachers/:teacherId/contracts", admin, contractController.adminListContracts);
+router.post("/admin/teachers/:teacherId/contracts", admin, contractController.adminCreateContract);
+router.post("/admin/contracts/:id/end", admin, contractController.adminEndContract);
+router.post("/contracts/econtract-webhook", contractController.econtractWebhook);
+
 // Notifications
 router.get("/me/notifications", authMiddleware, controller.getMyNotifications);
 router.post("/me/notifications/read-all", authMiddleware, controller.markAllNotificationsAsRead);

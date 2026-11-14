@@ -27,6 +27,7 @@ import type { TeacherProfile, UpdateTeacherProfilePayload } from "../../../types
 import type { SubmitVerificationRequest } from "../../../types/teacherVerification";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 import { groupVerificationSubmissions } from "../../../utils/verificationSubmissions";
+import TeacherContractCard from "./TeacherContractCard";
 import {
   AVATAR_ACCEPT,
   PRIVATE_DOCUMENT_ACCEPT,
@@ -308,15 +309,18 @@ export default function TeacherProfilePage() {
 
     if (status === "VERIFIED") {
       return (
-        <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 flex items-start gap-3">
-          <CheckCircleFilled className="text-emerald-500 text-xl mt-0.5" />
-          <div className="flex-1">
-            <h4 className="text-emerald-800 font-bold m-0 text-base">Hồ sơ đã được xác minh</h4>
-            <p className="text-emerald-700 text-sm mt-1 mb-0">
-              Hồ sơ của bạn đã được quản trị viên phê duyệt. Bạn có đầy đủ quyền tạo lớp học và bắt đầu giảng dạy trên hệ thống Edunity.
-            </p>
+        <>
+          <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 flex items-start gap-3">
+            <CheckCircleFilled className="text-emerald-500 text-xl mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-emerald-800 font-bold m-0 text-base">Hồ sơ đã được xác minh</h4>
+              <p className="text-emerald-700 text-sm mt-1 mb-0">
+                Hồ sơ của bạn đã được quản trị viên phê duyệt. Bạn có thể mở lớp khi có hợp đồng giảng dạy còn hiệu lực.
+              </p>
+            </div>
           </div>
-        </div>
+          <TeacherContractCard />
+        </>
       );
     }
 
