@@ -160,6 +160,16 @@ const parseDocuments = (documents) => {
     };
   });
 
+  // CCCD only: the identity document is the card's FRONT and BACK
+  parsed
+    .filter((document) => document.documentType === "IDENTITY")
+    .forEach((document) => {
+      const sides = document.files.map((file) => file.side);
+      if (!sides.includes("FRONT") || !sides.includes("BACK")) {
+        throw validationError("The IDENTITY document must contain both the FRONT and BACK of the CCCD");
+      }
+    });
+
   // FR-TEA-02 + FR-TEA-03: both identity verification and qualification are required
   const missing = TEACHER_DOCUMENT_TYPES.filter((type) => !parsed.some((document) => document.documentType === type));
   if (missing.length) throw validationError("Missing required documents", { missing });

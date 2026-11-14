@@ -112,7 +112,10 @@ export default function TeacherProfilePage() {
   const submitVerificationMutation = useMutation({
     mutationFn: async (values: { qualificationSummary?: string; biography?: string; identity: IdentityFormValues }) => {
       if (!identityFrontFile) {
-        throw new Error("Vui lòng tải lên tài liệu định danh (mặt trước hoặc hộ chiếu).");
+        throw new Error("Vui lòng tải lên mặt trước CCCD.");
+      }
+      if (!identityBackFile) {
+        throw new Error("Vui lòng tải lên mặt sau CCCD.");
       }
       if (qualificationFiles.length === 0) {
         throw new Error("Vui lòng tải lên ít nhất một bằng cấp hoặc chứng chỉ chuyên môn.");
@@ -637,7 +640,7 @@ export default function TeacherProfilePage() {
       >
         <Alert
           message="Yêu cầu tài liệu bắt buộc"
-          description="Hồ sơ xác minh bao gồm: (1) Giấy tờ định danh cá nhân (CMND/CCCD hoặc Hộ chiếu) và (2) Bằng cấp/Chứng chỉ chuyên môn. Định dạng hỗ trợ: PDF, JPG, PNG, WebP (Tối đa 10MB mỗi tệp)."
+          description="Hồ sơ xác minh bao gồm: (1) Căn cước công dân (CCCD, cả hai mặt) và (2) Bằng cấp/Chứng chỉ chuyên môn. Định dạng hỗ trợ: PDF, JPG, PNG, WebP (Tối đa 10MB mỗi tệp)."
           type="info"
           showIcon
           className="mb-5"
@@ -652,10 +655,10 @@ export default function TeacherProfilePage() {
           <div className="mb-5 p-4 rounded-xl bg-slate-50 border border-slate-200">
             <h4 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs">1</span>
-              Giấy tờ định danh cá nhân (CMND / CCCD / Hộ chiếu) *
+              Căn cước công dân (CCCD) *
             </h4>
             <p className="text-xs text-slate-500 mb-3">
-              Tải lên mặt trước (bắt buộc) và mặt sau (dành cho CCCD).
+              Tải lên cả mặt trước và mặt sau CCCD.
             </p>
             <IdentityFields />
 
@@ -704,7 +707,7 @@ export default function TeacherProfilePage() {
 
               {/* Back Side */}
               <div data-testid="upload-id-back" className="border border-slate-200 rounded-lg p-3 bg-white flex flex-col justify-between">
-                <div className="text-xs font-semibold text-slate-700 mb-2">Mặt sau (Tùy chọn)</div>
+                <div className="text-xs font-semibold text-slate-700 mb-2">Mặt sau (Bắt buộc)</div>
                 {identityBackFile ? (
                   <div className="flex items-center justify-between p-2 rounded bg-indigo-50/50 border border-indigo-100">
                     <div className="flex items-center gap-2 overflow-hidden">

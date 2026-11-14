@@ -40,6 +40,9 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       BANK_ACCOUNT_NOT_VERIFIED: "Bạn cần đăng ký tài khoản nhận tiền và chờ Edunity duyệt trước khi rút tiền.",
       BANK_ACCOUNT_RECENTLY_CHANGED: "Tài khoản nhận tiền vừa thay đổi nên rút tiền đang tạm khoá 72 giờ.",
       BANK_ACCOUNT_NOT_PENDING: "Tài khoản này không còn chờ duyệt.",
+      GUARDIAN_CONSENT_REQUIRED: "Học sinh dưới 18 tuổi cần giấy đồng thuận của phụ huynh đã được Edunity xác nhận.",
+      GUARDIAN_CONSENT_EXISTS: "Bạn đã có giấy đồng thuận đang chờ duyệt hoặc đã xác nhận cho chiến dịch này.",
+      CONSENT_NOT_PENDING: "Giấy đồng thuận này không còn chờ duyệt.",
     };
     if (err.code && contractMessages[err.code]) return contractMessages[err.code];
 

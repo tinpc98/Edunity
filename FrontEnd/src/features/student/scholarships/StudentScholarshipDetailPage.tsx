@@ -1,3 +1,4 @@
+import GuardianConsentCard from "./components/GuardianConsentCard";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -112,6 +113,7 @@ export default function StudentScholarshipDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <div className="lg:col-span-8 space-y-6">
+          {campaign.dossierPolicy?.requireGuardianConsentForMinor && <GuardianConsentCard campaignId={campaign.id} />}
           <Card className="rounded-2xl border-slate-200 shadow-2xs">
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <Tag color={APPLICATION_PHASE_COLORS[phase]} className="font-semibold border-none">

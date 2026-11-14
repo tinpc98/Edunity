@@ -137,7 +137,7 @@ describe("Re-verification every 6 months", () => {
       .send({
         identity: IDENTITY,
         documents: [
-          { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: (await upload(name, "IDENTITY")).body.data.storageKey }] },
+          { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: (await upload(name, "IDENTITY")).body.data.storageKey }, { side: "BACK", storageKey: (await upload(name, "IDENTITY")).body.data.storageKey }] },
           { documentType: "QUALIFICATION", files: [{ storageKey: (await upload(name, "QUALIFICATION")).body.data.storageKey }] },
         ],
       });
@@ -150,7 +150,7 @@ describe("Re-verification every 6 months", () => {
       .send({
         identity: { ...IDENTITY, idNumber: "079203005555", expiryDate: new Date(Date.now() + 60 * DAY).toISOString().slice(0, 10) },
         documents: [
-          { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: (await upload("fresh", "IDENTITY")).body.data.storageKey }] },
+          { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: (await upload("fresh", "IDENTITY")).body.data.storageKey }, { side: "BACK", storageKey: (await upload("fresh", "IDENTITY")).body.data.storageKey }] },
           { documentType: "QUALIFICATION", files: [{ storageKey: (await upload("fresh", "QUALIFICATION")).body.data.storageKey }] },
         ],
       });

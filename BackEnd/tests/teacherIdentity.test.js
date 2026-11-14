@@ -41,7 +41,7 @@ const submit = async (name, identityBody) =>
     .set(as(name))
     .send({
       documents: [
-        { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: await upload(name, "IDENTITY") }] },
+        { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: await upload(name, "IDENTITY") }, { side: "BACK", storageKey: await upload(name, "IDENTITY") }] },
         { documentType: "QUALIFICATION", files: [{ storageKey: await upload(name, "QUALIFICATION") }] },
       ],
       identity: identityBody,

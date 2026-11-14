@@ -2,6 +2,7 @@ const os = require("os");
 const path = require("path");
 const fs = require("fs");
 process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "edunity-storage-"));
+process.env.ENABLE_PAYMENT_SANDBOX = "true"; // payments go through the deterministic sandbox gateway in tests
 
 const request = require("supertest");
 const mongoose = require("mongoose");
@@ -9,6 +10,7 @@ const app = require("../src/app");
 const {
   User, Category, Subject, Course, Class, Session, Enrollment, Payment, Notification, Report, Conversation, Message,
   ScholarshipCampaign, ScholarshipApplication, Scholarship, SponsorContribution, CourseProposal,
+  CoursePricingPolicy, TeacherSubjectAuthorization, TeacherContract,
 } = require("../src/models");
 const { signAccessToken } = require("../src/utils/jwt");
 const { hashPassword } = require("../src/utils/password");
@@ -53,6 +55,7 @@ const PUBLIC_ROUTES = new Set([
   "get /api/courses/:id",
   "get /api/courses/:id/classes",
   "get /api/courses/:id/syllabus",
+  "get /api/classes/:id/syllabus", // optionalAuth: published class syllabus is public
   "get /api/learning-paths",
   "get /api/learning-paths/:id",
   "get /api/campaigns",
@@ -101,11 +104,28 @@ beforeAll(async () => {
 
   const category = await Category.create({ name: "Danh mục", slug: "danh-muc", createdBy: users.admin._id });
   const subject = await Subject.create({ categoryId: category._id, categoryName: category.name, name: "Môn", slug: "mon", createdBy: users.admin._id });
-  const course = await Course.create({ subjectId: subject._id, subjectName: subject.name, categoryId: category._id, categoryName: category.name, title: "Khóa", slug: "khoa", createdBy: users.admin._id });
+  const course = await Course.create({ subjectId: subject._id, subjectName: subject.name, categoryId: category._id, categoryName: category.name, title: "Khóa", slug: "khoa", level: "BEGINNER", createdBy: users.admin._id });
+  // CUR-10 preconditions so teacherA can edit its draft class: TEA-07 authorization, CUR-07 pricing, TEA-12 contract
+  await TeacherSubjectAuthorization.create(
+    ["teacherA", "teacherB"].map((key) => ({
+      teacherId: users[key]._id, subjectId: subject._id, categoryId: category._id, gradeLevel: null, level: "BEGINNER",
+      status: "APPROVED", createdBy: users.admin._id, approvedBy: users.admin._id, approvedAt: new Date(),
+    }))
+  );
+  await CoursePricingPolicy.create({
+    policyKey: "GLOBAL:DEFAULT:ALL:ANY:ANY", version: 1, name: "Auth Test Global Policy", scopeType: "GLOBAL", classType: "ALL",
+    allowFree: true, minPrice: 0, maxPrice: 1000000, minSessions: 1, maxSessions: 50,
+    effectiveFrom: new Date(Date.now() - 60000), status: "ACTIVE", createdBy: users.admin._id,
+  });
+  await TeacherContract.create({
+    contractCode: "HD-AUTH-A", teacherId: users.teacherA._id, status: "ACTIVE", effectiveFrom: new Date(Date.now() - 86400000),
+    expiresAt: new Date(Date.now() + 365 * 86400000), provider: { name: "SANDBOX", envelopeId: "SBX-AUTH-A" },
+    createdBy: users.admin._id, sentAt: new Date(), signedAt: new Date(),
+  });
 
   const makeClass = (teacherKey, name, extra = {}) =>
     Class.create({
-      courseId: course._id, courseTitle: course.title, categoryId: category._id, subjectId: subject._id,
+      courseId: course._id, courseTitle: course.title, categoryId: category._id, subjectId: subject._id, level: "BEGINNER",
       teacherId: users[teacherKey]._id, teacherName: teacherKey, className: name, classType: "PAID", price: 200000,
       capacity: 10, enrollmentStart: WINDOW.start, enrollmentEnd: WINDOW.end, startDate: WINDOW.start, endDate: WINDOW.end,
       status: "OPEN", reviewedBy: users.admin._id, reviewNote: "ghi chú nội bộ của admin", ...extra,

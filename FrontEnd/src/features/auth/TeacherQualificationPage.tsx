@@ -242,7 +242,7 @@ export default function TeacherQualificationPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <Form.Item
-                  label={<span><IdcardOutlined className="mr-1.5 text-indigo-600" />CCCD / Hộ chiếu (mặt trước)</span>}
+                  label={<span><IdcardOutlined className="mr-1.5 text-indigo-600" />CCCD (mặt trước)</span>}
                   name="identityFront"
                   valuePropName="fileList"
                   getValueFromEvent={normFileList}
@@ -257,7 +257,7 @@ export default function TeacherQualificationPage() {
                   name="identityBack"
                   valuePropName="fileList"
                   getValueFromEvent={normFileList}
-                  extra="Không bắt buộc nếu dùng hộ chiếu."
+                  rules={[{ required: true, message: "Vui lòng tải lên mặt sau CCCD." }]}
                 >
                   <Upload accept={PRIVATE_DOCUMENT_ACCEPT} beforeUpload={beforeUpload} maxCount={1} listType="text">
                     <Button icon={<InboxOutlined />} block>Chọn tệp mặt sau</Button>

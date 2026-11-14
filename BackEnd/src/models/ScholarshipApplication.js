@@ -93,6 +93,19 @@ const scholarshipApplicationSchema = new Schema(
     latestPaperReceiptId: { type: Schema.Types.ObjectId, ref: "PaperDossierReceipt", default: null },
 
     statement: String, // hoàn cảnh/nhu cầu học tập — KHÔNG có field số tiền (BR-36)
+    // BAO-11: an anonymised story sponsors may read. Off by default; the student (and guardian, for a minor) opts in.
+    publicStory: {
+      type: new Schema(
+        {
+          consent: { type: Boolean, default: false },
+          text: { type: String, trim: true, maxlength: 500, default: null },
+          consentedAt: { type: Date, default: null },
+          revokedAt: { type: Date, default: null },
+        },
+        { _id: false }
+      ),
+      default: () => ({ consent: false }),
+    },
     status: {
       type: String,
       enum: SCHOLARSHIP_APPLICATION_STATUSES,

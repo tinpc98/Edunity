@@ -73,6 +73,10 @@ app.use("/api", require("./routes/teachingRoutes"));
 app.use("/api", require("./routes/scholarshipRoutes"));
 app.use("/api", require("./routes/accountRoutes"));
 app.use("/api", require("./routes/communityRoutes"));
+app.use("/api", require("./routes/scholarshipPrivacyRoutes"));
+
+// AID-08: guardian consent for minors is checked against Admin-verified consent forms (BAO-11)
+require("./services/scholarshipDossierGateService").setConsentVerifier(require("./services/scholarshipPrivacyService").verifyConsent);
 
 // Public storage only (avatars, cover images). Private documents are never served statically.
 app.use("/uploads", express.static(require("./services/storageService").getPublicDir(), { index: false }));

@@ -577,7 +577,7 @@ describe("Teacher Access Control by verificationStatus (P0-01, P1-01..P1-05)", (
               qualificationSummary: "Thạc sĩ Vật lý",
               identity: { fullName: "Trần Thị B", idNumber: "079203009999", dateOfBirth: "1988-01-01", address: "1 Trần Phú, Hà Đông, Hà Nội" },
               documents: [
-                { documentType: "IDENTITY", files: [{ side: "SINGLE", storageKey: idUp.body.data.storageKey }] },
+                { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: idUp.body.data.storageKey }, { side: "BACK", storageKey: idUp.body.data.storageKey }] },
                 { documentType: "QUALIFICATION", files: [{ side: "SINGLE", storageKey: qualUp.body.data.storageKey }] },
               ],
             });

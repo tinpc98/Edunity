@@ -31,7 +31,7 @@ const submit = async (name = "teacher", front = { file: PNG, type: "image/png" }
     .send({
       identity: IDENTITY,
       documents: [
-        { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: await upload(name, "IDENTITY", front.file, front.type) }] },
+        { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: await upload(name, "IDENTITY", front.file, front.type) }, { side: "BACK", storageKey: await upload(name, "IDENTITY") }] },
         { documentType: "QUALIFICATION", files: [{ storageKey: await upload(name, "QUALIFICATION") }] },
       ],
     });
