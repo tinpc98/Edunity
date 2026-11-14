@@ -47,4 +47,8 @@ const maskAddress = (address) => {
   return parts.length <= 2 ? "***" : `***, ${parts.slice(-2).join(", ")}`;
 };
 
-module.exports = { encrypt, decrypt, blindIndex, maskTail, maskAddress };
+// "Nguyễn  Văn A" -> "NGUYEN VAN A": OCR, bank records and typing differ in accents, case and spacing, not in letters
+const normalizePersonName = (name) =>
+  String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "D").replace(/\s+/g, " ").trim().toUpperCase();
+
+module.exports = { encrypt, decrypt, blindIndex, maskTail, maskAddress, normalizePersonName };

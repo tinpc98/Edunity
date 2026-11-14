@@ -1,3 +1,4 @@
+import AdminBankAccountReviewCard from "./AdminBankAccountReviewCard";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -123,6 +124,7 @@ export default function AdminPayoutsPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+      <AdminBankAccountReviewCard />
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

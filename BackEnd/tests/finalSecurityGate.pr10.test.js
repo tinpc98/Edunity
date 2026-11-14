@@ -26,6 +26,7 @@ const {
   clearDB,
   syncIndexes,
 } = require("./helpers/db");
+const { verifiedBankAccount } = require("./helpers/bankAccount");
 
 // UTC representations for Monday and Friday times in UTC+7 (Vietnam Time)
 // Vietnam is UTC+7.
@@ -106,11 +107,7 @@ describe("PR10 Final Security Gate: Business Clock Hardening, Settlement Hold & 
       teacherProfile: {
         fullName: "Teacher Gate",
         status: "APPROVED",
-        bankAccount: {
-          bankName: "Vietcombank",
-          accountNumber: "9988776655",
-          accountHolderName: "TEACHER GATE",
-        },
+        bankAccount: verifiedBankAccount("TEACHER GATE", "9988776655", "Vietcombank"),
       },
     });
     teacherToken = signAccessToken(teacher);

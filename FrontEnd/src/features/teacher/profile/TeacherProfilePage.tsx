@@ -320,8 +320,50 @@ export default function TeacherProfilePage() {
               <p className="text-emerald-700 text-sm mt-1 mb-0">
                 Hồ sơ của bạn đã được quản trị viên phê duyệt. Bạn có thể mở lớp khi có hợp đồng giảng dạy còn hiệu lực.
               </p>
+              {verificationStatus?.verifiedUntil && (
+                <p className="text-emerald-700 text-sm mt-1 mb-0">
+                  Xác minh có hiệu lực đến <strong>{new Date(verificationStatus.verifiedUntil).toLocaleDateString("vi-VN")}</strong> (tái xác minh mỗi 6 tháng).
+                </p>
+              )}
             </div>
           </div>
+          {verificationStatus?.reverificationStatus === "PENDING" && (
+            <Alert type="info" showIcon message="Hồ sơ tái xác minh đang chờ duyệt. Bạn vẫn dạy các lớp hiện có bình thường." />
+          )}
+          {verificationStatus?.reverificationStatus === "REJECTED" && (
+            <Alert
+              type="error"
+              showIcon
+              message="Hồ sơ tái xác minh bị từ chối"
+              description={verificationStatus.reviewNote || undefined}
+            />
+          )}
+          {verificationStatus?.reverificationOpen && (
+            <Alert
+              type="warning"
+              showIcon
+              message={
+                verificationStatus.verifiedUntil && new Date(verificationStatus.verifiedUntil) <= new Date()
+                  ? "Xác minh đã hết hạn: bạn cần tái xác minh để mở lớp mới."
+                  : "Đã đến kỳ tái xác minh giáo viên."
+              }
+              action={
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={() => {
+                    verificationForm.setFieldsValue({
+                      qualificationSummary: profile.qualificationSummary || "",
+                      biography: profile.biography || "",
+                    });
+                    setIsVerificationModalVisible(true);
+                  }}
+                >
+                  Tái xác minh
+                </Button>
+              }
+            />
+          )}
           <TeacherContractCard />
         </>
       );

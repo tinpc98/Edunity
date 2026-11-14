@@ -65,6 +65,10 @@ export interface TeacherVerificationStatus {
   qualificationSummary?: string;
   identity?: TeacherIdentity | null;
   verificationStatus: VerificationStatus;
+  /** BAO-10: verification lasts 6 months; re-verification keeps the teacher VERIFIED while reviewed */
+  verifiedUntil?: string | null;
+  reverificationStatus?: "PENDING" | "REJECTED" | null;
+  reverificationOpen?: boolean;
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
@@ -94,6 +98,8 @@ export interface AdminTeacherVerificationListItem {
   fullName: string;
   qualificationSummary?: string;
   verificationStatus: VerificationStatus;
+  isReverification?: boolean;
+  verifiedUntil?: string | null;
   updatedAt: string;
 }
 

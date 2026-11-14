@@ -46,6 +46,7 @@ const {
   clearDB,
   syncIndexes,
 } = require("./helpers/db");
+const { verifiedBankAccount } = require("./helpers/bankAccount");
 
 const TUITION_SECRET = "tuition-checksum-pr7-secret-key-111";
 const DONATION_SECRET = "donation-checksum-pr7-secret-key-222";
@@ -101,6 +102,7 @@ describe("PR7: Teacher Settlement & Withdrawal Management (TIN-FIN-PR7)", () => 
       teacherProfile: {
         fullName: "Senior Teacher PR7",
         verificationStatus: "VERIFIED",
+        bankAccount: verifiedBankAccount("SENIOR TEACHER PR7", "0123456789", "Vietcombank"),
       },
     });
     teacherToken = signAccessToken(teacherUser);
@@ -113,6 +115,7 @@ describe("PR7: Teacher Settlement & Withdrawal Management (TIN-FIN-PR7)", () => 
       teacherProfile: {
         fullName: "Secondary Teacher PR7",
         verificationStatus: "VERIFIED",
+        bankAccount: verifiedBankAccount("SECONDARY TEACHER PR7", "0123456789", "Vietcombank"),
       },
     });
     secondTeacherToken = signAccessToken(secondTeacherUser);

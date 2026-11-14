@@ -208,6 +208,17 @@ const assertTeacherContractGate = async ({ teacher, now = new Date(), contractVe
 };
 
 /**
+ * BAO-10: past verifiedUntil the teacher keeps existing classes but cannot open, edit or get new ones approved.
+ * No verifiedUntil yet (verified before BAO-10) passes: the maintenance job gives those teachers a deadline.
+ */
+const assertVerificationCurrent = ({ teacher, now = new Date() }) => {
+  const verifiedUntil = teacher && teacher.teacherProfile && teacher.teacherProfile.verifiedUntil;
+  if (verifiedUntil && new Date(verifiedUntil) <= now) {
+    throw new AppError("Teacher verification has expired: re-verify to open classes", "TEACHER_REVERIFICATION_REQUIRED", 403);
+  }
+};
+
+/**
  * Full CUR-10 Gate executed on createClass, updateClass, and submitClass.
  */
 const validateClassGate = async ({
@@ -221,6 +232,7 @@ const validateClassGate = async ({
   pricingPolicyVerifier,
   contractVerifier,
 }) => {
+  assertVerificationCurrent({ teacher, now });
   const alignment = await assertCourseAlignment({ course, cls, body });
 
   await assertApprovedAuthorization({
@@ -306,6 +318,7 @@ const captureClassSnapshots = async ({ course, pricingResult = null, now = new D
 };
 
 module.exports = {
+  assertVerificationCurrent,
   setDependencyVerifiers,
   resetDependencyVerifiers,
   getDependencyStatus,

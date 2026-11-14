@@ -94,10 +94,12 @@ export default function TeacherVerificationDetailPage() {
   const qualificationDoc = latestDocuments.find(d => d.documentType === 'QUALIFICATION');
 
   const status = teacher.verificationStatus;
+  const isReverification = teacher.reverificationStatus === 'PENDING';
+  const awaitingReview = status === 'PENDING' || isReverification;
   const pendingDocuments = submissions[0]?.status === 'PENDING' ? latestDocuments : [];
   const ocrMismatch = pendingDocuments.some((d) => d.ocr?.status === 'MISMATCHED');
   // A pending round that follows earlier rounds is a resubmission after rejection
-  const previousSubmission = status === 'PENDING' && submissions.length > 1 ? submissions[1] : undefined;
+  const previousSubmission = awaitingReview && submissions.length > 1 ? submissions[1] : undefined;
 
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
@@ -118,6 +120,10 @@ export default function TeacherVerificationDetailPage() {
             <div className="flex items-center gap-3 mb-1">
               <Title level={3} className="!m-0 text-gray-900">{teacher.fullName}</Title>
               {status === 'PENDING' && <Tag color="processing" className="!m-0 rounded font-bold">Chờ duyệt</Tag>}
+              {isReverification && <Tag color="processing" className="!m-0 rounded font-bold">Tái xác minh</Tag>}
+              {teacher.verifiedUntil && (
+                <Tag className="!m-0 rounded">Hiệu lực đến {dayjs(teacher.verifiedUntil).format('DD/MM/YYYY')}</Tag>
+              )}
               {status === 'VERIFIED' && <Tag color="success" className="!m-0 rounded font-bold">Đã xác minh</Tag>}
               {status === 'REJECTED' && <Tag color="error" className="!m-0 rounded font-bold">Từ chối</Tag>}
               {status === 'UNVERIFIED' && <Tag className="!m-0 rounded font-bold">Chưa nộp hồ sơ</Tag>}
@@ -233,7 +239,7 @@ export default function TeacherVerificationDetailPage() {
                 </div>
               )}
 
-              {status === 'PENDING' && (
+              {awaitingReview && (
                 <div className="flex flex-col gap-3 mt-4">
                   <Button danger block className="rounded-xl h-[44px] font-semibold" onClick={() => setIsRejectModalOpen(true)}>Từ chối hồ sơ</Button>
                   <Button type="primary" block className="rounded-xl h-[54px] font-bold bg-emerald-600 hover:bg-emerald-700 text-base" onClick={() => setIsApproveModalOpen(true)}>

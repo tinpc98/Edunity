@@ -4,7 +4,7 @@ const { AppError, FORBIDDEN } = require("../utils/errors");
 const { paged, validationError, isBlank, parseDate } = require("../utils/http");
 const { audit } = require("./auditService");
 const storage = require("./storageService");
-const { notify, notifyAdmins } = require("./notificationService");
+const { notify, notifyOnce, notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
 const pii = require("../utils/pii");
 const ocrProvider = require("./ocrProvider");
@@ -15,6 +15,23 @@ const VERIFICATION_STATUSES = ["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED"];
 const FILE_SIDES = ["FRONT", "BACK", "SINGLE"];
 
 const MIN_TEACHER_AGE = 18;
+const VALIDITY_MONTHS = 6; // BAO-10
+const REVERIFY_WINDOW_DAYS = 30; // re-verification opens, and reminders start, this long before expiry
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// 6 months from approval, or the CCCD's own expiry when that comes first
+const computeVerifiedUntil = (now, identity) => {
+  const until = new Date(now);
+  until.setMonth(until.getMonth() + VALIDITY_MONTHS);
+  return identity && identity.expiryDate && new Date(identity.expiryDate) < until ? new Date(identity.expiryDate) : until;
+};
+
+// A verified teacher may re-submit once the window opens, or at any time when verified before identities existed
+const isReverificationOpen = (profile, now = new Date()) =>
+  Boolean(profile) &&
+  profile.verificationStatus === "VERIFIED" &&
+  profile.reverificationStatus !== "PENDING" &&
+  (!profile.identity || !profile.verifiedUntil || new Date(profile.verifiedUntil) - now <= REVERIFY_WINDOW_DAYS * DAY_MS);
 const identityNumberInUse = () =>
   new AppError("This CCCD number is already used by another account", "IDENTITY_NUMBER_IN_USE", 409);
 
@@ -68,8 +85,7 @@ const presentIdentity = (identity) =>
     : null;
 
 // "Nguyễn  Văn A" -> "NGUYEN VAN A": OCR and typing differ in accents, case and spacing, not in letters
-const normalizeName = (name) =>
-  String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "D").replace(/\s+/g, " ").trim().toUpperCase();
+const normalizeName = pii.normalizePersonName;
 const sameDay = (a, b) => Boolean(a && b) && new Date(a).toISOString().slice(0, 10) === new Date(b).toISOString().slice(0, 10);
 
 // Pure: compares what OCR read with what the teacher declared
@@ -168,6 +184,9 @@ const presentStatus = async (teacher) => {
     qualificationSummary: profile.qualificationSummary,
     identity: presentIdentity(profile.identity),
     verificationStatus: profile.verificationStatus,
+    verifiedUntil: profile.verifiedUntil || null,
+    reverificationStatus: profile.reverificationStatus || null,
+    reverificationOpen: isReverificationOpen(profile),
     reviewedBy: profile.reviewedBy,
     reviewedAt: profile.reviewedAt,
     reviewNote: profile.reviewNote,
@@ -183,8 +202,13 @@ const submitVerification = async (teacherId, body) => {
     throw FORBIDDEN("Only TEACHER can perform this action");
   }
   const current = teacher.teacherProfile.verificationStatus;
-  if (current === "VERIFIED") throw new AppError("Teacher is already verified", "ALREADY_VERIFIED", 409);
-  if (current === "PENDING") throw new AppError("Verification is already pending review", "VERIFICATION_PENDING", 409);
+  const isReverification = current === "VERIFIED";
+  if (current === "PENDING" || teacher.teacherProfile.reverificationStatus === "PENDING") {
+    throw new AppError("Verification is already pending review", "VERIFICATION_PENDING", 409);
+  }
+  if (isReverification && !isReverificationOpen(teacher.teacherProfile)) {
+    throw new AppError("Teacher is already verified", "ALREADY_VERIFIED", 409);
+  }
 
   const documents = parseDocuments(body.documents);
   const identity = parseIdentity(body.identity);
@@ -210,7 +234,9 @@ const submitVerification = async (teacherId, body) => {
       if (body.qualificationSummary !== undefined) teacher.teacherProfile.qualificationSummary = body.qualificationSummary;
       if (body.biography !== undefined) teacher.teacherProfile.biography = body.biography;
       teacher.teacherProfile.identity = identity;
-      teacher.teacherProfile.verificationStatus = "PENDING";
+      // A re-verification keeps the teacher VERIFIED (existing classes go on) while it is reviewed
+      if (isReverification) teacher.teacherProfile.reverificationStatus = "PENDING";
+      else teacher.teacherProfile.verificationStatus = "PENDING";
       await teacher.save({ session });
     });
   } catch (err) {
@@ -221,7 +247,11 @@ const submitVerification = async (teacherId, body) => {
   }
 
   await runIdentityOcr(created.find((document) => document.documentType === "IDENTITY"), declared);
-  await notifyAdmins("Hồ sơ giáo viên chờ xác minh", `${teacher.teacherProfile.fullName} đã gửi hồ sơ xác minh.`, "TEACHER_VERIFICATION_SUBMITTED");
+  await notifyAdmins(
+    isReverification ? "Hồ sơ tái xác minh giáo viên" : "Hồ sơ giáo viên chờ xác minh",
+    `${teacher.teacherProfile.fullName} đã gửi hồ sơ ${isReverification ? "tái xác minh" : "xác minh"}.`,
+    "TEACHER_VERIFICATION_SUBMITTED"
+  );
   return presentStatus(teacher);
 };
 
@@ -237,7 +267,12 @@ const adminListVerifications = async (query, paging) => {
   const status = query.status || "PENDING";
   if (!VERIFICATION_STATUSES.includes(status)) throw validationError("status is invalid");
 
-  const filter = { role: "TEACHER", "teacherProfile.verificationStatus": status, ...NOT_DELETED };
+  // The PENDING queue also holds re-verifications of teachers who stay VERIFIED meanwhile
+  const statusFilter =
+    status === "PENDING"
+      ? { $or: [{ "teacherProfile.verificationStatus": "PENDING" }, { "teacherProfile.reverificationStatus": "PENDING" }] }
+      : { "teacherProfile.verificationStatus": status };
+  const filter = { role: "TEACHER", ...statusFilter, ...NOT_DELETED };
   const [items, total] = await Promise.all([
     User.find(filter).sort({ updatedAt: 1 }).skip(paging.skip).limit(paging.pageSize).select("email status teacherProfile createdAt updatedAt").lean(),
     User.countDocuments(filter),
@@ -251,6 +286,8 @@ const adminListVerifications = async (query, paging) => {
       fullName: teacher.teacherProfile.fullName,
       qualificationSummary: teacher.teacherProfile.qualificationSummary,
       verificationStatus: teacher.teacherProfile.verificationStatus,
+      isReverification: teacher.teacherProfile.reverificationStatus === "PENDING",
+      verifiedUntil: teacher.teacherProfile.verifiedUntil || null,
       updatedAt: teacher.updatedAt,
     })),
     total,
@@ -285,7 +322,9 @@ const adminRevealIdentity = async (adminId, teacherId, body = {}) => {
 
 const reviewVerification = async (adminId, teacherId, body, status) => {
   const teacher = await getTeacher(teacherId);
-  if (teacher.teacherProfile.verificationStatus !== "PENDING") {
+  const profile = teacher.teacherProfile;
+  const isReverification = profile.verificationStatus === "VERIFIED" && profile.reverificationStatus === "PENDING";
+  if (profile.verificationStatus !== "PENDING" && !isReverification) {
     throw new AppError("Teacher verification is not pending", "VERIFICATION_NOT_PENDING", 409);
   }
   if (status === "REJECTED" && isBlank(body.reviewNote)) {
@@ -311,11 +350,23 @@ const reviewVerification = async (adminId, teacherId, body, status) => {
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
+      const outcome =
+        status === "VERIFIED"
+          ? {
+              "teacherProfile.verificationStatus": "VERIFIED",
+              "teacherProfile.verifiedUntil": computeVerifiedUntil(now, profile.identity),
+              "teacherProfile.reverificationStatus": null,
+            }
+          : isReverification
+            ? { "teacherProfile.reverificationStatus": "REJECTED" } // stays VERIFIED; verifiedUntil still runs out
+            : { "teacherProfile.verificationStatus": "REJECTED" };
       const updated = await User.updateOne(
-        { _id: teacher._id, "teacherProfile.verificationStatus": "PENDING" },
+        isReverification
+          ? { _id: teacher._id, "teacherProfile.reverificationStatus": "PENDING" }
+          : { _id: teacher._id, "teacherProfile.verificationStatus": "PENDING" },
         {
           $set: {
-            "teacherProfile.verificationStatus": status,
+            ...outcome,
             "teacherProfile.reviewedBy": adminId,
             "teacherProfile.reviewedAt": now,
             "teacherProfile.reviewNote": body.reviewNote || null,
@@ -353,7 +404,7 @@ const reviewVerification = async (adminId, teacherId, body, status) => {
           action: status === "VERIFIED" ? "TEACHER_VERIFIED" : "TEACHER_VERIFICATION_REJECTED",
           targetType: "User",
           targetId: teacher._id,
-          beforeState: { verificationStatus: "PENDING" },
+          beforeState: { verificationStatus: profile.verificationStatus, isReverification },
           afterState: { verificationStatus: status, reviewNote: body.reviewNote || null },
         },
         session
@@ -371,6 +422,41 @@ const reviewVerification = async (adminId, teacherId, body, status) => {
   return adminGetVerification(teacher._id);
 };
 
+/**
+ * BAO-10 sweep (maintenance job). Idempotent: reminders are deduplicated per expiry date.
+ *  - VERIFIED teachers without an expiry (verified before BAO-10) get one window to re-verify
+ *  - teachers within the window are reminded; expired ones are told they can no longer open new classes
+ */
+const runReverificationSweep = async (now = new Date()) => {
+  const verified = { role: "TEACHER", "teacherProfile.verificationStatus": "VERIFIED", ...NOT_DELETED };
+  const legacy = await User.updateMany(
+    { ...verified, "teacherProfile.verifiedUntil": null },
+    { $set: { "teacherProfile.verifiedUntil": new Date(now.getTime() + REVERIFY_WINDOW_DAYS * DAY_MS) } }
+  );
+  const due = await User.find({
+    ...verified,
+    "teacherProfile.verifiedUntil": { $lte: new Date(now.getTime() + REVERIFY_WINDOW_DAYS * DAY_MS) },
+    "teacherProfile.reverificationStatus": { $ne: "PENDING" },
+  })
+    .select("teacherProfile.verifiedUntil")
+    .lean();
+
+  for (const teacher of due) {
+    const until = new Date(teacher.teacherProfile.verifiedUntil);
+    const expired = until <= now;
+    await notifyOnce(
+      teacher._id,
+      expired ? "Xác minh giáo viên đã hết hạn" : "Sắp đến hạn tái xác minh giáo viên",
+      expired
+        ? "Bạn cần tái xác minh để mở lớp mới. Các lớp đang dạy không bị ảnh hưởng."
+        : `Xác minh của bạn hết hạn ngày ${until.toLocaleDateString("vi-VN")}. Vui lòng nộp hồ sơ tái xác minh.`,
+      expired ? "TEACHER_REVERIFICATION_EXPIRED" : "TEACHER_REVERIFICATION_DUE",
+      `REVERIFY:${teacher._id}:${until.toISOString()}:${expired ? "EXPIRED" : "DUE"}`
+    );
+  }
+  return { legacyGraceGranted: legacy.modifiedCount, reminded: due.length };
+};
+
 const approveVerification = (adminId, teacherId, body) => reviewVerification(adminId, teacherId, body, "VERIFIED");
 const rejectVerification = (adminId, teacherId, body) => reviewVerification(adminId, teacherId, body, "REJECTED");
 
@@ -384,4 +470,6 @@ module.exports = {
   approveVerification,
   rejectVerification,
   compareOcr, // exported for unit tests
+  isReverificationOpen,
+  runReverificationSweep,
 };

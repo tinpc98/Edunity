@@ -1,3 +1,4 @@
+const { resolvePayoutAccount } = require("./teacherBankAccountService");
 const mongoose = require("mongoose");
 const {
   Payout,
@@ -56,21 +57,9 @@ const requestPayout = async (teacherId, body = {}, options = {}) => {
     );
   }
 
-  const {
-    bankName,
-    accountNumber,
-    accountHolderName,
-    amount: requestedAmount,
-  } = body;
-  if (
-    isBlank(bankName) ||
-    isBlank(accountNumber) ||
-    isBlank(accountHolderName)
-  ) {
-    throw validationError(
-      "bankName, accountNumber and accountHolderName are required",
-    );
-  }
+  const { amount: requestedAmount } = body;
+  // BAO-09: money only goes to the teacher's verified account; bank fields in the request are ignored
+  const { bankName, accountNumber, accountHolderName } = await resolvePayoutAccount(teacherId, now);
 
   // Active payout guard
   const activePayout = await Payout.findOne({

@@ -29,6 +29,7 @@ const {
   clearDB,
   syncIndexes,
 } = require("./helpers/db");
+const { verifiedBankAccount } = require("./helpers/bankAccount");
 
 const FRIDAY_1000 = "2026-11-13T03:00:00.000Z";
 const MONDAY_1000 = "2026-11-09T03:00:00.000Z";
@@ -91,11 +92,7 @@ describe("PR9: Staging Hardening & Two-Channel payOS Pilot Readiness", () => {
       teacherProfile: {
         fullName: "Teacher PR9",
         status: "APPROVED",
-        bankAccount: {
-          bankName: "Vietcombank",
-          accountNumber: "9988776655",
-          accountHolderName: "TEACHER PR9",
-        },
+        bankAccount: verifiedBankAccount("TEACHER PR9", "9988776655", "Vietcombank"),
       },
     });
     teacherToken = signAccessToken(teacher);

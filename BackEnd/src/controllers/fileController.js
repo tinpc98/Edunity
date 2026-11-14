@@ -5,6 +5,7 @@ const { AppError, FORBIDDEN } = require("../utils/errors");
 const { handle, validationError } = require("../utils/http");
 const { getAllowedOrigins } = require("../config/env");
 const { audit } = require("../services/auditService");
+const { isReverificationOpen } = require("../services/teacherVerificationService");
 
 // POST /api/uploads/private (multipart: file, purpose)
 exports.uploadPrivate = handle(async (req) => {
@@ -19,7 +20,7 @@ exports.uploadPrivate = handle(async (req) => {
     }
     if (purpose === "IDENTITY" || purpose === "QUALIFICATION") {
       const teacher = await User.findById(req.user.id)
-        .select("role status isDeleted teacherProfile.verificationStatus")
+        .select("role status isDeleted teacherProfile.verificationStatus teacherProfile.verifiedUntil teacherProfile.reverificationStatus teacherProfile.identity")
         .lean();
       if (!teacher || teacher.isDeleted || teacher.role !== "TEACHER") {
         throw FORBIDDEN("Only TEACHER can upload teacher verification documents");
@@ -36,7 +37,7 @@ exports.uploadPrivate = handle(async (req) => {
           403
         );
       }
-      if (verificationStatus === "VERIFIED") {
+      if (verificationStatus === "VERIFIED" && !isReverificationOpen(teacher.teacherProfile)) {
         throw new AppError("Teacher is already verified", "ALREADY_VERIFIED", 403);
       }
     }

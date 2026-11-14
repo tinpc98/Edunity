@@ -34,6 +34,12 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       IDENTITY_NUMBER_IN_USE: "Số CCCD này đã được dùng cho một tài khoản khác. Liên hệ Edunity nếu bạn cho rằng có nhầm lẫn.",
       IDENTITY_DOCUMENT_EXPIRED: "CCCD đã hết hạn. Vui lòng dùng CCCD còn hiệu lực.",
       OCR_MISMATCH_NOTE_REQUIRED: "OCR không khớp với thông tin khai báo: hãy ghi rõ lý do vẫn phê duyệt.",
+      TEACHER_REVERIFICATION_REQUIRED: "Xác minh giáo viên đã hết hạn. Hãy tái xác minh trong Hồ sơ giáo viên để mở lớp mới.",
+      IDENTITY_REQUIRED: "Bạn cần khai báo thông tin CCCD (tái xác minh) trước khi đăng ký tài khoản nhận tiền.",
+      BANK_HOLDER_NAME_MISMATCH: "Chủ tài khoản phải trùng họ tên trên CCCD của bạn.",
+      BANK_ACCOUNT_NOT_VERIFIED: "Bạn cần đăng ký tài khoản nhận tiền và chờ Edunity duyệt trước khi rút tiền.",
+      BANK_ACCOUNT_RECENTLY_CHANGED: "Tài khoản nhận tiền vừa thay đổi nên rút tiền đang tạm khoá 72 giờ.",
+      BANK_ACCOUNT_NOT_PENDING: "Tài khoản này không còn chờ duyệt.",
     };
     if (err.code && contractMessages[err.code]) return contractMessages[err.code];
 

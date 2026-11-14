@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   Form,
-  Input,
   InputNumber,
   Modal,
   Table,
@@ -34,6 +33,10 @@ import {
   PAYOUT_STATUS_LABELS,
 } from "../../../types/payment";
 import { maskBankAccountNumber } from "../../../utils/maskBankAccount";
+import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
+import { TEACHER_BANK_ACCOUNT_KEY, teacherBankAccountService } from "../../../services/teacherBankAccount.service";
+import TeacherBankAccountCard from "./TeacherBankAccountCard";
+import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
 
@@ -73,6 +76,9 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
     settlementData?.window?.notice ||
     "Cổng rút tiền mở vào Thứ Hai hàng tuần từ 08:00 đến 17:00 (GMT+7)";
 
+  const { data: bankAccount } = useQuery({ queryKey: TEACHER_BANK_ACCOUNT_KEY, queryFn: teacherBankAccountService.getMine });
+  const bankReady = bankAccount?.status === "VERIFIED" && !dayjs(bankAccount.payoutLockedUntil).isAfter(dayjs());
+
   const hasOpenRequest = payouts.some((p) =>
     ["PENDING", "PROCESSING", "APPROVED", "SCHEDULED", "PENDING_BANK_TRANSFER"].includes(p.status)
   );
@@ -85,8 +91,8 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
       form.resetFields();
       queryClient.invalidateQueries({ queryKey: financeKeys.all });
     },
-    onError: () => {
-      message.error("Không thể gửi yêu cầu rút tiền. Vui lòng kiểm tra thông tin và thử lại.");
+    onError: (error) => {
+      message.error(getFriendlyErrorMessage(error, "Không thể gửi yêu cầu rút tiền. Vui lòng thử lại."));
     },
   });
 
@@ -111,20 +117,22 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
         <Button
           type="primary"
           icon={<BankOutlined />}
-          disabled={payoutDataUnavailable || available <= 0 || hasOpenRequest || !isMonday}
+          disabled={payoutDataUnavailable || available <= 0 || hasOpenRequest || !isMonday || !bankReady}
           onClick={() => {
             form.resetFields();
             form.setFieldsValue({ amount: available });
             setOpen(true);
           }}
           className={
-            payoutDataUnavailable || !isMonday || available <= 0 || hasOpenRequest
+            payoutDataUnavailable || !isMonday || available <= 0 || hasOpenRequest || !bankReady
               ? ""
               : "bg-indigo-600 hover:bg-indigo-500"
           }
         >
           {payoutDataUnavailable
             ? "Không thể tải thông tin rút tiền"
+            : !bankReady
+            ? "Cần tài khoản nhận tiền đã duyệt"
             : hasOpenRequest
             ? "Đang có yêu cầu chờ xử lý"
             : !isMonday
@@ -165,13 +173,7 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
         )}
       </div>
 
-      <Alert
-        type="info"
-        showIcon
-        className="mb-4"
-        message="Thông tin ngân hàng được dùng cho từng yêu cầu rút"
-        description="Backend hiện chưa có hồ sơ tài khoản nhận thù lao riêng để lưu hoặc cập nhật. Số tài khoản bên dưới được gửi cùng yêu cầu rút tiền và lưu thành snapshot của yêu cầu đó."
-      />
+      <TeacherBankAccountCard />
 
       {(payoutsError || settlementsError) && (
         <Alert
@@ -346,32 +348,11 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
             />
           </Form.Item>
 
-          <Form.Item
-            name="bankName"
-            label="Tên Ngân hàng"
-            rules={[{ required: true, message: "Vui lòng nhập tên ngân hàng" }]}
-          >
-            <Input autoComplete="off" placeholder="Tên ngân hàng" />
-          </Form.Item>
-
-          <Form.Item
-            name="accountNumber"
-            label="Số tài khoản ngân hàng"
-            rules={[
-              { required: true, message: "Vui lòng nhập số tài khoản" },
-              { min: 6, message: "Số tài khoản không hợp lệ" },
-            ]}
-          >
-            <Input autoComplete="off" inputMode="numeric" placeholder="Nhập số tài khoản" />
-          </Form.Item>
-
-          <Form.Item
-            name="accountHolderName"
-            label="Tên chủ tài khoản (In hoa không dấu)"
-            rules={[{ required: true, message: "Vui lòng nhập tên chủ tài khoản" }]}
-          >
-            <Input autoComplete="off" placeholder="Tên chủ tài khoản" />
-          </Form.Item>
+          {bankAccount && (
+            <div className="text-sm text-slate-600">
+              Tiền sẽ chuyển về: <strong>{bankAccount.bankName} · {bankAccount.accountNumberMasked}</strong> ({bankAccount.accountHolderName})
+            </div>
+          )}
         </Form>
       </Modal>
     </Card>

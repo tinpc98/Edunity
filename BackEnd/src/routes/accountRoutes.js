@@ -32,6 +32,15 @@ router.post("/admin/teachers/:teacherId/contracts", admin, contractController.ad
 router.post("/admin/contracts/:id/end", admin, contractController.adminEndContract);
 router.post("/contracts/econtract-webhook", contractController.econtractWebhook);
 
+// Teacher payout bank account (BAO-09)
+const bankAccounts = require("../services/teacherBankAccountService");
+const { handle, parsePaging } = require("../utils/http");
+router.get("/teacher/bank-account", teacher, handle((req) => bankAccounts.getMyBankAccount(req.user.id)));
+router.put("/teacher/bank-account", teacher, handle((req) => bankAccounts.submitBankAccount(req.user.id, req.body)));
+router.get("/admin/teacher-bank-accounts", admin, handle((req) => bankAccounts.adminListBankAccounts(req.query, parsePaging(req.query))));
+router.post("/admin/teacher-bank-accounts/:teacherId/approve", admin, handle((req) => bankAccounts.adminReviewBankAccount(req.user.id, req.params.teacherId, req.body, "VERIFIED")));
+router.post("/admin/teacher-bank-accounts/:teacherId/reject", admin, handle((req) => bankAccounts.adminReviewBankAccount(req.user.id, req.params.teacherId, req.body, "REJECTED")));
+
 // Notifications
 router.get("/me/notifications", authMiddleware, controller.getMyNotifications);
 router.post("/me/notifications/read-all", authMiddleware, controller.markAllNotificationsAsRead);
