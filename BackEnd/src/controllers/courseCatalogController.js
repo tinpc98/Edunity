@@ -22,8 +22,11 @@ exports.updateSubject = handle((req) => catalog.updateSubject(req.user.id, req.p
 exports.searchCourses = handle((req) => catalog.searchCourses(req.query, parsePaging(req.query)));
 exports.getCourse = handle((req) => catalog.getCourse(req.params.id));
 exports.getCourseClasses = handle((req) => catalog.getCourseClasses(req.params.id, parsePaging(req.query)));
+exports.adminListCourses = handle((req) => catalog.adminListCourses(req.query, parsePaging(req.query)));
+exports.adminGetCourse = handle((req) => catalog.adminGetCourse(req.params.id));
 exports.createCourse = handle((req) => catalog.createCourse(req.user.id, body(req)), 201);
 exports.updateCourse = handle((req) => catalog.updateCourse(req.user.id, req.params.id, body(req)));
+exports.deleteCourse = handle((req) => catalog.deleteCourse(req.user.id, req.params.id));
 
 // Course proposals — Teacher
 exports.createProposal = handle((req) => proposals.createProposal(req.user.id, body(req)), 201);
@@ -37,8 +40,9 @@ exports.approveProposal = handle((req) => proposals.approveProposal(req.user.id,
 exports.rejectProposal = handle((req) => proposals.rejectProposal(req.user.id, req.params.id, body(req)));
 exports.requestProposalChanges = handle((req) => proposals.requestProposalChanges(req.user.id, req.params.id, body(req)));
 
-// Syllabus Versions & Curriculum Units (CUR-02)
+// Syllabus Versions & Curriculum Units (CUR-02, CUR-12)
 exports.getCoursePublishedSyllabus = handle((req) => syllabusService.getPublishedSyllabus(req.params.id));
+exports.getClassSyllabus = handle((req) => syllabusService.getClassSyllabus(req.params.id, req.user));
 exports.listSyllabusVersions = handle((req) => syllabusService.listVersions(req.params.id));
 exports.createSyllabusVersion = handle((req) => syllabusService.createDraftVersion(req.user.id, req.params.id, body(req)), 201);
 exports.getSyllabusVersion = handle((req) => syllabusService.getVersionDetail(req.params.id, req.params.versionId));

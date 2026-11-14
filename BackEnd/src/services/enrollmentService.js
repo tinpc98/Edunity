@@ -2,8 +2,10 @@ const mongoose = require("mongoose");
 const Class = require("../models/Class");
 const Enrollment = require("../models/Enrollment");
 const User = require("../models/User");
+const Course = require("../models/Course");
 const { getSetting } = require("../utils/settings");
 const {
+  AppError,
   CLASS_FULL,
   ENROLLMENT_CLOSED,
   CLASS_NOT_OPEN,
@@ -86,6 +88,18 @@ const createEnrollment = async (studentId, classId, retried = false) => {
       const targetClass = await Class.findById(classId).session(session);
       if (!targetClass) {
         throw CLASS_NOT_FOUND();
+      }
+
+      // 1b. Validate parent Course status: must be ACTIVE and not deleted
+      if (targetClass.courseId) {
+        const parentCourse = await Course.findOne({
+          _id: targetClass.courseId,
+          status: "ACTIVE",
+          isDeleted: { $ne: true },
+        }).session(session);
+        if (!parentCourse) {
+          throw new AppError("Course not found or inactive", "COURSE_NOT_ACTIVE", 400);
+        }
       }
 
       // 2. Validate class status & enrollment window

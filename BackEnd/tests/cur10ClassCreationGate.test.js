@@ -64,6 +64,7 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
   } = {}) => {
     jest.spyOn(User, "findById").mockReturnValue(mockQuery(teacher));
     jest.spyOn(Course, "findOne").mockReturnValue(mockQuery(course));
+    jest.spyOn(Course, "findOneAndUpdate").mockReturnValue(mockQuery(course));
     jest.spyOn(Subject, "findOne").mockReturnValue(
       mockQuery({ _id: subId, categoryId: catId, name: "Toán", status: "ACTIVE" })
     );
@@ -76,6 +77,10 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
   beforeEach(() => {
     jest.restoreAllMocks();
     classCreationGateService.resetDependencyVerifiers();
+    jest.spyOn(mongoose, "startSession").mockResolvedValue({
+      withTransaction: async (fn) => fn(),
+      endSession: jest.fn(),
+    });
     jest.spyOn(Notification, "insertMany").mockResolvedValue([]);
     jest.spyOn(User, "find").mockReturnValue(mockQuery([]));
   });
