@@ -381,6 +381,7 @@ describe("Teacher verification, class approval and classroom", () => {
       .set(as(newTeacher))
       .send({
         qualificationSummary: "Cử nhân Sư phạm Toán",
+        identity: { fullName: "Nguyễn Văn A", idNumber: "079203001234", dateOfBirth: "1990-05-01", address: "12 Lê Lợi, Phường 1, Quận 1, TP.HCM" },
         documents: [
           {
             documentType: "IDENTITY",

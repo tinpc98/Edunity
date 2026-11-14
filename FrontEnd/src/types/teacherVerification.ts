@@ -24,6 +24,25 @@ export interface VerificationDocument {
   createdAt?: string;
 }
 
+/** Masked view: the full CCCD number and address are only returned by the audited admin reveal. */
+export interface TeacherIdentity {
+  fullName: string;
+  dateOfBirth: string;
+  idNumberMasked: string;
+  addressMasked: string | null;
+  issueDate?: string | null;
+  expiryDate?: string | null;
+}
+
+export interface SubmitIdentity {
+  fullName: string;
+  idNumber: string;
+  dateOfBirth: string;
+  address: string;
+  issueDate?: string;
+  expiryDate?: string;
+}
+
 export interface TeacherVerificationStatus {
   teacherId: string;
   email: string;
@@ -31,6 +50,7 @@ export interface TeacherVerificationStatus {
   fullName: string;
   biography?: string;
   qualificationSummary?: string;
+  identity?: TeacherIdentity | null;
   verificationStatus: VerificationStatus;
   reviewedBy?: string;
   reviewedAt?: string;
@@ -49,6 +69,7 @@ export interface SubmitVerificationDocument {
 
 export interface SubmitVerificationRequest {
   documents: SubmitVerificationDocument[];
+  identity: SubmitIdentity;
   qualificationSummary?: string;
   biography?: string;
 }

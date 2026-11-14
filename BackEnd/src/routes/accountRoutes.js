@@ -19,6 +19,7 @@ router.post("/teacher/verification", teacher, controller.submitVerification);
 router.get("/teacher/verification", teacher, controller.getMyVerification);
 router.get("/admin/teacher-verifications", admin, controller.adminListVerifications);
 router.get("/admin/teacher-verifications/:teacherId", admin, controller.adminGetVerification);
+router.post("/admin/teacher-verifications/:teacherId/identity/reveal", admin, controller.adminRevealIdentity);
 router.post("/admin/teacher-verifications/:teacherId/approve", admin, controller.approveVerification);
 router.post("/admin/teacher-verifications/:teacherId/reject", admin, controller.rejectVerification);
 

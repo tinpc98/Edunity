@@ -46,7 +46,7 @@ const validateEnv = (env = process.env) => {
 
   if (origins.length === 0) problems.push("CORS_ORIGIN is required in production");
 
-  const required = ["JWT_SECRET", "FILE_URL_SECRET", "PAYMENT_WEBHOOK_SECRET"];
+  const required = ["JWT_SECRET", "FILE_URL_SECRET", "PAYMENT_WEBHOOK_SECRET", "PII_ENCRYPTION_KEY"];
   const liveKit = ["LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"].filter((name) => env[name]);
   if (liveKit.length > 0 && liveKit.length < 3) problems.push("LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be set together");
   if (liveKit.length === 0) required.push("ROOM_TOKEN_SECRET"); // only signs classroom tokens when LiveKit is off

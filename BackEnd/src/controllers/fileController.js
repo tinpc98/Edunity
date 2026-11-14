@@ -4,6 +4,7 @@ const { getVerifiedTeacher } = require("../services/teacherClassService");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { handle, validationError } = require("../utils/http");
 const { getAllowedOrigins } = require("../config/env");
+const { audit } = require("../services/auditService");
 
 // POST /api/uploads/private (multipart: file, purpose)
 exports.uploadPrivate = handle(async (req) => {
@@ -69,6 +70,16 @@ exports.createSignedUrl = handle(async (req) => {
   }
   if (req.user.role === "TEACHER" && parsed.purpose === "RECORDING") {
     await getVerifiedTeacher(req.user.id);
+  }
+  // BAO-04: an Admin opening someone else's private file (CCCD, diplomas, proofs) leaves a trace
+  if (req.user.role === "ADMIN" && parsed.ownerId !== req.user.id.toString()) {
+    await audit({
+      actorAdminId: req.user.id,
+      action: "PRIVATE_FILE_ACCESSED",
+      targetType: "User",
+      targetId: parsed.ownerId,
+      afterState: { storageKey, purpose: parsed.purpose },
+    });
   }
   return storage.createSignedUrl(storageKey);
 });

@@ -18,6 +18,7 @@ import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import type { VerificationStatus } from '../../../../types/teacherVerification';
 import VerificationHistoryCard from './components/VerificationHistoryCard';
 import TeacherContractsCard from './components/TeacherContractsCard';
+import TeacherIdentityCard from './components/TeacherIdentityCard';
 import { groupVerificationSubmissions } from '../../../../utils/verificationSubmissions';
 
 const { Title, Paragraph } = Typography;
@@ -145,6 +146,8 @@ export default function TeacherVerificationDetailPage() {
               </Col>
             </Row>
           </Card>
+
+          {teacherId && <TeacherIdentityCard teacherId={teacherId} identity={teacher.identity} />}
 
           <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2"><SafetyCertificateOutlined className="text-indigo-500" /> Xác minh danh tính cá nhân</span>}>
             {identityDoc && identityDoc.files && identityDoc.files.length > 0 ? (

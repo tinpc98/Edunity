@@ -41,6 +41,13 @@ export class TeacherVerificationService {
     return apiClient<TeacherVerificationStatus>(`/admin/teacher-verifications/${teacherId}`, { method: "GET" });
   }
 
+  async adminRevealIdentity(teacherId: string, reason: string): Promise<{ idNumber: string; address: string }> {
+    return apiClient<{ idNumber: string; address: string }>(`/admin/teacher-verifications/${teacherId}/identity/reveal`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
   async adminApproveVerification(teacherId: string): Promise<TeacherVerificationStatus> {
     return apiClient<TeacherVerificationStatus>(`/admin/teacher-verifications/${teacherId}/approve`, { method: "POST" });
   }

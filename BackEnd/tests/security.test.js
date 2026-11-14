@@ -18,6 +18,7 @@ const STRONG = {
   FILE_URL_SECRET: "b".repeat(40),
   PAYMENT_WEBHOOK_SECRET: "c".repeat(40),
   ROOM_TOKEN_SECRET: "d".repeat(40),
+  PII_ENCRYPTION_KEY: "e".repeat(40),
 };
 const PROD = { NODE_ENV: "production", CORS_ORIGIN: "https://edunity.example", COMMISSION_RATE: "0.10", COMMISSION_POLICY_VERSION: "POLICY_PROD_APPROVED", COMMISSION_POLICY_APPROVED: "true", ...STRONG };
 const ALL_KEYS = ["NODE_ENV", "CORS_ORIGIN", "COMMISSION_RATE", "COMMISSION_POLICY_VERSION", "COMMISSION_POLICY_APPROVED", ...Object.keys(STRONG), "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"];
@@ -151,7 +152,7 @@ describe("P0: startup configuration", () => {
     expect(validateEnv({ ...PROD, NODE_ENV: mode }).join()).toMatch(/NODE_ENV must be/);
   });
 
-  it.each(["JWT_SECRET", "FILE_URL_SECRET", "PAYMENT_WEBHOOK_SECRET", "ROOM_TOKEN_SECRET"])("requires a strong %s in production", (name) => {
+  it.each(["JWT_SECRET", "FILE_URL_SECRET", "PAYMENT_WEBHOOK_SECRET", "ROOM_TOKEN_SECRET", "PII_ENCRYPTION_KEY"])("requires a strong %s in production", (name) => {
     expect(problemsWith({ [name]: undefined }).join()).toMatch(`${name} is required`);
     expect(problemsWith({ [name]: "short" }).join()).toMatch(`${name} must be at least 32`);
     expect(problemsWith({ [name]: `change-me-${"x".repeat(40)}` }).join()).toMatch(`${name} still contains a placeholder`);

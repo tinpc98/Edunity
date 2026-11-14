@@ -12,6 +12,8 @@ import type { SubmitVerificationRequest } from "../../types/teacherVerification"
 import { getFriendlyErrorMessage } from "../../utils/apiErrorMap";
 import { PRIVATE_DOCUMENT_ACCEPT, validatePrivateDocument } from "../../utils/fileValidation";
 import { invalidateTeacherVerificationState } from "../../hooks/useTeacherVerification";
+import IdentityFields from "../../components/verification/IdentityFields";
+import { toIdentityPayload, type IdentityFormValues } from "../../utils/identityPayload";
 
 interface QualificationFormValues {
   qualificationSummary: string;
@@ -19,6 +21,7 @@ interface QualificationFormValues {
   identityFront: UploadFile[];
   identityBack?: UploadFile[];
   qualificationFiles: UploadFile[];
+  identity: IdentityFormValues;
 }
 
 const normFileList = (event: { fileList?: UploadFile[] } | UploadFile[]) =>
@@ -80,6 +83,7 @@ export default function TeacherQualificationPage() {
             files: qualifications.map((q) => ({ storageKey: q.storageKey, side: "SINGLE" as const, mimeType: q.mimeType })),
           },
         ],
+        identity: toIdentityPayload(values.identity),
         qualificationSummary: values.qualificationSummary.trim(),
         biography: values.biography?.trim() || undefined,
       };
@@ -233,6 +237,8 @@ export default function TeacherQualificationPage() {
               <Form.Item label="Giới thiệu bản thân" name="biography">
                 <Input.TextArea placeholder="Chia sẻ ngắn gọn về kinh nghiệm giảng dạy của bạn" rows={3} />
               </Form.Item>
+
+              <IdentityFields />
 
               <div className="grid gap-4 md:grid-cols-2">
                 <Form.Item

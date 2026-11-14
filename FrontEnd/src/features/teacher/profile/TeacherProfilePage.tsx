@@ -28,6 +28,8 @@ import type { SubmitVerificationRequest } from "../../../types/teacherVerificati
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 import { groupVerificationSubmissions } from "../../../utils/verificationSubmissions";
 import TeacherContractCard from "./TeacherContractCard";
+import IdentityFields from "../../../components/verification/IdentityFields";
+import { toIdentityPayload, type IdentityFormValues } from "../../../utils/identityPayload";
 import {
   AVATAR_ACCEPT,
   PRIVATE_DOCUMENT_ACCEPT,
@@ -108,7 +110,7 @@ export default function TeacherProfilePage() {
 
   // Verification Submit Mutation
   const submitVerificationMutation = useMutation({
-    mutationFn: async (values: { qualificationSummary?: string; biography?: string }) => {
+    mutationFn: async (values: { qualificationSummary?: string; biography?: string; identity: IdentityFormValues }) => {
       if (!identityFrontFile) {
         throw new Error("Vui lòng tải lên tài liệu định danh (mặt trước hoặc hộ chiếu).");
       }
@@ -171,6 +173,7 @@ export default function TeacherProfilePage() {
             files: qualKeyList.map((k) => ({ storageKey: k.storageKey, side: "SINGLE" as const, mimeType: k.mimeType })),
           },
         ],
+        identity: toIdentityPayload(values.identity),
         qualificationSummary: values.qualificationSummary?.trim() || undefined,
         biography: values.biography?.trim() || undefined,
       };
@@ -605,6 +608,7 @@ export default function TeacherProfilePage() {
             <p className="text-xs text-slate-500 mb-3">
               Tải lên mặt trước (bắt buộc) và mặt sau (dành cho CCCD).
             </p>
+            <IdentityFields />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Front Side */}

@@ -1,16 +1,70 @@
 const mongoose = require("mongoose");
 const { User, VerificationDocument } = require("../models");
 const { AppError, FORBIDDEN } = require("../utils/errors");
-const { paged, validationError, isBlank } = require("../utils/http");
+const { paged, validationError, isBlank, parseDate } = require("../utils/http");
 const { audit } = require("./auditService");
 const storage = require("./storageService");
 const { notify, notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
+const pii = require("../utils/pii");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const TEACHER_DOCUMENT_TYPES = ["IDENTITY", "QUALIFICATION"];
 const VERIFICATION_STATUSES = ["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED"];
 const FILE_SIDES = ["FRONT", "BACK", "SINGLE"];
+
+const MIN_TEACHER_AGE = 18;
+const identityNumberInUse = () =>
+  new AppError("This CCCD number is already used by another account", "IDENTITY_NUMBER_IN_USE", 409);
+
+// BAO-02: the identity as printed on the CCCD. Returns the stored (encrypted) shape.
+const parseIdentity = (identity, now = new Date()) => {
+  if (!identity || typeof identity !== "object") throw validationError("identity is required");
+  const fullName = typeof identity.fullName === "string" ? identity.fullName.trim() : "";
+  if (!fullName || fullName.length > 100) throw validationError("identity.fullName is required (max 100 characters)");
+
+  const idNumber = String(identity.idNumber || "").trim();
+  if (!/^\d{12}$/.test(idNumber)) throw validationError("identity.idNumber must be the 12-digit CCCD number");
+
+  const address = typeof identity.address === "string" ? identity.address.trim() : "";
+  if (!address || address.length > 300) throw validationError("identity.address is required (max 300 characters)");
+
+  const dateOfBirth = parseDate(identity.dateOfBirth, "identity.dateOfBirth");
+  if (!dateOfBirth) throw validationError("identity.dateOfBirth is required");
+  const adultSince = new Date(dateOfBirth);
+  adultSince.setFullYear(adultSince.getFullYear() + MIN_TEACHER_AGE);
+  if (adultSince > now) throw validationError(`Teachers must be at least ${MIN_TEACHER_AGE} years old`);
+
+  const issueDate = parseDate(identity.issueDate, "identity.issueDate");
+  if (issueDate && (issueDate > now || issueDate < dateOfBirth)) throw validationError("identity.issueDate is invalid");
+  const expiryDate = parseDate(identity.expiryDate, "identity.expiryDate");
+  if (expiryDate && expiryDate <= now) throw new AppError("The CCCD has expired", "IDENTITY_DOCUMENT_EXPIRED", 400);
+
+  return {
+    fullName,
+    dateOfBirth,
+    idNumberEnc: pii.encrypt(idNumber),
+    idNumberHash: pii.blindIndex(idNumber),
+    idNumberLast4: idNumber.slice(-4),
+    addressEnc: pii.encrypt(address),
+    issueDate,
+    expiryDate,
+    submittedAt: now,
+  };
+};
+
+// Never the full number or address: those are only shown through adminRevealIdentity, which is audited
+const presentIdentity = (identity) =>
+  identity
+    ? {
+        fullName: identity.fullName,
+        dateOfBirth: identity.dateOfBirth,
+        idNumberMasked: `********${identity.idNumberLast4}`,
+        addressMasked: pii.maskAddress(pii.decrypt(identity.addressEnc)),
+        issueDate: identity.issueDate,
+        expiryDate: identity.expiryDate,
+      }
+    : null;
 
 const teacherNotFound = () => new AppError("Teacher not found", "TEACHER_NOT_FOUND", 404);
 
@@ -69,6 +123,7 @@ const presentStatus = async (teacher) => {
     fullName: profile.fullName,
     biography: profile.biography,
     qualificationSummary: profile.qualificationSummary,
+    identity: presentIdentity(profile.identity),
     verificationStatus: profile.verificationStatus,
     reviewedBy: profile.reviewedBy,
     reviewedAt: profile.reviewedAt,
@@ -89,6 +144,10 @@ const submitVerification = async (teacherId, body) => {
   if (current === "PENDING") throw new AppError("Verification is already pending review", "VERIFICATION_PENDING", 409);
 
   const documents = parseDocuments(body.documents);
+  const identity = parseIdentity(body.identity);
+  if (await User.exists({ _id: { $ne: teacher._id }, "teacherProfile.identity.idNumberHash": identity.idNumberHash })) {
+    throw identityNumberInUse();
+  }
   await storage.assertOwnedKeys(teacher._id, documents.flatMap((document) => document.files.map((file) => file.storageKey)));
 
   const session = await mongoose.startSession();
@@ -100,9 +159,13 @@ const submitVerification = async (teacherId, body) => {
       );
       if (body.qualificationSummary !== undefined) teacher.teacherProfile.qualificationSummary = body.qualificationSummary;
       if (body.biography !== undefined) teacher.teacherProfile.biography = body.biography;
+      teacher.teacherProfile.identity = identity;
       teacher.teacherProfile.verificationStatus = "PENDING";
       await teacher.save({ session });
     });
+  } catch (err) {
+    if (err && err.code === 11000 && String(err.message).includes("idNumberHash")) throw identityNumberInUse();
+    throw err;
   } finally {
     session.endSession();
   }
@@ -141,6 +204,29 @@ const adminListVerifications = async (query, paging) => {
 };
 
 const adminGetVerification = async (teacherId) => presentStatus(await getTeacher(teacherId));
+
+// Opening a teacher's dossier shows their identity documents: every view by an Admin is recorded
+const adminViewVerification = async (adminId, teacherId) => {
+  const teacher = await getTeacher(teacherId);
+  await audit({ actorAdminId: adminId, action: "TEACHER_VERIFICATION_VIEWED", targetType: "User", targetId: teacher._id });
+  return presentStatus(teacher);
+};
+
+// The only way to read the full CCCD number and address; audited with the reason given
+const adminRevealIdentity = async (adminId, teacherId, body = {}) => {
+  const teacher = await getTeacher(teacherId);
+  const identity = teacher.teacherProfile.identity;
+  if (!identity) throw new AppError("Teacher has not declared an identity", "IDENTITY_NOT_FOUND", 404);
+  if (isBlank(body.reason)) throw validationError("reason is required to reveal identity data");
+  await audit({
+    actorAdminId: adminId,
+    action: "TEACHER_IDENTITY_REVEALED",
+    targetType: "User",
+    targetId: teacher._id,
+    afterState: { reason: String(body.reason).trim().slice(0, 500) },
+  });
+  return { idNumber: pii.decrypt(identity.idNumberEnc), address: pii.decrypt(identity.addressEnc) };
+};
 
 const reviewVerification = async (adminId, teacherId, body, status) => {
   const teacher = await getTeacher(teacherId);
@@ -216,6 +302,8 @@ module.exports = {
   getMyVerification,
   adminListVerifications,
   adminGetVerification,
+  adminViewVerification,
+  adminRevealIdentity,
   approveVerification,
   rejectVerification,
 };

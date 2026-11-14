@@ -31,6 +31,8 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       TEACHER_NOT_VERIFIED: "Chỉ gửi được hợp đồng cho giáo viên đã xác minh.",
       CONTRACT_NOT_PENDING: "Hợp đồng này không còn ở trạng thái chờ ký.",
       ECONTRACT_PROVIDER_UNAVAILABLE: "Dịch vụ hợp đồng điện tử chưa sẵn sàng. Vui lòng thử lại sau.",
+      IDENTITY_NUMBER_IN_USE: "Số CCCD này đã được dùng cho một tài khoản khác. Liên hệ Edunity nếu bạn cho rằng có nhầm lẫn.",
+      IDENTITY_DOCUMENT_EXPIRED: "CCCD đã hết hạn. Vui lòng dùng CCCD còn hiệu lực.",
     };
     if (err.code && contractMessages[err.code]) return contractMessages[err.code];
 
