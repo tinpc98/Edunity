@@ -44,7 +44,7 @@ const allowedOrigins = getAllowedOrigins();
 const corsOptions = {
   origin: (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)),
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"], // session create/generate dedupe retries by it
 };
 // Before the body parser, so a parse error still reaches the browser with CORS headers
 app.use(cors(corsOptions));

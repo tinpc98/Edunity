@@ -23,7 +23,10 @@ const MAX_PRIVATE_SIZE = 10 * 1024 * 1024;
 const MAX_PUBLIC_SIZE = 5 * 1024 * 1024;
 
 const IMAGE_TYPES = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp" };
-const PRIVATE_TYPES = { ...IMAGE_TYPES, "application/pdf": "pdf", "video/mp4": "mp4" };
+const DOCUMENT_TYPES = { ...IMAGE_TYPES, "application/pdf": "pdf" };
+// Only incident evidence may be a video clip; identity, qualification and scholarship proof stay documents
+const PRIVATE_TYPES = { ...DOCUMENT_TYPES, "video/mp4": "mp4" };
+const typesFor = (purpose) => (purpose === "INCIDENT_EVIDENCE" ? PRIVATE_TYPES : DOCUMENT_TYPES);
 const MIME_BY_EXTENSION = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf", mp4: "video/mp4" };
 
 const PRIVATE_KEY_PATTERN = /^private\/([a-f0-9]{24})\/([A-Z_]+)\/[a-f0-9-]{36}\.(jpg|png|webp|pdf|mp4)$/;
@@ -41,6 +44,8 @@ const matchesSignature = (buffer, mimeType) => {
       return startsWith([0x89, 0x50, 0x4e, 0x47]);
     case "image/webp":
       return buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP";
+    case "video/mp4":
+      return buffer.length >= 8 && buffer.toString("ascii", 4, 8) === "ftyp"; // ISO base media box
     default:
       return false;
   }
@@ -66,7 +71,7 @@ const write = async (key, buffer) => {
 
 const savePrivateFile = async (userId, purpose, file) => {
   if (!PRIVATE_PURPOSES.includes(purpose)) throw validationError(`purpose must be one of ${PRIVATE_PURPOSES.join(", ")}`);
-  const extension = validateFile(file, PRIVATE_TYPES, MAX_PRIVATE_SIZE);
+  const extension = validateFile(file, typesFor(purpose), MAX_PRIVATE_SIZE);
 
   const storageKey = `private/${userId}/${purpose}/${crypto.randomUUID()}.${extension}`;
   await write(storageKey, file.buffer);

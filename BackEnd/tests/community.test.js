@@ -321,6 +321,15 @@ describe("File upload and signed URLs", () => {
       .attach("file", MP4_PAYLOAD, { filename: "session.mp4", contentType: "video/mp4" });
     expect(tc17.statusCode).toBe(400);
     expect(tc17.body.error).toBe("UNSUPPORTED_FILE_TYPE");
+
+    // A real mp4 is accepted as incident evidence; a renamed non-mp4 is not
+    const evidence = (buffer) =>
+      request(app).post("/api/uploads/private").set(as(student)).field("purpose", "INCIDENT_EVIDENCE")
+        .attach("file", buffer, { filename: "clip.mp4", contentType: "video/mp4" });
+    const ok = await evidence(MP4_PAYLOAD);
+    expect(ok.statusCode).toBe(201);
+    expect(ok.body.data.storageKey).toMatch(/\/INCIDENT_EVIDENCE\/.+\.mp4$/);
+    expect((await evidence(Buffer.from("not really a video file"))).body.error).toBe("UNSUPPORTED_FILE_TYPE");
   });
 });
 

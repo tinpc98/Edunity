@@ -326,7 +326,7 @@ describe("P1: CORS", () => {
 
   it("no longer offers the bypass headers", async () => {
     const allowed = (await preflight("http://localhost:5173")).headers["access-control-allow-headers"];
-    expect(allowed).toBe("Content-Type,Authorization");
+    expect(allowed).toBe("Content-Type,Authorization,Idempotency-Key");
   });
 
   it("malformed JSON is a 400 the browser can read", async () => {
