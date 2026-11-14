@@ -325,8 +325,8 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
         price: 500000,
         capacity: 15,
       });
-    expect(res.statusCode).toBe(503);
-    expect(res.body.error).toBe("CONTRACT_DEPENDENCY_BLOCKED");
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
     expect(await Class.countDocuments({ className: "IELTS Blocked" })).toBe(0);
   });
 });

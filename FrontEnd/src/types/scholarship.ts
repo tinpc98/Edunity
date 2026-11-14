@@ -124,8 +124,15 @@ export interface CampaignSummaryInScholarship {
   dossierPolicy?: ScholarshipDossierPolicy;
 }
 
+export interface PublicStory {
+  consent: boolean;
+  text?: string | null;
+  consentedAt?: string | null;
+}
+
 export interface ApiScholarshipApplication {
   _id: string;
+  publicStory?: PublicStory | null;
   campaignId: string | any;
   studentId: string | any;
   statement: string;
@@ -172,6 +179,7 @@ export interface ApiScholarshipApplication {
 
 export interface ScholarshipApplication {
   id: string;
+  publicStory?: PublicStory | null;
   campaignId: string;
   studentId: string;
   statement: string;

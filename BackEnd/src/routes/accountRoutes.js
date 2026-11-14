@@ -19,8 +19,27 @@ router.post("/teacher/verification", teacher, controller.submitVerification);
 router.get("/teacher/verification", teacher, controller.getMyVerification);
 router.get("/admin/teacher-verifications", admin, controller.adminListVerifications);
 router.get("/admin/teacher-verifications/:teacherId", admin, controller.adminGetVerification);
+router.post("/admin/teacher-verifications/:teacherId/identity/reveal", admin, controller.adminRevealIdentity);
 router.post("/admin/teacher-verifications/:teacherId/approve", admin, controller.approveVerification);
 router.post("/admin/teacher-verifications/:teacherId/reject", admin, controller.rejectVerification);
+
+// Teacher contracts (TEA-12 / BAO-06..08)
+const contractController = require("../controllers/contractController");
+router.get("/teacher/contracts", teacher, contractController.listMyContracts);
+router.post("/teacher/contracts/:id/sandbox-sign", teacher, contractController.sandboxSign);
+router.get("/admin/teachers/:teacherId/contracts", admin, contractController.adminListContracts);
+router.post("/admin/teachers/:teacherId/contracts", admin, contractController.adminCreateContract);
+router.post("/admin/contracts/:id/end", admin, contractController.adminEndContract);
+router.post("/contracts/econtract-webhook", contractController.econtractWebhook);
+
+// Teacher payout bank account (BAO-09)
+const bankAccounts = require("../services/teacherBankAccountService");
+const { handle, parsePaging } = require("../utils/http");
+router.get("/teacher/bank-account", teacher, handle((req) => bankAccounts.getMyBankAccount(req.user.id)));
+router.put("/teacher/bank-account", teacher, handle((req) => bankAccounts.submitBankAccount(req.user.id, req.body)));
+router.get("/admin/teacher-bank-accounts", admin, handle((req) => bankAccounts.adminListBankAccounts(req.query, parsePaging(req.query))));
+router.post("/admin/teacher-bank-accounts/:teacherId/approve", admin, handle((req) => bankAccounts.adminReviewBankAccount(req.user.id, req.params.teacherId, req.body, "VERIFIED")));
+router.post("/admin/teacher-bank-accounts/:teacherId/reject", admin, handle((req) => bankAccounts.adminReviewBankAccount(req.user.id, req.params.teacherId, req.body, "REJECTED")));
 
 // Notifications
 router.get("/me/notifications", authMiddleware, controller.getMyNotifications);

@@ -272,7 +272,8 @@ export default function TeacherVerificationPage() {
       dataIndex: 'verificationStatus',
       key: 'verificationStatus',
       width: 150,
-      render: (status: VerificationStatus) => getStatusTag(status),
+      render: (status: VerificationStatus, record: AdminTeacherVerificationListItem) =>
+        record.isReverification ? <Tag color="processing">Tái xác minh</Tag> : getStatusTag(status),
     },
     {
       title: 'Hành động',

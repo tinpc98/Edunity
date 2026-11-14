@@ -48,6 +48,7 @@ export function adaptScholarshipApplication(api: ApiScholarshipApplication): Sch
     reviewedBy: api.reviewedBy,
     reviewedAt: api.reviewedAt,
     reviewNote: api.reviewNote,
+    publicStory: api.publicStory ?? null,
     campaignTitle,
     awardAmountPerStudent: awardAmount,
     studentName: api.studentName || api.student?.fullName || "",

@@ -117,7 +117,7 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
 
     expect(classCreationGateService.getDependencyStatus()).toEqual({
       cur07PricingPolicyReady: true,
-      tea12ContractReady: false,
+      tea12ContractReady: true, // TEA-12 wired to teacherContractService.verifyContract
     });
   });
 
@@ -136,11 +136,12 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
       statusCode: 503,
     });
 
-    // Inject CUR-07 only -> still MUST fail closed on TEA-12 contract even though verificationStatus === "VERIFIED"
+    // Inject CUR-07 only, TEA-12 verifier missing -> still MUST fail closed even though verificationStatus === "VERIFIED"
     mockCatalogAndAuth();
     await expect(
       teacherClassService.createClass(teacherId, validBody, {
         pricingPolicyVerifier: async () => ({ valid: true }),
+        contractVerifier: null,
       })
     ).rejects.toMatchObject({
       code: "CONTRACT_DEPENDENCY_BLOCKED",
@@ -194,7 +195,7 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
       teacherClassService.createClass(
         teacherId,
         { ...validBody, level: "BASIC" },
-        { pricingPolicyVerifier: async () => ({ valid: true }) }
+        { pricingPolicyVerifier: async () => ({ valid: true }), contractVerifier: null }
       )
     ).rejects.toMatchObject({
       code: "CONTRACT_DEPENDENCY_BLOCKED",

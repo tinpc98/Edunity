@@ -19,6 +19,7 @@ export interface CampaignScopeDetail {
 
 export interface ApiScholarshipCampaign {
   _id: string;
+  dossierPolicy?: import("./scholarship").ScholarshipDossierPolicy;
   createdBy: string | any;
   updatedBy?: string | any;
   title: string;
@@ -59,6 +60,7 @@ export interface ScholarshipCampaignChecklist {
 
 export interface ScholarshipCampaign {
   id: string;
+  dossierPolicy?: import("./scholarship").ScholarshipDossierPolicy;
   createdBy: string;
   updatedBy?: string | null;
   title: string;

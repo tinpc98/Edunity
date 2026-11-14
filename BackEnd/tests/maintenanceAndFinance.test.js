@@ -29,6 +29,7 @@ const JobLock = require("../src/models/JobLock");
 const { toDec } = require("../src/utils/money");
 const { hashPassword } = require("../src/utils/password");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
+const { verifiedBankAccount } = require("./helpers/bankAccount");
 
 const as = (user) => ({ "x-user-id": user._id.toString() });
 const HOUR = 60 * 60 * 1000;
@@ -53,7 +54,7 @@ describe("Maintenance, scheduling rules and finance (C01-C05, F02-F04, L16, H03,
       email: "teacher@test.com",
       passwordHash,
       role: "TEACHER",
-      teacherProfile: { fullName: "Teacher", verificationStatus: "VERIFIED" },
+      teacherProfile: { fullName: "Teacher", verificationStatus: "VERIFIED", bankAccount: verifiedBankAccount("TEACHER", "0123", "VCB") },
     });
     student = await User.create({
       email: "s@test.com",
@@ -318,8 +319,6 @@ describe("Maintenance, scheduling rules and finance (C01-C05, F02-F04, L16, H03,
 
       const MONDAY_NOW = "2026-11-09T03:00:00.000Z";
       const FRIDAY_NOW = "2026-11-13T03:00:00.000Z";
-      const missingBank = await request(app).post("/api/teacher/payouts").set(as(teacher)).set("x-test-now", MONDAY_NOW).send({});
-      expect(missingBank.statusCode).toBe(400);
 
       const bank = { bankName: "VCB", accountNumber: "0123", accountHolderName: "TEACHER" };
       const req1 = await request(app).post("/api/teacher/payouts").set(as(teacher)).set("x-test-now", MONDAY_NOW).send(bank);

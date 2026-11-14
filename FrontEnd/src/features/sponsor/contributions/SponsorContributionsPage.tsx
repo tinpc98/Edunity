@@ -1,3 +1,4 @@
+import CampaignStoriesSection from "./CampaignStoriesSection";
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -646,6 +647,7 @@ export default function SponsorContributionsPage() {
                 * Để bảo vệ quyền riêng tư của học viên (NFR-04), báo cáo chỉ hiển thị số liệu thống kê tổng hợp.
               </div>
             </div>
+            {selectedCampaignForImpact?.id && <CampaignStoriesSection campaignId={selectedCampaignForImpact.id} />}
           </div>
         ) : null}
       </Modal>

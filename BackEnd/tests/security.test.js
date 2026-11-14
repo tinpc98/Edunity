@@ -2,12 +2,14 @@ const os = require("os");
 const path = require("path");
 const fs = require("fs");
 process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "edunity-storage-"));
+process.env.ENABLE_PAYMENT_SANDBOX = "true"; // payments go through the deterministic sandbox gateway in tests
 
 const crypto = require("crypto");
 const request = require("supertest");
 const jwt = require("jsonwebtoken");
 const app = require("../src/app");
-const { User, RefreshToken, ScholarshipCampaign, Class, Session, Enrollment } = require("../src/models");
+const mongoose = require("mongoose");
+const { User, RefreshToken, ScholarshipCampaign, Class, Session, Enrollment, Category, Subject, Course } = require("../src/models");
 const { hashPassword } = require("../src/utils/password");
 const { getSecret } = require("../src/utils/jwt");
 const { validateEnv } = require("../src/config/env");
@@ -18,6 +20,7 @@ const STRONG = {
   FILE_URL_SECRET: "b".repeat(40),
   PAYMENT_WEBHOOK_SECRET: "c".repeat(40),
   ROOM_TOKEN_SECRET: "d".repeat(40),
+  PII_ENCRYPTION_KEY: "e".repeat(40),
 };
 const PROD = { NODE_ENV: "production", CORS_ORIGIN: "https://edunity.example", COMMISSION_RATE: "0.10", COMMISSION_POLICY_VERSION: "POLICY_PROD_APPROVED", COMMISSION_POLICY_APPROVED: "true", ...STRONG };
 const ALL_KEYS = ["NODE_ENV", "CORS_ORIGIN", "COMMISSION_RATE", "COMMISSION_POLICY_VERSION", "COMMISSION_POLICY_APPROVED", ...Object.keys(STRONG), "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"];
@@ -50,10 +53,15 @@ const signFor = (user, secret, options = {}) =>
 
 const login = (email, password = PASSWORD) => request(app).post("/api/auth/login").send({ email, password });
 
-const paidClass = (name = "Lớp có phí") => {
+// Enrollment requires a real ACTIVE Course (catalog), so the class hangs off one
+const paidClass = async (name = "Lớp có phí") => {
   const id = teacher._id;
+  const slug = `khoa-${new mongoose.Types.ObjectId()}`;
+  const category = await Category.create({ name: slug, slug, createdBy: admin._id });
+  const subject = await Subject.create({ categoryId: category._id, categoryName: slug, name: slug, slug, createdBy: admin._id });
+  const course = await Course.create({ subjectId: subject._id, subjectName: slug, categoryId: category._id, categoryName: slug, title: "Khoá", slug, createdBy: admin._id });
   return Class.create({
-    courseId: id, courseTitle: "Khoá", teacherId: id, teacherName: "GV", categoryId: id, subjectId: id, className: name,
+    courseId: course._id, courseTitle: "Khoá", teacherId: id, teacherName: "GV", categoryId: category._id, subjectId: subject._id, className: name,
     classType: "PAID", price: 500000, capacity: 5, status: "OPEN", reviewedBy: admin._id, reviewNote: "ghi chú nội bộ",
     enrollmentStart: new Date(Date.now() - 864e5), enrollmentEnd: new Date(Date.now() + 864e5), startDate: new Date(Date.now() + 2 * 864e5),
   });
@@ -151,7 +159,7 @@ describe("P0: startup configuration", () => {
     expect(validateEnv({ ...PROD, NODE_ENV: mode }).join()).toMatch(/NODE_ENV must be/);
   });
 
-  it.each(["JWT_SECRET", "FILE_URL_SECRET", "PAYMENT_WEBHOOK_SECRET", "ROOM_TOKEN_SECRET"])("requires a strong %s in production", (name) => {
+  it.each(["JWT_SECRET", "FILE_URL_SECRET", "PAYMENT_WEBHOOK_SECRET", "ROOM_TOKEN_SECRET", "PII_ENCRYPTION_KEY"])("requires a strong %s in production", (name) => {
     expect(problemsWith({ [name]: undefined }).join()).toMatch(`${name} is required`);
     expect(problemsWith({ [name]: "short" }).join()).toMatch(`${name} must be at least 32`);
     expect(problemsWith({ [name]: `change-me-${"x".repeat(40)}` }).join()).toMatch(`${name} still contains a placeholder`);
@@ -182,11 +190,12 @@ describe("P0: startup configuration", () => {
 });
 
 describe("P0: payment webhooks", () => {
-  it.each([undefined, "staging", "production"])("the sandbox webhook does not exist under NODE_ENV=%s", async (mode) => {
+  it.each([undefined, "staging", "production"])("the sandbox webhook is refused under NODE_ENV=%s", async (mode) => {
     const { gatewayReference, enrollmentId } = await pendingPayment();
     await withEnv({ ...PROD, NODE_ENV: mode }, async () => {
       const res = await request(app).post("/api/payments/sandbox/webhook").send({ gatewayReference, status: "SUCCESS" });
-      expect(res.statusCode).toBe(404);
+      expect(res.statusCode).toBe(403); // sandboxOnly guard (paymentRoutes.js)
+      expect(res.body.code).toBe("PAYMENT_PROVIDER_DISABLED");
     });
     expect((await Enrollment.findById(enrollmentId)).enrollmentStatus).toBe("PENDING_PAYMENT");
   });
@@ -326,7 +335,7 @@ describe("P1: CORS", () => {
 
   it("no longer offers the bypass headers", async () => {
     const allowed = (await preflight("http://localhost:5173")).headers["access-control-allow-headers"];
-    expect(allowed).toBe("Content-Type,Authorization");
+    expect(allowed).toBe("Content-Type,Authorization,Idempotency-Key");
   });
 
   it("malformed JSON is a 400 the browser can read", async () => {

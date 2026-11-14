@@ -47,4 +47,6 @@ module.exports = {
   PaymentReconciliation: require("./PaymentReconciliation"),
   RefundCase: require("./RefundCase"),
   BankProofRegistry: require("./BankProofRegistry"),
+  TeacherContract: require("./TeacherContract"),
+  GuardianConsent: require("./GuardianConsent"),
 };

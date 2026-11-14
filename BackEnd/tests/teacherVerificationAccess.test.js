@@ -21,6 +21,21 @@ const {
 const { signAccessToken } = require("../src/utils/jwt");
 const { hashPassword } = require("../src/utils/password");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
+const pii = require("../src/utils/pii");
+
+let identitySeq = 0;
+const currentIdentity = () => {
+  const idNumber = String(100000000000 + ++identitySeq); // unique per teacher: one CCCD, one account
+  return {
+    fullName: "Teacher",
+    dateOfBirth: new Date("1990-01-01"),
+    idNumberEnc: pii.encrypt(idNumber),
+    idNumberHash: pii.blindIndex(idNumber),
+    idNumberLast4: idNumber.slice(-4),
+    addressEnc: pii.encrypt("1 Lê Lợi, Quận 1, TP.HCM"),
+    submittedAt: new Date(),
+  };
+};
 
 const PDF = Buffer.from("%PDF-1.4\n% test document\n%%EOF\n");
 const PNG = Buffer.from(
@@ -46,6 +61,8 @@ describe("Teacher Access Control by verificationStatus (P0-01, P1-01..P1-05)", (
       teacherProfile: {
         fullName: `Teacher ${key}`,
         verificationStatus,
+        // A current verification (BAO-10): declared identity and an expiry far away, so re-verification is not open
+        ...(verificationStatus === "VERIFIED" ? { identity: currentIdentity(), verifiedUntil: new Date(Date.now() + 150 * DAY) } : {}),
       },
     });
     tokens[key] = signAccessToken(user);
@@ -558,8 +575,9 @@ describe("Teacher Access Control by verificationStatus (P0-01, P1-01..P1-05)", (
             .set(bearer("rejected"))
             .send({
               qualificationSummary: "Thạc sĩ Vật lý",
+              identity: { fullName: "Trần Thị B", idNumber: "079203009999", dateOfBirth: "1988-01-01", address: "1 Trần Phú, Hà Đông, Hà Nội" },
               documents: [
-                { documentType: "IDENTITY", files: [{ side: "SINGLE", storageKey: idUp.body.data.storageKey }] },
+                { documentType: "IDENTITY", files: [{ side: "FRONT", storageKey: idUp.body.data.storageKey }, { side: "BACK", storageKey: idUp.body.data.storageKey }] },
                 { documentType: "QUALIFICATION", files: [{ side: "SINGLE", storageKey: qualUp.body.data.storageKey }] },
               ],
             });

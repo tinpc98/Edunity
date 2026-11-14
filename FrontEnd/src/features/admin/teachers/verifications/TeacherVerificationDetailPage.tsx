@@ -17,6 +17,8 @@ import PrivateDocumentCard from '../../../../components/common/PrivateDocumentCa
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import type { VerificationStatus } from '../../../../types/teacherVerification';
 import VerificationHistoryCard from './components/VerificationHistoryCard';
+import TeacherContractsCard from './components/TeacherContractsCard';
+import TeacherIdentityCard from './components/TeacherIdentityCard';
 import { groupVerificationSubmissions } from '../../../../utils/verificationSubmissions';
 
 const { Title, Paragraph } = Typography;
@@ -32,6 +34,7 @@ export default function TeacherVerificationDetailPage() {
   const { teacherId } = useParams();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
+  const [approveForm] = Form.useForm<{ reviewNote?: string }>();
   
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
@@ -43,7 +46,7 @@ export default function TeacherVerificationDetailPage() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: () => teacherVerificationService.adminApproveVerification(teacherId as string),
+    mutationFn: (reviewNote?: string) => teacherVerificationService.adminApproveVerification(teacherId as string, reviewNote),
     onSuccess: () => {
       message.success('Đã phê duyệt và cấp chứng nhận giáo viên thành công!');
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verification', teacherId] });
@@ -56,7 +59,14 @@ export default function TeacherVerificationDetailPage() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: (values: { reviewNote: string }) => teacherVerificationService.adminRejectVerification(teacherId as string, values.reviewNote),
+    mutationFn: (values: { reviewNote: string; reasons?: Record<string, string | undefined> }) =>
+      teacherVerificationService.adminRejectVerification(
+        teacherId as string,
+        values.reviewNote,
+        Object.entries(values.reasons ?? {})
+          .filter(([, reason]) => reason?.trim())
+          .map(([documentId, reason]) => ({ documentId, reason: (reason as string).trim() }))
+      ),
     onSuccess: () => {
       message.success('Đã từ chối hồ sơ xác minh.');
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verification', teacherId] });
@@ -84,8 +94,12 @@ export default function TeacherVerificationDetailPage() {
   const qualificationDoc = latestDocuments.find(d => d.documentType === 'QUALIFICATION');
 
   const status = teacher.verificationStatus;
+  const isReverification = teacher.reverificationStatus === 'PENDING';
+  const awaitingReview = status === 'PENDING' || isReverification;
+  const pendingDocuments = submissions[0]?.status === 'PENDING' ? latestDocuments : [];
+  const ocrMismatch = pendingDocuments.some((d) => d.ocr?.status === 'MISMATCHED');
   // A pending round that follows earlier rounds is a resubmission after rejection
-  const previousSubmission = status === 'PENDING' && submissions.length > 1 ? submissions[1] : undefined;
+  const previousSubmission = awaitingReview && submissions.length > 1 ? submissions[1] : undefined;
 
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
@@ -106,6 +120,10 @@ export default function TeacherVerificationDetailPage() {
             <div className="flex items-center gap-3 mb-1">
               <Title level={3} className="!m-0 text-gray-900">{teacher.fullName}</Title>
               {status === 'PENDING' && <Tag color="processing" className="!m-0 rounded font-bold">Chờ duyệt</Tag>}
+              {isReverification && <Tag color="processing" className="!m-0 rounded font-bold">Tái xác minh</Tag>}
+              {teacher.verifiedUntil && (
+                <Tag className="!m-0 rounded">Hiệu lực đến {dayjs(teacher.verifiedUntil).format('DD/MM/YYYY')}</Tag>
+              )}
               {status === 'VERIFIED' && <Tag color="success" className="!m-0 rounded font-bold">Đã xác minh</Tag>}
               {status === 'REJECTED' && <Tag color="error" className="!m-0 rounded font-bold">Từ chối</Tag>}
               {status === 'UNVERIFIED' && <Tag className="!m-0 rounded font-bold">Chưa nộp hồ sơ</Tag>}
@@ -145,6 +163,8 @@ export default function TeacherVerificationDetailPage() {
             </Row>
           </Card>
 
+          {teacherId && <TeacherIdentityCard teacherId={teacherId} identity={teacher.identity} ocr={identityDoc?.ocr} />}
+
           <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2"><SafetyCertificateOutlined className="text-indigo-500" /> Xác minh danh tính cá nhân</span>}>
             {identityDoc && identityDoc.files && identityDoc.files.length > 0 ? (
               <Row gutter={[16, 16]}>
@@ -183,6 +203,8 @@ export default function TeacherVerificationDetailPage() {
 
           <VerificationHistoryCard submissions={submissions} />
 
+          {teacherId && <TeacherContractsCard teacherId={teacherId} isVerified={status === 'VERIFIED'} />}
+
         </Col>
 
         {/* RIGHT COLUMN - ACTIONS */}
@@ -217,7 +239,7 @@ export default function TeacherVerificationDetailPage() {
                 </div>
               )}
 
-              {status === 'PENDING' && (
+              {awaitingReview && (
                 <div className="flex flex-col gap-3 mt-4">
                   <Button danger block className="rounded-xl h-[44px] font-semibold" onClick={() => setIsRejectModalOpen(true)}>Từ chối hồ sơ</Button>
                   <Button type="primary" block className="rounded-xl h-[54px] font-bold bg-emerald-600 hover:bg-emerald-700 text-base" onClick={() => setIsApproveModalOpen(true)}>
@@ -236,17 +258,22 @@ export default function TeacherVerificationDetailPage() {
         onCancel={() => !rejectMutation.isPending && setIsRejectModalOpen(false)}
         footer={null}
       >
-        <Alert
-          type="warning"
-          showIcon
-          className="mb-4"
-          message="Backend hiện chỉ hỗ trợ trạng thái TỪ CHỐI"
-          description="Hồ sơ sẽ chuyển sang REJECTED. Giáo viên có thể cập nhật giấy tờ và gửi lại; hiện chưa có trạng thái riêng cho yêu cầu bổ sung hồ sơ."
-        />
+        <Paragraph className="text-gray-500 text-sm">
+          Giáo viên sẽ thấy lý do chung và lý do riêng cho từng giấy tờ, rồi nộp lại hồ sơ.
+        </Paragraph>
         <Form form={form} layout="vertical" onFinish={(values) => rejectMutation.mutate(values)}>
           <Form.Item label="Lý do từ chối (Gửi cho giáo viên)" name="reviewNote" rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập lý do từ chối.' }]}>
             <Input.TextArea rows={4} placeholder="Nêu rõ lý do từ chối..." />
           </Form.Item>
+          {pendingDocuments.filter((d) => d._id).map((d) => (
+            <Form.Item
+              key={d._id}
+              name={['reasons', d._id as string]}
+              label={d.documentType === 'IDENTITY' ? 'Giấy tờ định danh cần sửa (không bắt buộc)' : 'Bằng cấp / chứng chỉ cần sửa (không bắt buộc)'}
+            >
+              <Input placeholder="Ví dụ: Ảnh mặt trước bị loá" maxLength={1000} />
+            </Form.Item>
+          ))}
           <div className="flex justify-end gap-3">
             <Button onClick={() => setIsRejectModalOpen(false)} disabled={rejectMutation.isPending}>Hủy</Button>
             <Button type="primary" danger htmlType="submit" loading={rejectMutation.isPending}>Gửi từ chối</Button>
@@ -258,7 +285,7 @@ export default function TeacherVerificationDetailPage() {
         title="Xác nhận phê duyệt"
         open={isApproveModalOpen}
         onCancel={() => !approveMutation.isPending && setIsApproveModalOpen(false)}
-        onOk={() => approveMutation.mutate()}
+        onOk={() => approveForm.submit()}
         confirmLoading={approveMutation.isPending}
         okText="Duyệt giáo viên"
         cancelText="Hủy"
@@ -271,6 +298,18 @@ export default function TeacherVerificationDetailPage() {
           <Paragraph className="text-gray-500 text-sm">
             Hành động này sẽ cập nhật trạng thái của giáo viên.
           </Paragraph>
+          {ocrMismatch && (
+            <Alert type="warning" showIcon className="!mb-3" message="Kết quả OCR không khớp với thông tin giáo viên khai báo. Hãy ghi rõ lý do vẫn phê duyệt." />
+          )}
+          <Form form={approveForm} layout="vertical" onFinish={({ reviewNote }) => approveMutation.mutate(reviewNote)}>
+            <Form.Item
+              name="reviewNote"
+              label="Ghi chú phê duyệt"
+              rules={ocrMismatch ? [{ required: true, whitespace: true, message: 'Bắt buộc khi OCR không khớp.' }] : []}
+            >
+              <Input.TextArea rows={2} maxLength={2000} />
+            </Form.Item>
+          </Form>
         </div>
       </Modal>
     </div>

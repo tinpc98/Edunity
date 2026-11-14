@@ -473,7 +473,8 @@ const assertConsentGate = async ({
   const verifier =
     typeof consentVerifier === "function" ? consentVerifier : registeredConsentVerifier;
 
-  if (!mustVerify && !verifier) {
+  // A registered verifier is only consulted when consent is actually required, so nothing is marked VERIFIED needlessly
+  if (!mustVerify) {
     return {
       status: "NOT_REQUIRED",
       consentRecordId: null,
@@ -492,6 +493,10 @@ const assertConsentGate = async ({
   }
 
   const outcome = await verifier({ student, campaign, application, guardianInfo, schoolInfo });
+  if (outcome && outcome.verified && outcome.notRequired) {
+    // e.g. the student is 18 or older: consent is not needed, and is not recorded as given
+    return { status: "NOT_REQUIRED", consentRecordId: null, guardianUserId: null, checkedAt: new Date(), note: assertOptionalText(outcome.note, "consent.note", { max: 300 }) };
+  }
   if (!outcome || !outcome.verified) {
     throw new AppError(
       (outcome && outcome.reason) ||

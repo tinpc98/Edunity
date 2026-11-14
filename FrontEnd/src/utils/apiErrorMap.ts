@@ -22,6 +22,30 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       return "Bạn chỉ có thể nhắn tin cho học viên thuộc lớp của mình.";
     }
 
+    // Teacher contract errors (TEA-12)
+    const contractMessages: Record<string, string> = {
+      TEACHER_CONTRACT_NOT_FOUND: "Bạn cần ký hợp đồng giảng dạy trước khi mở lớp. Xem mục Hợp đồng trong Hồ sơ giáo viên.",
+      TEACHER_CONTRACT_NOT_ACTIVE: "Hợp đồng giảng dạy chưa có hiệu lực, nên chưa thể mở lớp.",
+      TEACHER_CONTRACT_EXPIRED: "Hợp đồng giảng dạy đã hết hạn. Vui lòng liên hệ Edunity để gia hạn.",
+      CONTRACT_ALREADY_PENDING: "Giáo viên này đang có một hợp đồng chờ ký.",
+      TEACHER_NOT_VERIFIED: "Chỉ gửi được hợp đồng cho giáo viên đã xác minh.",
+      CONTRACT_NOT_PENDING: "Hợp đồng này không còn ở trạng thái chờ ký.",
+      ECONTRACT_PROVIDER_UNAVAILABLE: "Dịch vụ hợp đồng điện tử chưa sẵn sàng. Vui lòng thử lại sau.",
+      IDENTITY_NUMBER_IN_USE: "Số CCCD này đã được dùng cho một tài khoản khác. Liên hệ Edunity nếu bạn cho rằng có nhầm lẫn.",
+      IDENTITY_DOCUMENT_EXPIRED: "CCCD đã hết hạn. Vui lòng dùng CCCD còn hiệu lực.",
+      OCR_MISMATCH_NOTE_REQUIRED: "OCR không khớp với thông tin khai báo: hãy ghi rõ lý do vẫn phê duyệt.",
+      TEACHER_REVERIFICATION_REQUIRED: "Xác minh giáo viên đã hết hạn. Hãy tái xác minh trong Hồ sơ giáo viên để mở lớp mới.",
+      IDENTITY_REQUIRED: "Bạn cần khai báo thông tin CCCD (tái xác minh) trước khi đăng ký tài khoản nhận tiền.",
+      BANK_HOLDER_NAME_MISMATCH: "Chủ tài khoản phải trùng họ tên trên CCCD của bạn.",
+      BANK_ACCOUNT_NOT_VERIFIED: "Bạn cần đăng ký tài khoản nhận tiền và chờ Edunity duyệt trước khi rút tiền.",
+      BANK_ACCOUNT_RECENTLY_CHANGED: "Tài khoản nhận tiền vừa thay đổi nên rút tiền đang tạm khoá 72 giờ.",
+      BANK_ACCOUNT_NOT_PENDING: "Tài khoản này không còn chờ duyệt.",
+      GUARDIAN_CONSENT_REQUIRED: "Học sinh dưới 18 tuổi cần giấy đồng thuận của phụ huynh đã được Edunity xác nhận.",
+      GUARDIAN_CONSENT_EXISTS: "Bạn đã có giấy đồng thuận đang chờ duyệt hoặc đã xác nhận cho chiến dịch này.",
+      CONSENT_NOT_PENDING: "Giấy đồng thuận này không còn chờ duyệt.",
+    };
+    if (err.code && contractMessages[err.code]) return contractMessages[err.code];
+
     // Scholarship errors
     if (err.code === "CAMPAIGN_NOT_ACCEPTING_APPLICATIONS") {
       return "Chiến dịch này hiện không trong thời gian nhận hồ sơ.";

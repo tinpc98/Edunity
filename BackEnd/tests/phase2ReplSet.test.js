@@ -128,7 +128,7 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
 
     expect(classCreationGateService.getDependencyStatus()).toEqual({
       cur07PricingPolicyReady: true,
-      tea12ContractReady: false,
+      tea12ContractReady: true, // wired to teacherContractService
     });
 
     // Step 1: TEA-07 HTTP lifecycle & redaction
@@ -164,13 +164,13 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
       .expect(200);
     expect(JSON.stringify(myAuthRes.body)).not.toContain(admin._id.toString());
 
-    // Step 2: With TEA-07 APPROVED + CUR-07 ACTIVE, HTTP createClass MUST still fail closed (503) without TEA-12
+    // Step 2: With TEA-07 APPROVED + CUR-07 ACTIVE, a VERIFIED teacher with no signed contract is still refused (403)
     const blockedHttp = await request(app)
       .post("/api/teacher/classes")
       .set(as(teacher))
       .send({ courseId: course._id, className: "Missing TEA-12", classType: "PAID", price: 500000, capacity: 20 })
-      .expect(503);
-    expect(blockedHttp.body.error).toBe("CONTRACT_DEPENDENCY_BLOCKED");
+      .expect(403);
+    expect(blockedHttp.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
 
     // Step 3: With explicit test contractVerifier ONLY in options, real CUR-07 validates price & captures CUR-09 snapshot
     const contractOk = { contractVerifier: async () => ({ id: "c-1", status: "ACTIVE" }) };
@@ -243,13 +243,13 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     ).rejects.toMatchObject({ code: "SESSION_NOT_DELETABLE", statusCode: 409 });
 
     // Step 4: ApproveClass BYPASS CLOSURE proofs!
-    // 4a) Default HTTP POST /api/admin/classes/:id/approve MUST FAIL CLOSED with 503 CONTRACT_DEPENDENCY_BLOCKED
+    // 4a) Default HTTP POST /api/admin/classes/:id/approve MUST be refused (403): the teacher has no ACTIVE contract
     const adminHttpBlocked = await request(app)
       .post(`/api/admin/classes/${created._id}/approve`)
       .set(as(admin))
       .send({ reviewNote: "Thử duyệt khi thiếu TEA-12" })
-      .expect(503);
-    expect(adminHttpBlocked.body.error).toBe("CONTRACT_DEPENDENCY_BLOCKED");
+      .expect(403);
+    expect(adminHttpBlocked.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
     expect((await Class.findById(created._id).lean()).status).toBe("PENDING_APPROVAL");
 
     // 4b) Suspend TEA-07 while PENDING_APPROVAL -> approveClass MUST reject with 403 even if TEA-12 OK!

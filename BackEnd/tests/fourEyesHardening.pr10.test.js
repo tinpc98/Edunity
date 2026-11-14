@@ -25,6 +25,7 @@ const {
   clearDB,
   syncIndexes,
 } = require("./helpers/db");
+const { verifiedBankAccount } = require("./helpers/bankAccount");
 
 const FRIDAY_1000 = "2026-11-13T03:00:00.000Z";
 const MONDAY_1000 = "2026-11-09T03:00:00.000Z";
@@ -87,11 +88,7 @@ describe("PR10: Four-Eyes Hardening & Elimination of Client Bypass", () => {
       teacherProfile: {
         fullName: "Teacher PR10",
         status: "APPROVED",
-        bankAccount: {
-          bankName: "Vietcombank",
-          accountNumber: "9988776655",
-          accountHolderName: "TEACHER PR10",
-        },
+        bankAccount: verifiedBankAccount("TEACHER PR10", "9988776655", "Vietcombank"),
       },
     });
     teacherToken = signAccessToken(teacher);

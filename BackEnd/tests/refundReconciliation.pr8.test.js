@@ -40,6 +40,7 @@ const {
   clearDB,
   syncIndexes,
 } = require("./helpers/db");
+const { verifiedBankAccount } = require("./helpers/bankAccount");
 
 const FRIDAY_1000 = "2026-11-13T03:00:00.000Z"; // 10:00 AM UTC+7
 const MONDAY_1000 = "2026-11-09T03:00:00.000Z"; // 10:00 AM UTC+7
@@ -107,11 +108,7 @@ describe("PR8: Safe Refund & Reconciliation Engine - Financial Closure & Bank Pr
       teacherProfile: {
         fullName: "Senior Teacher PR8",
         status: "APPROVED",
-        bankAccount: {
-          bankName: "Vietcombank",
-          accountNumber: "9876543210",
-          accountHolderName: "SENIOR TEACHER PR8",
-        },
+        bankAccount: verifiedBankAccount("SENIOR TEACHER PR8", "9876543210", "Vietcombank"),
       },
     });
     teacherToken = signAccessToken(teacherUser);

@@ -16,7 +16,8 @@ exports.getMyReviews = handle((req) => reviews.getMyReviews(req.user.id, parsePa
 exports.submitVerification = handle((req) => verifications.submitVerification(req.user.id, body(req)), 201);
 exports.getMyVerification = handle((req) => verifications.getMyVerification(req.user.id));
 exports.adminListVerifications = handle((req) => verifications.adminListVerifications(req.query, parsePaging(req.query)));
-exports.adminGetVerification = handle((req) => verifications.adminGetVerification(req.params.teacherId));
+exports.adminGetVerification = handle((req) => verifications.adminViewVerification(req.user.id, req.params.teacherId));
+exports.adminRevealIdentity = handle((req) => verifications.adminRevealIdentity(req.user.id, req.params.teacherId, body(req)));
 exports.approveVerification = handle((req) => verifications.approveVerification(req.user.id, req.params.teacherId, body(req)));
 exports.rejectVerification = handle((req) => verifications.rejectVerification(req.user.id, req.params.teacherId, body(req)));
 

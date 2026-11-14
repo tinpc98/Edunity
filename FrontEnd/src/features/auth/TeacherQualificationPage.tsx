@@ -12,6 +12,8 @@ import type { SubmitVerificationRequest } from "../../types/teacherVerification"
 import { getFriendlyErrorMessage } from "../../utils/apiErrorMap";
 import { PRIVATE_DOCUMENT_ACCEPT, validatePrivateDocument } from "../../utils/fileValidation";
 import { invalidateTeacherVerificationState } from "../../hooks/useTeacherVerification";
+import IdentityFields from "../../components/verification/IdentityFields";
+import { toIdentityPayload, type IdentityFormValues } from "../../utils/identityPayload";
 
 interface QualificationFormValues {
   qualificationSummary: string;
@@ -19,6 +21,7 @@ interface QualificationFormValues {
   identityFront: UploadFile[];
   identityBack?: UploadFile[];
   qualificationFiles: UploadFile[];
+  identity: IdentityFormValues;
 }
 
 const normFileList = (event: { fileList?: UploadFile[] } | UploadFile[]) =>
@@ -80,6 +83,7 @@ export default function TeacherQualificationPage() {
             files: qualifications.map((q) => ({ storageKey: q.storageKey, side: "SINGLE" as const, mimeType: q.mimeType })),
           },
         ],
+        identity: toIdentityPayload(values.identity),
         qualificationSummary: values.qualificationSummary.trim(),
         biography: values.biography?.trim() || undefined,
       };
@@ -234,9 +238,11 @@ export default function TeacherQualificationPage() {
                 <Input.TextArea placeholder="Chia sẻ ngắn gọn về kinh nghiệm giảng dạy của bạn" rows={3} />
               </Form.Item>
 
+              <IdentityFields />
+
               <div className="grid gap-4 md:grid-cols-2">
                 <Form.Item
-                  label={<span><IdcardOutlined className="mr-1.5 text-indigo-600" />CCCD / Hộ chiếu (mặt trước)</span>}
+                  label={<span><IdcardOutlined className="mr-1.5 text-indigo-600" />CCCD (mặt trước)</span>}
                   name="identityFront"
                   valuePropName="fileList"
                   getValueFromEvent={normFileList}
@@ -251,7 +257,7 @@ export default function TeacherQualificationPage() {
                   name="identityBack"
                   valuePropName="fileList"
                   getValueFromEvent={normFileList}
-                  extra="Không bắt buộc nếu dùng hộ chiếu."
+                  rules={[{ required: true, message: "Vui lòng tải lên mặt sau CCCD." }]}
                 >
                   <Upload accept={PRIVATE_DOCUMENT_ACCEPT} beforeUpload={beforeUpload} maxCount={1} listType="text">
                     <Button icon={<InboxOutlined />} block>Chọn tệp mặt sau</Button>

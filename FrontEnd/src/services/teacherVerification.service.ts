@@ -41,14 +41,28 @@ export class TeacherVerificationService {
     return apiClient<TeacherVerificationStatus>(`/admin/teacher-verifications/${teacherId}`, { method: "GET" });
   }
 
-  async adminApproveVerification(teacherId: string): Promise<TeacherVerificationStatus> {
-    return apiClient<TeacherVerificationStatus>(`/admin/teacher-verifications/${teacherId}/approve`, { method: "POST" });
+  async adminRevealIdentity(teacherId: string, reason: string): Promise<{ idNumber: string; address: string }> {
+    return apiClient<{ idNumber: string; address: string }>(`/admin/teacher-verifications/${teacherId}/identity/reveal`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
   }
 
-  async adminRejectVerification(teacherId: string, reviewNote: string): Promise<TeacherVerificationStatus> {
+  async adminApproveVerification(teacherId: string, reviewNote?: string): Promise<TeacherVerificationStatus> {
+    return apiClient<TeacherVerificationStatus>(`/admin/teacher-verifications/${teacherId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ reviewNote: reviewNote || undefined }),
+    });
+  }
+
+  async adminRejectVerification(
+    teacherId: string,
+    reviewNote: string,
+    documents: { documentId: string; reason: string }[] = []
+  ): Promise<TeacherVerificationStatus> {
     return apiClient<TeacherVerificationStatus>(`/admin/teacher-verifications/${teacherId}/reject`, {
       method: "POST",
-      body: JSON.stringify({ reviewNote }),
+      body: JSON.stringify({ reviewNote, documents }),
     });
   }
 }

@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const { runExclusive } = require("./jobLock");
 const { advanceClassStatuses } = require("../services/classLifecycleService");
 const { expireScholarships } = require("../services/scholarshipExpiryService");
+const { runReverificationSweep } = require("../services/teacherVerificationService");
 const { expireOldRecordings, failStaleProcessingRecordings } = require("../services/recordingMaintenanceService");
 const {
   startFinancialOutboxWorker,
@@ -32,6 +33,7 @@ const runMaintenanceJob = async (now = new Date()) => {
       scholarships: () => expireScholarships(now),
       expiredRecordings: () => expireOldRecordings(now),
       staleRecordings: () => failStaleProcessingRecordings(now),
+      teacherReverification: () => runReverificationSweep(now),
     };
 
     if (resolveOutboxConfig().isEnabled) {

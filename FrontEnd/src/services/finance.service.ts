@@ -42,10 +42,8 @@ export interface Payout {
   attachedEarningsCount?: number;
 }
 
+/** Bank details are never sent: the payout goes to the teacher's verified bank account (BAO-09). */
 export interface PayoutRequestPayload {
-  bankName: string;
-  accountNumber: string;
-  accountHolderName: string;
   amount?: number;
 }
 

@@ -27,6 +27,9 @@ import type { TeacherProfile, UpdateTeacherProfilePayload } from "../../../types
 import type { SubmitVerificationRequest } from "../../../types/teacherVerification";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 import { groupVerificationSubmissions } from "../../../utils/verificationSubmissions";
+import TeacherContractCard from "./TeacherContractCard";
+import IdentityFields from "../../../components/verification/IdentityFields";
+import { toIdentityPayload, type IdentityFormValues } from "../../../utils/identityPayload";
 import {
   AVATAR_ACCEPT,
   PRIVATE_DOCUMENT_ACCEPT,
@@ -107,9 +110,12 @@ export default function TeacherProfilePage() {
 
   // Verification Submit Mutation
   const submitVerificationMutation = useMutation({
-    mutationFn: async (values: { qualificationSummary?: string; biography?: string }) => {
+    mutationFn: async (values: { qualificationSummary?: string; biography?: string; identity: IdentityFormValues }) => {
       if (!identityFrontFile) {
-        throw new Error("Vui lòng tải lên tài liệu định danh (mặt trước hoặc hộ chiếu).");
+        throw new Error("Vui lòng tải lên mặt trước CCCD.");
+      }
+      if (!identityBackFile) {
+        throw new Error("Vui lòng tải lên mặt sau CCCD.");
       }
       if (qualificationFiles.length === 0) {
         throw new Error("Vui lòng tải lên ít nhất một bằng cấp hoặc chứng chỉ chuyên môn.");
@@ -170,6 +176,7 @@ export default function TeacherProfilePage() {
             files: qualKeyList.map((k) => ({ storageKey: k.storageKey, side: "SINGLE" as const, mimeType: k.mimeType })),
           },
         ],
+        identity: toIdentityPayload(values.identity),
         qualificationSummary: values.qualificationSummary?.trim() || undefined,
         biography: values.biography?.trim() || undefined,
       };
@@ -308,15 +315,60 @@ export default function TeacherProfilePage() {
 
     if (status === "VERIFIED") {
       return (
-        <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 flex items-start gap-3">
-          <CheckCircleFilled className="text-emerald-500 text-xl mt-0.5" />
-          <div className="flex-1">
-            <h4 className="text-emerald-800 font-bold m-0 text-base">Hồ sơ đã được xác minh</h4>
-            <p className="text-emerald-700 text-sm mt-1 mb-0">
-              Hồ sơ của bạn đã được quản trị viên phê duyệt. Bạn có đầy đủ quyền tạo lớp học và bắt đầu giảng dạy trên hệ thống Edunity.
-            </p>
+        <>
+          <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 flex items-start gap-3">
+            <CheckCircleFilled className="text-emerald-500 text-xl mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-emerald-800 font-bold m-0 text-base">Hồ sơ đã được xác minh</h4>
+              <p className="text-emerald-700 text-sm mt-1 mb-0">
+                Hồ sơ của bạn đã được quản trị viên phê duyệt. Bạn có thể mở lớp khi có hợp đồng giảng dạy còn hiệu lực.
+              </p>
+              {verificationStatus?.verifiedUntil && (
+                <p className="text-emerald-700 text-sm mt-1 mb-0">
+                  Xác minh có hiệu lực đến <strong>{new Date(verificationStatus.verifiedUntil).toLocaleDateString("vi-VN")}</strong> (tái xác minh mỗi 6 tháng).
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+          {verificationStatus?.reverificationStatus === "PENDING" && (
+            <Alert type="info" showIcon message="Hồ sơ tái xác minh đang chờ duyệt. Bạn vẫn dạy các lớp hiện có bình thường." />
+          )}
+          {verificationStatus?.reverificationStatus === "REJECTED" && (
+            <Alert
+              type="error"
+              showIcon
+              message="Hồ sơ tái xác minh bị từ chối"
+              description={verificationStatus.reviewNote || undefined}
+            />
+          )}
+          {verificationStatus?.reverificationOpen && (
+            <Alert
+              type="warning"
+              showIcon
+              message={
+                verificationStatus.verifiedUntil && new Date(verificationStatus.verifiedUntil) <= new Date()
+                  ? "Xác minh đã hết hạn: bạn cần tái xác minh để mở lớp mới."
+                  : "Đã đến kỳ tái xác minh giáo viên."
+              }
+              action={
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={() => {
+                    verificationForm.setFieldsValue({
+                      qualificationSummary: profile.qualificationSummary || "",
+                      biography: profile.biography || "",
+                    });
+                    setIsVerificationModalVisible(true);
+                  }}
+                >
+                  Tái xác minh
+                </Button>
+              }
+            />
+          )}
+          <TeacherContractCard />
+        </>
       );
     }
 
@@ -451,6 +503,13 @@ export default function TeacherProfilePage() {
                       Ghi chú Admin: {submission.reviewNote}
                     </p>
                   )}
+                  {submission.documents
+                    .filter((doc) => doc.rejectionReason)
+                    .map((doc) => (
+                      <p key={doc._id ?? doc.documentType} className="mb-0 mt-1 text-sm text-rose-700">
+                        {doc.documentType === "IDENTITY" ? "Giấy tờ định danh" : "Bằng cấp / chứng chỉ"}: {doc.rejectionReason}
+                      </p>
+                    ))}
                 </div>
               ))}
             </div>
@@ -581,7 +640,7 @@ export default function TeacherProfilePage() {
       >
         <Alert
           message="Yêu cầu tài liệu bắt buộc"
-          description="Hồ sơ xác minh bao gồm: (1) Giấy tờ định danh cá nhân (CMND/CCCD hoặc Hộ chiếu) và (2) Bằng cấp/Chứng chỉ chuyên môn. Định dạng hỗ trợ: PDF, JPG, PNG, WebP (Tối đa 10MB mỗi tệp)."
+          description="Hồ sơ xác minh bao gồm: (1) Căn cước công dân (CCCD, cả hai mặt) và (2) Bằng cấp/Chứng chỉ chuyên môn. Định dạng hỗ trợ: PDF, JPG, PNG, WebP (Tối đa 10MB mỗi tệp)."
           type="info"
           showIcon
           className="mb-5"
@@ -596,11 +655,12 @@ export default function TeacherProfilePage() {
           <div className="mb-5 p-4 rounded-xl bg-slate-50 border border-slate-200">
             <h4 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs">1</span>
-              Giấy tờ định danh cá nhân (CMND / CCCD / Hộ chiếu) *
+              Căn cước công dân (CCCD) *
             </h4>
             <p className="text-xs text-slate-500 mb-3">
-              Tải lên mặt trước (bắt buộc) và mặt sau (dành cho CCCD).
+              Tải lên cả mặt trước và mặt sau CCCD.
             </p>
+            <IdentityFields />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Front Side */}
@@ -647,7 +707,7 @@ export default function TeacherProfilePage() {
 
               {/* Back Side */}
               <div data-testid="upload-id-back" className="border border-slate-200 rounded-lg p-3 bg-white flex flex-col justify-between">
-                <div className="text-xs font-semibold text-slate-700 mb-2">Mặt sau (Tùy chọn)</div>
+                <div className="text-xs font-semibold text-slate-700 mb-2">Mặt sau (Bắt buộc)</div>
                 {identityBackFile ? (
                   <div className="flex items-center justify-between p-2 rounded bg-indigo-50/50 border border-indigo-100">
                     <div className="flex items-center gap-2 overflow-hidden">

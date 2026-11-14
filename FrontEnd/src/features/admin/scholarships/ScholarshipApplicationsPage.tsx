@@ -1,3 +1,4 @@
+import GuardianConsentReviewCard from "./GuardianConsentReviewCard";
 import { useState } from 'react';
 import { Typography, Input, Button, Table, Tag, Avatar, Row, Col, Card } from 'antd';
 import { 
@@ -157,6 +158,7 @@ export default function ScholarshipApplicationsPage() {
 
   return (
     <div className="flex flex-col gap-6 w-full">
+      <GuardianConsentReviewCard />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
         <div>
           <Title level={2} className="!m-0 text-gray-900">Hồ sơ ứng tuyển học bổng</Title>

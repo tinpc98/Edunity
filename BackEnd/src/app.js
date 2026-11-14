@@ -44,18 +44,19 @@ const allowedOrigins = getAllowedOrigins();
 const corsOptions = {
   origin: (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)),
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"], // session create/generate dedupe retries by it
 };
 // Before the body parser, so a parse error still reaches the browser with CORS headers
 app.use(cors(corsOptions));
 
 const LIVEKIT_WEBHOOK_PATH = "/api/sessions/livekit-webhook";
+const ECONTRACT_WEBHOOK_PATH = "/api/contracts/econtract-webhook";
 app.use(
   express.json({
     // LiveKit posts application/webhook+json and signs the exact bytes it sent
     type: ["application/json", "application/webhook+json"],
     verify: (req, res, buffer) => {
-      if (req.originalUrl === LIVEKIT_WEBHOOK_PATH) req.rawBody = buffer;
+      if (req.originalUrl === LIVEKIT_WEBHOOK_PATH || req.originalUrl === ECONTRACT_WEBHOOK_PATH) req.rawBody = buffer;
     },
   })
 );
@@ -72,6 +73,10 @@ app.use("/api", require("./routes/teachingRoutes"));
 app.use("/api", require("./routes/scholarshipRoutes"));
 app.use("/api", require("./routes/accountRoutes"));
 app.use("/api", require("./routes/communityRoutes"));
+app.use("/api", require("./routes/scholarshipPrivacyRoutes"));
+
+// AID-08: guardian consent for minors is checked against Admin-verified consent forms (BAO-11)
+require("./services/scholarshipDossierGateService").setConsentVerifier(require("./services/scholarshipPrivacyService").verifyConsent);
 
 // Public storage only (avatars, cover images). Private documents are never served statically.
 app.use("/uploads", express.static(require("./services/storageService").getPublicDir(), { index: false }));

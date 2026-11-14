@@ -2,6 +2,7 @@ const os = require("os");
 const path = require("path");
 const fs = require("fs");
 process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "edunity-storage-"));
+process.env.ENABLE_PAYMENT_SANDBOX = "true"; // payments go through the deterministic sandbox gateway in tests
 
 const request = require("supertest");
 const mongoose = require("mongoose");
@@ -24,6 +25,9 @@ const {
   AuditLog,
   Notification,
   SessionAttendance,
+  CoursePricingPolicy,
+  TeacherSubjectAuthorization,
+  TeacherContract,
 } = require("../src/models");
 const { runJob } = require("../src/jobs/expireEnrollmentsJob");
 const { verifyRoomToken } = require("../src/utils/roomToken");
@@ -101,6 +105,28 @@ beforeEach(async () => {
     subjectId: subject._id,
     subjectName: subject.name,
     gradeLevel: "GRADE_6",
+    level: "BEGINNER", // CUR-10: a class can only be opened on a course with a level
+    createdBy: admin._id,
+  });
+  // CUR-07: the price/session rules a class of this course must respect
+  await CoursePricingPolicy.create({
+    policyKey: `COURSE:${course._id}:ALL:GRADE_6:BEGINNER`,
+    version: 1,
+    name: "Toán 6 Test Policy",
+    scopeType: "COURSE",
+    categoryId: category._id,
+    subjectId: subject._id,
+    courseId: course._id,
+    gradeLevel: "GRADE_6",
+    level: "BEGINNER",
+    classType: "ALL",
+    allowFree: true,
+    minPrice: 0,
+    maxPrice: 2000000,
+    minSessions: 1,
+    maxSessions: 50,
+    effectiveFrom: new Date(Date.now() - 60000),
+    status: "ACTIVE",
     createdBy: admin._id,
   });
 });
@@ -381,6 +407,7 @@ describe("Teacher verification, class approval and classroom", () => {
       .set(as(newTeacher))
       .send({
         qualificationSummary: "Cử nhân Sư phạm Toán",
+        identity: { fullName: "Nguyễn Văn A", idNumber: "079203001234", dateOfBirth: "1990-05-01", address: "12 Lê Lợi, Phường 1, Quận 1, TP.HCM" },
         documents: [
           {
             documentType: "IDENTITY",
@@ -400,6 +427,26 @@ describe("Teacher verification, class approval and classroom", () => {
     const verified = await request(app).post(`/api/admin/teacher-verifications/${newTeacher._id}/approve`).set(as(admin)).send({});
     expect(verified.body.data.verificationStatus).toBe("VERIFIED");
     expect(verified.body.data.documents.every((d) => d.status === "APPROVED")).toBe(true);
+
+    // CUR-10 preconditions after verification: TEA-07 subject authorization and a signed TEA-12 contract
+    await TeacherSubjectAuthorization.create({
+      teacherId: newTeacher._id,
+      subjectId: subject._id,
+      categoryId: category._id,
+      gradeLevel: "GRADE_6",
+      level: "BEGINNER",
+      status: "APPROVED",
+      createdBy: admin._id,
+      approvedBy: admin._id,
+      approvedAt: new Date(),
+    });
+    const noContract = await request(app).post("/api/teacher/classes").set(as(newTeacher)).send(classBody);
+    expect(noContract.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
+    const contract = await request(app).post(`/api/admin/teachers/${newTeacher._id}/contracts`).set(as(admin)).send({});
+    expect(contract.statusCode).toBe(201);
+    const signed = await request(app).post(`/api/teacher/contracts/${contract.body.data.id}/sandbox-sign`).set(as(newTeacher)).send({ decision: "SIGN" });
+    expect(signed.body.data.status).toBe("ACTIVE");
+    expect(await TeacherContract.countDocuments({ teacherId: newTeacher._id, status: "ACTIVE" })).toBe(1);
 
     // BR-09 / BR-10
     const freeWithPrice = await request(app).post("/api/teacher/classes").set(as(newTeacher)).send({ ...classBody, classType: "FREE" });
@@ -530,7 +577,8 @@ describe("Teacher verification, class approval and classroom", () => {
 
     // Join: BR-12 not enrolled, BR-15 not owner
     // Time passes: session 1 is now running (moved directly, the API only schedules future sessions)
-    await Session.updateOne({ _id: sessionId }, { $set: { startDatetime: start, endDatetime: end } });
+    // (started a minute ago: joining within the first 5 minutes keeps the student PRESENT)
+    await Session.updateOne({ _id: sessionId }, { $set: { startDatetime: new Date(Date.now() - 60 * 1000), endDatetime: end } });
     const stranger = await request(app).post(`/api/sessions/${sessionId}/join`).set(as(student2));
     expect(stranger.body.error).toBe("NOT_ENROLLED");
     const wrongTeacher = await request(app).post(`/api/sessions/${sessionId}/join`).set(as(teacher));
@@ -887,6 +935,7 @@ describe("Scholarship campaign, contribution, application and usage", () => {
       categoryName: category.name,
       subjectId: subject._id,
       subjectName: subject.name,
+      level: "BEGINNER",
       createdBy: admin._id,
     });
     const outside = await createOpenClass(500000, { courseId: otherCourse._id, className: "Ngoài phạm vi" });

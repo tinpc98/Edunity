@@ -67,6 +67,7 @@ export function adaptCampaign(raw: ApiScholarshipCampaign): ScholarshipCampaign 
     scopeDetail: raw.scopeDetail,
     awardedScholarshipCount: raw.awardedScholarshipCount || 0,
     contributionCount: raw.contributionCount || 0,
+    dossierPolicy: raw.dossierPolicy,
   };
 }
 

@@ -32,7 +32,26 @@ const verificationDocumentSchema = new Schema(
       },
     },
 
+    // BAO-03: OCR of the CCCD front, compared with the declared identity. Admin-only review aid.
+    // Never stores the number read: only whether it matched, and its last 4 digits.
+    ocr: {
+      type: new Schema(
+        {
+          status: { type: String, enum: ["MATCHED", "MISMATCHED", "UNAVAILABLE"], required: true },
+          provider: { type: String, default: null },
+          mismatches: { type: [String], default: [] }, // fullName, idNumber, dateOfBirth, expiryDate, cardExpired
+          readFullName: { type: String, default: null },
+          readIdNumberLast4: { type: String, default: null },
+          note: { type: String, default: null },
+          checkedAt: { type: Date, required: true },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
+
     status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], default: "PENDING" },
+    rejectionReason: { type: String, default: null, maxlength: 1000 }, // why THIS document was refused (BAO-05)
     reviewedBy: { type: Schema.Types.ObjectId, ref: "User", default: null }, // Admin
     reviewedAt: { type: Date, default: null },
     reviewNote: { type: String, default: null },

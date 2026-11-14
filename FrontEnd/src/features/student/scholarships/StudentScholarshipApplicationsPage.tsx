@@ -1,3 +1,4 @@
+import PublicStoryControl from "./components/PublicStoryControl";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -415,6 +416,8 @@ export default function StudentScholarshipApplicationsPage() {
                     >
                       {expandedApplicationId === app.id ? "Ẩn chi tiết" : "Xem checklist và lịch sử hồ sơ"}
                     </Button>
+
+                    {isApproved && <PublicStoryControl applicationId={app.id} publicStory={app.publicStory} />}
 
                     {expandedApplicationId === app.id && (
                       <div className="rounded-xl border border-slate-200 p-3 space-y-3">
