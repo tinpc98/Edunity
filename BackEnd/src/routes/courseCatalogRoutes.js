@@ -1,6 +1,7 @@
 const express = require("express");
 const controller = require("../controllers/courseCatalogController");
 const authMiddleware = require("../middlewares/authMiddleware");
+const { optionalAuth } = authMiddleware;
 const requireRole = require("../middlewares/requireRole");
 
 const router = express.Router();
@@ -18,12 +19,15 @@ router.get("/subjects/:id", controller.getSubject);
 router.post("/admin/subjects", admin, controller.createSubject);
 router.patch("/admin/subjects/:id", admin, controller.updateSubject);
 
-// Courses
+// Courses (CUR-04 & Safe Delete)
 router.get("/courses", controller.searchCourses);
 router.get("/courses/:id", controller.getCourse);
 router.get("/courses/:id/classes", controller.getCourseClasses);
+router.get("/admin/courses", admin, controller.adminListCourses);
+router.get("/admin/courses/:id", admin, controller.adminGetCourse);
 router.post("/admin/courses", admin, controller.createCourse);
 router.patch("/admin/courses/:id", admin, controller.updateCourse);
+router.delete("/admin/courses/:id", admin, controller.deleteCourse);
 
 // Course proposals
 router.post("/teacher/course-proposals", teacher, controller.createProposal);
@@ -35,8 +39,9 @@ router.post("/admin/course-proposals/:id/approve", admin, controller.approveProp
 router.post("/admin/course-proposals/:id/reject", admin, controller.rejectProposal);
 router.post("/admin/course-proposals/:id/request-changes", admin, controller.requestProposalChanges);
 
-// Syllabus Versions & Curriculum Units (CUR-02)
+// Syllabus Versions & Curriculum Units (CUR-02, CUR-12)
 router.get("/courses/:id/syllabus", controller.getCoursePublishedSyllabus);
+router.get("/classes/:id/syllabus", optionalAuth, controller.getClassSyllabus);
 router.get("/admin/courses/:id/syllabus-versions", admin, controller.listSyllabusVersions);
 router.post("/admin/courses/:id/syllabus-versions", admin, controller.createSyllabusVersion);
 router.get("/admin/courses/:id/syllabus-versions/:versionId", admin, controller.getSyllabusVersion);

@@ -165,35 +165,82 @@ const applyCourse = (cls, course) => {
 const createClass = async (teacherId, body = {}, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   if (!body.courseId) throw validationError("courseId is required");
-  const course = await getActiveCourse(body.courseId);
 
-  const cls = new Class({
-    teacherId: teacher._id,
-    teacherName: teacher.teacherProfile.fullName,
-    status: "DRAFT", // BR-47
-    updatedBy: teacher._id,
-  });
-  applyCourse(cls, course);
-  applyClassInput(cls, body);
+  if (typeof mongoose.startSession !== "function") {
+    throw new AppError(
+      "Database session is unavailable; class creation requires transaction support",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503
+    );
+  }
 
-  const gateResult = await validateClassGate({
-    teacher,
-    course,
-    cls,
-    body,
-    mode: "CREATE",
-    pricingPolicyVerifier: options.pricingPolicyVerifier,
-    contractVerifier: options.contractVerifier,
-  });
+  let session;
+  try {
+    session = await mongoose.startSession();
+  } catch (sessionErr) {
+    throw new AppError(
+      "Failed to start database transaction session for class creation",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503,
+      { originalError: sessionErr.message }
+    );
+  }
 
-  const snapshots = await captureClassSnapshots({
-    course,
-    pricingResult: gateResult.pricingResult,
-  });
-  Object.assign(cls, snapshots);
+  try {
+    if (!session || typeof session.withTransaction !== "function") {
+      throw new AppError(
+        "Database session is unavailable; class creation requires transaction support",
+        "DATABASE_TRANSACTION_UNAVAILABLE",
+        503
+      );
+    }
 
-  await cls.save();
-  return cls.toObject();
+    let created;
+    await session.withTransaction(async () => {
+      // 1. Atomically lock and verify course is ACTIVE and not soft-deleted
+      const course = await Course.findOneAndUpdate(
+        { _id: body.courseId, status: "ACTIVE", ...NOT_DELETED },
+        { $inc: { lockVersion: 1 } },
+        { session, returnDocument: "after" }
+      );
+      if (!course) {
+        throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
+      }
+
+      const cls = new Class({
+        teacherId: teacher._id,
+        teacherName: teacher.teacherProfile.fullName,
+        status: "DRAFT", // BR-47
+        updatedBy: teacher._id,
+      });
+      applyCourse(cls, course);
+      applyClassInput(cls, body);
+
+      const gateResult = await validateClassGate({
+        teacher,
+        course,
+        cls,
+        body,
+        mode: "CREATE",
+        pricingPolicyVerifier: options.pricingPolicyVerifier,
+        contractVerifier: options.contractVerifier,
+      });
+
+      const snapshots = await captureClassSnapshots({
+        course,
+        pricingResult: gateResult.pricingResult,
+      });
+      Object.assign(cls, snapshots);
+
+      await cls.save({ session });
+      created = cls.toObject();
+    });
+    return created;
+  } finally {
+    if (session && typeof session.endSession === "function") {
+      await session.endSession();
+    }
+  }
 };
 
 const updateClass = async (teacherId, classId, body = {}, options = {}) => {

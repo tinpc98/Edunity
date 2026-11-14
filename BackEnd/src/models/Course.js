@@ -21,6 +21,7 @@ const courseSchema = new Schema(
     curriculumReference: { type: String, trim: true, default: null }, // Sách/chương trình tham chiếu (ví dụ: "Cánh Diều", "Kết Nối Tri Thức", "Cambridge")
     prerequisites: String,
     status: { type: String, enum: ["ACTIVE", "INACTIVE"], default: "ACTIVE" },
+    lockVersion: { type: Number, default: 0 },
 
     sourceProposalId: { type: Schema.Types.ObjectId, ref: "CourseProposal", default: null }, // nếu tạo từ Course Proposal đã duyệt
   },

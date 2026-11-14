@@ -1,5 +1,5 @@
 class AppError extends Error {
-  constructor(message, code, statusCode) {
+  constructor(message, code, statusCode, details = undefined) {
     const fullMessage =
       code && typeof message === "string" && !message.includes(code)
         ? `[${code}] ${message}`
@@ -8,6 +8,7 @@ class AppError extends Error {
     this.code = code;
     this.rawMessage = typeof message === "string" ? message : fullMessage;
     this.statusCode = statusCode;
+    if (details !== undefined) this.details = details;
     Error.captureStackTrace(this, this.constructor);
   }
 }

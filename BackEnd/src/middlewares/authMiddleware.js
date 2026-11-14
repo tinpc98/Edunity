@@ -75,4 +75,15 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+const optionalAuth = async (req, res, next) => {
+  const hasAuthHeader = Boolean(req.headers["authorization"]);
+  const hasTestHeader = process.env.NODE_ENV === "test" && Boolean(req.headers["x-user-id"] || req.headers["x-user-role"]);
+  if (!hasAuthHeader && !hasTestHeader) {
+    return next();
+  }
+  return authMiddleware(req, res, next);
+};
+
+authMiddleware.optionalAuth = optionalAuth;
 module.exports = authMiddleware;
+module.exports.optionalAuth = optionalAuth;

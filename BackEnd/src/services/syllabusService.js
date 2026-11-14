@@ -754,11 +754,122 @@ const archiveVersion = async (adminId, courseId, versionId) => {
   };
 };
 
+/**
+ * CUR-12: Read Class-referenced Syllabus Snapshot.
+ * Retrieves the exact immutable SyllabusVersion and CurriculumUnits referenced by a Class.
+ * Never falls back to the latest or Course.publishedSyllabusVersionId.
+ */
+const getClassSyllabus = async (classId, user = null) => {
+  assertId(classId, "Class not found", "CLASS_NOT_FOUND");
+  const { Class, Enrollment } = require("../models");
+  const classDoc = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
+  if (!classDoc) throw new AppError("Class not found", "CLASS_NOT_FOUND", 404);
+
+  // Role-based access control with safe teacherId handling
+  const PUBLIC_STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED"];
+  const isPublic = PUBLIC_STATUSES.includes(classDoc.status);
+  const isAdmin = Boolean(user && user.role === "ADMIN");
+  const isTeacherOwner = Boolean(
+    user && classDoc.teacherId && user.id === classDoc.teacherId.toString()
+  );
+
+  // Unified RBAC policy: DRAFT, PENDING_APPROVAL, REJECTED strictly restricted to Teacher Owner and Admin
+  if (["DRAFT", "PENDING_APPROVAL", "REJECTED"].includes(classDoc.status)) {
+    if (!isAdmin && !isTeacherOwner) {
+      if (!user) {
+        throw new AppError("Authentication required to view non-public class syllabus", "UNAUTHORIZED", 401);
+      }
+      throw new AppError("You do not have permission to view this class syllabus", "FORBIDDEN", 403);
+    }
+  } else if (!isPublic && !isAdmin && !isTeacherOwner) {
+    // For other non-public statuses (e.g. CANCELLED), allow enrolled students
+    let isEnrolled = false;
+    if (user && user.role === "STUDENT") {
+      isEnrolled = await Enrollment.exists({
+        classId: classDoc._id,
+        studentId: user.id,
+        enrollmentStatus: { $in: ["PENDING_PAYMENT", "CONFIRMED", "COMPLETED"] },
+      });
+    }
+    if (!isEnrolled) {
+      if (!user) {
+        throw new AppError("Authentication required to view non-public class syllabus", "UNAUTHORIZED", 401);
+      }
+      throw new AppError("You do not have permission to view this class syllabus", "FORBIDDEN", 403);
+    }
+  }
+
+  // Requirement: If Class lacks version or snapshot, return structured error, do not guess or fallback
+  if (!classDoc.syllabusVersionId) {
+    throw new AppError(
+      "Class does not have a linked syllabus version snapshot",
+      "CLASS_SYLLABUS_SNAPSHOT_NOT_FOUND",
+      404
+    );
+  }
+
+  // Must query the exact referenced version (even if Course is INACTIVE or version is ARCHIVED)
+  const version = await SyllabusVersion.findOne({
+    _id: classDoc.syllabusVersionId,
+    ...NOT_DELETED,
+  }).lean();
+
+  if (!version) {
+    throw new AppError("Referenced syllabus version not found", "SYLLABUS_VERSION_NOT_FOUND", 404);
+  }
+
+  // Snapshot Integrity: Verify SyllabusVersion belongs to the exact Course referenced by Class
+  const versionCourseId = version.courseId ? version.courseId.toString() : null;
+  const classCourseId = classDoc.courseId ? classDoc.courseId.toString() : null;
+  if (!versionCourseId || versionCourseId !== classCourseId) {
+    throw new AppError(
+      "Syllabus version does not belong to the class course",
+      "SYLLABUS_VERSION_COURSE_MISMATCH",
+      409
+    );
+  }
+
+  // Snapshot Integrity: Verify versionNumber matches class snapshot when defined
+  if (
+    classDoc.syllabusVersionNumber !== null &&
+    classDoc.syllabusVersionNumber !== undefined &&
+    version.versionNumber !== classDoc.syllabusVersionNumber
+  ) {
+    throw new AppError(
+      `Syllabus version number mismatch: expected ${classDoc.syllabusVersionNumber}, found ${version.versionNumber}`,
+      "SYLLABUS_VERSION_NUMBER_MISMATCH",
+      409
+    );
+  }
+
+  const units = await CurriculumUnit.find({
+    syllabusVersionId: version._id,
+    ...NOT_DELETED,
+  })
+    .sort({ unitOrder: 1 })
+    .lean();
+
+  return {
+    classId: classDoc._id,
+    className: classDoc.className,
+    courseId: classDoc.courseId,
+    courseTitle: classDoc.courseTitle,
+    syllabusVersionId: version._id,
+    versionNumber: version.versionNumber,
+    title: version.title,
+    summary: version.summary || "",
+    status: version.status,
+    publishedAt: version.publishedAt || null,
+    units: units.map(toPublicCurriculumUnit),
+  };
+};
+
 module.exports = {
   createDraftVersion,
   listVersions,
   getVersionDetail,
   getPublishedSyllabus,
+  getClassSyllabus,
   updateDraftVersion,
   addUnit,
   updateUnit,

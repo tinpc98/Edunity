@@ -304,6 +304,9 @@ const updateCourse = async (adminId, courseId, body) => {
     );
   }
 
+  const prevTitle = course.title;
+  const prevStatus = course.status;
+
   if (body.title !== undefined) {
     if (isBlank(body.title)) throw validationError("title must not be empty");
     await assertCourseTitleAvailable(course.subjectId, body.title, course._id);
@@ -315,9 +318,36 @@ const updateCourse = async (adminId, courseId, body) => {
   const levelUpdated = body.level !== undefined;
   if (levelUpdated) course.level = resolveLevel(body.level);
   if (body.gradeLevel !== undefined) course.gradeLevel = resolveGradeLevel(category, body.gradeLevel); // FR-ADM-22
-  if (body.status !== undefined) course.status = resolveStatus(body.status);
+
+  if (body.status !== undefined) {
+    const nextStatus = resolveStatus(body.status);
+    if (nextStatus === "ACTIVE" && course.status !== "ACTIVE") {
+      // Reactivation gate: ensure Subject and Category are active
+      const subject = await Subject.findOne({ _id: course.subjectId, ...NOT_DELETED });
+      if (!subject) throw new AppError("Subject not found or deleted", "SUBJECT_NOT_FOUND", 400);
+      if (subject.status !== "ACTIVE") {
+        throw new AppError("Cannot activate course under an inactive subject", "SUBJECT_INACTIVE", 400);
+      }
+    }
+    course.status = nextStatus;
+  }
+
   course.updatedBy = adminId;
   await course.save();
+
+  try {
+    const { audit } = require("./auditService");
+    await audit({
+      actorAdminId: adminId,
+      action: "COURSE_UPDATED",
+      targetType: "Course",
+      targetId: course._id,
+      beforeState: { title: prevTitle, status: prevStatus },
+      afterState: { title: course.title, status: course.status },
+    });
+  } catch (err) {
+    // Non-blocking audit log
+  }
 
   // courseTitle and gradeLevel are denormalized in Class
   await Class.updateMany({ courseId: course._id }, { $set: { courseTitle: course.title, gradeLevel: course.gradeLevel } });
@@ -328,6 +358,256 @@ const updateCourse = async (adminId, courseId, body) => {
     );
   }
   return course.toObject();
+};
+
+const adminListCourses = async (query, paging) => {
+  const filter = { ...NOT_DELETED };
+
+  if (query.status && query.status !== "ALL") {
+    filter.status = resolveStatus(query.status);
+  }
+
+  if (query.search) {
+    const pattern = { $regex: escapeRegex(query.search.trim()), $options: "i" };
+    filter.$or = [
+      { title: pattern },
+      { slug: pattern },
+      { description: pattern },
+      { curriculumReference: pattern },
+    ];
+  }
+
+  for (const field of ["categoryId", "subjectId"]) {
+    if (query[field]) {
+      if (!mongoose.isValidObjectId(query[field])) throw validationError(`${field} is invalid`);
+      filter[field] = query[field];
+    }
+  }
+
+  if (query.gradeLevel) {
+    if (!GRADE_LEVELS.includes(query.gradeLevel)) {
+      throw new AppError("gradeLevel is not a standard grade level", "INVALID_GRADE_LEVEL", 400);
+    }
+    filter.gradeLevel = query.gradeLevel;
+  }
+
+  if (query.level) filter.level = resolveLevel(query.level);
+  if (query.curriculumReference) {
+    filter.curriculumReference = { $regex: escapeRegex(query.curriculumReference.trim()), $options: "i" };
+  }
+
+  // Stable sort: default createdAt: -1, _id: -1
+  let sort = { createdAt: -1, _id: -1 };
+  if (query.sortBy) {
+    const validSortFields = ["title", "createdAt", "updatedAt", "status"];
+    const sortField = validSortFields.includes(query.sortBy) ? query.sortBy : "createdAt";
+    const sortOrder = query.sortOrder === "asc" || query.sortOrder === "1" ? 1 : -1;
+    sort = { [sortField]: sortOrder, _id: sortOrder };
+  }
+
+  const [items, total] = await Promise.all([
+    Course.find(filter).sort(sort).skip(paging.skip).limit(paging.pageSize).lean(),
+    Course.countDocuments(filter),
+  ]);
+
+  return paged(items, total, paging);
+};
+
+const adminGetCourse = async (courseId) => {
+  const course = await getCourseOrThrow(courseId);
+  // Admin detail returns Course regardless of status (ACTIVE or INACTIVE)
+  const [openClassCount, totalClassCount] = await Promise.all([
+    Class.countDocuments({ courseId: course._id, status: "OPEN", ...NOT_DELETED }),
+    Class.countDocuments({ courseId: course._id, ...NOT_DELETED }),
+  ]);
+  return { ...course.toObject(), openClassCount, totalClassCount };
+};
+
+const deleteCourse = async (adminId, courseId) => {
+  assertId(courseId, "Course not found", "COURSE_NOT_FOUND");
+
+  if (typeof mongoose.startSession !== "function") {
+    throw new AppError(
+      "Database session is unavailable; course deletion requires transaction support",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503
+    );
+  }
+
+  let session;
+  try {
+    session = await mongoose.startSession();
+  } catch (sessionErr) {
+    throw new AppError(
+      "Failed to start database transaction session for course deletion",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503,
+      { originalError: sessionErr.message }
+    );
+  }
+
+  try {
+    if (!session || typeof session.withTransaction !== "function") {
+      throw new AppError(
+        "Database session is unavailable; course deletion requires transaction support",
+        "DATABASE_TRANSACTION_UNAVAILABLE",
+        503
+      );
+    }
+
+    let result;
+    await session.withTransaction(async () => {
+      // 1. Concurrency guard & exclusive write lock on Course document:
+      // Atomically verify course exists and is ACTIVE/not deleted, while acquiring exclusive write lock
+      const course = await Course.findOneAndUpdate(
+        { _id: courseId, ...NOT_DELETED },
+        { $inc: { lockVersion: 1 } },
+        { session, returnDocument: "after" }
+      );
+      if (!course) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
+
+      const originalStatus = course.status;
+      const beforeState = { title: course.title, status: originalStatus };
+
+      // 2. Dependency check: Class (any existing class)
+      const classCount = await Class.countDocuments({ courseId: course._id }, { session });
+      if (classCount > 0) {
+        throw new AppError(
+          `Cannot delete course: ${classCount} class(es) exist. Deactivate the course by setting status to INACTIVE instead.`,
+          "COURSE_HAS_CLASSES",
+          409,
+          { classCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 3. Dependency check: Enrollment
+      const { Enrollment } = require("../models");
+      const enrollmentCount = await Enrollment.countDocuments({ courseId: course._id }, { session });
+      if (enrollmentCount > 0) {
+        throw new AppError(
+          `Cannot delete course: ${enrollmentCount} enrollment(s) exist. Deactivate the course by setting status to INACTIVE instead.`,
+          "COURSE_HAS_ENROLLMENTS",
+          409,
+          { enrollmentCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 4. Dependency check: SessionRefundReview (financial dispute / refund history)
+      const { SessionRefundReview } = require("../models");
+      const refundReviewCount = await SessionRefundReview.countDocuments({ courseId: course._id }, { session });
+      if (refundReviewCount > 0) {
+        throw new AppError(
+          `Cannot delete course: ${refundReviewCount} financial refund review record(s) exist. Deactivate the course by setting status to INACTIVE instead.`,
+          "COURSE_HAS_REFUND_REVIEWS",
+          409,
+          { refundReviewCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 5. Dependency check: ScholarshipCampaign
+      const { ScholarshipCampaign } = require("../models");
+      const scholarshipCount = await ScholarshipCampaign.countDocuments(
+        {
+          courseIds: course._id,
+          ...NOT_DELETED,
+        },
+        { session }
+      );
+      if (scholarshipCount > 0) {
+        throw new AppError(
+          `Cannot delete course: referenced in ${scholarshipCount} active scholarship campaign(s). Deactivate the course by setting status to INACTIVE instead.`,
+          "COURSE_IN_SCHOLARSHIP_CAMPAIGN",
+          409,
+          { scholarshipCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 6. Dependency check: LearningPath
+      const { LearningPath } = require("../models");
+      const learningPathCount = await LearningPath.countDocuments(
+        {
+          $or: [{ "steps.courseId": course._id }, { prerequisiteCourseIds: course._id }],
+          ...NOT_DELETED,
+        },
+        { session }
+      );
+      if (learningPathCount > 0) {
+        throw new AppError(
+          `Cannot delete course: referenced in ${learningPathCount} learning path(s). Deactivate the course by setting status to INACTIVE instead.`,
+          "COURSE_IN_LEARNING_PATH",
+          409,
+          { learningPathCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 7. Dependency check: CoursePricingPolicy
+      const { CoursePricingPolicy } = require("../models");
+      const activePolicyCount = await CoursePricingPolicy.countDocuments(
+        {
+          courseId: course._id,
+          status: "ACTIVE",
+          ...NOT_DELETED,
+        },
+        { session }
+      );
+      if (activePolicyCount > 0) {
+        throw new AppError(
+          `Cannot delete course: active pricing policy exists. Deactivate the course by setting status to INACTIVE instead.`,
+          "COURSE_HAS_ACTIVE_PRICING_POLICY",
+          409,
+          { activePolicyCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 8. All dependency checks passed: apply soft-delete
+      course.isDeleted = true;
+      course.deletedAt = new Date();
+      course.deletedBy = adminId;
+      course.status = "INACTIVE";
+      await course.save({ session });
+
+      // Soft delete associated draft/published syllabus versions and curriculum units atomically
+      const { SyllabusVersion, CurriculumUnit } = require("../models");
+      await Promise.all([
+        SyllabusVersion.updateMany(
+          { courseId: course._id, ...NOT_DELETED },
+          { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: adminId } },
+          { session }
+        ),
+        CurriculumUnit.updateMany(
+          { courseId: course._id, ...NOT_DELETED },
+          { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: adminId } },
+          { session }
+        ),
+      ]);
+
+      // 9. AuditLog: Included directly in transaction session, NO silent swallowing!
+      const { audit } = require("./auditService");
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: "COURSE_SOFT_DELETED",
+          targetType: "Course",
+          targetId: course._id,
+          beforeState,
+          afterState: { isDeleted: true, status: "INACTIVE" },
+        },
+        session
+      );
+
+      result = {
+        success: true,
+        message: "Course soft-deleted successfully",
+        courseId: course._id,
+      };
+    });
+
+    return result;
+  } finally {
+    if (session && typeof session.endSession === "function") {
+      await session.endSession();
+    }
+  }
 };
 
 module.exports = {
@@ -347,6 +627,9 @@ module.exports = {
   insertCourse,
   createCourse,
   updateCourse,
+  adminListCourses,
+  adminGetCourse,
+  deleteCourse,
   normalizeLevel,
   resolveLevel,
 };
