@@ -12,6 +12,17 @@ export interface VerificationFile {
 
 export type VerificationDocumentStatus = "PENDING" | "APPROVED" | "REJECTED";
 
+/** OCR of the CCCD front compared with the declared identity (admin view only). */
+export interface VerificationOcr {
+  status: "MATCHED" | "MISMATCHED" | "UNAVAILABLE";
+  provider?: string | null;
+  mismatches: Array<"fullName" | "idNumber" | "dateOfBirth" | "expiryDate" | "cardExpired">;
+  readFullName?: string | null;
+  readIdNumberLast4?: string | null;
+  note?: string | null;
+  checkedAt: string;
+}
+
 /** One submitted document. Backend returns every submission (newest first), each reviewed as a batch. */
 export interface VerificationDocument {
   _id?: string;
@@ -19,6 +30,8 @@ export interface VerificationDocument {
   files: VerificationFile[];
   status?: VerificationDocumentStatus;
   reviewNote?: string | null;
+  rejectionReason?: string | null;
+  ocr?: VerificationOcr;
   reviewedAt?: string | null;
   uploadedAt?: string;
   createdAt?: string;

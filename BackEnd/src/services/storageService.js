@@ -118,6 +118,13 @@ const assertOwnedKeys = async (userId, storageKeys) => {
   }
 };
 
+// Server-side read of a private file (e.g. OCR). Callers must have authorised access already.
+const readPrivateFile = async (storageKey) => {
+  const parsed = parsePrivateKey(storageKey);
+  if (!parsed) throw new AppError("File not found", "FILE_NOT_FOUND", 404);
+  return { buffer: await fs.readFile(path.join(getRoot(), storageKey)), mimeType: MIME_BY_EXTENSION[parsed.extension] };
+};
+
 // ---------- Signed URLs ----------
 
 const getUrlSecret = () => getSecret("FILE_URL_SECRET");
@@ -172,6 +179,7 @@ module.exports = {
   savePublicFile,
   parsePrivateKey,
   assertOwnedKeys,
+  readPrivateFile,
   createSignedUrl,
   withSignedUrls,
   resolveSignedDownload,

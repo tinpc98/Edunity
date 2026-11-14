@@ -7,6 +7,7 @@ const storage = require("./storageService");
 const { notify, notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
 const pii = require("../utils/pii");
+const ocrProvider = require("./ocrProvider");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const TEACHER_DOCUMENT_TYPES = ["IDENTITY", "QUALIFICATION"];
@@ -65,6 +66,48 @@ const presentIdentity = (identity) =>
         expiryDate: identity.expiryDate,
       }
     : null;
+
+// "Nguyễn  Văn A" -> "NGUYEN VAN A": OCR and typing differ in accents, case and spacing, not in letters
+const normalizeName = (name) =>
+  String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "D").replace(/\s+/g, " ").trim().toUpperCase();
+const sameDay = (a, b) => Boolean(a && b) && new Date(a).toISOString().slice(0, 10) === new Date(b).toISOString().slice(0, 10);
+
+// Pure: compares what OCR read with what the teacher declared
+const compareOcr = (read, declared, now = new Date()) => {
+  const mismatches = [];
+  if (normalizeName(read.fullName) !== normalizeName(declared.fullName)) mismatches.push("fullName");
+  if (String(read.idNumber || "") !== declared.idNumber) mismatches.push("idNumber");
+  if (!sameDay(read.dateOfBirth, declared.dateOfBirth)) mismatches.push("dateOfBirth");
+  if (read.expiryDate && declared.expiryDate && !sameDay(read.expiryDate, declared.expiryDate)) mismatches.push("expiryDate");
+  if (read.expiryDate && new Date(read.expiryDate) <= now) mismatches.push("cardExpired");
+  return mismatches;
+};
+
+// BAO-03: OCR the CCCD front and record the comparison. Any failure is recorded as UNAVAILABLE, never thrown:
+// the Admin then compares by eye, as before OCR existed.
+const runIdentityOcr = async (identityDocument, declared) => {
+  const front = identityDocument.files.find((file) => file.side === "FRONT") || identityDocument.files[0];
+  let ocr;
+  try {
+    const file = await storage.readPrivateFile(front.storageKey);
+    const result = await ocrProvider.recognizeIdCard({ ...file, declared });
+    if (result.unavailable) {
+      ocr = { status: "UNAVAILABLE", provider: result.provider, note: result.unavailable };
+    } else {
+      const mismatches = compareOcr(result.fields, declared);
+      ocr = {
+        status: mismatches.length ? "MISMATCHED" : "MATCHED",
+        provider: result.provider,
+        mismatches,
+        readFullName: result.fields.fullName || null,
+        readIdNumberLast4: result.fields.idNumber ? String(result.fields.idNumber).slice(-4) : null,
+      };
+    }
+  } catch (err) {
+    ocr = { status: "UNAVAILABLE", provider: ocrProvider.getMode(), note: `OCR failed: ${err.message}`.slice(0, 300) };
+  }
+  await VerificationDocument.updateOne({ _id: identityDocument._id }, { $set: { ocr: { ...ocr, checkedAt: new Date() } } });
+};
 
 const teacherNotFound = () => new AppError("Teacher not found", "TEACHER_NOT_FOUND", 404);
 
@@ -145,15 +188,22 @@ const submitVerification = async (teacherId, body) => {
 
   const documents = parseDocuments(body.documents);
   const identity = parseIdentity(body.identity);
+  const declared = {
+    fullName: identity.fullName,
+    idNumber: String(body.identity.idNumber).trim(),
+    dateOfBirth: identity.dateOfBirth,
+    expiryDate: identity.expiryDate,
+  };
   if (await User.exists({ _id: { $ne: teacher._id }, "teacherProfile.identity.idNumberHash": identity.idNumberHash })) {
     throw identityNumberInUse();
   }
   await storage.assertOwnedKeys(teacher._id, documents.flatMap((document) => document.files.map((file) => file.storageKey)));
 
+  let created;
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      await VerificationDocument.create(
+      created = await VerificationDocument.create(
         documents.map((document) => ({ ...document, userId: teacher._id })),
         { session, ordered: true }
       );
@@ -170,11 +220,16 @@ const submitVerification = async (teacherId, body) => {
     session.endSession();
   }
 
+  await runIdentityOcr(created.find((document) => document.documentType === "IDENTITY"), declared);
   await notifyAdmins("Hồ sơ giáo viên chờ xác minh", `${teacher.teacherProfile.fullName} đã gửi hồ sơ xác minh.`, "TEACHER_VERIFICATION_SUBMITTED");
   return presentStatus(teacher);
 };
 
-const getMyVerification = async (teacherId) => withoutReviewer(await presentStatus(await getTeacher(teacherId)));
+// The OCR comparison is an Admin review aid, not shown to the teacher
+const getMyVerification = async (teacherId) => {
+  const view = withoutReviewer(await presentStatus(await getTeacher(teacherId)));
+  return { ...view, documents: view.documents.map(({ ocr, ...document }) => document) };
+};
 
 // ---------- Admin (UC-ADM-01 / FR-ADM-02) ----------
 
@@ -237,6 +292,21 @@ const reviewVerification = async (adminId, teacherId, body, status) => {
     throw validationError("reviewNote is required when rejecting a verification");
   }
 
+  const pending = await VerificationDocument.find({ userId: teacher._id, documentType: { $in: TEACHER_DOCUMENT_TYPES }, status: "PENDING" })
+    .select("_id ocr")
+    .lean();
+  // BAO-05: approving despite an OCR mismatch must be a deliberate, explained decision
+  if (status === "VERIFIED" && pending.some((document) => document.ocr && document.ocr.status === "MISMATCHED") && isBlank(body.reviewNote)) {
+    throw new AppError("OCR does not match the declared identity: explain the approval in reviewNote", "OCR_MISMATCH_NOTE_REQUIRED", 409);
+  }
+  // Optional per-document reasons on rejection: [{ documentId, reason }]
+  const documentReasons = status === "REJECTED" && Array.isArray(body.documents) ? body.documents : [];
+  const pendingIds = new Set(pending.map((document) => document._id.toString()));
+  documentReasons.forEach((item, index) => {
+    if (!item || !pendingIds.has(String(item.documentId))) throw validationError(`documents[${index}].documentId is not a pending document of this teacher`);
+    if (isBlank(item.reason)) throw validationError(`documents[${index}].reason is required`);
+  });
+
   const now = new Date();
   const session = await mongoose.startSession();
   try {
@@ -269,6 +339,13 @@ const reviewVerification = async (adminId, teacherId, body, status) => {
         },
         { session }
       );
+      for (const item of documentReasons) {
+        await VerificationDocument.updateOne(
+          { _id: item.documentId },
+          { $set: { rejectionReason: String(item.reason).trim().slice(0, 1000) } },
+          { session }
+        );
+      }
 
       await audit(
         {
@@ -306,4 +383,5 @@ module.exports = {
   adminRevealIdentity,
   approveVerification,
   rejectVerification,
+  compareOcr, // exported for unit tests
 };

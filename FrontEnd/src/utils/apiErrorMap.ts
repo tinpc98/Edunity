@@ -33,6 +33,7 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       ECONTRACT_PROVIDER_UNAVAILABLE: "Dịch vụ hợp đồng điện tử chưa sẵn sàng. Vui lòng thử lại sau.",
       IDENTITY_NUMBER_IN_USE: "Số CCCD này đã được dùng cho một tài khoản khác. Liên hệ Edunity nếu bạn cho rằng có nhầm lẫn.",
       IDENTITY_DOCUMENT_EXPIRED: "CCCD đã hết hạn. Vui lòng dùng CCCD còn hiệu lực.",
+      OCR_MISMATCH_NOTE_REQUIRED: "OCR không khớp với thông tin khai báo: hãy ghi rõ lý do vẫn phê duyệt.",
     };
     if (err.code && contractMessages[err.code]) return contractMessages[err.code];
 

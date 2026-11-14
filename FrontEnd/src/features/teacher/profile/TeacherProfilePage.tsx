@@ -458,6 +458,13 @@ export default function TeacherProfilePage() {
                       Ghi chú Admin: {submission.reviewNote}
                     </p>
                   )}
+                  {submission.documents
+                    .filter((doc) => doc.rejectionReason)
+                    .map((doc) => (
+                      <p key={doc._id ?? doc.documentType} className="mb-0 mt-1 text-sm text-rose-700">
+                        {doc.documentType === "IDENTITY" ? "Giấy tờ định danh" : "Bằng cấp / chứng chỉ"}: {doc.rejectionReason}
+                      </p>
+                    ))}
                 </div>
               ))}
             </div>

@@ -48,14 +48,21 @@ export class TeacherVerificationService {
     });
   }
 
-  async adminApproveVerification(teacherId: string): Promise<TeacherVerificationStatus> {
-    return apiClient<TeacherVerificationStatus>(`/admin/teacher-verifications/${teacherId}/approve`, { method: "POST" });
+  async adminApproveVerification(teacherId: string, reviewNote?: string): Promise<TeacherVerificationStatus> {
+    return apiClient<TeacherVerificationStatus>(`/admin/teacher-verifications/${teacherId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ reviewNote: reviewNote || undefined }),
+    });
   }
 
-  async adminRejectVerification(teacherId: string, reviewNote: string): Promise<TeacherVerificationStatus> {
+  async adminRejectVerification(
+    teacherId: string,
+    reviewNote: string,
+    documents: { documentId: string; reason: string }[] = []
+  ): Promise<TeacherVerificationStatus> {
     return apiClient<TeacherVerificationStatus>(`/admin/teacher-verifications/${teacherId}/reject`, {
       method: "POST",
-      body: JSON.stringify({ reviewNote }),
+      body: JSON.stringify({ reviewNote, documents }),
     });
   }
 }

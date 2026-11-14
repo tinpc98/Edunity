@@ -1,20 +1,29 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Button, Card, Descriptions, Form, Input, Modal, message } from 'antd';
+import { Alert, Button, Card, Descriptions, Form, Input, Modal, message } from 'antd';
 import { EyeOutlined, IdcardOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { teacherVerificationService } from '../../../../../services/teacherVerification.service';
-import type { TeacherIdentity } from '../../../../../types/teacherVerification';
+import type { TeacherIdentity, VerificationOcr } from '../../../../../types/teacherVerification';
 import { getFriendlyErrorMessage } from '../../../../../utils/apiErrorMap';
 
 const formatDate = (value?: string | null) => (value ? dayjs(value).format('DD/MM/YYYY') : '—');
 
+const OCR_FIELD_LABELS: Record<VerificationOcr['mismatches'][number], string> = {
+  fullName: 'Họ tên',
+  idNumber: 'Số CCCD',
+  dateOfBirth: 'Ngày sinh',
+  expiryDate: 'Ngày hết hạn',
+  cardExpired: 'CCCD đã hết hạn',
+};
+
 interface Props {
   teacherId: string;
   identity?: TeacherIdentity | null;
+  ocr?: VerificationOcr;
 }
 
-export default function TeacherIdentityCard({ teacherId, identity }: Props) {
+export default function TeacherIdentityCard({ teacherId, identity, ocr }: Props) {
   const [form] = Form.useForm<{ reason: string }>();
   const [isRevealOpen, setIsRevealOpen] = useState(false);
   // Kept in component state only (never in the query cache), and dropped when the page is left
@@ -56,6 +65,28 @@ export default function TeacherIdentityCard({ teacherId, identity }: Props) {
           </Descriptions.Item>
           <Descriptions.Item label="Nơi thường trú" span={2}>{revealed?.address ?? identity.addressMasked}</Descriptions.Item>
         </Descriptions>
+      )}
+
+      {ocr && (
+        <Alert
+          className="!mt-3"
+          showIcon
+          type={ocr.status === 'MATCHED' ? 'success' : ocr.status === 'MISMATCHED' ? 'error' : 'info'}
+          message={
+            ocr.status === 'MATCHED'
+              ? 'OCR khớp với thông tin khai báo'
+              : ocr.status === 'MISMATCHED'
+                ? `OCR không khớp: ${ocr.mismatches.map((m) => OCR_FIELD_LABELS[m]).join(', ')}`
+                : 'Không chạy được OCR, cần đối chiếu thủ công'
+          }
+          description={
+            <span className="text-xs">
+              {ocr.readFullName && <>OCR đọc được: {ocr.readFullName}{ocr.readIdNumberLast4 && <> · số CCCD đuôi {ocr.readIdNumberLast4}</>} · </>}
+              {ocr.note && <>{ocr.note} · </>}
+              Nguồn: {ocr.provider === 'SANDBOX' ? 'Sandbox (giả lập)' : ocr.provider ?? '—'}
+            </span>
+          }
+        />
       )}
 
       <Modal
