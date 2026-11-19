@@ -130,7 +130,7 @@ export default function AdminClassDetailPage() {
             <Tag color={CLASS_STATUS_COLORS[cls.status]} className="font-bold text-sm px-3 py-0.5 rounded">
               {CLASS_STATUS_LABELS[cls.status] || cls.status}
             </Tag>
-            <Tag color={cls.classType === 'PAID' ? 'indigo' : 'green'} className="font-bold text-sm px-3 py-0.5 rounded">
+            <Tag color={cls.classType === 'PAID' ? 'cyan' : 'green'} className="font-bold text-sm px-3 py-0.5 rounded">
               {cls.classType}
             </Tag>
           </div>
@@ -225,7 +225,7 @@ export default function AdminClassDetailPage() {
                 </Col>
                 <Col span={24}>
                   <Text className="text-gray-400 block mb-0.5">Lịch học hàng tuần:</Text>
-                  <div className="font-semibold text-indigo-700">
+                  <div className="font-semibold text-teal-700">
                     {scheduleDisplay}
                   </div>
                 </Col>
@@ -274,7 +274,7 @@ export default function AdminClassDetailPage() {
               <div className="flex flex-col gap-2.5 text-sm">
                 <div>
                   <Text className="text-gray-400 block mb-0.5">Tiêu đề khóa học:</Text>
-                  <div className="font-bold text-indigo-700 text-base">{cls.courseTitle}</div>
+                  <div className="font-bold text-teal-800 text-base">{cls.courseTitle}</div>
                 </div>
                 {cls.course?.subjectName && (
                   <div>

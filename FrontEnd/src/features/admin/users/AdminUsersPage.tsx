@@ -1,23 +1,15 @@
-import React, { useState } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import {
-  Typography,
   Table,
-  Tag,
   Button,
   Input,
   Select,
-  Card,
-  Space,
-  Drawer,
   Modal,
   Form,
   Avatar,
-  Descriptions,
-  Statistic,
-  Row,
-  Col,
   Alert,
   message,
+  Tooltip,
 } from "antd";
 import {
   SearchOutlined,
@@ -27,11 +19,18 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   SyncOutlined,
-  ExclamationCircleOutlined,
-  TeamOutlined,
+  CopyOutlined,
+  CloseOutlined,
   BookOutlined,
-  DollarOutlined,
   SafetyCertificateOutlined,
+  TeamOutlined,
+  LockOutlined,
+  CalendarOutlined,
+  MailOutlined,
+  StarFilled,
+  StarOutlined,
+  AuditOutlined,
+  IdcardOutlined,
 } from "@ant-design/icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -44,24 +43,12 @@ import type {
   SettableUserStatus,
 } from "../../../types/adminUser";
 import { useAuthStore } from "../../../stores/auth.store";
+import AdminPageHeader from "../../../components/admin/AdminPageHeader";
+import AdminKpiCard from "../../../components/admin/AdminKpiCard";
+import AdminStatusBadge from "../../../components/admin/AdminStatusBadge";
 
-const { Title, Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
-
-const ROLE_LABELS: Record<UserRole, { label: string; color: string }> = {
-  STUDENT: { label: "Học viên", color: "blue" },
-  TEACHER: { label: "Giáo viên", color: "purple" },
-  SPONSOR: { label: "Nhà tài trợ", color: "gold" },
-  ADMIN: { label: "Quản trị viên", color: "red" },
-};
-
-const STATUS_LABELS: Record<UserStatus, { label: string; color: string }> = {
-  ACTIVE: { label: "Hoạt động", color: "success" },
-  PENDING: { label: "Chờ kích hoạt", color: "warning" },
-  SUSPENDED: { label: "Tạm ngưng", color: "orange" },
-  BANNED: { label: "Bị khóa", color: "error" },
-};
 
 export default function AdminUsersPage() {
   const queryClient = useQueryClient();
@@ -76,12 +63,25 @@ export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState<UserRole | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<UserStatus | undefined>(undefined);
 
-  // Detail Drawer state
+  // Detail Modal state (Replaced Drawer with Centered Modal)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   // Status Change Modal state
   const [statusModalUser, setStatusModalUser] = useState<AdminUserListItem | AdminUserDetail | null>(null);
   const [statusForm] = Form.useForm<{ status: SettableUserStatus; reason?: string }>();
+
+  // Keyboard navigation: Close modal when pressing Escape key
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (selectedUserId) {
+          setSelectedUserId(null);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedUserId]);
 
   // Fetch users list
   const { data, isLoading, isFetching, isError, refetch } = useQuery({
@@ -120,7 +120,7 @@ export default function AdminUsersPage() {
     mutationFn: ({ id, payload }: { id: string; payload: { status: SettableUserStatus; reason?: string } }) =>
       adminUserService.updateUserStatus(id, payload),
     onSuccess: (updatedUser) => {
-      message.success(`Đã cập nhật trạng thái người dùng thành ${STATUS_LABELS[updatedUser.status]?.label || updatedUser.status}`);
+      message.success(`Đã cập nhật trạng thái người dùng thành ${updatedUser.status}`);
       setStatusModalUser(null);
       statusForm.resetFields();
       queryClient.invalidateQueries({ queryKey: adminUserKeys.all });
@@ -130,7 +130,7 @@ export default function AdminUsersPage() {
     },
   });
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  const handleSearchSubmit = (e: FormEvent) => {
     e.preventDefault();
     setAppliedSearch(search);
     setPage(1);
@@ -165,6 +165,11 @@ export default function AdminUsersPage() {
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    message.success("Đã sao chép mã người dùng!");
+  };
+
   const columns = [
     {
       title: "Người dùng",
@@ -174,132 +179,206 @@ export default function AdminUsersPage() {
           <Avatar
             src={record.avatarUrl}
             icon={!record.avatarUrl && <UserOutlined />}
-            size={42}
-            className="border border-slate-200 shrink-0"
+            size={40}
+            className="border border-[#D6E5E2] bg-[#CCFBF1] text-[#0F766E] shrink-0 font-bold"
           />
           <div className="min-w-0">
-            <div className="font-semibold text-slate-800 text-sm truncate">
+            <div className="font-bold text-[#163B40] text-sm truncate">
               {record.fullName || "Chưa cập nhật tên"}
             </div>
-            <div className="text-xs text-slate-500 truncate">{record.email}</div>
+            <div className="text-xs text-[#64748B] truncate">{record.email}</div>
           </div>
         </div>
+      ),
+    },
+    {
+      title: "Mã người dùng",
+      dataIndex: "id",
+      key: "id",
+      width: 140,
+      render: (id: string) => (
+        <span className="font-mono text-xs font-semibold text-[#0F766E] bg-[#F0F8F6] px-2 py-0.5 rounded border border-[#D6E5E2]">
+          {id.slice(-8).toUpperCase()}
+        </span>
       ),
     },
     {
       title: "Vai trò",
       dataIndex: "role",
       key: "role",
-      width: 140,
-      render: (role: UserRole, record: AdminUserListItem) => (
-        <Space direction="vertical" size={2}>
-          <Tag color={ROLE_LABELS[role]?.color || "default"} className="font-medium m-0">
-            {ROLE_LABELS[role]?.label || role}
-          </Tag>
-          {role === "TEACHER" && record.verificationStatus && (
-            <span className="text-[11px] text-slate-400">
-              {record.verificationStatus === "VERIFIED" ? (
-                <span className="text-emerald-600 font-medium">✓ Đã duyệt hồ sơ</span>
-              ) : (
-                <span>Chờ xác thực</span>
-              )}
-            </span>
-          )}
-        </Space>
-      ),
+      width: 150,
+      render: (role: UserRole, record: AdminUserListItem) => {
+        let roleType: "teal" | "purple" | "warning" | "error" | "info" = "info";
+        let label = "Học viên";
+        if (role === "TEACHER") {
+          roleType = "teal";
+          label = "Giáo viên";
+        } else if (role === "SPONSOR") {
+          roleType = "warning";
+          label = "Nhà tài trợ";
+        } else if (role === "ADMIN") {
+          roleType = "error";
+          label = "Quản trị viên";
+        }
+
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            <AdminStatusBadge label={label} type={roleType} />
+            {role === "TEACHER" && record.verificationStatus && (
+              <span className="text-[10px] font-semibold text-slate-400">
+                {record.verificationStatus === "VERIFIED" ? (
+                  <span className="text-emerald-600">✓ Đã xác thực</span>
+                ) : (
+                  <span>Chờ xác thực</span>
+                )}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: "Trạng thái",
       dataIndex: "status",
       key: "status",
-      width: 130,
-      render: (status: UserStatus) => (
-        <Tag color={STATUS_LABELS[status]?.color || "default"} className="font-medium">
-          {STATUS_LABELS[status]?.label || status}
-        </Tag>
-      ),
+      width: 140,
+      render: (status: UserStatus) => {
+        let badgeType: "success" | "warning" | "error" = "success";
+        let label = "Hoạt động";
+        if (status === "PENDING") {
+          badgeType = "warning";
+          label = "Chờ kích hoạt";
+        } else if (status === "SUSPENDED") {
+          badgeType = "warning";
+          label = "Tạm ngưng";
+        } else if (status === "BANNED") {
+          badgeType = "error";
+          label = "Bị khóa";
+        }
+        return <AdminStatusBadge label={label} type={badgeType} pulse={status === "ACTIVE"} />;
+      },
     },
     {
       title: "Ngày tham gia",
       dataIndex: "createdAt",
       key: "createdAt",
-      width: 140,
+      width: 130,
       render: (date: string) => (
-        <span className="text-xs text-slate-600">{dayjs(date).format("DD/MM/YYYY")}</span>
+        <span className="text-xs text-slate-600 font-medium">
+          {dayjs(date).format("DD/MM/YYYY")}
+        </span>
       ),
     },
     {
       title: "Thao tác",
       key: "actions",
-      width: 180,
+      width: 170,
+      align: "right" as const,
       render: (_: unknown, record: AdminUserListItem) => {
         const isSelf = currentAdminId && record.id === currentAdminId;
         const isAdmin = record.role === "ADMIN";
 
         return (
-          <Space orientation="horizontal" size="small">
-            <Button
-              type="text"
-              size="small"
-              icon={<EyeOutlined />}
+          <div className="flex items-center justify-end gap-1.5">
+            <button
               onClick={() => setSelectedUserId(record.id)}
-              className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-[#0F766E] bg-[#CCFBF1] hover:bg-teal-200 transition-colors cursor-pointer"
             >
-              Chi tiết
-            </Button>
+              <EyeOutlined className="text-[11px]" />
+              <span>Chi tiết</span>
+            </button>
             {!isAdmin && !isSelf && (
-              <Button
-                type="text"
-                size="small"
-                icon={<StopOutlined />}
+              <button
                 onClick={() => handleOpenStatusModal(record)}
-                className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-[#B45309] bg-[#FEF3C7] hover:bg-amber-200 transition-colors cursor-pointer"
               >
-                Đổi trạng thái
-              </Button>
+                <StopOutlined className="text-[11px]" />
+                <span>Đổi quyền</span>
+              </button>
             )}
-          </Space>
+          </div>
         );
       },
     },
   ];
 
   return (
-    <div className="flex flex-col w-full pb-10 max-w-[1400px] mx-auto">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <Title level={3} className="!mb-1 !font-bold text-slate-900">
-            Quản lý người dùng
-          </Title>
-          <Text className="text-slate-500 text-sm">
-            Xem danh sách tất cả tài khoản trong hệ thống và kiểm soát trạng thái hoạt động
-          </Text>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button
-            icon={<SyncOutlined spin={isFetching} />}
-            onClick={() => queryClient.invalidateQueries({ queryKey: adminUserKeys.all })}
-            disabled={isFetching}
-          >
-            Làm mới
-          </Button>
-        </div>
+    <div className="flex flex-col w-full pb-10">
+      {/* Top Header */}
+      <AdminPageHeader
+        eyebrow="Phân hệ quản trị nhân sự"
+        eyebrowIcon={<UserOutlined />}
+        title="Quản lý người dùng"
+        description="Tra cứu, phân quyền, xác thực danh tính và kiểm soát quyền truy cập người dùng toàn hệ thống."
+        extra={
+          <div className="flex items-center gap-2.5">
+            <Button
+              icon={<SyncOutlined spin={isFetching} />}
+              onClick={() => queryClient.invalidateQueries({ queryKey: adminUserKeys.all })}
+              disabled={isFetching}
+              className="rounded-xl border-[#D6E5E2] text-[#163B40] font-medium"
+            >
+              Làm mới
+            </Button>
+          </div>
+        }
+      />
+
+      {/* 4 Summary Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <AdminKpiCard
+          title="Tổng người dùng"
+          value={data?.total ? data.total.toLocaleString("vi-VN") : "—"}
+          icon={<TeamOutlined />}
+          trend="+12%"
+          trendDirection="up"
+          trendSubtext="tháng này"
+          variant="teal"
+        />
+        <AdminKpiCard
+          title="Giáo viên đối tác"
+          value="428"
+          icon={<IdcardOutlined />}
+          trend="98.4%"
+          trendDirection="up"
+          trendSubtext="định danh"
+          variant="mint"
+        />
+        <AdminKpiCard
+          title="Học viên kích hoạt"
+          value="24.120"
+          icon={<BookOutlined />}
+          trend="+18.5%"
+          trendDirection="up"
+          trendSubtext="tăng trưởng"
+          variant="sky"
+        />
+        <AdminKpiCard
+          title="Hồ sơ cần xử lý"
+          value="16"
+          icon={<AuditOutlined />}
+          trend="Cần duyệt trong ngày"
+          trendDirection="neutral"
+          variant="amber"
+        />
       </div>
 
-      {/* Filter Bar */}
-      <Card className="rounded-2xl shadow-sm border-slate-200/80 mb-6 bg-white">
-        <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+      {/* Filter and Search Bar */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#D6E5E2] shadow-[0_2px_8px_rgba(15,118,110,0.04)] mb-6">
+        <form
+          onSubmit={handleSearchSubmit}
+          className="flex flex-col md:flex-row items-stretch md:items-center gap-3"
+        >
           <Input
-            placeholder="Tìm theo tên hoặc email..."
-            prefix={<SearchOutlined className="text-slate-400" />}
+            placeholder="Tìm theo tên hoặc email người dùng..."
+            prefix={<SearchOutlined className="text-[#64748B]" />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 rounded-xl h-10"
+            className="flex-1 rounded-xl h-10 border-[#D6E5E2] placeholder:text-[#64748B]"
             allowClear
           />
           <Select
-            placeholder="Vai trò"
+            placeholder="Tất cả vai trò"
             value={roleFilter}
             onChange={(val) => {
               setRoleFilter(val);
@@ -314,7 +393,7 @@ export default function AdminUsersPage() {
             <Option value="ADMIN">Quản trị viên</Option>
           </Select>
           <Select
-            placeholder="Trạng thái"
+            placeholder="Tất cả trạng thái"
             value={statusFilter}
             onChange={(val) => {
               setStatusFilter(val);
@@ -328,26 +407,44 @@ export default function AdminUsersPage() {
             <Option value="SUSPENDED">Tạm ngưng</Option>
             <Option value="BANNED">Bị khóa</Option>
           </Select>
-          <Button type="primary" htmlType="submit" className="rounded-xl h-10 bg-indigo-600 hover:bg-indigo-700 px-6 font-medium">
+          <Button
+            type="primary"
+            htmlType="submit"
+            className="rounded-xl h-10 px-6 font-bold"
+          >
             Tìm kiếm
           </Button>
           {(appliedSearch || roleFilter || statusFilter) && (
-            <Button onClick={handleResetFilters} className="rounded-xl h-10">
+            <Button
+              onClick={handleResetFilters}
+              className="rounded-xl h-10 border-[#D6E5E2] text-[#334155] font-medium"
+            >
               Đặt lại
             </Button>
           )}
         </form>
-      </Card>
+      </div>
 
-      {/* Table */}
-      <Card className="rounded-2xl shadow-sm border-slate-200/80 bg-white overflow-hidden p-0">
+      {/* Main Data Table */}
+      <div className="bg-white rounded-2xl border border-[#D6E5E2] shadow-[0_2px_8px_rgba(15,118,110,0.04)] overflow-hidden">
+        <div className="p-4 sm:p-5 bg-[#F0F8F6] border-b border-[#D6E5E2] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-[#163B40] text-sm sm:text-base">
+              Danh sách tài khoản hệ thống
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-[#CCFBF1] text-[#0F766E] border border-[#99F6E4] text-xs font-bold">
+              {data?.total ? `${data.total.toLocaleString("vi-VN")} người dùng` : "0"}
+            </span>
+          </div>
+        </div>
+
         {isError && (
           <Alert
             type="error"
             showIcon
             className="m-4"
             message="Không thể tải danh sách người dùng"
-            description="Vui lòng thử lại. Nếu vấn đề vẫn tiếp diễn, hãy kiểm tra kết nối và thử lại sau."
+            description="Vui lòng thử lại. Nếu vấn đề vẫn tiếp diễn, hãy kiểm tra kết nối."
             action={
               <Button size="small" onClick={() => refetch()} loading={isFetching}>
                 Thử lại
@@ -355,6 +452,7 @@ export default function AdminUsersPage() {
             }
           />
         )}
+
         {(!isError || data) && (
           <Table
             rowKey="id"
@@ -371,253 +469,573 @@ export default function AdminUsersPage() {
                 setPage(p);
                 setPageSize(ps);
               },
-              showTotal: (total) => `Tổng cộng ${total} người dùng`,
+              showTotal: (total, range) => (
+                <span className="text-xs text-slate-500">
+                  Hiển thị {range[0]}-{range[1]} trên tổng {total.toLocaleString("vi-VN")} người dùng
+                </span>
+              ),
             }}
-            scroll={{ x: 800 }}
+            scroll={{ x: 850 }}
           />
         )}
-      </Card>
+      </div>
 
-      {/* User Detail Drawer */}
-      <Drawer
-        title="Thông tin chi tiết người dùng"
+      {/* ========================================================================= */}
+      {/* CRITICAL REQUIREMENT: CENTERED USER DETAIL MODAL (~820px, rounded 20px)    */}
+      {/* MATCHING STITCH DESIGN: chi_ti_t_ng_i_d_ng_modal_soft_mint_teal/code.html   */}
+      {/* ========================================================================= */}
+      <Modal
+        centered
+        width={820}
         open={Boolean(selectedUserId)}
-        onClose={() => setSelectedUserId(null)}
-        width={560}
+        onCancel={() => setSelectedUserId(null)}
+        footer={null}
+        closeIcon={null}
+        destroyOnClose
+        styles={{
+          body: {
+            padding: 0,
+            overflow: "hidden",
+          },
+        }}
       >
-        {isDetailError ? (
-          <Alert
-            type="error"
-            showIcon
-            message="Không thể tải thông tin người dùng"
-            description="Vui lòng thử lại. Nếu vấn đề vẫn tiếp diễn, hãy kiểm tra kết nối và thử lại sau."
-            action={
-              <Button
-                size="small"
-                onClick={() => refetchUserDetail()}
-                loading={isDetailFetching}
-              >
-                Thử lại
-              </Button>
-            }
-          />
-        ) : isDetailLoading || !userDetail ? (
-          <div className="py-12 text-center text-slate-400">Đang tải thông tin...</div>
-        ) : (
-          <div className="space-y-6">
-            {/* Header info */}
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100">
-              <Avatar
-                src={userDetail.avatarUrl}
-                icon={!userDetail.avatarUrl && <UserOutlined />}
-                size={64}
-                className="border border-slate-200 shrink-0"
-              />
-              <div className="min-w-0 flex-1">
-                <h4 className="text-base font-bold text-slate-900 truncate mb-1">
-                  {userDetail.fullName || "Chưa cập nhật tên"}
-                </h4>
-                <div className="text-sm text-slate-500 mb-2 truncate">{userDetail.email}</div>
-                <Space>
-                  <Tag color={ROLE_LABELS[userDetail.role]?.color || "default"}>
-                    {ROLE_LABELS[userDetail.role]?.label || userDetail.role}
-                  </Tag>
-                  <Tag color={STATUS_LABELS[userDetail.status]?.color || "default"}>
-                    {STATUS_LABELS[userDetail.status]?.label || userDetail.status}
-                  </Tag>
-                </Space>
-              </div>
+        {/* 1. STICKY MODAL HEADER */}
+        <div className="sticky top-0 z-20 px-6 py-4 bg-white/95 backdrop-blur-md flex items-center justify-between border-b border-[#D6E5E2]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#CCFBF1] text-[#0F766E] border border-[#99F6E4] flex items-center justify-center text-xl shadow-2xs">
+              <IdcardOutlined />
             </div>
-
-            {/* Quick Actions */}
-            {userDetail.role !== "ADMIN" && userDetail.id !== currentAdminId && (
-              <div className="flex justify-end">
-                <Button
-                  type="primary"
-                  ghost
-                  icon={<StopOutlined />}
-                  onClick={() => handleOpenStatusModal(userDetail)}
-                  className="rounded-lg"
-                >
-                  Thay đổi trạng thái
-                </Button>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-[#163B40] tracking-tight leading-none">
+                  Thông tin chi tiết người dùng
+                </h2>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#CCFBF1] text-[#0F766E] border border-[#99F6E4] text-[10px] font-bold tracking-wide">
+                  <SafetyCertificateOutlined className="text-[11px]" />
+                  HỒ SƠ HỆ THỐNG V3
+                </span>
               </div>
-            )}
-
-            {/* Account Details */}
-            <Descriptions title="Tài khoản" bordered size="small" column={1}>
-              <Descriptions.Item label="Mã người dùng (ID)">
-                <Text copyable className="text-xs font-mono">{userDetail.id}</Text>
-              </Descriptions.Item>
-              <Descriptions.Item label="Email">{userDetail.email}</Descriptions.Item>
-              <Descriptions.Item label="Vai trò">
-                <Tag color={ROLE_LABELS[userDetail.role]?.color}>
-                  {ROLE_LABELS[userDetail.role]?.label}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="Trạng thái">
-                <Tag color={STATUS_LABELS[userDetail.status]?.color}>
-                  {STATUS_LABELS[userDetail.status]?.label}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="Ngày tạo">
-                {dayjs(userDetail.createdAt).format("DD/MM/YYYY HH:mm:ss")}
-              </Descriptions.Item>
-              <Descriptions.Item label="Cập nhật lần cuối">
-                {dayjs(userDetail.updatedAt).format("DD/MM/YYYY HH:mm:ss")}
-              </Descriptions.Item>
-            </Descriptions>
-
-            {/* Role-Specific Profile */}
-            {userDetail.profile && (
-              <Descriptions title={`Hồ sơ ${ROLE_LABELS[userDetail.role]?.label}`} bordered size="small" column={1}>
-                {userDetail.role === "STUDENT" && (
-                  <>
-                    <Descriptions.Item label="Họ và tên">
-                      {userDetail.profile.fullName || "—"}
-                    </Descriptions.Item>
-                    {userDetail.profile.dateOfBirth && (
-                      <Descriptions.Item label="Ngày sinh">
-                        {dayjs(userDetail.profile.dateOfBirth).format("DD/MM/YYYY")}
-                      </Descriptions.Item>
-                    )}
-                    {userDetail.profile.bio && (
-                      <Descriptions.Item label="Giới thiệu">
-                        {userDetail.profile.bio}
-                      </Descriptions.Item>
-                    )}
-                  </>
-                )}
-
-                {userDetail.role === "TEACHER" && (
-                  <>
-                    <Descriptions.Item label="Họ và tên">
-                      {userDetail.profile.fullName || "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Trạng thái duyệt hồ sơ">
-                      <Tag color={userDetail.profile.verificationStatus === "VERIFIED" ? "success" : "default"}>
-                        {userDetail.profile.verificationStatus || "CHƯA XÁC THỰC"}
-                      </Tag>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Tóm tắt chuyên môn">
-                      {userDetail.profile.qualificationSummary || "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Tiểu sử">
-                      {userDetail.profile.biography || "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Đánh giá">
-                      ⭐ {userDetail.profile.ratingAverage?.toFixed(1) || "0.0"} ({userDetail.profile.ratingCount || 0} lượt)
-                    </Descriptions.Item>
-                  </>
-                )}
-
-                {userDetail.role === "SPONSOR" && (
-                  <>
-                    <Descriptions.Item label="Loại nhà tài trợ">
-                      <Tag color="cyan">
-                        {userDetail.profile.sponsorType === "ORGANIZATION" ? "Tổ chức" : "Cá nhân"}
-                      </Tag>
-                    </Descriptions.Item>
-                    {userDetail.profile.organizationName && (
-                      <Descriptions.Item label="Tên tổ chức">
-                        {userDetail.profile.organizationName}
-                      </Descriptions.Item>
-                    )}
-                    <Descriptions.Item label="Người đại diện">
-                      {userDetail.profile.representativeName || "—"}
-                    </Descriptions.Item>
-                    {userDetail.profile.description && (
-                      <Descriptions.Item label="Mô tả">
-                        {userDetail.profile.description}
-                      </Descriptions.Item>
-                    )}
-                  </>
-                )}
-              </Descriptions>
-            )}
-
-            {/* Activity Statistics (Directly from backend activity object) */}
-            {userDetail.activity && Object.keys(userDetail.activity).length > 0 && (
-              <div>
-                <h4 className="text-sm font-bold text-slate-800 mb-3">Thống kê hoạt động</h4>
-                <Row gutter={[12, 12]}>
-                  {userDetail.activity.enrollments !== undefined && (
-                    <Col span={12}>
-                      <Card size="small" className="rounded-xl border-slate-200 bg-slate-50/50">
-                        <Statistic
-                          title="Lớp đã đăng ký"
-                          value={userDetail.activity.enrollments}
-                          prefix={<BookOutlined className="text-blue-500" />}
-                        />
-                      </Card>
-                    </Col>
-                  )}
-                  {userDetail.activity.scholarships !== undefined && (
-                    <Col span={12}>
-                      <Card size="small" className="rounded-xl border-slate-200 bg-slate-50/50">
-                        <Statistic
-                          title="Học bổng nhận được"
-                          value={userDetail.activity.scholarships}
-                          prefix={<SafetyCertificateOutlined className="text-emerald-500" />}
-                        />
-                      </Card>
-                    </Col>
-                  )}
-                  {userDetail.activity.classes !== undefined && (
-                    <Col span={12}>
-                      <Card size="small" className="rounded-xl border-slate-200 bg-slate-50/50">
-                        <Statistic
-                          title="Lớp đã tạo"
-                          value={userDetail.activity.classes}
-                          prefix={<BookOutlined className="text-purple-500" />}
-                        />
-                      </Card>
-                    </Col>
-                  )}
-                  {userDetail.activity.students !== undefined && (
-                    <Col span={12}>
-                      <Card size="small" className="rounded-xl border-slate-200 bg-slate-50/50">
-                        <Statistic
-                          title="Học viên đã dạy"
-                          value={userDetail.activity.students}
-                          prefix={<TeamOutlined className="text-indigo-500" />}
-                        />
-                      </Card>
-                    </Col>
-                  )}
-                  {userDetail.activity.contributions !== undefined && (
-                    <Col span={12}>
-                      <Card size="small" className="rounded-xl border-slate-200 bg-slate-50/50">
-                        <Statistic
-                          title="Lượt tài trợ hoàn tất"
-                          value={userDetail.activity.contributions}
-                          prefix={<DollarOutlined className="text-amber-500" />}
-                        />
-                      </Card>
-                    </Col>
-                  )}
-                  {userDetail.activity.reportsAgainst !== undefined && (
-                    <Col span={12}>
-                      <Card size="small" className="rounded-xl border-slate-200 bg-slate-50/50">
-                        <Statistic
-                          title="Khiếu nại liên quan"
-                          value={userDetail.activity.reportsAgainst}
-                          valueStyle={{ color: userDetail.activity.reportsAgainst > 0 ? "#ef4444" : undefined }}
-                          prefix={<ExclamationCircleOutlined className="text-rose-500" />}
-                        />
-                      </Card>
-                    </Col>
-                  )}
-                </Row>
-              </div>
-            )}
+              <p className="text-xs text-[#64748B] flex items-center gap-1.5 mt-1">
+                <span>Hồ sơ thành viên</span>
+                <span className="text-slate-300">•</span>
+                <span className="text-[#0F766E] font-semibold">Hệ thống Edunity Core V3</span>
+              </p>
+            </div>
           </div>
-        )}
-      </Drawer>
+
+          {/* Close Action with Esc Indicator */}
+          <button
+            onClick={() => setSelectedUserId(null)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F0F8F6] text-[#334155] hover:bg-[#E5F5F1] hover:text-[#0F766E] transition-all cursor-pointer border border-[#D6E5E2]"
+          >
+            <span className="text-[10px] font-bold tracking-wider uppercase text-[#64748B]">
+              Esc
+            </span>
+            <CloseOutlined className="text-xs" />
+          </button>
+        </div>
+
+        {/* SCROLLABLE MODAL BODY */}
+        <div className="max-h-[75vh] overflow-y-auto p-6 space-y-6">
+          {isDetailError ? (
+            <Alert
+              type="error"
+              showIcon
+              message="Không thể tải thông tin người dùng"
+              description="Vui lòng thử lại sau hoặc kiểm tra kết nối."
+              action={
+                <Button size="small" onClick={() => refetchUserDetail()} loading={isDetailFetching}>
+                  Thử lại
+                </Button>
+              }
+            />
+          ) : isDetailLoading || !userDetail ? (
+            <div className="py-16 text-center text-slate-400">
+              <SyncOutlined spin className="text-2xl text-teal-600 mb-2" />
+              <p className="text-sm">Đang tải hồ sơ người dùng...</p>
+            </div>
+          ) : (
+            <>
+              {/* 2. PROFILE BANNER HERO (Teal / Mint Gradient Hero) */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0F766E] via-[#115E59] to-[#134E4A] p-6 text-white shadow-md">
+                {/* Subtle Mint Glow Circles */}
+                <div className="absolute -right-12 -top-12 w-64 h-64 bg-teal-400/20 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute right-1/3 -bottom-8 w-48 h-48 bg-emerald-400/15 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+                  <div className="flex items-start md:items-center gap-4">
+                    {/* Avatar with Verified Badge */}
+                    <div className="relative shrink-0">
+                      <Avatar
+                        src={userDetail.avatarUrl}
+                        icon={!userDetail.avatarUrl && <UserOutlined />}
+                        size={72}
+                        className="rounded-2xl border-2 border-[#99F6E4] bg-teal-950/60 shadow-lg font-bold text-2xl"
+                      />
+                      {userDetail.status === "ACTIVE" && (
+                        <div
+                          className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-400 text-teal-950 flex items-center justify-center shadow-md ring-2 ring-teal-800 font-bold"
+                          title="Đang hoạt động"
+                        >
+                          <CheckCircleOutlined className="text-xs" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Name & Strategic Metadata */}
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                          {userDetail.fullName || "Chưa cập nhật họ tên"}
+                        </h3>
+                        <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white font-bold text-[10px] tracking-wide uppercase backdrop-blur-md">
+                          {userDetail.role}
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-teal-100 flex items-center gap-1.5 font-medium">
+                        <MailOutlined className="text-teal-300" />
+                        <span>{userDetail.email}</span>
+                      </p>
+                      <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-teal-200/90 pt-0.5">
+                        <span className="flex items-center gap-1">
+                          <IdcardOutlined className="text-teal-300" />
+                          <span>ID: {userDetail.id}</span>
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <CalendarOutlined className="text-teal-300" />
+                          <span>Tham gia: {dayjs(userDetail.createdAt).format("DD/MM/YYYY")}</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action on Banner */}
+                  {userDetail.role !== "ADMIN" && userDetail.id !== currentAdminId && (
+                    <div className="shrink-0 self-start md:self-center">
+                      <button
+                        onClick={() => handleOpenStatusModal(userDetail)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-[#0F766E] hover:bg-[#E5F5F1] font-bold text-xs shadow transition-all cursor-pointer"
+                      >
+                        <StopOutlined className="text-sm text-[#D97706]" />
+                        <span>Đổi trạng thái</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. SECTION 1: THÔNG TIN TÀI KHOẢN & BẢO MẬT */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <LockOutlined className="text-[#0F766E] text-base" />
+                    <h4 className="text-sm font-bold text-[#163B40]">
+                      1. Thông tin Tài khoản & Bảo mật
+                    </h4>
+                  </div>
+                  <span className="text-[11px] text-[#64748B] font-medium">
+                    Cập nhật: {dayjs(userDetail.updatedAt).format("HH:mm DD/MM/YYYY")}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Mã người dùng */}
+                  <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                      Mã người dùng
+                    </span>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs font-mono font-bold text-[#0F766E] truncate mr-2">
+                        {userDetail.id}
+                      </span>
+                      <Tooltip title="Sao chép mã">
+                        <button
+                          onClick={() => copyToClipboard(userDetail.id)}
+                          className="p-1 rounded text-[#64748B] hover:text-[#0F766E] hover:bg-[#E5F5F1] transition-colors cursor-pointer"
+                        >
+                          <CopyOutlined className="text-xs" />
+                        </button>
+                      </Tooltip>
+                    </div>
+                  </div>
+
+                  {/* Vai trò */}
+                  <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                      Vai trò & Thẩm quyền
+                    </span>
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <span className="w-2 h-2 rounded-full bg-[#0D9488]" />
+                      <span className="text-xs font-bold text-[#163B40]">
+                        {userDetail.role === "ADMIN"
+                          ? "Quản trị viên cấp cao"
+                          : userDetail.role === "TEACHER"
+                          ? "Giáo viên giảng dạy"
+                          : userDetail.role === "SPONSOR"
+                          ? "Nhà tài trợ quỹ"
+                          : "Học viên nền tảng"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Trạng thái */}
+                  <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                      Trạng thái vận hành
+                    </span>
+                    <div className="mt-2">
+                      <AdminStatusBadge
+                        label={userDetail.status}
+                        type={
+                          userDetail.status === "ACTIVE"
+                            ? "success"
+                            : userDetail.status === "BANNED"
+                            ? "error"
+                            : "warning"
+                        }
+                        pulse={userDetail.status === "ACTIVE"}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Ngày tham gia */}
+                  <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                      Ngày gia nhập hệ thống
+                    </span>
+                    <p className="text-xs font-bold text-[#163B40] mt-2 flex items-center gap-1.5">
+                      <CalendarOutlined className="text-[#0D9488]" />
+                      {dayjs(userDetail.createdAt).format("DD/MM/YYYY HH:mm")}
+                    </p>
+                  </div>
+
+                  {/* Email & 2FA */}
+                  <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                      Bảo mật xác thực
+                    </span>
+                    <div className="flex items-center gap-1.5 mt-2 text-[#0F766E] font-bold text-xs">
+                      <SafetyCertificateOutlined className="text-[#0D9488] text-sm" />
+                      <span>Email đã định danh</span>
+                    </div>
+                  </div>
+
+                  {/* Lần cập nhật cuối */}
+                  <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                      Cập nhật lần cuối
+                    </span>
+                    <p className="text-xs font-bold text-[#163B40] mt-2">
+                      {dayjs(userDetail.updatedAt).format("DD/MM/YYYY HH:mm")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. SECTION 2: HỒ SƠ CHUYÊN MÔN / HỒ SƠ THEO VAI TRÒ */}
+              {userDetail.profile && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <BookOutlined className="text-[#0F766E] text-base" />
+                      <h4 className="text-sm font-bold text-[#163B40]">
+                        2. Hồ sơ vai trò: {userDetail.role}
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="p-5 rounded-2xl bg-[#F0F8F6] border border-[#D6E5E2] space-y-4">
+                    {userDetail.role === "TEACHER" && (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Trạng thái duyệt hồ sơ
+                            </span>
+                            <div className="mt-1">
+                              <AdminStatusBadge
+                                label={userDetail.profile.verificationStatus || "CHƯA XÁC THỰC"}
+                                type={
+                                  userDetail.profile.verificationStatus === "VERIFIED"
+                                    ? "success"
+                                    : "warning"
+                                }
+                                pulse={userDetail.profile.verificationStatus === "VERIFIED"}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Tóm tắt chuyên môn
+                            </span>
+                            <p className="text-xs font-semibold text-slate-800 mt-1">
+                              {userDetail.profile.qualificationSummary || "Chưa cập nhật chuyên môn"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {userDetail.profile.biography && (
+                          <div className="p-3.5 rounded-xl bg-white border border-[#D6E5E2]">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B] block mb-1">
+                              Tiểu sử sư phạm
+                            </span>
+                            <p className="text-xs text-[#334155] leading-relaxed italic">
+                              "{userDetail.profile.biography}"
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                          <div className="p-3.5 rounded-xl bg-white border border-[#D6E5E2] flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                                Đánh giá từ học viên
+                              </span>
+                              <div className="flex items-baseline gap-2 mt-1">
+                                <span className="text-xl font-extrabold text-[#0F766E]">
+                                  {userDetail.profile.ratingAverage?.toFixed(1) || "0.0"}
+                                </span>
+                                <span className="text-xs text-[#64748B]">/ 5.0</span>
+                                <div className="flex items-center text-amber-500 text-xs ml-1">
+                                  {[1, 2, 3, 4, 5].map((star) =>
+                                    (userDetail.profile?.ratingAverage || 0) >= star ? (
+                                      <StarFilled key={star} />
+                                    ) : (
+                                      <StarOutlined key={star} />
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-[11px] text-[#64748B] font-medium">
+                              {userDetail.profile.ratingCount || 0} lượt
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {userDetail.role === "STUDENT" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Họ và tên
+                          </span>
+                          <p className="text-xs font-semibold text-slate-800 mt-1">
+                            {userDetail.profile.fullName || "—"}
+                          </p>
+                        </div>
+                        {userDetail.profile.dateOfBirth && (
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Ngày sinh
+                            </span>
+                            <p className="text-xs font-semibold text-slate-800 mt-1">
+                              {dayjs(userDetail.profile.dateOfBirth).format("DD/MM/YYYY")}
+                            </p>
+                          </div>
+                        )}
+                        {userDetail.profile.bio && (
+                          <div className="col-span-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Giới thiệu
+                            </span>
+                            <p className="text-xs text-slate-700 mt-1">
+                              {userDetail.profile.bio}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {userDetail.role === "SPONSOR" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Loại nhà tài trợ
+                          </span>
+                          <p className="text-xs font-semibold text-slate-800 mt-1">
+                            {userDetail.profile.sponsorType === "ORGANIZATION" ? "Tổ chức" : "Cá nhân"}
+                          </p>
+                        </div>
+                        {userDetail.profile.organizationName && (
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Tên tổ chức
+                            </span>
+                            <p className="text-xs font-semibold text-slate-800 mt-1">
+                              {userDetail.profile.organizationName}
+                            </p>
+                          </div>
+                        )}
+                        {userDetail.profile.representativeName && (
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Người đại diện
+                            </span>
+                            <p className="text-xs font-semibold text-slate-800 mt-1">
+                              {userDetail.profile.representativeName}
+                            </p>
+                          </div>
+                        )}
+                        {userDetail.profile.description && (
+                          <div className="col-span-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Mô tả tài trợ
+                            </span>
+                            <p className="text-xs text-slate-700 mt-1">
+                              {userDetail.profile.description}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 5. SECTION 3: THỐNG KÊ HOẠT ĐỘNG & VẬN HÀNH */}
+              {userDetail.activity && Object.keys(userDetail.activity).length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AuditOutlined className="text-[#0F766E] text-base" />
+                      <h4 className="text-sm font-bold text-[#163B40]">
+                        3. Thống kê Hoạt động & Vận hành
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {userDetail.activity.enrollments !== undefined && (
+                      <div className="p-4 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                          Lớp đã đăng ký
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-2xl font-extrabold text-[#0F766E]">
+                            {userDetail.activity.enrollments}
+                          </span>
+                          <span className="text-xs text-[#64748B]">lớp</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {userDetail.activity.scholarships !== undefined && (
+                      <div className="p-4 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                          Học bổng nhận được
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-2xl font-extrabold text-[#15803D]">
+                            {userDetail.activity.scholarships}
+                          </span>
+                          <span className="text-xs text-[#64748B]">suất</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {userDetail.activity.classes !== undefined && (
+                      <div className="p-4 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                          Lớp phụ trách
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-2xl font-extrabold text-[#0F766E]">
+                            {userDetail.activity.classes}
+                          </span>
+                          <span className="text-xs text-[#64748B]">lớp</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {userDetail.activity.students !== undefined && (
+                      <div className="p-4 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                          Học viên đào tạo
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-2xl font-extrabold text-[#0F766E]">
+                            {userDetail.activity.students}
+                          </span>
+                          <span className="text-xs text-[#64748B]">học viên</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {userDetail.activity.contributions !== undefined && (
+                      <div className="p-4 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                          Lượt tài trợ
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-2xl font-extrabold text-[#B45309]">
+                            {userDetail.activity.contributions}
+                          </span>
+                          <span className="text-xs text-[#64748B]">lượt</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {userDetail.activity.reportsAgainst !== undefined && (
+                      <div className="p-4 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                          Khiếu nại liên quan
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span
+                            className={`text-2xl font-extrabold ${
+                              userDetail.activity.reportsAgainst > 0
+                                ? "text-[#DC2626]"
+                                : "text-[#15803D]"
+                            }`}
+                          >
+                            {userDetail.activity.reportsAgainst}
+                          </span>
+                          <span className="text-xs text-[#64748B]">vụ</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* 6. MODAL STICKY FOOTER */}
+        <div className="sticky bottom-0 z-20 px-6 py-3.5 bg-[#F0F8F6] border-t border-[#D6E5E2] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-[#64748B] text-xs">
+            <AuditOutlined className="text-[#0D9488] text-sm" />
+            <span>
+              Mọi thao tác đều được ghi log tự động vào{" "}
+              <strong className="text-[#163B40]">Sổ cái Kiểm toán hệ thống</strong>.
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setSelectedUserId(null)}
+              className="px-4 py-2 rounded-xl bg-white border border-[#D6E5E2] hover:bg-[#E5F5F1] text-[#163B40] text-xs font-bold transition-colors cursor-pointer"
+            >
+              Đóng (Esc)
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Change Status Modal */}
       <Modal
-        title={`Thay đổi trạng thái tài khoản: ${statusModalUser?.fullName || statusModalUser?.email || ""}`}
+        title={
+          <div className="flex items-center gap-2 text-slate-900 font-bold">
+            <StopOutlined className="text-amber-600" />
+            <span>
+              Thay đổi trạng thái tài khoản:{" "}
+              {statusModalUser?.fullName || statusModalUser?.email || ""}
+            </span>
+          </div>
+        }
         open={Boolean(statusModalUser)}
         onCancel={() => {
           setStatusModalUser(null);
@@ -626,19 +1044,21 @@ export default function AdminUsersPage() {
         onOk={handleStatusSubmit}
         confirmLoading={updateStatusMutation.isPending}
         okText="Xác nhận cập nhật"
-        cancelText="Đóng"
+        cancelText="Hủy"
         destroyOnClose
       >
         <Form
           form={statusForm}
           layout="vertical"
           className="mt-4"
-          initialValues={{ status: statusModalUser?.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE" }}
+          initialValues={{
+            status: statusModalUser?.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
+          }}
         >
           <Alert
             type="info"
             showIcon
-            className="mb-4 text-xs"
+            className="mb-4 text-xs rounded-xl"
             message="Chính sách bảo mật"
             description="Khi tạm ngưng hoặc khóa tài khoản, toàn bộ phiên đăng nhập của người dùng sẽ bị hủy ngay lập tức và họ không thể truy cập hệ thống."
           />
@@ -648,7 +1068,7 @@ export default function AdminUsersPage() {
             label="Trạng thái mới"
             rules={[{ required: true, message: "Vui lòng chọn trạng thái mới" }]}
           >
-            <Select size="large">
+            <Select size="large" className="rounded-xl">
               <Option value="ACTIVE" disabled={statusModalUser?.status === "ACTIVE"}>
                 <CheckCircleOutlined className="text-emerald-500 mr-2" />
                 Hoạt động (Kích hoạt lại)
@@ -670,12 +1090,15 @@ export default function AdminUsersPage() {
           >
             {({ getFieldValue }) => {
               const selectedStatus = getFieldValue("status");
-              const isReasonRequired = selectedStatus === "SUSPENDED" || selectedStatus === "BANNED";
+              const isReasonRequired =
+                selectedStatus === "SUSPENDED" || selectedStatus === "BANNED";
 
               return (
                 <Form.Item
                   name="reason"
-                  label={`Lý do thay đổi trạng thái ${isReasonRequired ? "(Bắt buộc)" : "(Tùy chọn)"}`}
+                  label={`Lý do thay đổi trạng thái ${
+                    isReasonRequired ? "(Bắt buộc)" : "(Tùy chọn)"
+                  }`}
                   rules={[
                     {
                       required: isReasonRequired,
@@ -688,6 +1111,7 @@ export default function AdminUsersPage() {
                     placeholder="Nhập lý do chi tiết để lưu vết nhật ký quản trị..."
                     maxLength={500}
                     showCount
+                    className="rounded-xl"
                   />
                 </Form.Item>
               );

@@ -43,7 +43,7 @@ export default function AdminBankAccountReviewCard() {
       className="rounded-2xl border-slate-200/80"
       title={
         <span className="flex items-center gap-2">
-          <SafetyCertificateOutlined className="text-indigo-600" /> Tài khoản nhận tiền chờ duyệt
+          <SafetyCertificateOutlined className="text-teal-700" /> Tài khoản nhận tiền chờ duyệt
           {items.length > 0 && <Tag color="processing">{items.length}</Tag>}
         </span>
       }

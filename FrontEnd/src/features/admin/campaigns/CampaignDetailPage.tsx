@@ -135,7 +135,7 @@ export default function CampaignDetailPage() {
       key: "sponsorEmail",
       render: (email: string, record) => (
         <div className="flex items-center gap-3">
-          <Avatar className="bg-indigo-100 text-indigo-700 font-bold">
+          <Avatar className="bg-teal-50 text-teal-800 border border-teal-200 font-bold">
             {(email || record.sponsorId || "SP").substring(0, 2).toUpperCase()}
           </Avatar>
           <div>
@@ -277,10 +277,10 @@ export default function CampaignDetailPage() {
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
-          <Card className="rounded-2xl border-slate-200/80 shadow-xs bg-indigo-50/40 border-indigo-200">
-            <div className="text-xs text-indigo-700 uppercase font-bold tracking-wider mb-1">Đã huy động được</div>
-            <div className="text-xl font-black text-indigo-600">{formatVND(campaign.fundedAmount)}</div>
-            <div className="text-xs text-indigo-500 mt-2">Đạt {campaign.fundingProgress}% mục tiêu</div>
+          <Card className="rounded-2xl border-teal-200/80 shadow-xs bg-teal-50/50">
+            <div className="text-xs text-teal-800 uppercase font-bold tracking-wider mb-1">Đã huy động được</div>
+            <div className="text-xl font-black text-teal-700">{formatVND(campaign.fundedAmount)}</div>
+            <div className="text-xs text-teal-600 mt-2">Đạt {campaign.fundingProgress}% mục tiêu</div>
           </Card>
         </Col>
 
@@ -315,7 +315,7 @@ export default function CampaignDetailPage() {
                   <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <div className="flex justify-between items-center text-sm font-semibold text-slate-700">
                       <span>Tiến độ huy động quỹ</span>
-                      <span className="text-indigo-600 font-bold">{campaign.fundingProgress}%</span>
+                      <span className="text-teal-700 font-bold">{campaign.fundingProgress}%</span>
                     </div>
                     <Progress
                       percent={campaign.fundingProgress}

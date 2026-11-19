@@ -1529,7 +1529,7 @@ export default function AdminCatalogPage() {
               </Descriptions.Item>
               {detailCourse.sourceProposalId && (
                 <Descriptions.Item label="Mã đề xuất gốc (Proposal ID)" span={2}>
-                  <span className="font-mono text-xs text-indigo-600">
+                  <span className="font-mono text-xs text-teal-700 font-bold">
                     {detailCourse.sourceProposalId}
                   </span>
                 </Descriptions.Item>

@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "tertiary": "#38645c", "surface-container-high": "#dee9fc", "on-primary-fixed-variant": "#005049", "on-error": "#ffffff", "tertiary-container": "#517d75", "secondary-container": "#6ef9e2", "surface-container-lowest": "#ffffff", "on-primary-fixed": "#00201d", "error": "#ba1a1a", "secondary-fixed": "#6ef9e2", "surface-dim": "#d0dbed", "primary": "#00685f", "surface-tint": "#006a61", "inverse-surface": "#27313f", "surface-container-low": "#eff4ff", "on-tertiary-fixed": "#00201c", "tertiary-fixed-dim": "#a2d0c6", "inverse-primary": "#6bd8cb", "primary-container": "#008378", "on-background": "#121c2a", "on-primary": "#ffffff", "on-surface-variant": "#3d4947", "on-tertiary": "#ffffff", "surface": "#f8f9ff", "tertiary-fixed": "#bdece2", "secondary": "#006b5e", "surface-variant": "#d9e3f6", "outline": "#6d7a77", "on-tertiary-fixed-variant": "#224e47", "on-tertiary-container": "#f4fffb", "on-secondary-container": "#007164", "surface-bright": "#f8f9ff", "surface-container-highest": "#d9e3f6", "outline-variant": "#bcc9c6", "error-container": "#ffdad6", "on-error-container": "#93000a", "background": "#f8f9ff", "on-secondary-fixed": "#00201b", "secondary-fixed-dim": "#4ddcc6", "primary-fixed-dim": "#6bd8cb", "inverse-on-surface": "#eaf1ff", "on-secondary-fixed-variant": "#005047", "primary-fixed": "#89f5e7", "on-surface": "#121c2a", "on-primary-container": "#f4fffc", "on-secondary": "#ffffff", "surface-container": "#e6eeff" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "gutter-sm": "1rem", "space-sm": "0.5rem", "space-lg": "1.5rem", "margin-tablet": "1.5rem", "margin": "2rem", "space-xl": "2rem", "gutter": "1.5rem", "gutter-lg": "2rem", "space-xs": "0.25rem", "margin-mobile": "1rem", "space-md": "1rem" }, "fontFamily": { "label-sm": ["Be Vietnam Pro"], "numeric-metric": ["Be Vietnam Pro"], "body-sm": ["Be Vietnam Pro"], "label-lg": ["Be Vietnam Pro"], "headline-sm": ["Be Vietnam Pro"], "display-lg": ["Be Vietnam Pro"], "headline-md": ["Be Vietnam Pro"], "headline-xl": ["Be Vietnam Pro"], "display-lg-mobile": ["Be Vietnam Pro"], "label-md": ["Be Vietnam Pro"], "headline-lg": ["Be Vietnam Pro"], "headline-xl-mobile": ["Be Vietnam Pro"], "body-md": ["Be Vietnam Pro"], "body-lg": ["Be Vietnam Pro"] }, "fontSize": { "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }], "numeric-metric": ["28px", { "lineHeight": "34px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }], "label-lg": ["14px", { "lineHeight": "20px", "fontWeight": "500" }], "headline-sm": ["16px", { "lineHeight": "24px", "fontWeight": "600" }], "display-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "display-lg-mobile": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "500" }], "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "600" }], "headline-xl-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }] } } } };</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-space-lg flex items-center justify-between bg-surface-container-low"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-on-primary font-headline-md text-headline-md font-bold shadow-sm">E</div><div class="flex flex-col"><span class="font-headline-md text-headline-md font-bold tracking-tight text-primary leading-none">Edunity</span><span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Management V3</span></div></div><span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container font-semibold px-space-xs py-0.5 rounded-full uppercase tracking-wider">Admin</span></div><div class="flex-1 overflow-y-auto px-space-md py-space-md"><nav class="space-y-space-md" data-active-classes="bg-secondary-container text-on-secondary-container font-semibold rounded-lg relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1.5 before:bg-primary before:rounded-r-full"><div class="space-y-1"><span class="px-space-sm font-label-sm text-label-sm uppercase tracking-wider text-outline block mb-1">Tổng quan</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="tong-quan" href="#"><span class="material-symbols-outlined text-[20px]">dashboard</span><span>Tổng quan</span></a></div><div class="space-y-1"><span class="px-space-sm font-label-sm text-label-sm uppercase tracking-wider text-outline block mb-1">Quản lý hệ thống</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="nguoi-dung" href="#"><span class="material-symbols-outlined text-[20px]">group</span><span>Người dùng</span></a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-2 transition-all bg-secondary-container text-on-secondary-container font-semibold rounded-lg relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1.5 before:bg-primary before:rounded-r-full" data-path="giao-vien" href="#"><span class="material-symbols-outlined text-[20px]">school</span><span>Giáo viên</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="danh-muc-khoa-hoc" href="#"><span class="material-symbols-outlined text-[20px]">category</span><span>Danh mục &amp; Khóa học</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="duyet-de-xuat-khoa-hoc" href="#"><span class="material-symbols-outlined text-[20px]">fact_check</span><span>Duyệt đề xuất khóa học</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="lop-hoc" href="#"><span class="material-symbols-outlined text-[20px]">meeting_room</span><span>Lớp học</span></a></div><div class="space-y-1"><span class="px-space-sm font-label-sm text-label-sm uppercase tracking-wider text-outline block mb-1">Học bổng</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="chien-dich" href="#"><span class="material-symbols-outlined text-[20px]">campaign</span><span>Chiến dịch</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="ho-so-ung-tuyen" href="#"><span class="material-symbols-outlined text-[20px]">assignment_ind</span><span>Hồ sơ ứng tuyển</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="ho-so-giay" href="#"><span class="material-symbols-outlined text-[20px]">inventory</span><span>Hồ sơ giấy</span></a></div><div class="space-y-1"><span class="px-space-sm font-label-sm text-label-sm uppercase tracking-wider text-outline block mb-1">Tài chính &amp; Đối soát</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="tong-quan-tai-chinh" href="#"><span class="material-symbols-outlined text-[20px]">account_balance</span><span>Tổng quan tài chính</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="so-cai-giao-dich" href="#"><span class="material-symbols-outlined text-[20px]">receipt_long</span><span>Sổ cái giao dịch</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="hang-doi-doi-soat" href="#"><span class="material-symbols-outlined text-[20px]">sync_alt</span><span>Hàng đợi đối soát</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="webhooks-outbox" href="#"><span class="material-symbols-outlined text-[20px]">webhook</span><span>Webhooks &amp; Outbox</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="thanh-toan-hoc-phi" href="#"><span class="material-symbols-outlined text-[20px]">payments</span><span>Thanh toán học phí</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="rut-tien-giao-vien" href="#"><span class="material-symbols-outlined text-[20px]">currency_exchange</span><span>Rút tiền giáo viên</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="quan-ly-hoan-tien" href="#"><span class="material-symbols-outlined text-[20px]">price_change</span><span>Quản lý hoàn tiền</span></a></div><div class="space-y-1"><span class="px-space-sm font-label-sm text-label-sm uppercase tracking-wider text-outline block mb-1">Vận hành</span><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="khieu-nai" href="#"><span class="material-symbols-outlined text-[20px]">report_problem</span><span>Khiếu nại</span></a></div></nav></div><div class="p-space-md bg-surface-container"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-on-primary"><span class="material-symbols-outlined text-[20px]">person</span></div><div class="flex-1 min-w-0"><p class="font-label-lg text-label-lg font-semibold text-on-surface truncate">Nguyễn Văn Quản Trị</p><p class="font-label-sm text-label-sm text-on-surface-variant truncate">superadmin@edunity.edu.vn</p></div><span class="material-symbols-outlined text-outline cursor-pointer hover:text-primary transition-colors">logout</span></div></div></aside><div class="pl-72 min-h-screen bg-background"><header class="fixed top-0 left-72 right-0 h-16 bg-surface/85 backdrop-blur-xl z-40 shadow-[0_1px_8px_rgba(0,0,0,0.04)] px-margin"><div class="h-full w-full flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-sm text-on-surface-variant font-body-md text-body-md"><span class="material-symbols-outlined text-primary text-[20px]">admin_panel_settings</span><span class="text-outline font-label-md text-label-md">/</span><span class="font-label-md text-label-md text-on-surface font-semibold">Hệ thống Edunity V3</span></div><div class="flex items-center gap-space-lg"><div class="relative flex items-center w-80"><span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">search</span><input class="w-full h-10 pl-9 pr-14 rounded-lg bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:ring-2 focus:ring-secondary focus:bg-surface-container-lowest transition-all" placeholder="Tìm kiếm nhanh..." type="text"/><span class="absolute right-2 font-label-sm text-label-sm bg-surface-container-high text-on-surface-variant px-1.5 py-0.5 rounded">Ctrl+K</span></div><div class="flex items-center gap-space-xs px-2.5 py-1 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant"><span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-medium">Operational</span></div><div class="relative"><button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-[22px]">notifications</span></button><span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-error ring-2 ring-surface"></span></div><div class="flex items-center gap-space-xs pl-space-xs cursor-pointer"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><span class="material-symbols-outlined text-outline text-[18px]">expand_more</span></div></div></div></header><main class="w-full pt-16 px-margin bg-background"><div class="flex flex-col w-full pb-margin">
+<!-- BREADCRUMB & METADATA BAR -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm mb-space-lg">
+<div class="flex items-center gap-space-xs font-body-sm text-body-sm text-on-surface-variant">
+<span class="hover:text-primary cursor-pointer transition-colors">Quản trị Edunity</span>
+<span class="text-outline-variant">/</span>
+<span class="hover:text-primary cursor-pointer transition-colors">Xác minh giáo viên</span>
+<span class="text-outline-variant">/</span>
+<span class="font-semibold text-on-surface">Hồ sơ TS. Nguyễn Hoàng Nam</span>
+<span class="bg-surface-container-high text-primary font-label-sm text-label-sm px-2 py-0.5 rounded-full ml-space-xs">TCH-2026-8834</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="flex items-center gap-1 font-label-sm text-label-sm text-tertiary">
+<span class="w-2 h-2 rounded-full bg-secondary-fixed-dim animate-pulse"></span>
+        Hồ sơ mã hóa SHA-256
+      </span>
+<span class="text-outline-variant">|</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Cập nhật lần cuối: 16/11/2026 09:30</span>
+</div>
+</div>
+<!-- TOP TEACHER HEADER HERO CARD -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg mb-gutter relative overflow-hidden">
+<div class="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-secondary-container/20 blur-3xl pointer-events-none"></div>
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg relative z-10">
+<!-- Avatar & Essential Identity -->
+<div class="flex items-start sm:items-center gap-space-lg">
+<div class="relative shrink-0">
+<div class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden shadow-sm bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Portrait of an esteemed Vietnamese academic male computer science professor in his early 40s, wearing classic glasses and smart teal-toned blazer, warm friendly demeanor, crisp soft studio lighting with a calm medical-grade mint and slate backdrop." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBR-fKy88AxXc6CxNcesLd2Z5rrCMwrwoIuXHVadUjsp2vGzPXEZY6qWFsszw-nLQ_S9uqWGjASZ_CxSgciNGdDnK3ZWs7cTrd-NPVr9oOYDH0nB6uLUkkPHaQoyKTofXXdXpm5LZwXjOCHNwoyeqp-nvm6C54JvhRCNyeGBykb2TPsmp7KwIF5tmyz9dItI4EFowsQ0bcm0MTYK4JIi_Ma_372eApvgmA988UEJo"/>
+</div>
+<div class="absolute -bottom-1 -right-1 w-7 h-7 bg-primary text-on-primary rounded-full flex items-center justify-center shadow-sm" title="Ứng viên đã xác thực cấp 2">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+</div>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<div class="flex flex-wrap items-center gap-space-xs">
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">TS. Nguyễn Hoàng Nam</h1>
+<span class="bg-surface-container-high text-primary font-label-sm text-label-sm px-2.5 py-0.5 rounded-full uppercase font-semibold">Giảng viên Cao cấp</span>
+</div>
+<p class="font-label-lg text-label-lg font-semibold text-primary">Tiến sĩ Khoa học Máy tính — KAIST</p>
+<div class="flex flex-wrap items-center gap-y-1 gap-x-space-md font-body-sm text-body-sm text-on-surface-variant mt-1">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-primary text-[18px]">psychology</span>
+              Trí tuệ Nhân tạo &amp; Xử lý Ngôn ngữ Tự nhiên
+            </span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-tertiary text-[18px]">location_on</span>
+              Hà Nội &amp; TP. Hồ Chí Minh
+            </span>
+</div>
+</div>
+</div>
+<!-- Action Panel & Status -->
+<div class="flex flex-col items-start lg:items-end justify-between gap-space-md shrink-0">
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-high text-primary font-label-md text-label-md font-semibold">
+<span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+            ĐANG CHỜ PHÊ DUYỆT CẤP CAO
+          </span>
+<span class="px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-semibold">Tier 1 Elite</span>
+</div>
+<div class="flex flex-wrap items-center gap-space-sm w-full sm:w-auto">
+<button class="px-space-md py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm" id="btn-request-more">
+<span class="material-symbols-outlined text-[18px]">edit_note</span>
+            Yêu cầu bổ sung
+          </button>
+<button class="px-space-md py-2.5 rounded-lg bg-error-container hover:bg-error text-error hover:text-on-error font-label-lg text-label-lg font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm" id="btn-reject">
+<span class="material-symbols-outlined text-[18px]">cancel</span>
+            Từ chối hồ sơ
+          </button>
+<button class="px-space-lg py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg font-semibold flex items-center justify-center gap-2 shadow-sm transition-all" id="btn-approve">
+<span class="material-symbols-outlined text-[20px]">check_circle</span>
+            PHÊ DUYỆT HỒ SƠ
+          </button>
+</div>
+</div>
+</div>
+</div>
+<!-- MAIN 2-COLUMN WORKFLOW LAYOUT -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- LEFT MAIN COLUMN (65% -> 8 of 12 columns) -->
+<div class="lg:col-span-8 flex flex-col gap-gutter">
+<!-- MỤC A: THÔNG TIN CÁ NHÂN & LIÊN HỆ -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">badge</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">MỤC A: Thông tin cá nhân &amp; Liên hệ</h2>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Dữ liệu cá nhân xác thực đồng bộ eKYC</p>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary bg-surface-container px-2 py-0.5 rounded font-semibold">Đã xác minh</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Họ và tên đầy đủ</span>
+<span class="font-body-md text-body-md font-semibold text-on-surface">NGUYỄN HOÀNG NAM</span>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Ngày sinh &amp; Giới tính</span>
+<span class="font-body-md text-body-md font-medium text-on-surface">14/08/1984 (Nam)</span>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Số điện thoại liên hệ</span>
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md font-medium text-on-surface">0918 ••• 892</span>
+<span class="font-label-sm text-label-sm text-secondary flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[14px]">lock</span>Bảo mật OTP
+              </span>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Email cơ quan / Học thuật</span>
+<span class="font-body-md text-body-md font-medium text-on-surface">nam.nguyenhoang@kaist.edu.vn</span>
+</div>
+<div class="md:col-span-2 p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Cơ quan / Đơn vị công tác hiện tại</span>
+<span class="font-body-md text-body-md font-medium text-on-surface">Viện Nghiên cứu Trí tuệ Nhân tạo &amp; Công nghệ Cao - Đại học Quốc gia</span>
+</div>
+</div>
+</section>
+<!-- MỤC B: THIẾT LẬP SƯ PHẠM & NĂNG LỰC GIẢNG DẠY -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">psychology_alt</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">MỤC B: Thiết lập Sư phạm &amp; Năng lực Giảng dạy</h2>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Quy chuẩn chuyên môn tiếp nhận đào tạo</p>
+</div>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-2.5 py-0.5 rounded font-semibold">12 Năm Kinh Nghiệm</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-sm">
+<div class="bg-surface-container-low p-space-sm rounded-lg flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Chuyên ngành chính</span>
+<span class="font-body-md text-body-md font-semibold text-primary mt-1">Trí tuệ Nhân tạo (AI)</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">&amp; Thị giác Máy tính</span>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Thâm niên sư phạm</span>
+<span class="font-body-md text-body-md font-semibold text-on-surface mt-1">12 năm liên tục</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">Hơn 450 giờ thực hành</span>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Đối tượng học viên</span>
+<span class="font-body-md text-body-md font-semibold text-on-surface mt-1">Đại học &amp; Thạc sĩ</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">Kỹ sư doanh nghiệp</span>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Hình thức đào tạo</span>
+<span class="font-body-md text-body-md font-semibold text-on-surface mt-1">Mô hình Hybrid</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">Trực tuyến &amp; Lab thực chiến</span>
+</div>
+</div>
+<!-- Metric visual overview -->
+<div class="bg-surface-container p-space-md rounded-xl flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container-lowest flex items-center justify-center text-primary shadow-sm">
+<span class="material-symbols-outlined text-[28px]">insights</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-outline uppercase">Chỉ số đánh giá học viên (CSAT lịch sử)</p>
+<div class="flex items-center gap-2">
+<span class="font-numeric-metric text-numeric-metric font-bold text-on-surface">4.92</span>
+<span class="font-label-sm text-label-sm text-primary bg-secondary-container px-2 py-0.5 rounded-full font-semibold">Top 3% Giảng viên</span>
+</div>
+</div>
+</div>
+<!-- Inline Mini Sparkline Chart -->
+<div class="flex items-center gap-space-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Tỷ lệ hoàn thành khóa: 94.8%</span>
+<svg class="w-32 h-10 text-primary" fill="none" viewbox="0 0 120 36">
+<path d="M4 28 L24 24 L44 18 L64 22 L84 10 L104 6 L116 4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+<path d="M4 28 L24 24 L44 18 L64 22 L84 10 L104 6 L116 4 V36 H4 Z" fill="currentColor" fill-opacity="0.08"></path>
+</svg>
+</div>
+</div>
+</section>
+<!-- MỤC C: THÔNG TIN ĐỊNH DANH & PHÁP LÝ -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">fingerprint</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">MỤC C: Thông tin định danh &amp; Pháp lý</h2>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Căn cước công dân gắn chip điện tử (Nghị định 59/2022/NĐ-CP)</p>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[16px]">verified_user</span>
+            CSDL Dân cư Quốc gia: KHỚP
+          </span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<!-- Mặt trước CCCD -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Căn cước công dân (Mặt trước)</span>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded text-outline font-medium">Bản gốc</span>
+</div>
+<div class="relative w-full h-48 rounded-lg overflow-hidden bg-surface-container shadow-sm group">
+<img class="w-full h-full object-cover" data-alt="National Citizen Identity Card of Vietnam front side representation, blurred sensitive personal numeric identifiers with a clean holographic seal, soft teal gradient overlay, clean modern administrative document presentation." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmqrFuNdUF4t5pX4xX0ChOu0hz3i5e8rDNDOi6ElcvrLEaDfEYKm3AZCVxByMQDI9nW5X0ja4TitoSMnBuktWwC9AkGqTel2uLcpzErZi9k43KhuLdENnOTesrFa0pijTNyTp3gwXwK7NjNJ8_pXmWmrJo30vaEv9d15xUUk8wIh7jSQj1TFabAmLhWMFWzJ67093a7ToLDpG2mI3LkO8y6gxhiYw0Ty5nRW9oK3c"/>
+<div class="absolute inset-0 bg-on-background/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm font-semibold flex items-center gap-1 shadow">
+<span class="material-symbols-outlined text-[16px]">visibility</span> Xem phóng to
+                </button>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline">Số CCCD bảo mật</span>
+<span class="font-body-md text-body-md font-semibold text-on-surface tracking-wider">0792 •••• 84</span>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-semibold">Đã quét QR chip</span>
+</div>
+</div>
+<!-- Mặt sau CCCD -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Căn cước công dân (Mặt sau)</span>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded text-outline font-medium">Bản gốc</span>
+</div>
+<div class="relative w-full h-48 rounded-lg overflow-hidden bg-surface-container shadow-sm group">
+<img class="w-full h-full object-cover" data-alt="National Citizen Identity Card of Vietnam back side representation showing MRZ code zone and embedded microchip details with blurred sensitive biometric markers, pristine crisp institutional lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3y2KuScvqPKsiYdntqGOc0jL9Vv8D5KGmlwl4azNHCT1qNRQCmonJL_LruP8r1FqZOlAZ9u18ws5FwMa0GO-rPvwK7FLn6a7sJv52HyHBFSOzchztMq5CCa42pDIAwKwXjYdL7UK82hTP0LYT9gGFhnjSMl-F119ohpBCuZdwcul6oERLW5pVfj82RG09i9BIyWN6FsgdJdP3PaqE5KQCLusmYdAYNM7HHpByBcU"/>
+<div class="absolute inset-0 bg-on-background/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm font-semibold flex items-center gap-1 shadow">
+<span class="material-symbols-outlined text-[16px]">visibility</span> Xem phóng to
+                </button>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline">Đặc điểm nhân dạng</span>
+<span class="font-body-md text-body-md font-semibold text-on-surface">Nốt ruồi C.0,5cm dưới đuôi mắt trái</span>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-semibold">MRZ Hợp lệ</span>
+</div>
+</div>
+</div>
+</section>
+<!-- MỤC D: BẰNG CẤP & CHỨNG CHỈ QUỐC TẾ -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">school</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">MỤC D: Bằng cấp &amp; Chứng chỉ Quốc tế</h2>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Đối chiếu văn bằng gốc và đối soát cơ quan cấp phát</p>
+</div>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container text-primary font-semibold px-2 py-0.5 rounded">3 Chứng chỉ đính kèm</span>
+</div>
+<div class="flex flex-col gap-space-sm">
+<!-- Item 1: KAIST -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col md:flex-row md:items-center justify-between gap-space-sm hover:bg-surface-container transition-colors">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-primary text-on-primary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[22px]">workspace_premium</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Bằng Tiến sĩ Khoa học Máy tính — Viện KAIST Hàn Quốc</span>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-1.5 py-0.2 rounded font-semibold">Apostille</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Tệp: <span class="font-mono text-primary font-medium">Bang_Tien_Si_KAIST.pdf</span> • 3.2 MB • Hash: <span class="font-mono text-outline">f7a9•••3e2</span></p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm self-end md:self-center">
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[16px]">task_alt</span> Xác thực Cục HTQT
+              </span>
+<button class="p-2 rounded-lg bg-surface-container-lowest text-on-surface hover:text-primary shadow-sm" title="Tải xuống tệp">
+<span class="material-symbols-outlined text-[18px]">download</span>
+</button>
+</div>
+</div>
+<!-- Item 2: ĐHQG -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col md:flex-row md:items-center justify-between gap-space-sm hover:bg-surface-container transition-colors">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-secondary text-on-secondary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[22px]">history_edu</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Chứng chỉ Nghiệp vụ Sư phạm Đại học — ĐHQG Hà Nội</span>
+<span class="font-label-sm text-label-sm bg-surface-container-high text-primary px-1.5 py-0.2 rounded font-semibold">Loại Giỏi</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Tệp: <span class="font-mono text-primary font-medium">Chung_Chi_Su_Pham.pdf</span> • 1.8 MB • Cấp ngày: 18/06/2018</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm self-end md:self-center">
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[16px]">task_alt</span> Hợp lệ
+              </span>
+<button class="p-2 rounded-lg bg-surface-container-lowest text-on-surface hover:text-primary shadow-sm" title="Tải xuống tệp">
+<span class="material-symbols-outlined text-[18px]">download</span>
+</button>
+</div>
+</div>
+<!-- Item 3: NVIDIA DLI -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col md:flex-row md:items-center justify-between gap-space-sm hover:bg-surface-container transition-colors">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-tertiary text-on-tertiary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[22px]">verified</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md font-semibold text-on-surface">NVIDIA Deep Learning Institute Certified University Instructor</span>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-1.5 py-0.2 rounded font-semibold">Global Cert</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Mã định danh: <span class="font-mono text-outline">NVDLI-99420-EXP2028</span> • Cấp trực tuyến qua Badgr</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm self-end md:self-center">
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[16px]">task_alt</span> API NVIDIA Verified
+              </span>
+<button class="p-2 rounded-lg bg-surface-container-lowest text-on-surface hover:text-primary shadow-sm" title="Xem chứng chỉ trực tuyến">
+<span class="material-symbols-outlined text-[18px]">open_in_new</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- MỤC E: HỢP ĐỒNG GIẢNG DẠY & CAM KẾT PHÁP LÝ -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">gavel</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">MỤC E: Hợp đồng Giảng dạy &amp; Cam kết Pháp lý</h2>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Thỏa thuận đối tác đào tạo chuẩn hóa Edunity Ecosystem 2026-2028</p>
+</div>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container font-semibold px-2 py-0.5 rounded">VNPT SmartCA</span>
+</div>
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[32px]">assignment_turned_in</span>
+<div>
+<p class="font-body-md text-body-md font-semibold text-on-surface">Edunity Partner Agreement 2026-2028 (Signed)</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Ký số bởi TS. Nguyễn Hoàng Nam vào 10/11/2026 lúc 08:14:02 GMT+7</p>
+</div>
+</div>
+<button class="px-space-md py-2 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-primary font-label-md text-label-md font-semibold shadow-sm flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+            Kiểm tra chứng thư số
+          </button>
+</div>
+</section>
+</div>
+<!-- RIGHT REVIEWER PANEL & AUDIT TRAIL (35% -> 4 of 12 columns) -->
+<div class="lg:col-span-4 flex flex-col gap-gutter">
+<!-- BẢNG THẨM ĐỊNH TIÊU CHÍ (CHECKLIST) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Thẩm định tiêu chuẩn</h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Quy trình kiểm định hồ sơ 5 bước</p>
+</div>
+<div class="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-bold text-label-lg">
+            4/5
+          </div>
+</div>
+<!-- Progress ring bar visualization -->
+<div class="w-full bg-surface-container rounded-full h-2 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 80%"></div>
+</div>
+<div class="flex flex-col gap-space-sm pt-1">
+<!-- Item 1 -->
+<div class="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Định danh điện tử CCCD</span>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-semibold uppercase">Đạt</span>
+</div>
+<!-- Item 2 -->
+<div class="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Xác thực văn bằng Tiến sĩ</span>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-semibold uppercase">Đạt</span>
+</div>
+<!-- Item 3 -->
+<div class="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Chứng chỉ Sư phạm ĐH</span>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-semibold uppercase">Đạt</span>
+</div>
+<!-- Item 4 -->
+<div class="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Lý lịch tư pháp số 2</span>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-semibold uppercase">Đạt</span>
+</div>
+<!-- Item 5 (Pending) -->
+<div class="flex items-center justify-between p-space-sm rounded-lg bg-surface-container">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-tertiary text-[20px]">pending</span>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Phê duyệt Trưởng Ban Quản trị</span>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container-high text-primary px-2 py-0.5 rounded font-semibold uppercase">Đang chờ</span>
+</div>
+</div>
+</div>
+<!-- TIMELINE / LỊCH SỬ XÉT DUYỆT -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Nhật ký xử lý hồ sơ</h3>
+<span class="material-symbols-outlined text-outline text-[20px]">history</span>
+</div>
+<div class="relative pl-6 space-y-space-md before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-container-high">
+<!-- Step 1 -->
+<div class="relative">
+<div class="absolute -left-[27px] top-1 w-3.5 h-3.5 rounded-full bg-primary ring-4 ring-surface-container-lowest"></div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-primary font-semibold">16/11/2026 — 09:30</span>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface mt-0.5">Xác thực văn bằng KAIST thành công</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Chuyên viên Hoàng Thảo xác minh qua cổng liên kết Cục HTQT Bộ GD&amp;ĐT.</p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="relative">
+<div class="absolute -left-[27px] top-1 w-3.5 h-3.5 rounded-full bg-secondary-container ring-4 ring-surface-container-lowest"></div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline font-medium">14/11/2026 — 14:15</span>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface mt-0.5">Bổ sung Chứng chỉ Sư phạm</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Giảng viên tải lên bản số hóa có công chứng điện tử.</p>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="relative">
+<div class="absolute -left-[27px] top-1 w-3.5 h-3.5 rounded-full bg-surface-container-high ring-4 ring-surface-container-lowest"></div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline font-medium">10/11/2026 — 08:00</span>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface mt-0.5">Nộp hồ sơ thẩm định ban đầu</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Hệ thống tạo mã định danh TCH-2026-8834 tự động.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- REVIEWER NOTES & AUDIT LOG NOTE -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col gap-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">rate_review</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Ghi chú Thẩm định viên</h3>
+</div>
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-sm text-label-sm text-outline uppercase" for="reviewer-notes">Nhận xét nội bộ (Internal Audit)</label>
+<textarea class="w-full p-space-sm rounded-lg bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:ring-2 focus:ring-secondary focus:bg-surface-container-lowest transition-all" id="reviewer-notes" placeholder="Nhập căn cứ thẩm định hoặc ghi chú bổ sung cho hội đồng duyệt..." rows="4"></textarea>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">shield</span> Lưu vết mã hóa
+          </span>
+<button class="px-space-md py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold transition-all" id="btn-save-note">
+            Lưu ghi chú
+          </button>
+</div>
+</div>
+</div>
+</div>
+<!-- INTERACTIVE FEEDBACK TOAST CONTAINER -->
+<div class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 pointer-events-none transition-all duration-300" id="action-toast">
+<div class="px-space-lg py-space-md bg-inverse-surface text-inverse-on-surface rounded-xl shadow-xl flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-secondary-container" id="toast-icon">check_circle</span>
+<span class="font-body-md text-body-md font-medium" id="toast-msg">Hồ sơ đã được phê duyệt thành công!</span>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const toast = document.getElementById('action-toast');
+    const toastMsg = document.getElementById('toast-msg');
+    const toastIcon = document.getElementById('toast-icon');
+
+    function showToast(message, isSuccess = true) {
+      if (!toast) return;
+      toastMsg.textContent = message;
+      toastIcon.textContent = isSuccess ? 'check_circle' : 'info';
+      toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+      }, 3500);
+    }
+
+    document.getElementById('btn-approve')?.addEventListener('click', function() {
+      showToast('Đã xác thực và phê duyệt giáo viên TS. Nguyễn Hoàng Nam vào hệ thống Edunity.', true);
+    });
+
+    document.getElementById('btn-reject')?.addEventListener('click', function() {
+      showToast('Đã chuyển trạng thái hồ sơ sang: Từ chối thẩm định.', false);
+    });
+
+    document.getElementById('btn-request-more')?.addEventListener('click', function() {
+      showToast('Đã gửi thông báo yêu cầu giảng viên bổ sung thông tin qua Email/SMS.', true);
+    });
+
+    document.getElementById('btn-save-note')?.addEventListener('click', function() {
+      const val = document.getElementById('reviewer-notes').value;
+      if (val.trim()) {
+        showToast('Ghi chú thẩm định đã được mã hóa lưu trữ vào sổ nhật ký.', true);
+      } else {
+        showToast('Vui lòng nhập nội dung ghi chú thẩm định.', false);
+      }
+    });
+  })();
+</script></main></div></body></html>

@@ -722,6 +722,24 @@ export default function PublicCampaignDetailPage() {
                     >
                       Tạo mã VietQR tài trợ ngay
                     </Button>
+
+                    {createContributionMutation.isError && (
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message="Cổng thanh toán tài trợ trực tuyến tạm thời chưa kích hoạt"
+                        description={
+                          (createContributionMutation.error as any)?.code === "PAYMENT_PROVIDER_DISABLED" ||
+                          (createContributionMutation.error as any)?.status === 503
+                            ? "Kênh tiếp nhận tài trợ qua VietQR (payOS) hiện đang tạm dừng hoặc chưa được mở giao dịch trực tuyến trên hệ thống thử nghiệm này. Vui lòng liên hệ ban quản trị Edunity để biết thêm thông tin."
+                            : (createContributionMutation.error as any)?.message ||
+                              "Không thể tạo mã VietQR lúc này. Vui lòng thử lại sau ít phút."
+                        }
+                        className="rounded-xl text-xs"
+                        closable
+                        onClose={() => createContributionMutation.reset()}
+                      />
+                    )}
                   </div>
                 )}
 

@@ -155,7 +155,7 @@ export default function AdminPaymentsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Title level={3} className="!mb-1 !text-slate-900 font-bold flex items-center gap-2">
-            <WalletOutlined className="text-indigo-600" /> Giám sát Thanh toán (Admin)
+            <WalletOutlined className="text-teal-700" /> Giám sát Thanh toán (Admin)
           </Title>
           <Text type="secondary" className="text-sm">
             Quản lý toàn bộ giao dịch thanh toán học phí trên toàn hệ thống Edunity.
@@ -234,7 +234,7 @@ export default function AdminPaymentsPage() {
       <Modal
         title={
           <div className="flex items-center gap-2 text-base font-bold text-slate-800">
-            <WalletOutlined className="text-indigo-600" />
+            <WalletOutlined className="text-teal-700" />
             Chi tiết thanh toán #{selectedPayment?.id.slice(-6)}
           </div>
         }

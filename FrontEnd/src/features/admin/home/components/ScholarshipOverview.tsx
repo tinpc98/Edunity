@@ -1,10 +1,9 @@
-import { Typography, Button, Progress } from "antd";
-import { SafetyCertificateOutlined, ReadOutlined, MailOutlined } from "@ant-design/icons";
+import { Progress } from "antd";
+import { SafetyCertificateOutlined, ReadOutlined, MailOutlined, ArrowRightOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { AdminDashboardScholarship } from "../../../../types/adminDashboard";
 import { formatVND } from "../../../../types/payment";
-
-const { Title, Text } = Typography;
+import AdminSectionCard from "../../../../components/admin/AdminSectionCard";
 
 interface ScholarshipOverviewProps {
   scholarship?: AdminDashboardScholarship;
@@ -21,62 +20,66 @@ export default function ScholarshipOverview({ scholarship }: ScholarshipOverview
   const newApplications = scholarship?.newApplications || 0;
 
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] border border-gray-100 relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 rounded-bl-[80px] pointer-events-none"></div>
-      
-      <div className="flex items-center justify-between mb-3 relative z-10">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-sm">
-            <SafetyCertificateOutlined className="text-[16px]" />
-          </div>
-          <Title level={4} style={{ margin: 0, fontSize: '16px' }}>Học bổng Edunity</Title>
-        </div>
-        <Button 
-          type="link" 
+    <AdminSectionCard
+      title="Học bổng Edunity"
+      icon={<SafetyCertificateOutlined />}
+      extra={
+        <button
           onClick={() => navigate("/admin/campaigns")}
-          className="font-bold text-indigo-600 p-0 text-[12px] cursor-pointer"
+          className="inline-flex items-center gap-1 text-xs font-bold text-[#0F766E] hover:text-[#0D9488] transition-colors cursor-pointer"
         >
-          Quản lý chiến dịch
-        </Button>
-      </div>
+          <span>Chiến dịch</span>
+          <ArrowRightOutlined className="text-[10px]" />
+        </button>
+      }
+    >
+      <p className="text-xs text-[#334155] mb-3 leading-relaxed">
+        <strong className="text-[#163B40] font-bold">{openCampaigns} chiến dịch</strong> đang tiếp nhận đóng góp & hồ sơ xét duyệt học bổng.
+      </p>
 
-      <Text className="block mb-4 text-[13px]">
-        <strong className="text-gray-800">{openCampaigns} chiến dịch</strong> đang tiếp nhận đóng góp & hồ sơ xét duyệt học bổng.
-      </Text>
-
-      <div className="bg-gray-50 rounded-xl p-3 mb-3 flex flex-col gap-3">
+      <div className="bg-[#F0F8F6] rounded-xl p-3.5 mb-3 flex flex-col gap-3 border border-[#D6E5E2]">
         <div className="flex items-center justify-between">
-          <Text type="secondary" className="font-semibold text-[12px]">Tổng quỹ huy động:</Text>
-          <Text strong className="text-[16px] text-gray-800">{formatVND(totalFund)}</Text>
+          <span className="text-xs font-semibold text-[#64748B]">Tổng quỹ huy động:</span>
+          <span className="text-sm font-extrabold text-[#163B40]">{formatVND(totalFund)}</span>
         </div>
-        
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between text-[11px]">
-            <Text className="text-indigo-600 font-bold">Đã phân bổ: {formatVND(allocatedFund)}</Text>
-            <Text strong>{percent}%</Text>
+
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[#0F766E] font-bold">
+              Đã phân bổ: {formatVND(allocatedFund)}
+            </span>
+            <span className="font-bold text-[#163B40]">{percent}%</span>
           </div>
-          <Progress percent={percent} showInfo={false} strokeColor="#4f46e5" railColor="#e5e7eb" className="m-0" size={{ height: 6 }} />
+          <Progress
+            percent={percent}
+            showInfo={false}
+            strokeColor="#0D9488"
+            trailColor="#D6E5E2"
+            className="m-0"
+            size={{ height: 6 }}
+          />
         </div>
-        
-        <div className="flex items-center justify-between pt-1 text-[12px]">
-          <Text type="secondary">Học sinh đã nhận tài trợ:</Text>
-          <Text strong className="text-teal-600 flex items-center gap-1 font-bold">
-            <ReadOutlined className="text-[14px]" /> {studentsReceived} em
-          </Text>
+
+        <div className="flex items-center justify-between pt-1 border-t border-[#D6E5E2] text-xs">
+          <span className="text-[#64748B] font-medium">Học sinh đã nhận tài trợ:</span>
+          <span className="text-[#0F766E] font-bold flex items-center gap-1">
+            <ReadOutlined className="text-[#0D9488]" />
+            <span>{studentsReceived} em</span>
+          </span>
         </div>
       </div>
 
-      <div 
-        className="p-2.5 rounded-xl bg-amber-50 text-amber-900 flex items-start gap-2 cursor-pointer hover:bg-amber-100/70 transition-colors"
+      <div
+        className="p-3 rounded-xl bg-[#FEF3C7] border border-[#FDE68A] text-[#B45309] flex items-start gap-2.5 cursor-pointer hover:bg-amber-100 transition-colors"
         onClick={() => navigate("/admin/scholarship-applications")}
       >
-        <MailOutlined className="text-[16px] text-amber-600 shrink-0 mt-0.5" />
-        <Text strong className="text-[12px] leading-tight text-amber-800">
+        <MailOutlined className="text-base text-[#D97706] shrink-0 mt-0.5" />
+        <span className="text-xs font-bold leading-snug text-[#B45309]">
           {newApplications > 0
             ? `${newApplications} Hồ sơ mới cần hội đồng thẩm định xem xét duyệt`
             : "Hiện không có hồ sơ học bổng mới đang chờ duyệt"}
-        </Text>
+        </span>
       </div>
-    </div>
+    </AdminSectionCard>
   );
 }

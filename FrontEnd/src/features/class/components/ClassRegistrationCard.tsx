@@ -182,8 +182,13 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
                 Chỗ ngồi của bạn đang được hệ thống giữ tạm thời.
               </p>
               <div className="flex items-center gap-2 pt-1">
+                <Link to={`/checkout/${activeEnrollment.id}`}>
+                  <Button size="small" type="primary" className="bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold">
+                    Thanh toán ngay
+                  </Button>
+                </Link>
                 <Link to={ROUTES.STUDENT.ENROLLMENTS}>
-                  <Button size="small" type="primary" className="bg-amber-600 text-xs font-semibold">
+                  <Button size="small" className="text-xs font-semibold">
                     Xem đơn đăng ký
                   </Button>
                 </Link>
@@ -218,14 +223,25 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
           Vào lớp học của tôi
         </Button>
       ) : isPending ? (
-        <Link to={ROUTES.STUDENT.ENROLLMENTS} className="w-full">
-          <Button
-            size="large"
-            className="font-bold text-sm h-12 rounded-xl w-full border-amber-500 text-amber-700 bg-amber-50/40 hover:bg-amber-100"
-          >
-            Quản lý đơn giữ chỗ
-          </Button>
-        </Link>
+        <div className="flex flex-col gap-2 w-full">
+          <Link to={`/checkout/${activeEnrollment.id}`} className="w-full">
+            <Button
+              type="primary"
+              size="large"
+              className="font-bold text-sm h-12 rounded-xl w-full bg-indigo-600 hover:bg-indigo-700 border-none shadow-xs"
+            >
+              Tiếp tục thanh toán học phí
+            </Button>
+          </Link>
+          <Link to={ROUTES.STUDENT.ENROLLMENTS} className="w-full">
+            <Button
+              size="small"
+              className="font-semibold text-xs h-9 rounded-xl w-full border-amber-300 text-amber-800 bg-amber-50/50 hover:bg-amber-100"
+            >
+              Quản lý danh sách đơn giữ chỗ
+            </Button>
+          </Link>
+        </div>
       ) : !isAuthenticated ? (
         <Button
           type="primary"

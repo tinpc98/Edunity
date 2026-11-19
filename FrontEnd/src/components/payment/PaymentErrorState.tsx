@@ -61,8 +61,9 @@ const DEFAULT_CONTENT: Record<
   },
   PAYMENT_PROVIDER_DISABLED: {
     type: "warning",
-    title: "Cổng thanh toán chưa được kích hoạt",
-    description: "Cổng thanh toán chưa được kích hoạt.",
+    title: "Cổng thanh toán trực tuyến chưa được kích hoạt",
+    description:
+      "Cổng thanh toán VietQR (payOS) hiện đang tạm dừng hoặc chưa được mở giao dịch trực tuyến trên hệ thống. Đơn đăng ký và vị trí giữ chỗ của bạn vẫn được bảo lưu an toàn.",
   },
   EXPIRED: {
     type: "warning",

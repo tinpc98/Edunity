@@ -93,7 +93,7 @@ export default function AdminCampaignsPage() {
         <div>
           <Link
             to={`/admin/campaigns/${record.id}`}
-            className="font-bold text-slate-900 hover:text-indigo-600 transition-colors line-clamp-1"
+            className="font-bold text-slate-900 hover:text-teal-700 transition-colors line-clamp-1"
           >
             {text}
           </Link>
@@ -124,9 +124,9 @@ export default function AdminCampaignsPage() {
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
               <span className="font-bold text-emerald-600">{formatVND(record.fundedAmount)}</span>
-              <span className="font-bold text-indigo-600">{percent}%</span>
+              <span className="font-bold text-teal-700">{percent}%</span>
             </div>
-            <Progress percent={percent} showInfo={false} strokeColor="#4f46e5" size="small" />
+            <Progress percent={percent} showInfo={false} strokeColor="#0D9488" size="small" />
           </div>
         );
       },
@@ -137,7 +137,7 @@ export default function AdminCampaignsPage() {
       align: "center",
       render: (_, record) => (
         <div className="text-xs">
-          <span className="font-bold text-indigo-700">{record.expectedSlots} suất</span>
+          <span className="font-bold text-teal-800">{record.expectedSlots} suất</span>
           <div className="text-[11px] text-slate-400">{formatVND(record.awardAmountPerStudent)}/suất</div>
         </div>
       ),
@@ -218,7 +218,7 @@ export default function AdminCampaignsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Title level={3} className="!mb-1 !text-slate-900 font-bold flex items-center gap-2">
-            <SafetyCertificateOutlined className="text-indigo-600" /> Quản lý Chiến dịch Học bổng
+            <SafetyCertificateOutlined className="text-teal-700" /> Quản lý Chiến dịch Học bổng
           </Title>
           <Text type="secondary" className="text-sm">
             Tạo lập, phát hành và giám sát tiến độ gây quỹ các chương trình học bổng trên toàn hệ thống.
@@ -230,7 +230,7 @@ export default function AdminCampaignsPage() {
             icon={<ReloadOutlined spin={isFetching} />}
             onClick={() => refetch()}
             disabled={isLoading}
-            className="rounded-xl"
+            className="rounded-xl border-[#D6E5E2] text-[#163B40] font-medium"
           >
             Làm mới
           </Button>
@@ -238,7 +238,7 @@ export default function AdminCampaignsPage() {
             <Button
               type="primary"
               icon={<PlusOutlined />}
-              className="bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold shadow-xs"
+              className="bg-[#0D9488] hover:bg-[#0B746C] rounded-xl font-bold shadow-xs"
             >
               Tạo chiến dịch mới
             </Button>

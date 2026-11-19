@@ -280,7 +280,7 @@ export default function PaperDossierIntakePage() {
       title: "Biên nhận",
       dataIndex: "receiptCode",
       render: (code: string, row) => (
-        <button className="font-mono font-semibold text-indigo-700 hover:underline" onClick={() => setSelectedReceiptId(row._id || row.id)}>
+        <button className="font-mono font-semibold text-teal-700 hover:underline" onClick={() => setSelectedReceiptId(row._id || row.id)}>
           {code}
         </button>
       ),

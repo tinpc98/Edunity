@@ -62,11 +62,11 @@ export default function AdminClassesPage() {
       key: 'className',
       render: (text: string, record: ClassModel) => (
         <div>
-          <div className="font-semibold text-gray-900 text-sm hover:text-indigo-600 transition-colors">
+          <div className="font-semibold text-gray-900 text-sm hover:text-teal-700 transition-colors">
             {text}
           </div>
           <div className="text-xs text-gray-400 mt-0.5">
-            Khóa: <span className="text-indigo-600 font-medium">{record.courseTitle}</span>
+            Khóa: <span className="text-teal-700 font-medium">{record.courseTitle}</span>
           </div>
         </div>
       ),
@@ -84,7 +84,7 @@ export default function AdminClassesPage() {
       key: 'classType',
       render: (_: any, record: ClassModel) => (
         <div>
-          <Tag color={record.classType === 'PAID' ? 'indigo' : 'green'} className="!m-0 font-bold text-xs">
+          <Tag color={record.classType === 'PAID' ? 'cyan' : 'green'} className="!m-0 font-bold text-xs">
             {record.classType}
           </Tag>
           <div className="text-xs font-semibold text-gray-700 mt-1">
@@ -131,7 +131,7 @@ export default function AdminClassesPage() {
           type="primary" 
           size="small"
           icon={<EyeOutlined />}
-          className="bg-indigo-600 hover:bg-indigo-700 rounded-md font-medium text-xs"
+          className="bg-teal-600 hover:bg-teal-700 rounded-lg font-medium text-xs text-white"
           onClick={() => navigate(ROUTES.ADMIN.CLASS_DETAIL.replace(":classId", record.id))}
         >
           {record.status === 'PENDING_APPROVAL' ? 'Xét duyệt' : 'Chi tiết'}

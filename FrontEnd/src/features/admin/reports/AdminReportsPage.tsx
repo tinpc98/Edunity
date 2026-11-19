@@ -248,7 +248,7 @@ export const AdminReportsPage: React.FC = () => {
             src={record.reporter?.avatarUrl}
             icon={<UserOutlined />}
             size="small"
-            className="bg-indigo-600 shrink-0"
+            className="bg-teal-600 shrink-0"
           />
           <div className="min-w-0">
             <div className="text-xs font-semibold text-slate-800 truncate">
@@ -270,7 +270,7 @@ export const AdminReportsPage: React.FC = () => {
             {TYPE_LABELS[record.type] || record.type}
           </Tag>
           {record.classSummary && (
-            <div className="text-xs text-indigo-600 mt-1 flex items-center gap-1 font-medium">
+            <div className="text-xs text-teal-700 mt-1 flex items-center gap-1 font-medium">
               <BookOutlined /> Lớp: {record.classSummary.className}
             </div>
           )}
@@ -423,7 +423,7 @@ export const AdminReportsPage: React.FC = () => {
                   key: "session",
                   render: (_, r: any) => (
                     <div>
-                      <div className="font-semibold text-xs text-indigo-600">{r.sessionId?.title || "Buổi học"}</div>
+                      <div className="font-semibold text-xs text-teal-700">{r.sessionId?.title || "Buổi học"}</div>
                       <Tag color="orange" className="text-[10px] mt-1">{r.incidentType}</Tag>
                       <Tag color="blue" className="text-[10px] mt-1">{r.requestedAction}</Tag>
                     </div>
@@ -439,7 +439,7 @@ export const AdminReportsPage: React.FC = () => {
                         <div className="mt-1 space-x-2">
                           {r.evidenceFiles.map((f: any, idx: number) =>
                             f.url ? (
-                              <a key={idx} href={f.url} target="_blank" rel="noreferrer" className="text-indigo-600 underline">
+                              <a key={idx} href={f.url} target="_blank" rel="noreferrer" className="text-teal-700 underline">
                                 Minh chứng #{idx + 1}
                               </a>
                             ) : null
@@ -505,7 +505,7 @@ export const AdminReportsPage: React.FC = () => {
           <Card
             title={
               <span className="font-bold flex items-center gap-2">
-                <CalendarOutlined className="text-indigo-600" />
+                <CalendarOutlined className="text-teal-700" />
                 Yêu cầu xếp lịch dạy bù ({smartOverview?.rescheduleRequests?.length || 0})
               </span>
             }
@@ -551,7 +551,7 @@ export const AdminReportsPage: React.FC = () => {
                         <Button
                           size="small"
                           type="primary"
-                          className="bg-indigo-600"
+                          className="bg-teal-600 hover:bg-teal-700"
                           loading={reviewRescheduleMutation.isPending}
                           onClick={() =>
                             reviewRescheduleMutation.mutate({

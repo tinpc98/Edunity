@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -48,6 +48,7 @@ const IS_DEV_OR_TEST =
 export default function CheckoutPage() {
   const { enrollmentId } = useParams<{ enrollmentId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
 
   const [selectedScholarshipId, setSelectedScholarshipId] = useState<string | null>(null);
@@ -248,9 +249,23 @@ export default function CheckoutPage() {
     );
   }
 
-  // Error loading enrollment (403/404/network)
+  // Error loading enrollment (401/403/404/network)
   if (isEnrollmentError || !enrollment) {
     const status = enrollmentError instanceof FetchError ? enrollmentError.status : 0;
+    if (status === 401) {
+      return (
+        <div className="max-w-3xl mx-auto p-6 md:p-8">
+          <PaymentErrorState
+            kind="FORBIDDEN"
+            purpose="TUITION"
+            message="Phiên đăng nhập đã hết hạn"
+            description="Vui lòng đăng nhập tài khoản học viên để truy cập thông tin thanh toán học phí."
+            onBack={() => navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`)}
+            backLabel="Đăng nhập lại"
+          />
+        </div>
+      );
+    }
     const errorKind =
       status === 403 ? "FORBIDDEN" : status === 404 ? "NOT_FOUND" : "NETWORK_ERROR";
     return (
@@ -523,18 +538,20 @@ export default function CheckoutPage() {
               message={
                 (createIntentMutation.error as any)?.code === "PAYMENT_PROVIDER_DISABLED" ||
                 (createIntentMutation.error as any)?.status === 503
-                  ? "Cổng thanh toán chưa được kích hoạt"
+                  ? "Cổng thanh toán trực tuyến tạm thời chưa kích hoạt"
                   : undefined
               }
               description={
                 (createIntentMutation.error as any)?.code === "PAYMENT_PROVIDER_DISABLED" ||
                 (createIntentMutation.error as any)?.status === 503
-                  ? "Cổng thanh toán chưa được kích hoạt."
+                  ? "Hệ thống thanh toán tự động qua VietQR (payOS) hiện đang tạm dừng hoặc chưa được kích hoạt trên hệ thống thử nghiệm này. Vị trí giữ chỗ của bạn trong lớp học vẫn được bảo lưu an toàn. Bạn có thể sử dụng học bổng khả dụng (ở cột bên trái) hoặc quay lại sau."
                   : (createIntentMutation.error as any)?.message ||
                     "Không thể tạo mã thanh toán học phí lúc này. Vui lòng thử lại."
               }
               onRetry={() => createIntentMutation.mutate(enrollment.id)}
               retryLoading={createIntentMutation.isPending}
+              onBack={() => navigate(ROUTES.STUDENT.ENROLLMENTS)}
+              backLabel="Về danh sách đơn đăng ký"
             />
           ) : activePayment ? (
             <>

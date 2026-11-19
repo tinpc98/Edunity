@@ -129,7 +129,7 @@ export default function AdminPayoutsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Title level={3} className="!mb-1 !text-slate-900 font-bold flex items-center gap-2">
-            <BankOutlined className="text-indigo-600" /> Quản trị Quyết toán & Chi trả Thù lao
+            <BankOutlined className="text-teal-700" /> Quản trị Quyết toán & Chi trả Thù lao
           </Title>
           <Text type="secondary" className="text-sm">
             Quy trình chuẩn: Giảng viên yêu cầu (Thứ Hai) ➔ Admin duyệt ➔ Lên lịch và hạch toán chuyển khoản (Thứ Sáu có mã GD ngân hàng).
@@ -285,7 +285,7 @@ export default function AdminPayoutsPage() {
                         type="primary"
                         size="small"
                         icon={<CheckCircleOutlined />}
-                        className="bg-indigo-600 hover:bg-indigo-500"
+                        className="bg-teal-600 hover:bg-teal-700"
                         onClick={() => setApproving(p)}
                       >
                         Phê duyệt

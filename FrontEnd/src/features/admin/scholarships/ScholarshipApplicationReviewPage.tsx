@@ -208,7 +208,7 @@ export default function ScholarshipApplicationReviewPage() {
           {/* Student Profile Card */}
           <Card className="rounded-2xl shadow-sm border-gray-100">
             <div className="flex items-start gap-4 mb-6">
-              <Avatar size={64} className="bg-indigo-100 text-indigo-700 text-2xl font-bold shrink-0">
+              <Avatar size={64} className="bg-teal-50 text-teal-800 border-2 border-teal-200 text-2xl font-bold shrink-0">
                 {studentDisplayName.substring(0, 2).toUpperCase()}
               </Avatar>
               <div className="flex-1">
@@ -241,34 +241,34 @@ export default function ScholarshipApplicationReviewPage() {
 
           {/* Campaign Policy Card */}
           <Card 
-            className="rounded-2xl shadow-sm border-indigo-100 bg-indigo-50/20" 
+            className="rounded-2xl shadow-xs border-teal-200 bg-teal-50/20" 
             title={
-              <span className="font-bold flex items-center gap-2 text-indigo-900">
-                <SafetyCertificateOutlined /> Chính sách & Định mức chiến dịch
+              <span className="font-bold flex items-center gap-2 text-teal-950">
+                <SafetyCertificateOutlined className="text-teal-700" /> Chính sách & Định mức chiến dịch
               </span>
             } 
-            extra={<Tag color="indigo" className="font-bold border-0">ADMIN READ-ONLY (BR-37)</Tag>}
+            extra={<Tag color="cyan" className="font-bold border-0">ADMIN READ-ONLY (BR-37)</Tag>}
           >
-            <div className="flex items-start gap-3 bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs mb-4">
-              <div className="text-indigo-600 mt-0.5"><ExclamationCircleOutlined /></div>
-              <div className="text-xs text-gray-600">
-                <strong className="text-indigo-900 block mb-0.5">Mức tài trợ được quy định bởi Campaign</strong>
+            <div className="flex items-start gap-3 bg-white p-4 rounded-xl border border-teal-100 shadow-2xs mb-4">
+              <div className="text-teal-700 mt-0.5"><ExclamationCircleOutlined /></div>
+              <div className="text-xs text-slate-600">
+                <strong className="text-teal-950 block mb-0.5">Mức tài trợ được quy định bởi Campaign</strong>
                 Số tiền học bổng cấp phát được tự động cố định theo quy chuẩn của chiến dịch. Admin chỉ thẩm định tính hợp lệ của hồ sơ, không thể tùy tiện nhập số tiền.
               </div>
             </div>
 
             <Row gutter={[16, 16]}>
               <Col span={12}>
-                <div className="bg-white p-4 rounded-xl border border-gray-100 h-full">
-                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">CHIẾN DỊCH</div>
-                  <div className="font-bold text-gray-900 text-base">{app.campaignTitle || app.campaign?.title}</div>
+                <div className="bg-white p-4 rounded-xl border border-[#D6E5E2] h-full shadow-[0_2px_8px_rgba(15,118,110,0.04)]">
+                  <div className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-1">CHIẾN DỊCH</div>
+                  <div className="font-extrabold text-[#163B40] text-base">{app.campaignTitle || app.campaign?.title}</div>
                 </div>
               </Col>
               <Col span={12}>
-                <div className="bg-indigo-600 p-4 rounded-xl border border-indigo-600 h-full text-white">
-                  <div className="text-xs font-bold text-indigo-200 uppercase tracking-wider mb-1">ĐỊNH MỨC PHÊ DUYỆT</div>
+                <div className="bg-[#0F766E] p-4 rounded-xl border border-[#0F766E] h-full text-white shadow-xs">
+                  <div className="text-xs font-bold text-teal-100 uppercase tracking-wider mb-1">ĐỊNH MỨC PHÊ DUYỆT</div>
                   <div className="font-black text-2xl">{formatVND(app.awardAmountPerStudent)}</div>
-                  <div className="text-xs text-indigo-100 mt-1">Cấp tự động khi duyệt thành công</div>
+                  <div className="text-xs text-teal-200 mt-1">Cấp tự động khi duyệt thành công</div>
                 </div>
               </Col>
             </Row>
@@ -279,7 +279,7 @@ export default function ScholarshipApplicationReviewPage() {
             className="rounded-2xl shadow-sm border-gray-100" 
             title={
               <span className="font-bold flex items-center gap-2">
-                <AuditOutlined className="text-indigo-600" /> Thư nguyện vọng & Hoàn cảnh học sinh
+                <AuditOutlined className="text-teal-700" /> Thư nguyện vọng & Hoàn cảnh học sinh
               </span>
             }
           >
@@ -323,9 +323,9 @@ export default function ScholarshipApplicationReviewPage() {
         {/* RIGHT COLUMN - DECISION PANEL */}
         <Col xs={24} lg={8}>
           <div className="sticky top-6 flex flex-col gap-6">
-            <Card className="rounded-2xl shadow-sm border-gray-100 border-t-4 border-t-indigo-600">
+            <Card className="rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border-[#D6E5E2] border-t-4 border-t-[#0D9488]">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-lg">
+                <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 font-bold text-lg">
                   <CheckCircleOutlined />
                 </div>
                 <div>
@@ -366,7 +366,7 @@ export default function ScholarshipApplicationReviewPage() {
                   </Button>
                   <Button 
                     block 
-                    className="rounded-xl h-[44px] font-semibold bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100" 
+                    className="rounded-xl h-[44px] font-semibold bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100" 
                     onClick={() => setIsRequestInfoModalOpen(true)}
                   >
                     Yêu cầu bổ sung hồ sơ
@@ -482,7 +482,7 @@ export default function ScholarshipApplicationReviewPage() {
                 type="primary" 
                 onClick={handleRequestInfoSubmit} 
                 loading={requestInfoMutation.isPending}
-                className="bg-indigo-600 hover:bg-indigo-700 font-semibold"
+                className="bg-teal-600 hover:bg-teal-700 font-semibold"
               >
                 Gửi yêu cầu
               </Button>

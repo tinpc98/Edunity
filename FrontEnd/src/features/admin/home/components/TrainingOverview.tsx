@@ -1,9 +1,8 @@
-import { Typography, Row, Col } from "antd";
-import { BookOutlined } from "@ant-design/icons";
+import { Row, Col } from "antd";
+import { BookOutlined, ArrowRightOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { AdminDashboardTraining } from "../../../../types/adminDashboard";
-
-const { Title, Text } = Typography;
+import AdminSectionCard from "../../../../components/admin/AdminSectionCard";
 
 interface TrainingOverviewProps {
   training?: AdminDashboardTraining;
@@ -18,63 +17,67 @@ export default function TrainingOverview({ training }: TrainingOverviewProps) {
   const upcomingClasses = training?.upcomingClasses || 0;
 
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] border border-gray-100">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shadow-sm">
-            <BookOutlined className="text-[16px]" />
-          </div>
-          <Title level={4} style={{ margin: 0, fontSize: '16px' }}>Nội dung đào tạo</Title>
-        </div>
-        <button 
+    <AdminSectionCard
+      title="Nội dung đào tạo"
+      icon={<BookOutlined />}
+      extra={
+        <button
           onClick={() => navigate("/admin/catalog")}
-          className="text-[12px] font-bold text-indigo-600 hover:text-indigo-800 bg-transparent border-0 cursor-pointer p-0"
+          className="inline-flex items-center gap-1 text-xs font-bold text-[#0F766E] hover:text-[#0D9488] transition-colors cursor-pointer"
         >
-          Quản lý danh mục →
+          <span>Danh mục</span>
+          <ArrowRightOutlined className="text-[10px]" />
         </button>
-      </div>
-
+      }
+    >
       <Row gutter={10} className="mb-3">
         <Col span={12}>
-          <div 
+          <div
             onClick={() => navigate("/admin/catalog")}
-            className="p-3 rounded-xl bg-gray-50 text-center border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+            className="p-3 rounded-xl bg-[#F0F8F6] text-center border border-[#D6E5E2] cursor-pointer hover:bg-[#E5F5F1] hover:border-[#99F6E4] transition-all"
           >
-            <div className="text-xl font-extrabold text-gray-800">{courses}</div>
-            <Text type="secondary" className="text-[11px] font-medium mt-0.5 block">Course tiêu chuẩn</Text>
+            <div className="text-xl font-extrabold text-[#163B40]">{courses}</div>
+            <span className="text-[11px] font-bold text-[#64748B] mt-0.5 block">
+              Khóa học chuẩn
+            </span>
           </div>
         </Col>
         <Col span={12}>
-          <div 
+          <div
             onClick={() => navigate("/admin/classes")}
-            className="p-3 rounded-xl bg-indigo-50/50 text-center border border-indigo-100/50 cursor-pointer hover:bg-indigo-100/50 transition-colors"
+            className="p-3 rounded-xl bg-[#CCFBF1] text-center border border-[#99F6E4] cursor-pointer hover:bg-teal-200 transition-all"
           >
-            <div className="text-xl font-extrabold text-indigo-600">{classes}</div>
-            <Text type="secondary" className="text-[11px] font-medium text-indigo-800/70 mt-0.5 block">Lớp học trực tuyến</Text>
+            <div className="text-xl font-extrabold text-[#0F766E]">{classes}</div>
+            <span className="text-[11px] font-bold text-[#0F766E] mt-0.5 block">
+              Lớp học trực tuyến
+            </span>
           </div>
         </Col>
       </Row>
 
-      <div className="flex flex-col gap-1.5">
-        <div 
+      <div className="flex flex-col gap-2">
+        <div
           onClick={() => navigate("/admin/classes")}
-          className="flex items-center justify-between p-2 rounded-xl bg-gray-50/80 cursor-pointer hover:bg-gray-100"
+          className="flex items-center justify-between p-2.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] cursor-pointer hover:bg-[#E5F5F1] transition-colors text-xs"
         >
-          <span className="flex items-center gap-1.5 text-gray-500 text-[12px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span> Lớp đang dạy hoạt động
+          <span className="flex items-center gap-1.5 text-[#334155] font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Lớp đang hoạt động</span>
           </span>
-          <Text strong className="text-[13px]">{activeClasses} lớp</Text>
+          <span className="font-bold text-[#163B40]">{activeClasses} lớp</span>
         </div>
-        <div 
+
+        <div
           onClick={() => navigate("/admin/classes")}
-          className="flex items-center justify-between p-2 rounded-xl bg-gray-50/80 cursor-pointer hover:bg-gray-100"
+          className="flex items-center justify-between p-2.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] cursor-pointer hover:bg-[#E5F5F1] transition-colors text-xs"
         >
-          <span className="flex items-center gap-1.5 text-gray-500 text-[12px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Lớp sắp khai giảng
+          <span className="flex items-center gap-1.5 text-[#334155] font-medium">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span>Lớp sắp khai giảng</span>
           </span>
-          <Text strong className="text-[13px]">{upcomingClasses} lớp</Text>
+          <span className="font-bold text-[#163B40]">{upcomingClasses} lớp</span>
         </div>
       </div>
-    </div>
+    </AdminSectionCard>
   );
 }

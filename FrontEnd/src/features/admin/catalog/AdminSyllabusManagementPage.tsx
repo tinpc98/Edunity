@@ -409,7 +409,7 @@ export default function AdminSyllabusManagementPage() {
                     onClick={() => setVersionId(version.id)}
                     className={`w-full rounded-lg border p-3 text-left transition-colors ${
                       version.id === selectedVersionId
-                        ? "border-indigo-300 bg-indigo-50"
+                        ? "border-teal-300 bg-teal-50 text-teal-900"
                         : "border-slate-100 hover:border-slate-300"
                     }`}
                   >

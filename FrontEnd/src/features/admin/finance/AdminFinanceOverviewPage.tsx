@@ -2,14 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Row,
   Col,
-  Card,
-  Statistic,
-  Typography,
-  Tag,
   Alert,
   Spin,
-  Button,
-  Space,
 } from "antd";
 import {
   DollarCircleOutlined,
@@ -20,13 +14,17 @@ import {
   ArrowRightOutlined,
   ReloadOutlined,
   LockOutlined,
+  AuditOutlined,
+  BankOutlined,
 } from "@ant-design/icons";
 import { Link } from "react-router-dom";
 import { financeService, financeKeys } from "../../../services/finance.service";
 import { formatVND } from "../../../types/payment";
 import { ROUTES } from "../../../routes/routePaths";
-
-const { Title, Text, Paragraph } = Typography;
+import AdminPageHeader from "../../../components/admin/AdminPageHeader";
+import AdminKpiCard from "../../../components/admin/AdminKpiCard";
+import AdminSectionCard from "../../../components/admin/AdminSectionCard";
+import AdminStatusBadge from "../../../components/admin/AdminStatusBadge";
 
 export default function AdminFinanceOverviewPage() {
   const { data, isLoading, refetch, isFetching } = useQuery({
@@ -49,287 +47,295 @@ export default function AdminFinanceOverviewPage() {
   const outboxWorker = data?.outboxWorker;
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <Title level={2} className="!mb-1 font-bold text-slate-800">
-            Tổng quan Tài chính & Đối soát
-          </Title>
-          <Text type="secondary">
-            Theo dõi sổ cái tài chính, nguồn thu học phí, quỹ học bổng và worker phục hồi giao dịch
-          </Text>
-        </div>
-        <Space>
-          <Button
-            icon={<ReloadOutlined spin={isFetching} />}
-            onClick={() => refetch()}
-            loading={isFetching}
-          >
-            Làm mới số liệu
-          </Button>
-          <Link to={ROUTES.ADMIN.RECONCILIATIONS}>
-            <Button type="primary" danger={Boolean(reconciliations && reconciliations.open > 0)}>
-              Hàng đợi đối soát ({reconciliations?.open || 0})
-            </Button>
-          </Link>
-        </Space>
-      </div>
+    <div className="flex flex-col gap-6 w-full pb-10">
+      {/* Top Header */}
+      <AdminPageHeader
+        eyebrow="Phân hệ Kế toán & Đối soát"
+        eyebrowIcon={<BankOutlined />}
+        title="Tổng quan Tài chính & Đối soát"
+        description="Theo dõi sổ cái tài chính, nguồn thu học phí, quỹ học bổng và worker phục hồi giao dịch theo thời gian thực."
+        extra={
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-[#D6E5E2] text-[#163B40] hover:text-[#0F766E] hover:bg-[#E5F5F1] text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            >
+              <ReloadOutlined className={isFetching ? "animate-spin" : ""} />
+              <span>Làm mới số liệu</span>
+            </button>
+            <Link
+              to={ROUTES.ADMIN.RECONCILIATIONS}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs ${
+                reconciliations && reconciliations.open > 0
+                  ? "bg-rose-600 hover:bg-rose-700 text-white"
+                  : "bg-teal-600 hover:bg-teal-700 text-white"
+              }`}
+            >
+              <AuditOutlined />
+              <span>Hàng đợi đối soát ({reconciliations?.open || 0})</span>
+            </Link>
+          </div>
+        }
+      />
 
+      {/* Safety Policy Alert Banner */}
       <Alert
-        message="Nguyên tắc an toàn sổ cái tài chính (FIN-16, BR-34)"
+        message={<span className="font-bold text-teal-900 text-xs sm:text-sm">Nguyên tắc an toàn sổ cái tài chính (FIN-16, BR-34)</span>}
         description={
-          <div className="space-y-1 text-xs">
+          <div className="space-y-1.5 text-xs text-slate-600 mt-1">
             <div>
-              <Text strong>RECEIPT ≠ REVENUE:</Text> Khoản thu học phí tạm giữ do đến muộn (UNAPPLIED_TUITION_RECEIPT) là nợ phải trả, không được tính vào doanh thu khả dụng.
+              <strong className="text-teal-800">RECEIPT ≠ REVENUE:</strong> Khoản thu học phí tạm giữ do đến muộn (UNAPPLIED_TUITION_RECEIPT) là nợ phải trả, không được tính vào doanh thu khả dụng.
             </div>
             <div>
-              <Text strong>TÁCH BIỆT NGUỒN TIỀN:</Text> Quỹ tài trợ học bổng (DONATION) tách biệt tuyệt đối với tiền học phí (TUITION).
+              <strong className="text-teal-800">TÁCH BIỆT NGUỒN TIỀN:</strong> Quỹ tài trợ học bổng (DONATION) tách biệt tuyệt đối với tiền học phí (TUITION).
             </div>
             <div>
-              <Text strong>THÙ LAO GIẢNG VIÊN:</Text> Thu nhập PENDING chỉ được giải ngân sau khi lớp học kết thúc (COMPLETED). Thao tác hoàn tiền thật được bảo lưu cho PR8.
+              <strong className="text-teal-800">THÙ LAO GIẢNG VIÊN:</strong> Thu nhập PENDING chỉ được giải ngân sau khi lớp học kết thúc (COMPLETED). Thao tác hoàn tiền thật được bảo lưu theo quy chuẩn an toàn.
             </div>
           </div>
         }
         type="info"
         showIcon
-        className="border-blue-200 bg-blue-50/70"
+        className="rounded-2xl border-teal-200 bg-teal-50/60 shadow-2xs"
       />
 
-      {/* Row 1: Revenue & Liabilities */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card bordered={false} className="shadow-sm">
-            <Statistic
-              title={<span className="text-slate-600 font-medium">Doanh thu Học phí</span>}
-              value={formatVND(revenue?.confirmedTuitionRevenue || "0")}
-              valueStyle={{ color: "#1677ff", fontWeight: 700 }}
-              prefix={<DollarCircleOutlined />}
-            />
-            <div className="mt-2 text-xs text-slate-500">
-              Giao dịch ENROLLMENT_PAYMENT hoàn thành
-            </div>
-          </Card>
-        </Col>
+      {/* Row 1: 4 Financial KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <AdminKpiCard
+          title="Doanh thu Học phí"
+          value={formatVND(revenue?.confirmedTuitionRevenue || "0")}
+          icon={<DollarCircleOutlined />}
+          trend="Đã xác thực"
+          trendDirection="up"
+          trendSubtext="ENROLLMENT_PAYMENT"
+          variant="teal"
+        />
+        <AdminKpiCard
+          title="Quỹ Tài trợ Học bổng"
+          value={formatVND(revenue?.confirmedDonationRevenue || "0")}
+          icon={<HeartOutlined />}
+          trend="Tách biệt nguồn thu"
+          trendDirection="up"
+          trendSubtext="DONATION Quỹ MTQ"
+          variant="mint"
+        />
+        <AdminKpiCard
+          title="Khoản thu tạm giữ (Nợ phải trả)"
+          value={formatVND(revenue?.unappliedLateReceipts || "0")}
+          icon={<WarningOutlined />}
+          trend="Nợ phải trả"
+          trendDirection="neutral"
+          trendSubtext="Đến muộn / Chờ đối soát"
+          variant="amber"
+        />
+        <AdminKpiCard
+          title="Nghĩa vụ Hoàn tiền (Pending)"
+          value={formatVND(revenue?.pendingRefundLiability || "0")}
+          icon={<ClockCircleOutlined />}
+          trend={`Đã hoàn tất: ${formatVND(revenue?.completedRefunds || "0")}`}
+          trendDirection="down"
+          variant="rose"
+        />
+      </div>
 
-        <Col xs={24} sm={12} lg={6}>
-          <Card bordered={false} className="shadow-sm">
-            <Statistic
-              title={<span className="text-slate-600 font-medium">Quỹ Tài trợ Học bổng</span>}
-              value={formatVND(revenue?.confirmedDonationRevenue || "0")}
-              valueStyle={{ color: "#52c41a", fontWeight: 700 }}
-              prefix={<HeartOutlined />}
-            />
-            <div className="mt-2 text-xs text-slate-500">
-              Tiền tài trợ MTQ đóng góp vào chiến dịch
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} lg={6}>
-          <Card bordered={false} className="shadow-sm border-l-4 border-l-amber-500">
-            <Statistic
-              title={<span className="text-amber-700 font-medium">Khoản thu tạm giữ (Nợ phải trả)</span>}
-              value={formatVND(revenue?.unappliedLateReceipts || "0")}
-              valueStyle={{ color: "#d46b08", fontWeight: 700 }}
-              prefix={<WarningOutlined />}
-            />
-            <div className="mt-2 text-xs text-amber-600">
-              Khoản thu đến muộn / chờ đối soát (Chưa ghi nhận doanh thu)
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} lg={6}>
-          <Card bordered={false} className="shadow-sm">
-            <Statistic
-              title={<span className="text-slate-600 font-medium">Nghĩa vụ Hoàn tiền (Pending)</span>}
-              value={formatVND(revenue?.pendingRefundLiability || "0")}
-              valueStyle={{ color: "#722ed1", fontWeight: 700 }}
-              prefix={<ClockCircleOutlined />}
-            />
-            <div className="mt-2 text-xs text-slate-500">
-              Đã hoàn tất: {formatVND(revenue?.completedRefunds || "0")}
-            </div>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Row 2: Deep Dive Cards */}
-      <Row gutter={[16, 16]}>
-        {/* Card: Teacher Earnings */}
+      {/* Row 2: Deep Dive Cards (3-column layout) */}
+      <Row gutter={[20, 20]}>
+        {/* Card: Teacher Earnings Ledger */}
         <Col xs={24} lg={8}>
-          <Card
-            title={
-              <Space>
-                <LockOutlined className="text-blue-500" />
-                <span>Sổ cái Thù lao Giảng viên</span>
-              </Space>
-            }
-            bordered={false}
-            className="h-full shadow-sm"
+          <AdminSectionCard
+            title="Sổ cái Thù lao Giảng viên"
+            icon={<LockOutlined />}
             extra={
-              <Link to={ROUTES.ADMIN.PAYOUTS} className="text-xs">
-                Xem yêu cầu rút <ArrowRightOutlined />
+              <Link
+                to={ROUTES.ADMIN.PAYOUTS}
+                className="text-xs font-bold text-teal-700 hover:text-teal-900 inline-flex items-center gap-1"
+              >
+                <span>Xem yêu cầu rút</span>
+                <ArrowRightOutlined className="text-[10px]" />
               </Link>
             }
+            className="h-full"
           >
             <div className="space-y-4">
-              <div className="flex items-center justify-between border-b pb-2">
-                <Text type="secondary">Tạm giữ (PENDING):</Text>
-                <Text strong className="text-amber-600">
+              <div className="flex items-center justify-between border-b border-[#D6E5E2] pb-2.5">
+                <span className="text-xs text-[#64748B] font-semibold">Tạm giữ (PENDING):</span>
+                <span className="text-sm font-extrabold text-[#B45309] font-mono">
                   {formatVND(teacherEarnings?.pending || "0")}
-                </Text>
+                </span>
               </div>
-              <div className="flex items-center justify-between border-b pb-2">
-                <Text type="secondary">Khả dụng rút tiền (AVAILABLE):</Text>
-                <Text strong className="text-emerald-600">
+              <div className="flex items-center justify-between border-b border-[#D6E5E2] pb-2.5">
+                <span className="text-xs text-[#64748B] font-semibold">Khả dụng rút (AVAILABLE):</span>
+                <span className="text-sm font-extrabold text-[#15803D] font-mono">
                   {formatVND(teacherEarnings?.available || "0")}
-                </Text>
+                </span>
               </div>
-              <div className="flex items-center justify-between border-b pb-2">
-                <Text type="secondary">Đã giải ngân (PAID_OUT):</Text>
-                <Text strong className="text-slate-600">
+              <div className="flex items-center justify-between border-b border-[#D6E5E2] pb-2.5">
+                <span className="text-xs text-[#64748B] font-semibold">Đã giải ngân (PAID_OUT):</span>
+                <span className="text-sm font-extrabold text-[#163B40] font-mono">
                   {formatVND(teacherEarnings?.paidOut || "0")}
-                </Text>
+                </span>
               </div>
-              <Paragraph type="secondary" className="!mb-0 text-xs">
+              <div className="p-3 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] text-xs text-[#64748B] italic leading-relaxed">
                 {teacherEarnings?.note || "Thù lao giảng viên chỉ chuyển sang AVAILABLE khi lớp học hoàn thành."}
-              </Paragraph>
+              </div>
             </div>
-          </Card>
+          </AdminSectionCard>
         </Col>
 
-        {/* Card: Outbox Recovery Worker */}
+        {/* Card: Financial Outbox Worker */}
         <Col xs={24} lg={8}>
-          <Card
-            title={
-              <Space>
-                <SyncOutlined spin={Boolean(outboxWorker?.isRunning)} className="text-emerald-500" />
-                <span>Financial Outbox Worker</span>
-              </Space>
+          <AdminSectionCard
+            title="Financial Outbox Worker"
+            icon={<SyncOutlined spin={Boolean(outboxWorker?.isRunning)} />}
+            badge={
+              <AdminStatusBadge
+                label={outboxWorker?.isRunning ? "ĐANG CHẠY" : "DỪNG / IDLE"}
+                type={outboxWorker?.isRunning ? "success" : "neutral"}
+                pulse={Boolean(outboxWorker?.isRunning)}
+              />
             }
-            bordered={false}
-            className="h-full shadow-sm"
             extra={
-              <Tag color={outboxWorker?.isRunning ? "green" : "default"}>
-                {outboxWorker?.isRunning ? "ĐANG CHẠY" : "DỪNG / IDLE"}
-              </Tag>
+              <Link
+                to={ROUTES.ADMIN.BANK_EVENTS}
+                className="text-xs font-bold text-teal-700 hover:text-teal-900 inline-flex items-center gap-1"
+              >
+                <span>Webhooks</span>
+                <ArrowRightOutlined className="text-[10px]" />
+              </Link>
             }
+            className="h-full"
           >
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Text type="secondary">Chu kỳ quét:</Text>
-                <Text strong>{Math.round((outboxWorker?.intervalMs || 30000) / 1000)} giây</Text>
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Chu kỳ quét:</span>
+                <span className="font-bold text-slate-800">
+                  {Math.round((outboxWorker?.intervalMs || 30000) / 1000)} giây
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <Text type="secondary">Batch size:</Text>
-                <Text strong>{outboxWorker?.batchSize || 25} sự kiện/tick</Text>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Batch size:</span>
+                <span className="font-bold text-slate-800">
+                  {outboxWorker?.batchSize || 25} sự kiện/tick
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <Text type="secondary">Tổng sự kiện đã hạch toán:</Text>
-                <Text strong className="text-emerald-600">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Tổng sự kiện đã hạch toán:</span>
+                <span className="font-bold text-teal-800 font-mono">
                   {outboxWorker?.totalDispatched || 0}
-                </Text>
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <Text type="secondary">Backlog đang chờ:</Text>
-                <Tag color={outboxWorker?.backlogCount ? "gold" : "green"}>
-                  {outboxWorker?.backlogCount || 0} sự kiện
-                </Tag>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Backlog đang chờ:</span>
+                <AdminStatusBadge
+                  label={`${outboxWorker?.backlogCount || 0} sự kiện`}
+                  type={outboxWorker?.backlogCount ? "warning" : "success"}
+                />
               </div>
-              <div className="flex items-center justify-between border-t pt-2">
-                <Text type="secondary">Vượt ngưỡng retry (Exhausted &ge; 5):</Text>
-                <Tag color={outboxWorker?.exhaustedCount ? "red" : "default"}>
-                  {outboxWorker?.exhaustedCount || 0} sự kiện
-                </Tag>
-              </div>
-              <div className="pt-2 text-right">
-                <Link to={ROUTES.ADMIN.BANK_EVENTS} className="text-xs text-blue-600 hover:underline">
-                  Chi tiết webhooks gateway <ArrowRightOutlined />
-                </Link>
+              <div className="flex items-center justify-between border-t border-[#D6E5E2] pt-2.5 text-xs">
+                <span className="text-slate-500">Vượt ngưỡng retry (Exhausted &ge; 5):</span>
+                <AdminStatusBadge
+                  label={`${outboxWorker?.exhaustedCount || 0} sự kiện`}
+                  type={outboxWorker?.exhaustedCount ? "error" : "neutral"}
+                />
               </div>
             </div>
-          </Card>
+          </AdminSectionCard>
         </Col>
 
         {/* Card: Reconciliations Summary */}
         <Col xs={24} lg={8}>
-          <Card
-            title={
-              <Space>
-                <WarningOutlined className="text-amber-500" />
-                <span>Hàng đợi Đối soát ({reconciliations?.total || 0})</span>
-              </Space>
-            }
-            bordered={false}
-            className="h-full shadow-sm"
+          <AdminSectionCard
+            title={`Hàng đợi Đối soát (${reconciliations?.total || 0})`}
+            icon={<AuditOutlined />}
             extra={
-              <Link to={ROUTES.ADMIN.RECONCILIATIONS} className="text-xs">
-                Mở hàng đợi <ArrowRightOutlined />
+              <Link
+                to={ROUTES.ADMIN.RECONCILIATIONS}
+                className="text-xs font-bold text-teal-700 hover:text-teal-900 inline-flex items-center gap-1"
+              >
+                <span>Mở hàng đợi</span>
+                <ArrowRightOutlined className="text-[10px]" />
               </Link>
             }
+            className="h-full"
           >
-            <div className="space-y-3">
+            <div className="space-y-3 text-xs">
               <div className="flex items-center justify-between">
-                <Text type="secondary">Cần kiểm tra (NEEDS_REVIEW):</Text>
-                <Tag color="volcano">{reconciliations?.byStatus?.needsReview || 0}</Tag>
+                <span className="text-slate-600">Cần kiểm tra (NEEDS_REVIEW):</span>
+                <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold">
+                  {reconciliations?.byStatus?.needsReview || 0}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <Text type="secondary">Đang xử lý (IN_REVIEW):</Text>
-                <Tag color="blue">{reconciliations?.byStatus?.inReview || 0}</Tag>
+                <span className="text-slate-600">Đang xử lý (IN_REVIEW):</span>
+                <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-bold">
+                  {reconciliations?.byStatus?.inReview || 0}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <Text type="secondary">Đã chấp thuận (RESOLVED_APPROVED):</Text>
-                <Tag color="green">{reconciliations?.byStatus?.resolvedApproved || 0}</Tag>
+                <span className="text-slate-600">Đã chấp thuận (RESOLVED_APPROVED):</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
+                  {reconciliations?.byStatus?.resolvedApproved || 0}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <Text type="secondary">Đã hoàn tiền (RESOLVED_REFUNDED):</Text>
-                <Tag color="purple">{reconciliations?.byStatus?.resolvedRefunded || 0}</Tag>
+                <span className="text-slate-600">Đã hoàn tiền (RESOLVED_REFUNDED):</span>
+                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-bold">
+                  {reconciliations?.byStatus?.resolvedRefunded || 0}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <Text type="secondary">Đã bỏ qua (RESOLVED_IGNORED):</Text>
-                <Tag color="default">{reconciliations?.byStatus?.resolvedIgnored || 0}</Tag>
+                <span className="text-slate-600">Đã bỏ qua (RESOLVED_IGNORED):</span>
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 font-semibold">
+                  {reconciliations?.byStatus?.resolvedIgnored || 0}
+                </span>
               </div>
             </div>
-          </Card>
+          </AdminSectionCard>
         </Col>
       </Row>
 
-      {/* Row 3: Navigation shortcuts */}
-      <Card title="Lối tắt Quản trị Tài chính" bordered={false} className="shadow-sm">
+      {/* Row 3: Navigation Shortcuts */}
+      <AdminSectionCard title="Lối tắt Quản trị Tài chính & Đối soát" icon={<BankOutlined />}>
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={8}>
-            <Link to={ROUTES.ADMIN.TRANSACTIONS}>
-              <div className="rounded-lg border border-slate-200 p-4 transition-colors hover:border-blue-400 hover:bg-blue-50/30">
-                <div className="font-semibold text-slate-800">Sổ cái Giao dịch (Ledger)</div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Tra cứu giao dịch, lọc theo loại, ngày tháng và kiểm tra tính toàn vẹn
+            <Link to={ROUTES.ADMIN.TRANSACTIONS} className="block group h-full">
+              <div className="rounded-xl border border-[#D6E5E2] p-4.5 bg-[#F0F8F6] hover:bg-[#E5F5F1] hover:border-[#99F6E4] transition-all h-full">
+                <div className="font-bold text-[#163B40] group-hover:text-[#0F766E] text-sm">
+                  Sổ cái Giao dịch (Ledger)
+                </div>
+                <div className="text-xs text-[#64748B] mt-1 leading-relaxed font-medium">
+                  Tra cứu giao dịch, lọc theo loại, ngày tháng và kiểm tra tính toàn vẹn dòng tiền
                 </div>
               </div>
             </Link>
           </Col>
           <Col xs={24} sm={8}>
-            <Link to={ROUTES.ADMIN.RECONCILIATIONS}>
-              <div className="rounded-lg border border-slate-200 p-4 transition-colors hover:border-amber-400 hover:bg-amber-50/30">
-                <div className="font-semibold text-slate-800">Hàng đợi Đối soát & Bất thường</div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Tiếp nhận sự vụ, phân công Admin và thêm ghi chú giải quyết
+            <Link to={ROUTES.ADMIN.RECONCILIATIONS} className="block group h-full">
+              <div className="rounded-xl border border-[#D6E5E2] p-4.5 bg-[#F0F8F6] hover:bg-[#FEF3C7] hover:border-[#FDE68A] transition-all h-full">
+                <div className="font-bold text-[#163B40] group-hover:text-[#B45309] text-sm">
+                  Hàng đợi Đối soát & Bất thường
+                </div>
+                <div className="text-xs text-[#64748B] mt-1 leading-relaxed font-medium">
+                  Tiếp nhận sự vụ, phân công Admin và thêm ghi chú giải quyết bất thường
                 </div>
               </div>
             </Link>
           </Col>
           <Col xs={24} sm={8}>
-            <Link to={ROUTES.ADMIN.BANK_EVENTS}>
-              <div className="rounded-lg border border-slate-200 p-4 transition-colors hover:border-emerald-400 hover:bg-emerald-50/30">
-                <div className="font-semibold text-slate-800">Cổng thanh toán & Webhook Outbox</div>
-                <div className="text-xs text-slate-500 mt-1">
+            <Link to={ROUTES.ADMIN.BANK_EVENTS} className="block group h-full">
+              <div className="rounded-xl border border-[#D6E5E2] p-4.5 bg-[#F0F8F6] hover:bg-[#E5F5F1] hover:border-[#99F6E4] transition-all h-full">
+                <div className="font-bold text-[#163B40] group-hover:text-[#0F766E] text-sm">
+                  Cổng thanh toán & Webhook Outbox
+                </div>
+                <div className="text-xs text-[#64748B] mt-1 leading-relaxed font-medium">
                   Giám sát Webhook payOS 2 kênh và quá trình phục hồi outbox tự động
                 </div>
               </div>
             </Link>
           </Col>
         </Row>
-      </Card>
+      </AdminSectionCard>
     </div>
   );
 }

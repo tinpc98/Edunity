@@ -55,8 +55,8 @@ export default function TeacherContractsCard({ teacherId, isVerified }: Props) {
 
   return (
     <Card
-      className="rounded-2xl shadow-sm border-gray-100"
-      title={<span className="font-bold flex items-center gap-2"><FileProtectOutlined className="text-indigo-500" /> Hợp đồng giảng dạy</span>}
+      className="rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border-[#D6E5E2]"
+      title={<span className="font-bold flex items-center gap-2"><FileProtectOutlined className="text-teal-700" /> Hợp đồng giảng dạy</span>}
       extra={
         <Button type="primary" disabled={!isVerified || hasPending} onClick={() => setIsSendOpen(true)}>
           Gửi hợp đồng

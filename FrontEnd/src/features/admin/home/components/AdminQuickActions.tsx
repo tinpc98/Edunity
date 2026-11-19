@@ -1,5 +1,10 @@
-import { Button } from "antd";
-import { UserAddOutlined, SafetyCertificateOutlined, PlusCircleOutlined, BookOutlined, ToolOutlined } from "@ant-design/icons";
+import {
+  UserAddOutlined,
+  SafetyCertificateOutlined,
+  PlusCircleOutlined,
+  BookOutlined,
+  WalletOutlined,
+} from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { AdminDashboardPending } from "../../../../types/adminDashboard";
 
@@ -14,63 +19,65 @@ export default function AdminQuickActions({ pending }: AdminQuickActionsProps) {
     {
       icon: UserAddOutlined,
       label: "Xác minh giáo viên",
-      color: "text-indigo-600",
+      iconColor: "text-[#D97706]",
       count: pending?.teacherVerifications || 0,
-      badgeColor: "bg-amber-100 text-amber-800",
+      badgeStyle: "bg-[#FEF3C7] text-[#B45309] border border-[#FDE68A]",
       path: "/admin/teachers/verifications",
     },
     {
       icon: SafetyCertificateOutlined,
       label: "Duyệt học bổng",
-      color: "text-indigo-600",
+      iconColor: "text-[#0F766E]",
       count: pending?.scholarshipApplications || 0,
-      badgeColor: "bg-indigo-100 text-indigo-700",
+      badgeStyle: "bg-[#CCFBF1] text-[#0F766E] border border-[#99F6E4]",
       path: "/admin/scholarship-applications",
     },
     {
       icon: PlusCircleOutlined,
       label: "Tạo Campaign mới",
-      color: "text-teal-600",
+      iconColor: "text-[#15803D]",
       count: 0,
-      badgeColor: "",
+      badgeStyle: "",
       path: "/admin/campaigns/create",
     },
     {
       icon: BookOutlined,
-      label: "Quản lý Course",
-      color: "text-gray-500",
+      label: "Quản lý khóa học",
+      iconColor: "text-[#7E22CE]",
       count: pending?.courseProposals || 0,
-      badgeColor: "bg-teal-100 text-teal-700",
+      badgeStyle: "bg-[#F3E8FF] text-[#7E22CE] border border-[#E9D5FF]",
       path: "/admin/course-proposals",
     },
     {
-      icon: ToolOutlined,
-      label: "Kiểm tra Payment",
-      color: "text-rose-600",
+      icon: WalletOutlined,
+      label: "Kiểm tra thanh toán",
+      iconColor: "text-[#DC2626]",
       count: pending?.refundsRequired || 0,
-      badgeColor: "bg-rose-100 text-rose-700",
+      badgeStyle: "bg-[#FEE2E2] text-[#DC2626] border border-[#FECACA]",
       path: "/admin/payments",
     },
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 pb-1">
+    <div className="flex flex-wrap items-center gap-2.5 pb-2">
       {actions.map((act, index) => {
         const Icon = act.icon;
         return (
-          <Button 
+          <button
             key={index}
             onClick={() => navigate(act.path)}
-            className="shrink-0 flex items-center gap-1.5 px-3 h-10 rounded-xl bg-white hover:bg-gray-50 border border-gray-100 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.04)] transition-all cursor-pointer"
+            className="shrink-0 inline-flex items-center gap-2 px-3.5 h-10 rounded-xl bg-white hover:bg-[#E5F5F1] border border-[#D6E5E2] hover:border-[#99F6E4] shadow-2xs transition-all cursor-pointer text-xs font-bold text-[#163B40] hover:text-[#0F766E]"
           >
-            <Icon className={`text-[16px] ${act.color}`} />
-            <span className="font-semibold text-gray-700 text-[13px]">{act.label}</span>
+            <Icon className={`text-base ${act.iconColor}`} />
+            <span>{act.label}</span>
             {act.count > 0 && (
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-0.5 leading-none ${act.badgeColor}`}>
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none ${act.badgeStyle}`}
+              >
                 {act.count}
               </span>
             )}
-          </Button>
+          </button>
         );
       })}
     </div>

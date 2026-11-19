@@ -41,8 +41,8 @@ export default function TeacherIdentityCard({ teacherId, identity, ocr }: Props)
 
   return (
     <Card
-      className="rounded-2xl shadow-sm border-gray-100"
-      title={<span className="font-bold flex items-center gap-2"><IdcardOutlined className="text-indigo-500" /> Thông tin định danh khai báo</span>}
+      className="rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border-[#D6E5E2]"
+      title={<span className="font-bold flex items-center gap-2"><IdcardOutlined className="text-teal-700" /> Thông tin định danh khai báo</span>}
       extra={
         identity && !revealed ? (
           <Button size="small" icon={<EyeOutlined />} onClick={() => setIsRevealOpen(true)}>

@@ -153,7 +153,7 @@ export default function CreateCampaignPage() {
             type="primary"
             icon={<RocketOutlined />}
             loading={isSubmitting}
-            className="rounded-xl h-11 bg-indigo-600 hover:bg-indigo-500 font-semibold shadow-xs"
+            className="rounded-xl h-11 bg-teal-600 hover:bg-teal-700 font-semibold shadow-xs"
             onClick={handlePublish}
           >
             Phát hành ngay
@@ -240,21 +240,21 @@ export default function CreateCampaignPage() {
             </Col>
 
             <Col xs={24} md={12}>
-              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 h-full flex flex-col justify-center">
-                <Text className="text-indigo-600 font-bold uppercase text-xs tracking-wider mb-2">
+              <div className="bg-teal-50/70 border border-teal-200/70 rounded-2xl p-6 h-full flex flex-col justify-center">
+                <Text className="text-teal-800 font-bold uppercase text-xs tracking-wider mb-2">
                   Tạm tính phân bổ học bổng
                 </Text>
-                <div className="flex justify-between items-end mb-3 border-b border-indigo-100 pb-3 text-sm">
+                <div className="flex justify-between items-end mb-3 border-b border-teal-200/50 pb-3 text-sm">
                   <span className="text-slate-600">Tổng ngân sách:</span>
                   <span className="font-bold text-slate-900">{formatVND(targetBudget)}</span>
                 </div>
-                <div className="flex justify-between items-end mb-3 border-b border-indigo-100 pb-3 text-sm">
+                <div className="flex justify-between items-end mb-3 border-b border-teal-200/50 pb-3 text-sm">
                   <span className="text-slate-600">Định mức / học sinh:</span>
                   <span className="font-bold text-slate-900">÷ {formatVND(awardPerStudent)}</span>
                 </div>
                 <div className="flex justify-between items-end pt-1">
-                  <span className="text-indigo-900 font-bold text-sm">Số suất học bổng dự kiến:</span>
-                  <span className="font-black text-indigo-700 text-3xl">
+                  <span className="text-teal-950 font-bold text-sm">Số suất học bổng dự kiến:</span>
+                  <span className="font-black text-teal-800 text-3xl">
                     {expectedSlots} <span className="text-base font-normal">suất</span>
                   </span>
                 </div>

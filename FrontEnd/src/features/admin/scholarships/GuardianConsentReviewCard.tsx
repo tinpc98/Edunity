@@ -48,7 +48,7 @@ export default function GuardianConsentReviewCard() {
       className="rounded-2xl border-slate-200"
       title={
         <span className="flex items-center gap-2">
-          <SafetyCertificateOutlined className="text-indigo-600" /> Giấy đồng thuận phụ huynh chờ xác nhận
+          <SafetyCertificateOutlined className="text-teal-700" /> Giấy đồng thuận phụ huynh chờ xác nhận
           {items.length > 0 && <Tag color="processing">{items.length}</Tag>}
         </span>
       }

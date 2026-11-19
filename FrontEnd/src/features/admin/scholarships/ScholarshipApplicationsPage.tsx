@@ -96,7 +96,7 @@ export default function ScholarshipApplicationsPage() {
         const initials = displayName.substring(0, 2).toUpperCase();
         return (
           <div className="flex items-center gap-3">
-            <Avatar className="bg-indigo-100 text-indigo-700 font-bold">{initials}</Avatar>
+            <Avatar className="bg-teal-50 text-teal-800 border border-teal-200 font-bold">{initials}</Avatar>
             <div>
               <div className="font-semibold text-gray-900">{displayName}</div>
               <div className="text-xs text-gray-500">{record.studentEmail}</div>
@@ -113,7 +113,7 @@ export default function ScholarshipApplicationsPage() {
         <div>
           <div className="font-medium text-gray-800">{text || 'Chiến dịch học bổng'}</div>
           {record.awardAmountPerStudent > 0 && (
-            <div className="text-xs text-indigo-600 font-semibold">
+            <div className="text-xs text-teal-700 font-semibold">
               Định mức: {formatVND(record.awardAmountPerStudent)}
             </div>
           )}
@@ -178,95 +178,95 @@ export default function ScholarshipApplicationsPage() {
       <Row gutter={[16, 16]}>
         <Col xs={12} sm={12} md={6}>
           <Card 
-            className={`rounded-2xl shadow-sm border transition-colors cursor-pointer ${
-              activeFilter === 'SUBMITTED' ? 'border-indigo-500 bg-indigo-50/20' : 'border-gray-100 bg-white hover:border-indigo-300'
+            className={`rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border transition-all cursor-pointer ${
+              activeFilter === 'SUBMITTED' ? 'border-[#0D9488] bg-[#CCFBF1]' : 'border-[#D6E5E2] bg-white hover:border-[#99F6E4]'
             }`} 
             onClick={() => { setActiveFilter('SUBMITTED'); setPage(1); }}
           >
             <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">CHỜ XÉT DUYỆT</Text>
+              <Text className="text-[#64748B] text-xs font-bold uppercase tracking-wider">CHỜ XÉT DUYỆT</Text>
             </div>
-            <Title level={1} className="!m-0 text-indigo-900 !text-3xl">{submittedData?.total ?? 0}</Title>
+            <Title level={1} className="!m-0 text-[#0F766E] !text-3xl font-extrabold">{submittedData?.total ?? 0}</Title>
           </Card>
         </Col>
         
         <Col xs={12} sm={12} md={6}>
           <Card 
-            className={`rounded-2xl shadow-sm border transition-colors cursor-pointer ${
-              activeFilter === 'NEED_MORE_INFORMATION' ? 'border-amber-500 bg-amber-50/20' : 'border-gray-100 bg-white hover:border-indigo-300'
+            className={`rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border transition-all cursor-pointer ${
+              activeFilter === 'NEED_MORE_INFORMATION' ? 'border-amber-500 bg-[#FEF3C7]' : 'border-[#D6E5E2] bg-white hover:border-amber-300'
             }`} 
             onClick={() => { setActiveFilter('NEED_MORE_INFORMATION'); setPage(1); }}
           >
             <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">CẦN BỔ SUNG</Text>
+              <Text className="text-[#64748B] text-xs font-bold uppercase tracking-wider">CẦN BỔ SUNG</Text>
             </div>
-            <Title level={1} className="!m-0 text-amber-600 !text-3xl">{needInfoData?.total ?? 0}</Title>
+            <Title level={1} className="!m-0 text-[#B45309] !text-3xl font-extrabold">{needInfoData?.total ?? 0}</Title>
           </Card>
         </Col>
 
         <Col xs={12} sm={12} md={6}>
           <Card 
-            className={`rounded-2xl shadow-sm border transition-colors cursor-pointer ${
-              activeFilter === 'APPROVED' ? 'border-emerald-500 bg-emerald-50/20' : 'border-gray-100 bg-white hover:border-indigo-300'
+            className={`rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border transition-all cursor-pointer ${
+              activeFilter === 'APPROVED' ? 'border-emerald-500 bg-[#DCFCE7]' : 'border-[#D6E5E2] bg-white hover:border-emerald-300'
             }`} 
             onClick={() => { setActiveFilter('APPROVED'); setPage(1); }}
           >
             <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">ĐÃ DUYỆT</Text>
+              <Text className="text-[#64748B] text-xs font-bold uppercase tracking-wider">ĐÃ DUYỆT</Text>
             </div>
-            <Title level={1} className="!m-0 text-emerald-600 !text-3xl">{approvedData?.total ?? 0}</Title>
+            <Title level={1} className="!m-0 text-[#15803D] !text-3xl font-extrabold">{approvedData?.total ?? 0}</Title>
           </Card>
         </Col>
 
         <Col xs={12} sm={12} md={6}>
           <Card 
-            className={`rounded-2xl shadow-sm border transition-colors cursor-pointer ${
-              activeFilter === 'REJECTED' ? 'border-rose-500 bg-rose-50/20' : 'border-gray-100 bg-white hover:border-indigo-300'
+            className={`rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border transition-all cursor-pointer ${
+              activeFilter === 'REJECTED' ? 'border-rose-500 bg-[#FEE2E2]' : 'border-[#D6E5E2] bg-white hover:border-rose-300'
             }`} 
             onClick={() => { setActiveFilter('REJECTED'); setPage(1); }}
           >
             <div className="flex justify-between items-start mb-2">
-              <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">TỪ CHỐI</Text>
+              <Text className="text-[#64748B] text-xs font-bold uppercase tracking-wider">TỪ CHỐI</Text>
             </div>
-            <Title level={1} className="!m-0 text-rose-600 !text-3xl">{rejectedData?.total ?? 0}</Title>
+            <Title level={1} className="!m-0 text-[#DC2626] !text-3xl font-extrabold">{rejectedData?.total ?? 0}</Title>
           </Card>
         </Col>
       </Row>
 
-      <div className="flex flex-col md:flex-row justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+      <div className="flex flex-col md:flex-row justify-between gap-4 bg-white p-4 rounded-2xl border border-[#D6E5E2] shadow-[0_2px_8px_rgba(15,118,110,0.04)]">
         <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 hide-scrollbar flex-1">
           <Button 
             type={activeFilter === 'ALL' ? 'primary' : 'default'} 
             onClick={() => { setActiveFilter('ALL'); setPage(1); }} 
-            className={activeFilter === 'ALL' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}
+            className={activeFilter === 'ALL' ? 'bg-[#0D9488] hover:bg-[#0B746C] rounded-full text-white font-bold' : 'rounded-full border-0 bg-slate-100 text-[#334155] font-semibold hover:text-[#0F766E]'}
           >
             Tất cả
           </Button>
           <Button 
             type={activeFilter === 'SUBMITTED' ? 'primary' : 'default'} 
             onClick={() => { setActiveFilter('SUBMITTED'); setPage(1); }} 
-            className={activeFilter === 'SUBMITTED' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}
+            className={activeFilter === 'SUBMITTED' ? 'bg-teal-600 hover:bg-teal-700 rounded-full text-white' : 'rounded-full border-0 bg-slate-100 text-slate-700 font-medium hover:text-teal-700'}
           >
             Chờ xét duyệt
           </Button>
           <Button 
             type={activeFilter === 'NEED_MORE_INFORMATION' ? 'primary' : 'default'} 
             onClick={() => { setActiveFilter('NEED_MORE_INFORMATION'); setPage(1); }} 
-            className={activeFilter === 'NEED_MORE_INFORMATION' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}
+            className={activeFilter === 'NEED_MORE_INFORMATION' ? 'bg-teal-600 hover:bg-teal-700 rounded-full text-white' : 'rounded-full border-0 bg-slate-100 text-slate-700 font-medium hover:text-teal-700'}
           >
             Cần bổ sung
           </Button>
           <Button 
             type={activeFilter === 'APPROVED' ? 'primary' : 'default'} 
             onClick={() => { setActiveFilter('APPROVED'); setPage(1); }} 
-            className={activeFilter === 'APPROVED' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}
+            className={activeFilter === 'APPROVED' ? 'bg-teal-600 hover:bg-teal-700 rounded-full text-white' : 'rounded-full border-0 bg-slate-100 text-slate-700 font-medium hover:text-teal-700'}
           >
             Đã duyệt
           </Button>
           <Button 
             type={activeFilter === 'REJECTED' ? 'primary' : 'default'} 
             onClick={() => { setActiveFilter('REJECTED'); setPage(1); }} 
-            className={activeFilter === 'REJECTED' ? 'bg-indigo-600 rounded-full' : 'rounded-full border-0 bg-gray-50 text-gray-600 font-medium hover:text-indigo-600'}
+            className={activeFilter === 'REJECTED' ? 'bg-teal-600 hover:bg-teal-700 rounded-full text-white' : 'rounded-full border-0 bg-slate-100 text-slate-700 font-medium hover:text-teal-700'}
           >
             Từ chối
           </Button>

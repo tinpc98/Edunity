@@ -1,9 +1,16 @@
 import { useNow } from "../../../../hooks/useNow";
-import { Typography, Timeline } from "antd";
-import { ClockCircleOutlined, CheckCircleOutlined, GiftOutlined, WarningOutlined, HistoryOutlined, BookOutlined, UserOutlined } from "@ant-design/icons";
+import { Timeline } from "antd";
+import {
+  ClockCircleOutlined,
+  CheckCircleOutlined,
+  GiftOutlined,
+  WarningOutlined,
+  HistoryOutlined,
+  BookOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import type { AdminDashboardActivity } from "../../../../types/adminDashboard";
-
-const { Title, Text } = Typography;
+import AdminSectionCard from "../../../../components/admin/AdminSectionCard";
 
 interface RecentActivitiesProps {
   activities?: AdminDashboardActivity[];
@@ -11,52 +18,53 @@ interface RecentActivitiesProps {
 
 export default function RecentActivities({ activities = [] }: RecentActivitiesProps) {
   const now = useNow();
+
   const getActionConfig = (action: string) => {
     if (action.includes("TEACHER")) {
       return {
-        icon: <UserOutlined className="text-teal-600 bg-white text-[14px]" />,
-        color: "teal",
+        icon: <UserOutlined className="text-teal-700 text-sm" />,
+        color: "#0D9488",
         title: action.includes("VERIFIED") ? "Xác minh giáo viên" : "Từ chối xác minh",
-        titleColor: "text-teal-600",
+        titleColor: "text-teal-800",
       };
     }
     if (action.includes("SCHOLARSHIP") || action.includes("CAMPAIGN")) {
       return {
-        icon: <GiftOutlined className="text-indigo-600 bg-white text-[14px]" />,
-        color: "blue",
+        icon: <GiftOutlined className="text-teal-600 text-sm" />,
+        color: "#14B8A6",
         title: action.includes("APPROVED") ? "Duyệt học bổng" : "Cập nhật chiến dịch",
-        titleColor: "text-indigo-600",
+        titleColor: "text-teal-800",
       };
     }
     if (action.includes("CLASS") || action.includes("COURSE")) {
       return {
-        icon: <BookOutlined className="text-emerald-600 bg-white text-[14px]" />,
-        color: "green",
+        icon: <BookOutlined className="text-emerald-600 text-sm" />,
+        color: "#10B981",
         title: action.includes("APPROVED") ? "Phê duyệt đào tạo" : "Xử lý đào tạo",
-        titleColor: "text-emerald-600",
+        titleColor: "text-emerald-800",
       };
     }
     if (action.includes("REPORT")) {
       return {
-        icon: <CheckCircleOutlined className="text-amber-600 bg-white text-[14px]" />,
-        color: "gold",
+        icon: <CheckCircleOutlined className="text-amber-600 text-sm" />,
+        color: "#F59E0B",
         title: "Xử lý khiếu nại / báo cáo",
-        titleColor: "text-amber-600",
+        titleColor: "text-amber-800",
       };
     }
     if (action.includes("REFUND") || action.includes("FAIL")) {
       return {
-        icon: <WarningOutlined className="text-rose-500 bg-white text-[14px]" />,
-        color: "red",
+        icon: <WarningOutlined className="text-rose-600 text-sm" />,
+        color: "#EF4444",
         title: "Cảnh báo hệ thống",
-        titleColor: "text-rose-600",
+        titleColor: "text-rose-800",
       };
     }
     return {
-      icon: <ClockCircleOutlined className="text-gray-400 bg-white text-[14px]" />,
-      color: "gray",
+      icon: <ClockCircleOutlined className="text-slate-400 text-sm" />,
+      color: "#94A3B8",
       title: "Nhật ký hệ thống",
-      titleColor: "text-gray-700",
+      titleColor: "text-slate-700",
     };
   };
 
@@ -84,48 +92,47 @@ export default function RecentActivities({ activities = [] }: RecentActivitiesPr
   };
 
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] border border-gray-100">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gray-50 text-gray-600 flex items-center justify-center shadow-sm">
-            <HistoryOutlined className="text-[16px]" />
-          </div>
-          <Title level={4} style={{ margin: 0, fontSize: '16px' }}>Hoạt động gần đây</Title>
-        </div>
-        <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
-      </div>
-
+    <AdminSectionCard
+      title="Hoạt động gần đây"
+      icon={<HistoryOutlined />}
+      badge={<span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />}
+    >
       {activities.length === 0 ? (
-        <div className="text-center py-6 text-gray-400 text-[13px]">
+        <div className="text-center py-6 text-slate-400 text-xs">
           Chưa có nhật ký hoạt động nào gần đây.
         </div>
       ) : (
-        <Timeline
-          className="mt-1"
-          items={activities.map((act) => {
-            const config = getActionConfig(act.action);
-            return {
-              color: config.color,
-              dot: config.icon,
-              children: (
-                <div className="flex flex-col pb-3">
-                  <div className="flex items-center justify-between">
-                    <Text strong className={`text-[12px] ${config.titleColor}`}>
-                      {config.title}
-                    </Text>
-                    <Text type="secondary" className="text-[10px] ml-2 shrink-0">
-                      {formatRelativeTime(act.createdAt)}
-                    </Text>
+        <div className="pt-2">
+          <Timeline
+            items={activities.map((act) => {
+              const cfg = getActionConfig(act.action);
+              return {
+                dot: (
+                  <div className="w-6 h-6 rounded-full bg-[#F0F8F6] border border-[#D6E5E2] flex items-center justify-center shadow-2xs">
+                    {cfg.icon}
                   </div>
-                  <Text className="text-[12px] mt-0.5 text-gray-600 leading-snug">
-                    {getActionDescription(act)}
-                  </Text>
-                </div>
-              ),
-            };
-          })}
-        />
+                ),
+                color: cfg.color,
+                children: (
+                  <div className="flex flex-col gap-0.5 pb-2 -mt-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className={`text-xs font-bold ${cfg.titleColor}`}>
+                        {cfg.title}
+                      </span>
+                      <span className="text-[10px] text-[#64748B] font-medium">
+                        {formatRelativeTime(act.createdAt)}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-[#64748B] leading-tight font-medium">
+                      {getActionDescription(act)}
+                    </span>
+                  </div>
+                ),
+              };
+            })}
+          />
+        </div>
       )}
-    </div>
+    </AdminSectionCard>
   );
 }

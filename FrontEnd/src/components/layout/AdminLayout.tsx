@@ -1,150 +1,117 @@
-import { Outlet, Link } from "react-router-dom";
-import DashboardShell from "../dashboard/DashboardShell";
+import { useState, useEffect } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { ConfigProvider, App as AntdApp } from "antd";
+import { adminThemeConfig } from "./admin/adminTheme";
+import AdminSidebar from "./admin/AdminSidebar";
+import AdminHeader from "./admin/AdminHeader";
+import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
-import {
-  DashboardOutlined,
-  IdcardOutlined,
-  AppstoreOutlined,
-  BookOutlined,
-  SafetyCertificateOutlined,
-  ProfileOutlined,
-  WalletOutlined,
-  FileTextOutlined,
-  CustomerServiceOutlined,
-  NotificationOutlined,
-  TeamOutlined,
-  BarChartOutlined,
-  AuditOutlined,
-  CloudSyncOutlined,
-  InboxOutlined,
-} from "@ant-design/icons";
-
-const adminMenuItems = [
-  {
-    key: ROUTES.ADMIN.HOME,
-    icon: <DashboardOutlined className="text-[18px]" />,
-    label: <Link to={ROUTES.ADMIN.HOME}>Tổng quan</Link>,
-  },
-  {
-    type: 'group',
-    label: 'QUẢN LÝ HỆ THỐNG',
-    children: [
-      {
-        key: ROUTES.ADMIN.USERS,
-        icon: <TeamOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.USERS}>Người dùng</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.TEACHER_VERIFICATIONS,
-        icon: <IdcardOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.TEACHER_VERIFICATIONS}>Giáo viên</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.CATALOG,
-        icon: <AppstoreOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.CATALOG}>Danh mục & Khóa học</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.COURSE_PROPOSALS,
-        icon: <FileTextOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.COURSE_PROPOSALS}>Duyệt đề xuất khóa học</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.CLASSES,
-        icon: <BookOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.CLASSES}>Lớp học</Link>,
-      },
-    ]
-  },
-  {
-    type: 'group',
-    label: 'HỌC BỔNG',
-    children: [
-      {
-        key: ROUTES.ADMIN.CAMPAIGNS,
-        icon: <SafetyCertificateOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.CAMPAIGNS}>Chiến dịch</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS,
-        icon: <ProfileOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS}>Hồ sơ ứng tuyển</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.PAPER_DOSSIERS,
-        icon: <InboxOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.PAPER_DOSSIERS}>Hồ sơ giấy</Link>,
-      },
-    ]
-  },
-  {
-    type: 'group',
-    label: 'TÀI CHÍNH & ĐỐI SOÁT',
-    children: [
-      {
-        key: ROUTES.ADMIN.FINANCE_OVERVIEW,
-        icon: <BarChartOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.FINANCE_OVERVIEW}>Tổng quan tài chính</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.TRANSACTIONS,
-        icon: <FileTextOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.TRANSACTIONS}>Sổ cái giao dịch</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.RECONCILIATIONS,
-        icon: <AuditOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.RECONCILIATIONS}>Hàng đợi đối soát</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.BANK_EVENTS,
-        icon: <CloudSyncOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.BANK_EVENTS}>Webhooks & Outbox</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.PAYMENTS,
-        icon: <WalletOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.PAYMENTS}>Thanh toán học phí</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.PAYOUTS,
-        icon: <WalletOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.PAYOUTS}>Rút tiền giáo viên</Link>,
-      },
-      {
-        key: ROUTES.ADMIN.REFUNDS,
-        icon: <AuditOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.REFUNDS}>Quản lý hoàn tiền</Link>,
-      },
-    ]
-  },
-  {
-    type: 'group',
-    label: 'VẬN HÀNH',
-    children: [
-      {
-        key: ROUTES.ADMIN.REPORTS,
-        icon: <CustomerServiceOutlined className="text-[18px]" />,
-        label: <Link to={ROUTES.ADMIN.REPORTS}>Khiếu nại</Link>,
-      },
-      {
-        key: '/admin/notifications',
-        icon: <NotificationOutlined className="text-[18px]" />,
-        label: <Link to="/admin/notifications">Thông báo</Link>,
-      },
-    ]
-  }
-];
 
 export default function AdminLayout() {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 1024 : false
+  );
+  const [collapsed, setCollapsed] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 1024 : false
+  );
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { notification } = AntdApp.useApp();
+  const { user, isAuthenticated } = useAuthStore();
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile) {
+        setCollapsed(true);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`, { replace: true });
+      return;
+    }
+
+    if (user.role !== "ADMIN") {
+      notification.error({
+        message: "Quyền truy cập bị từ chối",
+        description: "Bạn không có quyền quản trị viên để truy cập trang này.",
+        placement: "topRight",
+      });
+      navigate(ROUTES.HOME, { replace: true });
+    }
+  }, [isAuthenticated, user, navigate, notification, location.pathname]);
+
+  if (!isAuthenticated || !user || user.role !== "ADMIN") {
+    return null;
+  }
+
+  const handleLogout = async () => {
+    try {
+      const { refreshToken } = useAuthStore.getState();
+      const { logoutUser } = await import("../../services/auth.service");
+      await logoutUser(refreshToken);
+    } catch {
+      // Ignore errors
+    } finally {
+      useAuthStore.getState().logout();
+      navigate(ROUTES.AUTH.LOGIN);
+    }
+  };
+
+  const currentMarginLeft = isMobile
+    ? collapsed
+      ? 0
+      : 288
+    : collapsed
+    ? 80
+    : 288;
+
   return (
-    <DashboardShell 
-      menuItems={adminMenuItems} 
-      role="ADMIN"
-      userName="Nguyễn Minh Admin"
-      userRole="Administrator"
-    >
-      <Outlet />
-    </DashboardShell>
+    <ConfigProvider theme={adminThemeConfig}>
+      <div className="min-h-screen bg-[#F5FAF9] text-slate-800 flex overflow-x-hidden font-sans">
+        {/* Dedicated Admin Sidebar */}
+        <AdminSidebar
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed(!collapsed)}
+          user={user}
+          onLogout={handleLogout}
+          isMobile={isMobile}
+        />
+
+        {/* Backdrop overlay for mobile when drawer is open */}
+        {isMobile && !collapsed && (
+          <div
+            onClick={() => setCollapsed(true)}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 transition-opacity"
+          />
+        )}
+
+        {/* Main Content Layout */}
+        <div
+          style={{ marginLeft: currentMarginLeft, transition: "margin-left 0.25s ease-in-out" }}
+          className="flex-1 flex flex-col min-h-screen min-w-0"
+        >
+          {/* Dedicated Glassmorphism Admin Header */}
+          <AdminHeader
+            collapsed={collapsed}
+            onToggleCollapse={() => setCollapsed(!collapsed)}
+            user={user}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+          />
+
+          {/* Admin Content Area */}
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    </ConfigProvider>
   );
 }

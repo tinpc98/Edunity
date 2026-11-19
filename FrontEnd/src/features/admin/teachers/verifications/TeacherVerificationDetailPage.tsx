@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Typography, Breadcrumb, Button, Card, Row, Col, Avatar, Tag, Divider, Form, Input, message, Modal, Skeleton, Alert } from 'antd';
+import { Typography, Breadcrumb, Button, Card, Row, Col, Avatar, Divider, Form, Input, message, Modal, Skeleton, Alert } from 'antd';
 import { 
   SafetyCertificateOutlined,
   UserOutlined,
   MailOutlined,
   SolutionOutlined,
   FileSearchOutlined,
-  CheckSquareFilled
+  CheckSquareFilled,
+  LeftOutlined
 } from '@ant-design/icons';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
 import { teacherVerificationService } from '../../../../services/teacherVerification.service';
@@ -20,6 +21,7 @@ import VerificationHistoryCard from './components/VerificationHistoryCard';
 import TeacherContractsCard from './components/TeacherContractsCard';
 import TeacherIdentityCard from './components/TeacherIdentityCard';
 import { groupVerificationSubmissions } from '../../../../utils/verificationSubmissions';
+import AdminStatusBadge from '../../../../components/admin/AdminStatusBadge';
 
 const { Title, Paragraph } = Typography;
 
@@ -84,10 +86,18 @@ export default function TeacherVerificationDetailPage() {
   }
 
   if (isError || !teacher) {
-    return <div className="p-10 text-red-500">Không tìm thấy thông tin xác minh.</div>;
+    return (
+      <div className="p-8">
+        <Alert
+          type="error"
+          showIcon
+          message="Không tìm thấy thông tin xác minh"
+          description="Hồ sơ giáo viên không tồn tại hoặc đã bị gỡ khỏi hệ thống."
+        />
+      </div>
+    );
   }
 
-  // Every submission round is returned (newest first); the cards above show only the latest round
   const submissions = groupVerificationSubmissions(teacher.documents ?? []);
   const latestDocuments = submissions[0]?.documents ?? [];
   const identityDoc = latestDocuments.find(d => d.documentType === 'IDENTITY');
@@ -98,41 +108,73 @@ export default function TeacherVerificationDetailPage() {
   const awaitingReview = status === 'PENDING' || isReverification;
   const pendingDocuments = submissions[0]?.status === 'PENDING' ? latestDocuments : [];
   const ocrMismatch = pendingDocuments.some((d) => d.ocr?.status === 'MISMATCHED');
-  // A pending round that follows earlier rounds is a resubmission after rejection
   const previousSubmission = awaitingReview && submissions.length > 1 ? submissions[1] : undefined;
 
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
-      <Breadcrumb 
-        className="mb-2 text-sm font-medium"
-        items={[
-          { title: <a href={ROUTES.ADMIN.HOME}>Tổng quan</a> },
-          { title: <a href={ROUTES.ADMIN.TEACHER_VERIFICATIONS}>Xác minh giáo viên</a> },
-          { title: teacher.fullName },
-        ]}
-      />
+      {/* Breadcrumb Navigation */}
+      <div className="flex items-center justify-between">
+        <Breadcrumb 
+          className="text-xs font-semibold"
+          items={[
+            { title: <Link to={ROUTES.ADMIN.HOME} className="text-slate-500 hover:text-teal-700">Tổng quan</Link> },
+            { title: <Link to={ROUTES.ADMIN.TEACHER_VERIFICATIONS} className="text-slate-500 hover:text-teal-700">Xác minh giáo viên</Link> },
+            { title: <span className="text-slate-800">{teacher.fullName}</span> },
+          ]}
+        />
+        <Link
+          to={ROUTES.ADMIN.TEACHER_VERIFICATIONS}
+          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-teal-700 transition-colors"
+        >
+          <LeftOutlined className="text-[10px]" />
+          <span>Quay lại danh sách</span>
+        </Link>
+      </div>
 
-      {/* Header Info */}
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+      {/* Hero Dossier Card */}
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-5 bg-white p-6 rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border border-[#D6E5E2]">
         <div className="flex items-center gap-5">
-          <Avatar size={72} className="bg-indigo-100 text-indigo-700 text-2xl font-bold">{teacher.fullName.substring(0, 2).toUpperCase()}</Avatar>
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <Title level={3} className="!m-0 text-gray-900">{teacher.fullName}</Title>
-              {status === 'PENDING' && <Tag color="processing" className="!m-0 rounded font-bold">Chờ duyệt</Tag>}
-              {isReverification && <Tag color="processing" className="!m-0 rounded font-bold">Tái xác minh</Tag>}
-              {teacher.verifiedUntil && (
-                <Tag className="!m-0 rounded">Hiệu lực đến {dayjs(teacher.verifiedUntil).format('DD/MM/YYYY')}</Tag>
+          <Avatar
+            size={72}
+            className="bg-teal-50 text-teal-800 border-2 border-teal-200 text-2xl font-bold shrink-0 shadow-2xs"
+          >
+            {teacher.fullName.substring(0, 2).toUpperCase()}
+          </Avatar>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-none">
+                {teacher.fullName}
+              </h2>
+              <AdminStatusBadge
+                label={STATUS_LABELS[status] ?? status}
+                type={status === 'VERIFIED' ? 'success' : status === 'PENDING' ? 'warning' : 'error'}
+                pulse={status === 'PENDING'}
+              />
+              {isReverification && (
+                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold">
+                  Tái xác minh
+                </span>
               )}
-              {status === 'VERIFIED' && <Tag color="success" className="!m-0 rounded font-bold">Đã xác minh</Tag>}
-              {status === 'REJECTED' && <Tag color="error" className="!m-0 rounded font-bold">Từ chối</Tag>}
-              {status === 'UNVERIFIED' && <Tag className="!m-0 rounded font-bold">Chưa nộp hồ sơ</Tag>}
+              {teacher.verifiedUntil && (
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
+                  Hiệu lực đến {dayjs(teacher.verifiedUntil).format('DD/MM/YYYY')}
+                </span>
+              )}
             </div>
-            <div className="text-gray-500 font-medium mt-2 flex flex-wrap gap-4">
-              <span className="flex items-center gap-1.5"><SolutionOutlined /> Chuyên môn: <strong className="text-gray-800">{teacher.qualificationSummary || 'Chưa cập nhật'}</strong></span>
-              <span>• Mã hồ sơ: <strong>#TCH-{teacher.teacherId.substring(0, 6).toUpperCase()}</strong></span>
+            <div className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+              <span className="flex items-center gap-1.5 text-slate-700 font-semibold">
+                <SolutionOutlined className="text-teal-600" />
+                <span>Chuyên môn: {teacher.qualificationSummary || 'Chưa cập nhật'}</span>
+              </span>
+              <span>•</span>
+              <span className="font-mono text-slate-500">
+                #TCH-{teacher.teacherId.substring(0, 6).toUpperCase()}
+              </span>
               {teacher.reviewedAt && (
-                <span>• Ngày xét duyệt: <strong>{dayjs(teacher.reviewedAt).format('DD/MM/YYYY')}</strong></span>
+                <>
+                  <span>•</span>
+                  <span>Ngày xét duyệt: {dayjs(teacher.reviewedAt).format('DD/MM/YYYY')}</span>
+                </>
               )}
             </div>
           </div>
@@ -141,31 +183,40 @@ export default function TeacherVerificationDetailPage() {
 
       <Row gutter={[24, 24]}>
         {/* LEFT COLUMN - CONTENT */}
-        <Col xs={24} lg={17} className="flex flex-col gap-6">
-          
-          <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2"><UserOutlined className="text-indigo-500" /> Thông tin cá nhân & Thiết lập sư phạm</span>}>
+        <Col xs={24} lg={16} className="flex flex-col gap-6">
+          <Card
+            className="rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border-[#D6E5E2]"
+            title={<span className="font-bold flex items-center gap-2"><UserOutlined className="text-[#0F766E]" /> Thông tin cá nhân & Thiết lập sư phạm</span>}
+          >
             <Row gutter={[24, 16]}>
               <Col span={12}>
-                <div className="text-gray-500 text-xs font-bold uppercase mb-1">Họ và tên</div>
-                <div className="font-medium text-gray-900">{teacher.fullName}</div>
+                <div className="text-[#64748B] text-[10px] font-bold uppercase tracking-wider mb-1">Họ và tên</div>
+                <div className="font-bold text-[#163B40] text-sm">{teacher.fullName}</div>
               </Col>
               <Col span={12}>
-                <div className="text-gray-500 text-xs font-bold uppercase mb-1">Email liên hệ</div>
-                <div className="font-medium text-gray-900 flex items-center gap-2"><MailOutlined className="text-gray-400" /> {teacher.email}</div>
+                <div className="text-[#64748B] text-[10px] font-bold uppercase tracking-wider mb-1">Email liên hệ</div>
+                <div className="font-bold text-[#163B40] text-sm flex items-center gap-2">
+                  <MailOutlined className="text-[#0D9488]" /> {teacher.email}
+                </div>
               </Col>
               <Col span={24}>
-                <Divider className="my-2" />
+                <Divider className="my-2 border-[#D6E5E2]" />
               </Col>
               <Col span={24}>
-                <div className="text-gray-500 text-xs font-bold uppercase mb-1">Tiểu sử & Cam kết (Bio)</div>
-                <Paragraph className="font-medium text-gray-800 bg-gray-50 p-4 rounded-xl border border-gray-100 italic">"{teacher.biography || 'Chưa cập nhật'}"</Paragraph>
+                <div className="text-[#64748B] text-[10px] font-bold uppercase tracking-wider mb-1">Tiểu sử & Cam kết sư phạm</div>
+                <Paragraph className="font-medium text-[#334155] bg-[#F0F8F6] p-4 rounded-xl border border-[#D6E5E2] italic text-xs leading-relaxed m-0">
+                  "{teacher.biography || 'Chưa cập nhật tiểu sử'}"
+                </Paragraph>
               </Col>
             </Row>
           </Card>
 
           {teacherId && <TeacherIdentityCard teacherId={teacherId} identity={teacher.identity} ocr={identityDoc?.ocr} />}
 
-          <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2"><SafetyCertificateOutlined className="text-indigo-500" /> Xác minh danh tính cá nhân</span>}>
+          <Card
+            className="rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border-[#D6E5E2]"
+            title={<span className="font-bold flex items-center gap-2"><SafetyCertificateOutlined className="text-[#0F766E]" /> Xác minh danh tính cá nhân</span>}
+          >
             {identityDoc && identityDoc.files && identityDoc.files.length > 0 ? (
               <Row gutter={[16, 16]}>
                 {identityDoc.files.map((file) => (
@@ -179,11 +230,14 @@ export default function TeacherVerificationDetailPage() {
                 ))}
               </Row>
             ) : (
-              <div className="text-gray-500 text-center py-6">Chưa có tài liệu định danh</div>
+              <div className="text-slate-400 text-center py-6 text-xs">Chưa có tài liệu định danh</div>
             )}
           </Card>
 
-          <Card className="rounded-2xl shadow-sm border-gray-100" title={<span className="font-bold flex items-center gap-2"><FileSearchOutlined className="text-indigo-500" /> Bằng cấp & Chứng chỉ Sư phạm</span>}>
+          <Card
+            className="rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border-[#D6E5E2]"
+            title={<span className="font-bold flex items-center gap-2"><FileSearchOutlined className="text-[#0F766E]" /> Bằng cấp & Chứng chỉ Sư phạm</span>}
+          >
             {qualificationDoc && qualificationDoc.files && qualificationDoc.files.length > 0 ? (
               <Row gutter={[16, 16]}>
                 {qualificationDoc.files.map((file) => (
@@ -197,25 +251,26 @@ export default function TeacherVerificationDetailPage() {
                 ))}
               </Row>
             ) : (
-              <div className="text-gray-500 text-center py-6">Chưa có tài liệu chuyên môn</div>
+              <div className="text-slate-400 text-center py-6 text-xs">Chưa có tài liệu chuyên môn</div>
             )}
           </Card>
 
           <VerificationHistoryCard submissions={submissions} />
 
           {teacherId && <TeacherContractsCard teacherId={teacherId} isVerified={status === 'VERIFIED'} />}
-
         </Col>
 
         {/* RIGHT COLUMN - ACTIONS */}
-        <Col xs={24} lg={7}>
-          <div className="sticky top-6 flex flex-col gap-6">
-            <Card className="rounded-2xl shadow-sm border-gray-100 border-t-4 border-t-indigo-600">
+        <Col xs={24} lg={8}>
+          <div className="sticky top-20 flex flex-col gap-6">
+            <Card className="rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border-[#D6E5E2] border-t-4 border-t-[#0D9488]">
               <div className="flex items-start gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-lg"><CheckSquareFilled /></div>
+                <div className="w-10 h-10 rounded-xl bg-[#CCFBF1] flex items-center justify-center text-[#0F766E] font-bold text-lg shrink-0">
+                  <CheckSquareFilled />
+                </div>
                 <div>
-                  <Title level={5} className="!m-0 text-gray-900">Biên bản thẩm định</Title>
-                  <div className="text-xs text-gray-500 mt-1">Trạng thái hiện tại: {STATUS_LABELS[status] ?? status}</div>
+                  <Title level={5} className="!m-0 text-[#163B40] font-bold">Biên bản thẩm định</Title>
+                  <div className="text-xs text-[#64748B] mt-0.5">Trạng thái: {STATUS_LABELS[status] ?? status}</div>
                 </div>
               </div>
 
@@ -223,7 +278,7 @@ export default function TeacherVerificationDetailPage() {
                 <Alert
                   type="warning"
                   showIcon
-                  className="!mb-4 rounded-xl"
+                  className="!mb-4 rounded-xl text-xs"
                   title={`Hồ sơ nộp lại (lần ${submissions.length})`}
                   description={
                     previousSubmission.reviewNote
@@ -234,17 +289,28 @@ export default function TeacherVerificationDetailPage() {
               )}
 
               {teacher.reviewNote && (
-                <div className="flex flex-col gap-3 bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4">
-                  <span className="text-sm text-gray-700 font-medium">Ghi chú của admin: {teacher.reviewNote}</span>
+                <div className="flex flex-col gap-1 bg-[#F0F8F6] p-3.5 rounded-xl border border-[#D6E5E2] mb-4 text-xs">
+                  <span className="text-[#64748B] font-bold uppercase text-[10px]">Ghi chú của admin</span>
+                  <span className="text-[#163B40] font-semibold">{teacher.reviewNote}</span>
                 </div>
               )}
 
               {awaitingReview && (
                 <div className="flex flex-col gap-3 mt-4">
-                  <Button danger block className="rounded-xl h-[44px] font-semibold" onClick={() => setIsRejectModalOpen(true)}>Từ chối hồ sơ</Button>
-                  <Button type="primary" block className="rounded-xl h-[54px] font-bold bg-emerald-600 hover:bg-emerald-700 text-base" onClick={() => setIsApproveModalOpen(true)}>
-                    Phê duyệt & Kích hoạt quyền mở lớp
+                  <Button
+                    danger
+                    block
+                    className="rounded-xl h-[42px] font-semibold"
+                    onClick={() => setIsRejectModalOpen(true)}
+                  >
+                    Từ chối hồ sơ
                   </Button>
+                  <button
+                    onClick={() => setIsApproveModalOpen(true)}
+                    className="w-full h-[48px] rounded-xl bg-[#0D9488] hover:bg-[#0B746C] text-white font-bold text-sm shadow-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>Phê duyệt & Kích hoạt quyền mở lớp</span>
+                  </button>
                 </div>
               )}
             </Card>
@@ -252,62 +318,76 @@ export default function TeacherVerificationDetailPage() {
         </Col>
       </Row>
 
+      {/* Reject Modal */}
       <Modal
         title="Từ chối hồ sơ xác minh"
         open={isRejectModalOpen}
         onCancel={() => !rejectMutation.isPending && setIsRejectModalOpen(false)}
         footer={null}
+        destroyOnClose
       >
-        <Paragraph className="text-gray-500 text-sm">
-          Giáo viên sẽ thấy lý do chung và lý do riêng cho từng giấy tờ, rồi nộp lại hồ sơ.
+        <Paragraph className="text-slate-500 text-xs mb-4">
+          Giáo viên sẽ nhận được lý do chung và chi tiết từng tài liệu để nộp bổ sung.
         </Paragraph>
         <Form form={form} layout="vertical" onFinish={(values) => rejectMutation.mutate(values)}>
-          <Form.Item label="Lý do từ chối (Gửi cho giáo viên)" name="reviewNote" rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập lý do từ chối.' }]}>
-            <Input.TextArea rows={4} placeholder="Nêu rõ lý do từ chối..." />
+          <Form.Item
+            label="Lý do từ chối (Gửi cho giáo viên)"
+            name="reviewNote"
+            rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập lý do từ chối.' }]}
+          >
+            <Input.TextArea rows={4} placeholder="Nêu rõ lý do từ chối..." className="rounded-xl" />
           </Form.Item>
           {pendingDocuments.filter((d) => d._id).map((d) => (
             <Form.Item
               key={d._id}
               name={['reasons', d._id as string]}
-              label={d.documentType === 'IDENTITY' ? 'Giấy tờ định danh cần sửa (không bắt buộc)' : 'Bằng cấp / chứng chỉ cần sửa (không bắt buộc)'}
+              label={d.documentType === 'IDENTITY' ? 'Giấy tờ định danh cần sửa' : 'Bằng cấp / chứng chỉ cần sửa'}
             >
-              <Input placeholder="Ví dụ: Ảnh mặt trước bị loá" maxLength={1000} />
+              <Input placeholder="Ví dụ: Ảnh mặt trước bị mờ hoặc loá" maxLength={1000} className="rounded-xl" />
             </Form.Item>
           ))}
-          <div className="flex justify-end gap-3">
-            <Button onClick={() => setIsRejectModalOpen(false)} disabled={rejectMutation.isPending}>Hủy</Button>
-            <Button type="primary" danger htmlType="submit" loading={rejectMutation.isPending}>Gửi từ chối</Button>
+          <div className="flex justify-end gap-2.5 pt-2">
+            <Button onClick={() => setIsRejectModalOpen(false)} disabled={rejectMutation.isPending} className="rounded-xl">
+              Hủy
+            </Button>
+            <Button type="primary" danger htmlType="submit" loading={rejectMutation.isPending} className="rounded-xl">
+              Gửi từ chối
+            </Button>
           </div>
         </Form>
       </Modal>
 
+      {/* Approve Modal */}
       <Modal
-        title="Xác nhận phê duyệt"
+        title="Xác nhận phê duyệt hồ sơ"
         open={isApproveModalOpen}
         onCancel={() => !approveMutation.isPending && setIsApproveModalOpen(false)}
         onOk={() => approveForm.submit()}
         confirmLoading={approveMutation.isPending}
         okText="Duyệt giáo viên"
         cancelText="Hủy"
-        okButtonProps={{ className: 'bg-emerald-600' }}
+        okButtonProps={{ className: 'bg-teal-600 hover:bg-teal-700' }}
+        destroyOnClose
       >
-        <div className="py-4">
-          <Paragraph>
+        <div className="py-2">
+          <Paragraph className="text-slate-700 text-sm">
             Bạn xác nhận hồ sơ của giáo viên này hợp lệ và đồng ý cấp quyền <strong>Mở lớp học trực tuyến</strong> trên hệ thống Edunity?
           </Paragraph>
-          <Paragraph className="text-gray-500 text-sm">
-            Hành động này sẽ cập nhật trạng thái của giáo viên.
-          </Paragraph>
           {ocrMismatch && (
-            <Alert type="warning" showIcon className="!mb-3" message="Kết quả OCR không khớp với thông tin giáo viên khai báo. Hãy ghi rõ lý do vẫn phê duyệt." />
+            <Alert
+              type="warning"
+              showIcon
+              className="!mb-3 text-xs"
+              message="Kết quả OCR không khớp với thông tin giáo viên khai báo. Hãy ghi rõ lý do vẫn phê duyệt."
+            />
           )}
           <Form form={approveForm} layout="vertical" onFinish={({ reviewNote }) => approveMutation.mutate(reviewNote)}>
             <Form.Item
               name="reviewNote"
-              label="Ghi chú phê duyệt"
+              label="Ghi chú phê duyệt (Tùy chọn)"
               rules={ocrMismatch ? [{ required: true, whitespace: true, message: 'Bắt buộc khi OCR không khớp.' }] : []}
             >
-              <Input.TextArea rows={2} maxLength={2000} />
+              <Input.TextArea rows={2} maxLength={2000} className="rounded-xl" placeholder="Nhập ghi chú lưu hồ sơ..." />
             </Form.Item>
           </Form>
         </div>
