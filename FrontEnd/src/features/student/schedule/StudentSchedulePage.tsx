@@ -85,6 +85,9 @@ export default function StudentSchedulePage() {
     queryKey: sessionKeys.studentMySessions(monday.toISOString(), sunday.toISOString()),
     queryFn: () => sessionService.getMySessions(monday.toISOString(), sunday.toISOString()),
     enabled: Boolean(user?.userId && user?.role === "STUDENT"),
+    // One batch request: keeps "Vào lớp" in step with the Teacher's Start / End and the automatic end
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const filteredSessions = useMemo(() => {

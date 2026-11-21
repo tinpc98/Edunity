@@ -166,7 +166,7 @@ export default function ClassroomHeader({
               type="primary"
               icon={<PlayCircleOutlined />}
               loading={sessionControl.isStarting}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs font-semibold border-none"
+              className="bg-teal-600 hover:bg-teal-700 rounded-xl text-xs font-semibold border-none focus-visible:ring-2 focus-visible:ring-teal-300"
             >
               <span className="hidden sm:inline">Bắt đầu buổi học</span>
               <span className="sm:hidden">Bắt đầu</span>

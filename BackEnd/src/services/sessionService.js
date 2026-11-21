@@ -612,9 +612,9 @@ const joinSession = async (user, sessionId) => {
         preOpenedAt: session.preOpenedAt || now,
         "teacherPresence.lastConnectedAt": now,
       };
+      // Issuing a token is not presence: "connected" comes only from LiveKit-backed intervals
       if (isWaitingRoomWindow) {
         setFields["teacherPresence.firstPreOpenJoinAt"] = session.teacherPresence?.firstPreOpenJoinAt || now;
-        setFields["teacherPresence.isCurrentlyConnected"] = true;
       }
       await Session.updateOne({ _id: session._id, status: { $in: ["SCHEDULED", "WAITING"] } }, { $set: setFields });
       session.status = "WAITING";
@@ -940,8 +940,8 @@ const endSession = async (teacherId, sessionId) => {
   }
 
   // 8. Tac dung phu ngoai vi: Dong phong LiveKit SAU KHI DB transaction da commit thanh cong.
-  // Best effort: Loi mang LiveKit khong lam rollback DB va khong nem loi unhandled.
-  await videoProvider.closeRoom(sessionDoc.meetingRoomId);
+  // Loi mang LiveKit khong lam rollback DB: phong duoc danh dau cleanup pending va lifecycle job dong lai sau.
+  await presenceService.closeRoomOrMarkPending(sessionDoc);
 
   const finalSession = await Session.findById(sessionDoc._id).lean();
   return { ...finalSession, attendance: { present: attendedCount, absent: absentCount } };

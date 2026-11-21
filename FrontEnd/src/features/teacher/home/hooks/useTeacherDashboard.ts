@@ -58,6 +58,9 @@ export function useTeacherDashboard() {
       );
     },
     enabled: classes.length > 0,
+    // One request per class: refreshed on focus and every minute so an automatic end shows up
+    refetchInterval: 60000,
+    refetchOnWindowFocus: true,
   });
 
   // 5. Recent conversations for message widget

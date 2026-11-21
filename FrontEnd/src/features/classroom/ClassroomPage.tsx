@@ -27,6 +27,8 @@ import TeacherAttendanceModal from "./components/TeacherAttendanceModal";
 import TeacherIncidentModal from "./components/TeacherIncidentModal";
 
 const { Title, Text, Paragraph } = Typography;
+// Presence heartbeat; the backend closes a connection not confirmed for 3 minutes
+const PRESENCE_HEARTBEAT_MS = 30 * 1000;
 
 type ClassroomStage = "prejoin" | "joining" | "in_room" | "error" | "ended";
 
@@ -113,16 +115,28 @@ export default function ClassroomPage() {
     // this stage begins: an early call is rejected with 403 UNVERIFIED_LIVEKIT_PRESENCE. Retry until it is verified.
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
     const tryConnect = (attempt: number) => {
-      sessionService.connectSessionPresence(sessionId, connId).catch(() => {
-        if (!cancelled && attempt < 10) timer = setTimeout(() => tryConnect(attempt + 1), 3000);
-      });
+      sessionService
+        .connectSessionPresence(sessionId, connId)
+        .then(() => {
+          // The backend treats a connection without a heartbeat for 3 minutes as gone
+          if (!cancelled) {
+            heartbeat = setInterval(() => {
+              sessionService.heartbeatSessionPresence(sessionId, connId).catch(() => {});
+            }, PRESENCE_HEARTBEAT_MS);
+          }
+        })
+        .catch(() => {
+          if (!cancelled && attempt < 10) timer = setTimeout(() => tryConnect(attempt + 1), 3000);
+        });
     };
     timer = setTimeout(() => tryConnect(1), 1500);
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      if (heartbeat) clearInterval(heartbeat);
       sessionService.leaveSessionPresence(sessionId, connId).catch(() => {});
     };
   }, [stage, sessionId]);
@@ -219,6 +233,13 @@ export default function ClassroomPage() {
       setStage("ended");
     },
     onError: (err: any) => {
+      // Already ended (another tab, a second click, or the automatic end after +30 minutes): nothing failed
+      if (err?.code === "SESSION_NOT_IN_PROGRESS") {
+        message.info("Buổi học đã kết thúc.");
+        queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+        setStage("ended");
+        return;
+      }
       message.error(err?.message || "Không thể kết thúc buổi học.");
     },
   });

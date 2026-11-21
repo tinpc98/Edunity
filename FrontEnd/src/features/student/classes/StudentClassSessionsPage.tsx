@@ -122,6 +122,9 @@ export default function StudentClassSessionsPage() {
     queryKey: ["classSessions", classId],
     queryFn: () => (classId ? classDiscoveryService.fetchSessionsByClassId(classId) : []),
     enabled: Boolean(classId),
+    // The Teacher's Start / End and the automatic end change the status: keep the LIVE badge current
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   // Sort Sessions chronologically by startDatetime ASC and derive sessionNumber

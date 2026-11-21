@@ -35,6 +35,11 @@ const videoProvider = require("../src/services/videoProvider");
 const presenceService = require("../src/services/sessionPresenceService");
 const incidentService = require("../src/services/sessionIncidentService");
 const { runSessionLifecycleJob } = require("../src/jobs/sessionLifecycleJob");
+
+// Presence counts only while confirmed (client heartbeat / LiveKit participant list): simulates the confirmations
+// that would have arrived up to `at` for everyone still connected
+const keepPresenceAlive = (sessionId, at) =>
+  SessionPresenceInterval.updateMany({ sessionId, disconnectedAt: null }, { $set: { lastHeartbeatAt: at } });
 const {
   connectDB,
   disconnectDB,
@@ -1247,6 +1252,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
       });
 
       // J1: At 21:05 (5 minutes past endDatetime, inside 30m grace period) -> stays IN_PROGRESS, roomState = GRACE_PERIOD, teacher reminded
+      await keepPresenceAlive(session._id, new Date("2026-08-01T21:05:00.000Z"));
       await runSessionLifecycleJob(new Date("2026-08-01T21:05:00.000Z"));
       const inGrace = await Session.findById(session._id).lean();
       expect(inGrace.status).toBe("IN_PROGRESS");
@@ -1272,7 +1278,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
       const autoCompleted = await Session.findById(session._id).lean();
       expect(autoCompleted.status).toBe("COMPLETED");
       expect(autoCompleted.lifecycleState).toBe("AUTO_COMPLETED");
-      expect(autoCompleted.endReason).toBe("AUTO_COMPLETED");
+      expect(autoCompleted.endReason).toBe("AUTO_ENDED_AFTER_GRACE_PERIOD");
       expect(autoCompleted.roomState).toBe("ENDED");
 
       const s1Att = await SessionAttendance.findOne({
@@ -1295,7 +1301,9 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
   // K. TIN-05D/E-FIX01 TARGETED REGRESSION SUITE (SCENARIOS A - L)
   // =========================================================================
   describe("K. TIN-05D/E-FIX01: Overtime Protection, Teacher Disconnection Grace & LiveKit Presence Security (A-L)", () => {
-    it("FIX01-A & FIX01-B: Does NOT auto-complete session when teacher and students are still online 30m and 60m after scheduled end", async () => {
+    // Business rule (LiveSession fix): a started Session auto-ends once endDatetime + 30m is passed even if people are
+    // still connected; exactly at the +30m boundary it is not ended yet.
+    it("FIX01-A & FIX01-B: Does NOT auto-complete at endDatetime + 30m while teacher and students are online; auto-ends past it (60m) regardless of presence", async () => {
       const origStartRec = videoProvider.startRecording;
       videoProvider.startRecording = async () => "egress_overtime_active_1";
 
@@ -1333,6 +1341,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         });
 
         // Scenario A: 30 minutes after scheduled end (21:30) while teacher & student are still online
+        await keepPresenceAlive(session._id, new Date("2026-09-01T21:30:00.000Z"));
         await runSessionLifecycleJob(new Date("2026-09-01T21:30:00.000Z"));
         const at30m = await Session.findById(session._id).lean();
         expect(at30m.status).toBe("IN_PROGRESS");
@@ -1348,20 +1357,24 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         expect(attAt30m.evaluationStatus).toBe("PENDING");
         expect(attAt30m.finalizedAt).toBeNull();
 
-        // Scenario B: 60 minutes after scheduled end (22:00) while teacher & student are still online
+        // Scenario B: 60 minutes after scheduled end (22:00), still online -> auto-ended anyway, attendance finalized,
+        // recording stopped (kept, not deleted)
+        await keepPresenceAlive(session._id, new Date("2026-09-01T22:00:00.000Z"));
         await runSessionLifecycleJob(new Date("2026-09-01T22:00:00.000Z"));
         const at60m = await Session.findById(session._id).lean();
-        expect(at60m.status).toBe("IN_PROGRESS");
-        expect(at60m.recording.status).toBe("RECORDING");
-        expect(at60m.recordingSegments[0].stoppedAt).toBeNull();
-        expect(at60m.attendanceFinalizedAt).toBeNull();
+        expect(at60m.status).toBe("COMPLETED");
+        expect(at60m.roomState).toBe("ENDED");
+        expect(at60m.endReason).toBe("AUTO_ENDED_AFTER_GRACE_PERIOD");
+        expect(at60m.recording.status).toBe("PROCESSING");
+        expect(at60m.recordingSegments[0].stoppedAt).toBeTruthy();
+        expect(at60m.attendanceFinalizedAt).toBeTruthy();
 
         const attAt60m = await SessionAttendance.findOne({
           sessionId: session._id,
           studentId: student1._id,
         }).lean();
-        expect(attAt60m.evaluationStatus).toBe("PENDING");
-        expect(attAt60m.finalizedAt).toBeNull();
+        expect(attAt60m.evaluationStatus).toBe("FINALIZED");
+        expect(attAt60m.attendanceStatus).toBe("PRESENT");
       } finally {
         videoProvider.startRecording = origStartRec;
       }

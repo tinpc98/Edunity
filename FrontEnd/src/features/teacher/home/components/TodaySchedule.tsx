@@ -39,9 +39,9 @@ export default function TodaySchedule({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <CalendarOutlined className="text-indigo-600 text-[20px]" />
+          <CalendarOutlined className="text-teal-600 text-[20px]" />
           <Title level={4} style={{ margin: 0, fontSize: '18px' }}>Lịch dạy hôm nay</Title>
-          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[12px] font-bold text-indigo-600 ml-1">
+          <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[12px] font-bold text-teal-600 ml-1">
             {todaySessions.length} ca
           </span>
         </div>
@@ -50,7 +50,7 @@ export default function TodaySchedule({
             type="link" 
             disabled={!isVerified}
             onClick={() => isVerified && navigate("/teacher/schedule")}
-            className="font-semibold text-indigo-600 p-0 text-[13px] cursor-pointer"
+            className="font-semibold text-teal-600 p-0 text-[13px] cursor-pointer"
           >
             Xem toàn bộ lịch giảng <ArrowRightOutlined className="ml-1" />
           </Button>
@@ -70,7 +70,7 @@ export default function TodaySchedule({
             <Button 
               disabled={!isVerified}
               onClick={() => isVerified && navigate("/teacher/schedule")}
-              className="mt-3 rounded-xl bg-indigo-50 text-indigo-600 border-0 font-semibold h-8 text-[12px] cursor-pointer"
+              className="mt-3 rounded-xl bg-teal-50 text-teal-600 border-0 font-semibold h-8 text-[12px] cursor-pointer"
             >
               Mở thời khóa biểu
             </Button>
@@ -94,13 +94,13 @@ export default function TodaySchedule({
                 key={session.id}
                 className={`mb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl p-3 shadow-sm relative overflow-hidden transition-all ${
                   isInProgress 
-                    ? 'bg-[#f4f3ff] border border-indigo-100 border-l-4 border-l-indigo-600' 
+                    ? 'bg-teal-50/40 border border-teal-100 border-l-4 border-l-teal-600'
                     : 'bg-white border border-transparent hover:border-gray-200'
                 }`}
               >
                 <div className="flex items-start sm:items-center gap-3 pl-1">
                   <div className={`flex flex-col items-center justify-center rounded-xl px-2 py-1.5 text-center min-w-[64px] shadow-sm ${
-                    isInProgress ? 'bg-indigo-600 text-white' : 'bg-gray-50'
+                    isInProgress ? 'bg-teal-600 text-white' : 'bg-gray-50'
                   }`}>
                     <span className={`text-base font-bold leading-tight ${!isInProgress && 'text-gray-800'}`}>
                       {timeStart}
@@ -127,7 +127,7 @@ export default function TodaySchedule({
                         </span>
                       )}
                       {isScheduled && (
-                        <span className="inline-flex items-center rounded-md bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
+                        <span className="inline-flex items-center rounded-md bg-teal-50 border border-teal-100 px-1.5 py-0.5 text-[10px] font-medium text-teal-600">
                           Sắp diễn ra
                         </span>
                       )}
@@ -145,7 +145,7 @@ export default function TodaySchedule({
                         type="primary" 
                         disabled={!isVerified}
                         onClick={() => isVerified && navigate(`/classroom/${session.id}`)}
-                        className="bg-indigo-600 shadow-md shadow-indigo-600/25 rounded-[10px] border-0 h-9 px-3.5 flex items-center text-[13px] font-semibold cursor-pointer"
+                        className="bg-teal-600 shadow-md shadow-teal-600/25 rounded-[10px] border-0 h-9 px-3.5 flex items-center text-[13px] font-semibold cursor-pointer"
                       >
                         <LoginOutlined className="mr-1" /> Vào lớp Live
                       </Button>

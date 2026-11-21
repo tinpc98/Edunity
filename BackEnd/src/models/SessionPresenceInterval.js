@@ -8,6 +8,11 @@ const sessionPresenceIntervalSchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     role: { type: String, enum: ["STUDENT", "TEACHER", "ADMIN"], required: true },
     connectionSessionId: { type: String, required: true },
+    // Id the classroom tab generated for itself: heartbeat/leave of that tab find this interval by it even when the
+    // interval is keyed by the LiveKit participant sid. Only selects the caller's own interval, never proof of presence.
+    clientConnectionId: { type: String, default: null },
+    // Last moment presence was confirmed (client heartbeat or LiveKit participant list); a stale one gets closed
+    lastHeartbeatAt: { type: Date, default: null },
     connectedAt: { type: Date, required: true },
     disconnectedAt: { type: Date, default: null },
     durationSeconds: { type: Number, default: 0, min: 0 },
