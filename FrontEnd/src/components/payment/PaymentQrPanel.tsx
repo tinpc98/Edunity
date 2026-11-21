@@ -40,6 +40,7 @@ export interface PaymentQrPanelProps {
   onManualRefresh?: () => void;
   onRecreateIntent?: () => void;
   recreateLoading?: boolean;
+  minimal?: boolean;
 }
 
 /**
@@ -78,6 +79,7 @@ export function PaymentQrPanel({
   onManualRefresh,
   onRecreateIntent,
   recreateLoading = false,
+  minimal = false,
 }: PaymentQrPanelProps) {
   const isSandboxMode =
     provider === "SANDBOX" ||
@@ -126,35 +128,37 @@ export function PaymentQrPanel({
       )}
 
       {/* Header */}
-      <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Tag
-              color={purpose === "DONATION" ? "magenta" : "indigo"}
-              className="m-0 text-[11px] font-bold uppercase tracking-wide"
-            >
-              {purpose === "DONATION" ? "Kênh Quỹ Học Bổng (DONATION)" : "Kênh Học Phí (TUITION)"}
-            </Tag>
-            {purpose === "DONATION" && (
+      {!minimal && (
+        <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
               <Tag
-                color={isAnonymous ? "default" : "cyan"}
-                icon={isAnonymous ? <EyeInvisibleOutlined /> : <GlobalOutlined />}
-                className="m-0 text-[11px] font-semibold"
-                data-testid="payment-anonymity-tag"
+                color={purpose === "DONATION" ? "magenta" : "indigo"}
+                className="m-0 text-[11px] font-bold uppercase tracking-wide"
               >
-                {isAnonymous ? "Tài trợ ẩn danh" : donorDisplayName || "Tài trợ công khai"}
+                {purpose === "DONATION" ? "Kênh Quỹ Học Bổng (DONATION)" : "Kênh Học Phí (TUITION)"}
               </Tag>
-            )}
+              {purpose === "DONATION" && (
+                <Tag
+                  color={isAnonymous ? "default" : "cyan"}
+                  icon={isAnonymous ? <EyeInvisibleOutlined /> : <GlobalOutlined />}
+                  className="m-0 text-[11px] font-semibold"
+                  data-testid="payment-anonymity-tag"
+                >
+                  {isAnonymous ? "Tài trợ ẩn danh" : donorDisplayName || "Tài trợ công khai"}
+                </Tag>
+              )}
+            </div>
+            {title && <h3 className="text-base font-extrabold text-slate-900 m-0">{title}</h3>}
+            {subtitle && <p className="text-xs text-slate-500 m-0">{subtitle}</p>}
           </div>
-          {title && <h3 className="text-base font-extrabold text-slate-900 m-0">{title}</h3>}
-          {subtitle && <p className="text-xs text-slate-500 m-0">{subtitle}</p>}
-        </div>
 
-        <PaymentStatusBadge uiState={uiState} purpose={purpose} />
-      </div>
+          <PaymentStatusBadge uiState={uiState} purpose={purpose} />
+        </div>
+      )}
 
       {/* Main Content */}
-      <div className="p-5 space-y-5">
+      <div className={minimal ? "p-4 space-y-4" : "p-5 space-y-5"}>
         {/* Countdown */}
         {expiredAt && (
           <PaymentCountdown
@@ -162,9 +166,11 @@ export function PaymentQrPanel({
             onExpire={onExpire}
             disabled={uiState === "COMPLETED" || uiState === "LATE_PAYMENT_REVIEW"}
             label={
-              purpose === "DONATION"
+              minimal
+                ? "Thời gian còn lại"
+                : purpose === "DONATION"
                 ? "Thời hạn hiệu lực mã QR quyên góp (15 phút)"
-                : "Thời gian giữ chỗ & hiệu lực mã QR (15 phút)"
+                : "Thời gian giữ chỗ & hiệu lực mã QR"
             }
           />
         )}
@@ -309,24 +315,28 @@ export function PaymentQrPanel({
               )}
             </div>
 
-            <Text className="text-[11px] text-slate-500 text-center max-w-sm">
-              Mã VietQR chuẩn EMVCo Napas247 đã bao gồm sẵn số tiền{" "}
-              <strong>{formatVND(amount)}</strong> và nội dung định danh giao dịch.
-            </Text>
+            {!minimal && (
+              <>
+                <Text className="text-[11px] text-slate-500 text-center max-w-sm">
+                  Mã VietQR chuẩn EMVCo Napas247 đã bao gồm sẵn số tiền{" "}
+                  <strong>{formatVND(amount)}</strong> và nội dung định danh giao dịch.
+                </Text>
 
-            {checkoutUrl && (
-              <Button
-                type="default"
-                size="middle"
-                icon={<LinkOutlined />}
-                href={checkoutUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-xl font-semibold text-xs border-indigo-200 text-indigo-700 hover:border-indigo-400"
-                data-testid="payment-open-checkout-url"
-              >
-                Mở trang cổng thanh toán payOS
-              </Button>
+                {checkoutUrl && (
+                  <Button
+                    type="default"
+                    size="middle"
+                    icon={<LinkOutlined />}
+                    href={checkoutUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-xl font-semibold text-xs border-indigo-200 text-indigo-700 hover:border-indigo-400"
+                    data-testid="payment-open-checkout-url"
+                  >
+                    Mở trang cổng thanh toán payOS
+                  </Button>
+                )}
+              </>
             )}
           </div>
         ) : (
@@ -340,38 +350,42 @@ export function PaymentQrPanel({
         )}
 
         {/* Polling Status & Manual Refresh */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
-          <div className="flex items-center gap-2" data-testid="payment-polling-indicator">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isPolling ? "bg-emerald-500 animate-ping" : "bg-slate-300"
-              }`}
-            />
-            <span>
-              {isPolling
-                ? "Đang tự động kiểm tra trạng thái thanh toán (3 giây/lần)..."
-                : "Đã dừng tự động kiểm tra trạng thái."}
-            </span>
-          </div>
+        {!minimal && (
+          <>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+              <div className="flex items-center gap-2" data-testid="payment-polling-indicator">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isPolling ? "bg-emerald-500 animate-ping" : "bg-slate-300"
+                  }`}
+                />
+                <span>
+                  {isPolling
+                    ? "Đang tự động kiểm tra trạng thái thanh toán (3 giây/lần)..."
+                    : "Đã dừng tự động kiểm tra trạng thái."}
+                </span>
+              </div>
 
-          {onManualRefresh && (
-            <Button
-              size="small"
-              type="text"
-              icon={<ReloadOutlined spin={isRefreshing} />}
-              onClick={onManualRefresh}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 self-end sm:self-auto"
-              data-testid="payment-manual-refresh-btn"
-            >
-              Kiểm tra ngay
-            </Button>
-          )}
-        </div>
+              {onManualRefresh && (
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<ReloadOutlined spin={isRefreshing} />}
+                  onClick={onManualRefresh}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 self-end sm:self-auto"
+                  data-testid="payment-manual-refresh-btn"
+                >
+                  Kiểm tra ngay
+                </Button>
+              )}
+            </div>
 
-        <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
-          <SafetyCertificateOutlined className="text-emerald-600" />
-          <span>Bảo mật bởi Unified Payment Engine • Không lưu thông tin thẻ/tài khoản ngân hàng</span>
-        </div>
+            <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
+              <SafetyCertificateOutlined className="text-emerald-600" />
+              <span>Bảo mật bởi Unified Payment Engine • Không lưu thông tin thẻ/tài khoản ngân hàng</span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

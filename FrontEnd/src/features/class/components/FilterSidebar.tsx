@@ -8,7 +8,6 @@ import CourseFilter from "./filters/CourseFilter";
 import ClassTypeFilter from "./filters/ClassTypeFilter";
 import PriceFilter from "./filters/PriceFilter";
 import ScheduleFilter from "./filters/ScheduleFilter";
-import StatusFilter from "./filters/StatusFilter";
 import TeacherFilter from "./filters/TeacherFilter";
 
 interface FilterSidebarProps {
@@ -26,7 +25,6 @@ type FilterSectionId =
   | "classType"
   | "price"
   | "schedule"
-  | "status"
   | "teacher";
 
 export default function FilterSidebar({
@@ -45,7 +43,6 @@ export default function FilterSidebar({
     classType: false,
     price: false,
     schedule: false,
-    status: false,
     teacher: false,
   });
 
@@ -67,16 +64,15 @@ export default function FilterSidebar({
       ? 1
       : 0;
   const scheduleActiveCount = filters.timeOfDay.length;
-  const statusActiveCount = filters.statuses.length;
   const teacherActiveCount = filters.teacherId ? 1 : 0;
 
   return (
-    <aside className="w-full bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col">
+    <aside className="w-full bg-white rounded-xl border border-[#D6E5E2] shadow-xs p-4 flex flex-col">
       {/* Top Header of the Single Filter Panel */}
-      <div className="flex items-center justify-between pb-3.5 border-b border-slate-200/80">
+      <div className="flex items-center justify-between pb-3.5 border-b border-[#D6E5E2]">
         <div className="flex items-center gap-2">
-          <FilterOutlined className="text-indigo-600 text-sm" />
-          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider !m-0">
+          <FilterOutlined className="text-[#0D9488] text-sm" />
+          <h2 className="text-sm font-bold text-[#163B40] uppercase tracking-wider !m-0">
             Bộ lọc tìm kiếm
           </h2>
         </div>
@@ -187,21 +183,7 @@ export default function FilterSidebar({
           />
         </FilterSection>
 
-        {/* 7. TRẠNG THÁI (Default CLOSED) */}
-        <FilterSection
-          id="status"
-          title="Trạng thái"
-          isOpen={openSections.status}
-          onToggle={() => toggleSection("status")}
-          activeCount={statusActiveCount}
-        >
-          <StatusFilter
-            selectedStatuses={filters.statuses}
-            onChange={(statuses) => onFilterChange({ statuses })}
-          />
-        </FilterSection>
-
-        {/* 8. GIÁO VIÊN (Default CLOSED) */}
+        {/* 7. GIÁO VIÊN (Default CLOSED) */}
         <FilterSection
           id="teacher"
           title="Giáo viên"

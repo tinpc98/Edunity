@@ -93,12 +93,12 @@ export default function CoursesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#F5FAF9]">
       {/* Hero */}
-      <div className="bg-gradient-to-br from-indigo-700 to-violet-700 text-white py-14 px-4">
+      <div className="bg-gradient-to-r from-[#0F766E] via-[#0D9488] to-[#14B8A6] text-white py-14 px-4">
         <div className="max-w-5xl mx-auto text-center">
           <h1 className="text-4xl font-bold mb-3">Khám phá khóa học</h1>
-          <p className="text-indigo-200 text-lg mb-8">Tìm kiếm hàng ngàn khóa học chất lượng trên Edunity</p>
+          <p className="text-teal-100 text-lg mb-8">Tìm kiếm hàng ngàn khóa học chất lượng trên Edunity</p>
           <div className="flex gap-2 max-w-2xl mx-auto">
             <Input
               size="large"
@@ -109,7 +109,7 @@ export default function CoursesPage() {
               onPressEnter={handleSearch}
               className="flex-1 rounded-xl"
             />
-            <Button size="large" type="primary" onClick={handleSearch} className="bg-white text-indigo-700 font-bold rounded-xl hover:bg-indigo-50">
+            <Button size="large" type="primary" onClick={handleSearch} className="bg-white text-[#0F766E] font-bold rounded-xl hover:bg-[#F0FDFA] border-none shadow-sm">
               Tìm kiếm
             </Button>
           </div>
@@ -119,9 +119,9 @@ export default function CoursesPage() {
       <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col lg:flex-row gap-6">
         {/* Sidebar Filters */}
         <aside className="w-full lg:w-64 shrink-0">
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-5 sticky top-4">
-            <div className="flex items-center gap-2 font-bold text-gray-800 text-base">
-              <FilterOutlined />
+          <div className="bg-white rounded-2xl p-5 border border-[#D6E5E2] shadow-xs space-y-5 sticky top-4">
+            <div className="flex items-center gap-2 font-bold text-[#163B40] text-base">
+              <FilterOutlined className="text-[#0D9488]" />
               <span>Bộ lọc</span>
             </div>
 
@@ -182,7 +182,7 @@ export default function CoursesPage() {
                   setLocalSearch("");
                   setSearchParams({});
                 }}
-                className="text-indigo-600 border-indigo-200"
+                className="text-[#0D9488] border-[#99F6E4] hover:bg-[#CCFBF1]/50"
               >
                 Xóa bộ lọc
               </Button>
@@ -242,53 +242,53 @@ export default function CoursesPage() {
                 {coursesData.items.map((course) => (
                   <div
                     key={course.id}
-                    className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col"
+                    className="bg-white rounded-2xl border border-[#D6E5E2] shadow-xs hover:border-[#0D9488] hover:shadow-md transition-all cursor-pointer group flex flex-col"
                     onClick={() => navigate(ROUTES.COURSES.DETAIL.replace(":courseId", course.id))}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => e.key === "Enter" && navigate(ROUTES.COURSES.DETAIL.replace(":courseId", course.id))}
                   >
                     {/* Card color band */}
-                    <div className="h-2 bg-gradient-to-r from-indigo-500 to-violet-500 rounded-t-2xl" />
+                    <div className="h-2 bg-gradient-to-r from-[#0F766E] to-[#14B8A6] rounded-t-2xl" />
                     <div className="p-5 flex flex-col flex-1">
                       <div className="flex items-start gap-2 mb-2">
-                        <span className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
-                          <BookOutlined className="text-indigo-600 text-lg" />
+                        <span className="w-10 h-10 bg-[#CCFBF1] rounded-xl flex items-center justify-center shrink-0">
+                          <BookOutlined className="text-[#0D9488] text-lg" />
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-indigo-500 font-semibold truncate">{course.categoryName} · {course.subjectName}</p>
-                          <h3 className="font-bold text-gray-900 text-sm leading-snug line-clamp-2 group-hover:text-indigo-700 transition-colors">
+                          <p className="text-xs text-[#0D9488] font-semibold truncate">{course.categoryName} · {course.subjectName}</p>
+                          <h3 className="font-bold text-[#163B40] text-sm leading-snug line-clamp-2 group-hover:text-[#0D9488] transition-colors">
                             {course.title}
                           </h3>
                         </div>
                       </div>
 
                       {course.description && (
-                        <p className="text-gray-500 text-xs line-clamp-2 mb-3">{course.description}</p>
+                        <p className="text-[#64748B] text-xs line-clamp-2 mb-3">{course.description}</p>
                       )}
 
                       <div className="flex flex-wrap gap-1.5 mt-auto">
                         {course.level && (
-                          <Tag color="blue" className="text-xs rounded-full">{COURSE_LEVEL_LABELS[course.level]}</Tag>
+                          <Tag className="text-xs rounded-full bg-[#CCFBF1] text-[#0F766E] border-none font-medium">{COURSE_LEVEL_LABELS[course.level]}</Tag>
                         )}
                         {course.gradeLevel && (
-                          <Tag color="orange" className="text-xs rounded-full">{GRADE_LEVEL_LABELS[course.gradeLevel]}</Tag>
+                          <Tag className="text-xs rounded-full bg-[#F0FDFA] text-[#0D9488] border border-[#99F6E4]/70 font-medium">{GRADE_LEVEL_LABELS[course.gradeLevel]}</Tag>
                         )}
                         {course.openClassCount !== undefined && (
                           <Badge
                             count={course.openClassCount}
                             showZero
-                            color={course.openClassCount > 0 ? "green" : "gray"}
+                            color={course.openClassCount > 0 ? "#0D9488" : "#94a3b8"}
                             overflowCount={99}
                           >
-                            <span className="text-xs text-gray-400 pr-1">lớp mở</span>
+                            <span className="text-xs text-[#64748B] pr-1">lớp mở</span>
                           </Badge>
                         )}
                       </div>
 
-                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between mt-3 text-xs">
-                        <span className="text-gray-400">Khóa học chuẩn</span>
-                        <span className="font-semibold text-indigo-600 flex items-center gap-1 group-hover:underline">
+                      <div className="pt-3 border-t border-[#D6E5E2]/60 flex items-center justify-between mt-3 text-xs">
+                        <span className="text-slate-400">Khóa học chuẩn</span>
+                        <span className="font-semibold text-[#0D9488] flex items-center gap-1 group-hover:underline">
                           Xem chi tiết &rarr;
                         </span>
                       </div>

@@ -88,9 +88,31 @@ class CatalogService {
     if (filters.teacherId) query.teacherId = filters.teacherId;
     
     if (filters.statuses) {
-      query.status = { $in: asList(filters.statuses).filter(status => PUBLIC_CLASS_STATUSES.includes(status)) };
+      const allowed = asList(filters.statuses).filter(status => status === "OPEN");
+      query.status = { $in: allowed };
     } else {
-      query.status = { $in: ["OPEN", "IN_PROGRESS"] };
+      query.status = "OPEN";
+    }
+
+    // Hide classes that have already started (startDate <= now)
+    // Only show upcoming classes with startDate > now (defensive support for legacy test mocks)
+    const now = new Date();
+    const upcomingCond = {
+      $or: [
+        { startDate: { $gt: now } },
+        { startDate: { $exists: false } },
+        { startDate: null }
+      ]
+    };
+
+    if (query.$or) {
+      query.$and = [
+        { $or: query.$or },
+        upcomingCond
+      ];
+      delete query.$or;
+    } else {
+      query.$or = upcomingCond.$or;
     }
 
     // BUG-CAT-02 Fix: Unified price & classTypes filtering without overwrite
@@ -153,6 +175,7 @@ class CatalogService {
     }
 
     // Stable sorting with unique tie-breaker (_id)
+    // Default to upcoming classes (startDate: 1)
     let sort = {};
     switch (filters.sort) {
       case "price_asc": sort = { price: 1, _id: 1 }; break;
@@ -160,7 +183,7 @@ class CatalogService {
       case "upcoming": sort = { startDate: 1, _id: 1 }; break;
       case "newest": sort = { createdAt: -1, _id: -1 }; break;
       case "oldest": sort = { createdAt: 1, _id: 1 }; break;
-      default: sort = { createdAt: -1, _id: -1 }; break;
+      default: sort = { startDate: 1, _id: 1 }; break;
     }
 
     // BUG-CAT-04 Fix: Ensure safe positive page and pageSize

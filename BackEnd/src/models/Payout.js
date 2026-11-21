@@ -64,6 +64,8 @@ const payoutSchema = new Schema(
 
     failureReason: { type: String, default: null }, // khi status = FAILED
     reviewNote: { type: String, default: null }, // khi Admin reject/ghi chú
+    isTestData: { type: Boolean, default: false },
+    testDataTag: { type: String, default: null },
     auditLogs: [
       {
         action: { type: String, trim: true },

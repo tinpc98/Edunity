@@ -12,10 +12,10 @@ interface CategorySidebarProps {
 
 export default function CategorySidebar({ categories, isLoading = false, activeCategoryId, onSelectCategory }: CategorySidebarProps) {
   return (
-    <aside className="w-[248px] h-full bg-white rounded-[18px] border border-slate-100 shadow-sm p-3 flex flex-col shrink-0">
+    <aside className="w-[248px] h-full bg-white rounded-[18px] border border-[#D6E5E2] shadow-xs p-3 flex flex-col shrink-0">
       <div className="min-h-0 flex flex-col">
-        <div className="px-3 py-2 flex items-center gap-2 text-[13px] font-black tracking-wide text-indigo-900 uppercase">
-          <AppstoreOutlined className="text-indigo-600 text-sm" />
+        <div className="px-3 py-2 flex items-center gap-2 text-[13px] font-black tracking-wide text-[#163B40] uppercase">
+          <AppstoreOutlined className="text-[#0D9488] text-sm" />
           <span>CÁC KHÓA HỌC</span>
         </div>
 
@@ -39,8 +39,8 @@ export default function CategorySidebar({ categories, isLoading = false, activeC
                 onMouseEnter={() => onSelectCategory(cat.id)}
                 className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all text-[13px] font-semibold ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200 hover:text-white"
-                    : "text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"
+                    ? "bg-[#0D9488] text-white shadow-xs hover:text-white"
+                    : "text-[#334155] hover:bg-[#CCFBF1]/50 hover:text-[#0F766E]"
                 }`}
               >
                 <span className="leading-5 whitespace-normal">{cat.title}</span>
@@ -55,7 +55,7 @@ export default function CategorySidebar({ categories, isLoading = false, activeC
                           ? "bg-rose-50 text-rose-600"
                           : cat.badgeColor === "orange"
                           ? "bg-amber-50 text-amber-600"
-                          : "bg-indigo-50 text-indigo-600"
+                          : "bg-[#CCFBF1] text-[#0F766E]"
                       }`}
                     >
                       {cat.badge}

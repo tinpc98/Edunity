@@ -891,6 +891,26 @@ const verifyAndCompleteRefund = async (verifierAdminId, refundCaseId, data = {},
   return updated;
 };
 
+const serializeRefundCase = (doc) => {
+  if (!doc) return doc;
+  const res = { ...doc };
+  if (res.originalAmount !== undefined && res.originalAmount !== null) {
+    res.originalAmount = toNum(res.originalAmount);
+  }
+  if (res.eligibleAmount !== undefined && res.eligibleAmount !== null) {
+    res.eligibleAmount = toNum(res.eligibleAmount);
+  }
+  if (res.approvedAmount !== undefined && res.approvedAmount !== null) {
+    res.approvedAmount = toNum(res.approvedAmount);
+  }
+  if (res.sourcePaymentId && typeof res.sourcePaymentId === "object") {
+    if (res.sourcePaymentId.amount !== undefined && res.sourcePaymentId.amount !== null) {
+      res.sourcePaymentId.amount = toNum(res.sourcePaymentId.amount);
+    }
+  }
+  return res;
+};
+
 /**
  * List refund cases with filtering and pagination.
  */
@@ -928,6 +948,8 @@ const listRefundCases = async (query = {}) => {
       .skip(skip)
       .limit(limit)
       .populate("recipientUserId", "email fullName role")
+      .populate("sourcePaymentId", "orderCode amount paymentStatus transactionId createdAt")
+      .populate("relatedClassId", "title code")
       .populate("assignedTo", "email fullName")
       .populate("approvedBy", "email fullName")
       .lean(),
@@ -935,7 +957,7 @@ const listRefundCases = async (query = {}) => {
   ]);
 
   return {
-    items,
+    items: items.map(serializeRefundCase),
     pagination: {
       total,
       page,
@@ -955,7 +977,7 @@ const getRefundCaseById = async (refundCaseId) => {
     .populate("recipientUserId", "email fullName role")
     .populate("sourcePaymentId")
     .populate("relatedEnrollmentId")
-    .populate("relatedClassId")
+    .populate("relatedClassId", "title code")
     .populate("assignedTo", "email fullName")
     .populate("approvedBy", "email fullName")
     .populate("obligationTransactionId")
@@ -963,7 +985,7 @@ const getRefundCaseById = async (refundCaseId) => {
     .lean();
 
   if (!refundCase) throw refundCaseNotFound();
-  return refundCase;
+  return serializeRefundCase(refundCase);
 };
 
 module.exports = {

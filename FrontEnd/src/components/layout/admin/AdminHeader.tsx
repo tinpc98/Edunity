@@ -31,8 +31,12 @@ export default function AdminHeader({
       key: "status",
       label: (
         <div className="px-2 py-1">
-          <p className="text-xs font-bold text-slate-800">{user?.fullName || "Quản trị viên"}</p>
-          <p className="text-[11px] text-slate-500">{user?.email || "admin@edunity.edu.vn"}</p>
+          <p className="text-xs font-bold text-slate-800">
+            {user?.fullName || "Quản trị viên"}
+          </p>
+          <p className="text-[11px] text-slate-500">
+            {user?.email || "admin@edunity.edu.vn"}
+          </p>
           <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded bg-teal-50 text-teal-700">
             ADMINISTRATOR
           </span>
@@ -59,16 +63,22 @@ export default function AdminHeader({
         <button
           onClick={onToggleCollapse}
           className="p-2 rounded-xl text-[#64748B] hover:text-[#0F766E] hover:bg-[#E5F5F1] transition-colors"
-          title={collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"}
+          title={
+            collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"
+          }
         >
-          {collapsed ? <MenuUnfoldOutlined className="text-lg" /> : <MenuFoldOutlined className="text-lg" />}
+          {collapsed ? (
+            <MenuUnfoldOutlined className="text-lg" />
+          ) : (
+            <MenuFoldOutlined className="text-lg" />
+          )}
         </button>
 
         <div className="flex items-center gap-2 text-[#334155] text-sm">
           <SafetyCertificateOutlined className="text-[#0D9488] text-base" />
           <span className="text-slate-300">/</span>
           <span className="font-bold text-[#163B40] truncate max-w-[200px] sm:max-w-md">
-            {pageTitle || "Trung tâm Quản trị Edunity V3"}
+            {pageTitle || "Trung tâm Quản trị Edunity"}
           </span>
         </div>
       </div>
@@ -103,7 +113,11 @@ export default function AdminHeader({
         <div className="h-6 w-[1px] bg-[#D6E5E2] hidden sm:block"></div>
 
         {/* Admin Profile Dropdown */}
-        <Dropdown menu={{ items: userMenuItems }} trigger={["click"]} placement="bottomRight">
+        <Dropdown
+          menu={{ items: userMenuItems }}
+          trigger={["click"]}
+          placement="bottomRight"
+        >
           <div className="flex items-center gap-2 cursor-pointer p-1.5 rounded-xl hover:bg-[#E5F5F1] transition-colors">
             <Avatar
               size={32}

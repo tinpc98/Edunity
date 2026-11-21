@@ -163,4 +163,18 @@ export const classService = {
     });
     return adaptClassFromApi(data);
   },
+
+  async deleteClass(classId: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/admin/classes/${classId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  async restoreClass(classId: string): Promise<ClassModel> {
+    const data = await apiClient<ApiClass>(`/admin/classes/${classId}/restore`, {
+      method: "POST",
+    });
+    return adaptClassFromApi(data);
+  },
 };

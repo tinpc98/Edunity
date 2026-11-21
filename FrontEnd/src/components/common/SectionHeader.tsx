@@ -17,25 +17,25 @@ export default function SectionHeader({ categoryTag, title, subtitle, filterButt
       <div className="max-w-[560px]">
         {categoryTag && (
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="w-1 h-4 bg-indigo-600 rounded-full" />
-            <span className="text-[10px] font-bold tracking-wider text-indigo-700 uppercase">{categoryTag}</span>
+            <span className="w-1.5 h-4 bg-[#0D9488] rounded-full" />
+            <span className="text-[11px] font-bold tracking-wider text-[#0F766E] uppercase">{categoryTag}</span>
           </div>
         )}
-        <h2 className="text-[24px] font-extrabold text-slate-900 tracking-tight leading-tight">{title}</h2>
-        {subtitle && <p className="text-[11.5px] text-slate-500 mt-1 leading-5">{subtitle}</p>}
+        <h2 className="text-[24px] font-extrabold text-[#163B40] tracking-tight leading-tight">{title}</h2>
+        {subtitle && <p className="text-[12px] text-[#64748B] mt-1 leading-5">{subtitle}</p>}
       </div>
 
       <div className="flex items-center gap-3 flex-wrap justify-end">
         {filterButtons.length > 0 && (
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg flex-wrap">
+          <div className="flex items-center gap-1 bg-[#F0FDFA] border border-[#D6E5E2] p-1 rounded-lg flex-wrap">
             {filterButtons.map((btn) => {
               const isActive = activeFilter === btn;
               return (
                 <button
                   key={btn}
                   onClick={() => onFilterChange && onFilterChange(btn)}
-                  className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition ${
-                    isActive ? "bg-indigo-600 text-white shadow-xs" : "text-slate-600 hover:text-indigo-600"
+                  className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition ${
+                    isActive ? "bg-[#0D9488] text-white shadow-xs" : "text-[#334155] hover:text-[#0D9488] hover:bg-[#CCFBF1]/60"
                   }`}
                 >
                   {btn}
@@ -46,8 +46,8 @@ export default function SectionHeader({ categoryTag, title, subtitle, filterButt
         )}
 
         {viewAllText && (
-          <a href={viewAllLink} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 whitespace-nowrap">
-            {viewAllText} <RightOutlined className="text-[9px]" />
+          <a href={viewAllLink} className="text-[12px] font-bold text-[#0D9488] hover:text-[#0F766E] flex items-center gap-1 whitespace-nowrap group">
+            {viewAllText} <RightOutlined className="text-[10px] group-hover:translate-x-0.5 transition-transform" />
           </a>
         )}
       </div>

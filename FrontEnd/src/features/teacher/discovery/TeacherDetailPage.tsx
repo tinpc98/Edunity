@@ -78,7 +78,7 @@ export default function TeacherDetailPage() {
           Hồ sơ giáo viên không tồn tại hoặc chưa được xuất bản công khai.
         </p>
         <Link to={ROUTES.TEACHERS}>
-          <Button type="primary" icon={<ArrowLeftOutlined />} className="rounded-xl bg-indigo-600">
+          <Button type="primary" icon={<ArrowLeftOutlined />} className="rounded-xl bg-[#0D9488] hover:bg-[#0B746C] border-none shadow-sm">
             Quay lại danh sách giáo viên
           </Button>
         </Link>
@@ -95,16 +95,16 @@ export default function TeacherDetailPage() {
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
-          { title: <Link to={ROUTES.HOME}>Trang chủ</Link> },
-          { title: <Link to={ROUTES.TEACHERS}>Giáo viên</Link> },
-          { title: teacher.fullName },
+          { title: <Link to={ROUTES.HOME} className="text-[#64748B] hover:text-[#0D9488]">Trang chủ</Link> },
+          { title: <Link to={ROUTES.TEACHERS} className="text-[#64748B] hover:text-[#0D9488]">Giáo viên</Link> },
+          { title: <span className="text-[#163B40] font-semibold">{teacher.fullName}</span> },
         ]}
         className="mb-6 text-xs font-medium"
       />
 
       {/* Profile Header Card */}
-      <Card className="rounded-2xl border-slate-200/80 shadow-sm bg-white overflow-hidden mb-8 p-0">
-        <div className="h-28 bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 relative" />
+      <Card className="rounded-2xl border-[#D6E5E2] shadow-xs bg-white overflow-hidden mb-8 p-0">
+        <div className="h-28 bg-gradient-to-r from-[#0F766E] via-[#0D9488] to-[#14B8A6] relative" />
         <div className="px-6 pb-6 pt-0 relative flex flex-col md:flex-row md:items-end justify-between gap-6 -mt-12">
           <div className="flex flex-col md:flex-row items-center md:items-end gap-5">
             <Avatar
@@ -115,18 +115,18 @@ export default function TeacherDetailPage() {
             />
             <div className="text-center md:text-left">
               <div className="flex items-center gap-2 justify-center md:justify-start">
-                <h1 className="text-2xl font-bold text-slate-900 mb-0">{teacher.fullName}</h1>
-                <span title="Giáo viên đã xác thực chuyên môn" className="text-emerald-500 text-lg">
+                <h1 className="text-2xl font-bold text-[#163B40] mb-0">{teacher.fullName}</h1>
+                <span title="Giáo viên đã xác thực chuyên môn" className="text-[#0D9488] text-lg">
                   <CheckCircleFilled />
                 </span>
               </div>
-              <p className="text-indigo-600 font-medium text-sm mt-1 mb-2">
+              <p className="text-[#0D9488] font-medium text-sm mt-1 mb-2">
                 {teacher.qualificationSummary || "Giáo viên giảng dạy tại Edunity"}
               </p>
               <div className="flex items-center gap-2 justify-center md:justify-start">
                 <div className="flex items-center gap-1.5 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
                   <StarFilled className="text-amber-400 text-xs" />
-                  <span className="text-xs font-bold text-slate-800">
+                  <span className="text-xs font-bold text-[#163B40]">
                     {teacher.ratingAverage ? teacher.ratingAverage.toFixed(1) : "0.0"}
                   </span>
                   <span className="text-xs text-slate-400">
@@ -139,7 +139,7 @@ export default function TeacherDetailPage() {
 
           <div className="self-center md:self-end">
             <Link to={ROUTES.CLASSES}>
-              <Button type="default" className="rounded-xl text-xs font-medium">
+              <Button type="default" className="rounded-xl text-xs font-medium border-[#99F6E4] text-[#0F766E] hover:bg-[#CCFBF1]">
                 Khám phá lớp học
               </Button>
             </Link>

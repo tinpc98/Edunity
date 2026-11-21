@@ -209,6 +209,22 @@ refundCaseSchema.index({ recipientUserId: 1, status: 1 });
 refundCaseSchema.index({ relatedEnrollmentId: 1 });
 refundCaseSchema.index({ "bankTransferProof.referenceNumber": 1 }, { sparse: true });
 
+refundCaseSchema.set("toJSON", {
+  getters: true,
+  transform: (doc, ret) => {
+    if (ret.originalAmount !== undefined && ret.originalAmount !== null) {
+      ret.originalAmount = Number(ret.originalAmount.toString());
+    }
+    if (ret.eligibleAmount !== undefined && ret.eligibleAmount !== null) {
+      ret.eligibleAmount = Number(ret.eligibleAmount.toString());
+    }
+    if (ret.approvedAmount !== undefined && ret.approvedAmount !== null) {
+      ret.approvedAmount = Number(ret.approvedAmount.toString());
+    }
+    return ret;
+  },
+});
+
 module.exports = mongoose.model("RefundCase", refundCaseSchema);
 module.exports.REFUND_STATUSES = REFUND_STATUSES;
 module.exports.REFUND_REASONS = REFUND_REASONS;

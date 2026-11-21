@@ -12,12 +12,16 @@ const teacher = [authMiddleware, requireRole("TEACHER")];
 router.get("/categories", controller.listCategories);
 router.post("/admin/categories", admin, controller.createCategory);
 router.patch("/admin/categories/:id", admin, controller.updateCategory);
+router.delete("/admin/categories/:id", admin, controller.deleteCategory);
+router.post("/admin/categories/:id/restore", admin, controller.restoreCategory);
 
 // Subjects
 router.get("/categories/:id/subjects", controller.listSubjectsByCategory);
 router.get("/subjects/:id", controller.getSubject);
 router.post("/admin/subjects", admin, controller.createSubject);
 router.patch("/admin/subjects/:id", admin, controller.updateSubject);
+router.delete("/admin/subjects/:id", admin, controller.deleteSubject);
+router.post("/admin/subjects/:id/restore", admin, controller.restoreSubject);
 
 // Courses (CUR-04 & Safe Delete)
 router.get("/courses", controller.searchCourses);
@@ -28,6 +32,7 @@ router.get("/admin/courses/:id", admin, controller.adminGetCourse);
 router.post("/admin/courses", admin, controller.createCourse);
 router.patch("/admin/courses/:id", admin, controller.updateCourse);
 router.delete("/admin/courses/:id", admin, controller.deleteCourse);
+router.post("/admin/courses/:id/restore", admin, controller.restoreCourse);
 
 // Course proposals
 router.post("/teacher/course-proposals", teacher, controller.createProposal);

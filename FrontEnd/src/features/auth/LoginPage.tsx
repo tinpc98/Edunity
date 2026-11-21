@@ -75,28 +75,28 @@ export default function LoginPage() {
       <main className="site-container flex min-h-[calc(100vh-72px)] items-center py-14">
         <div className="grid w-full gap-16 lg:grid-cols-[minmax(0,1fr)_460px]">
           <section className="max-w-[570px] pb-4">
-            <p className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-indigo-600">Cùng học, cùng tiến bộ</p>
-            <h1 className="max-w-[520px] text-4xl font-black leading-tight tracking-tight text-slate-900 lg:text-[46px]">
+            <p className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-[#0D9488]">Cùng học, cùng tiến bộ</p>
+            <h1 className="max-w-[520px] text-4xl font-black leading-tight tracking-tight text-[#163B40] lg:text-[46px]">
               Tiếp tục hành trình học tập của bạn
             </h1>
-            <p className="mt-5 max-w-[510px] text-base leading-7 text-slate-600">
+            <p className="mt-5 max-w-[510px] text-base leading-7 text-[#64748B]">
               Kết nối với giáo viên phù hợp, tham gia các lớp học trực tuyến và quản lý hành trình học tập ngay trên Edunity.
             </p>
 
             <ul className="mt-8 space-y-4">
               {benefits.map((benefit) => (
-                <li key={benefit} className="flex items-center gap-3 text-sm font-medium text-slate-700">
-                  <CheckCircleFilled className="text-indigo-600" />
+                <li key={benefit} className="flex items-center gap-3 text-sm font-medium text-[#334155]">
+                  <CheckCircleFilled className="text-[#0D9488]" />
                   {benefit}
                 </li>
               ))}
             </ul>
           </section>
 
-          <section className="rounded-2xl border border-slate-100 bg-white p-7 shadow-[0_18px_50px_rgba(79,70,229,0.10)] lg:p-9">
+          <section className="rounded-2xl border border-[#D6E5E2] bg-white p-7 shadow-[0_18px_50px_rgba(13,148,136,0.08)] lg:p-9">
             <div className="mb-7">
-              <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Đăng nhập</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">Chào mừng bạn quay trở lại Edunity.</p>
+              <h2 className="text-2xl font-extrabold tracking-tight text-[#163B40]">Đăng nhập</h2>
+              <p className="mt-2 text-sm leading-6 text-[#64748B]">Chào mừng bạn quay trở lại Edunity.</p>
             </div>
 
             <Form
@@ -131,28 +131,28 @@ export default function LoginPage() {
                 <Form.Item name="rememberMe" valuePropName="checked" noStyle>
                   <Checkbox>Ghi nhớ đăng nhập</Checkbox>
                 </Form.Item>
-                <a href="#forgot-password" className="shrink-0 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+                <a href="#forgot-password" className="shrink-0 text-sm font-semibold text-[#0D9488] hover:text-[#0F766E]">
                   Quên mật khẩu?
                 </a>
               </div>
 
-              <Button type="primary" htmlType="submit" loading={loginMutation.isPending} disabled={loginMutation.isPending} block size="large" className="h-12 rounded-lg bg-indigo-600 font-bold shadow-sm shadow-indigo-200 hover:bg-indigo-700">
+              <Button type="primary" htmlType="submit" loading={loginMutation.isPending} disabled={loginMutation.isPending} block size="large" className="h-12 rounded-lg bg-[#0D9488] font-bold shadow-sm shadow-teal-900/10 hover:bg-[#0B746C] border-none">
                 Đăng nhập
               </Button>
             </Form>
 
-            <div className="mt-6 text-center text-sm text-slate-500">
+            <div className="mt-6 text-center text-sm text-[#64748B]">
               <p>
-                Chưa có tài khoản? <Link to={ROUTES.AUTH.REGISTER} className="font-bold text-indigo-600 hover:text-indigo-700">Đăng ký ngay</Link>
+                Chưa có tài khoản? <Link to={ROUTES.AUTH.REGISTER} className="font-bold text-[#0D9488] hover:text-[#0F766E]">Đăng ký ngay</Link>
               </p>
               <p className="mt-3 text-xs text-slate-400">
-                Bạn là giáo viên? <Link to={ROUTES.AUTH.TEACHER_REGISTER} className="font-semibold text-indigo-600 hover:text-indigo-700">Đăng ký trở thành giáo viên</Link>
+                Bạn là giáo viên? <Link to={ROUTES.AUTH.TEACHER_REGISTER} className="font-semibold text-[#0D9488] hover:text-[#0F766E]">Đăng ký trở thành giáo viên</Link>
               </p>
               <p className="mt-2 text-xs text-slate-400">
                 Bạn muốn ủng hộ học bổng?{" "}
                 <Link
                   to={redirectUrl ? `${ROUTES.AUTH.SPONSOR_REGISTER}?redirect=${encodeURIComponent(redirectUrl)}` : ROUTES.AUTH.SPONSOR_REGISTER}
-                  className="font-semibold text-indigo-600 hover:text-indigo-700"
+                  className="font-semibold text-[#0D9488] hover:text-[#0F766E]"
                 >
                   Đăng ký nhà tài trợ
                 </Link>

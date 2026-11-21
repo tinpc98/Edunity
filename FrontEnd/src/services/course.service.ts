@@ -69,6 +69,22 @@ class CourseService {
     });
     return adaptCourse(raw);
   }
+
+  /** DELETE /admin/courses/:id — Soft delete course */
+  async deleteCourse(id: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/admin/courses/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  /** POST /admin/courses/:id/restore — Restore course */
+  async restoreCourse(id: string): Promise<Course> {
+    const raw = await apiClient<ApiCourse>(`/admin/courses/${id}/restore`, {
+      method: "POST",
+    });
+    return adaptCourse(raw);
+  }
 }
 
 export const courseService = new CourseService();

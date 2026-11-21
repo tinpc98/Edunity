@@ -85,6 +85,14 @@ const sponsorProfileSchema = new Schema(
   { _id: false }
 );
 
+const adminProfileSchema = new Schema(
+  {
+    permissions: { type: [String], default: [] },
+    isSuperAdmin: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
 const userSchema = new Schema(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
@@ -96,6 +104,7 @@ const userSchema = new Schema(
     studentProfile: studentProfileSchema,
     teacherProfile: teacherProfileSchema,
     sponsorProfile: sponsorProfileSchema,
+    adminProfile: adminProfileSchema,
   },
   { timestamps: true }
 );

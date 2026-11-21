@@ -25,6 +25,8 @@ import {
   PlusOutlined,
   EditOutlined,
   EyeOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined,
   SearchOutlined,
   ReloadOutlined,
   CheckCircleOutlined,
@@ -151,6 +153,98 @@ export default function AdminCatalogPage() {
 
     return () => window.clearTimeout(timer);
   }, [searchDraft, courseSearch, updateSearchParams]);
+
+  // ==========================================
+  // SOFT DELETE MANAGEMENT
+  // ==========================================
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: "CATEGORY" | "SUBJECT" | "COURSE";
+    id: string;
+    name: string;
+  } | null>(null);
+  const [deleteReasonInput, setDeleteReasonInput] = useState<string>("");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteErrorMsg, setDeleteErrorMsg] = useState<string | null>(null);
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      catalogService.deleteCategory(id, reason),
+    onSuccess: () => {
+      messageApi.success("Đã chuyển danh mục vào Thùng rác thành công!");
+      setIsDeleteModalOpen(false);
+      setDeleteTarget(null);
+      setDeleteReasonInput("");
+      setDeleteErrorMsg(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["public-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["adminTrash"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.message || err?.error || "Không thể xóa danh mục này do có ràng buộc dữ liệu.";
+      setDeleteErrorMsg(msg);
+    },
+  });
+
+  const deleteSubjectMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      catalogService.deleteSubject(id, reason),
+    onSuccess: () => {
+      messageApi.success("Đã chuyển môn học vào Thùng rác thành công!");
+      setIsDeleteModalOpen(false);
+      setDeleteTarget(null);
+      setDeleteReasonInput("");
+      setDeleteErrorMsg(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["public-subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["adminTrash"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.message || err?.error || "Không thể xóa môn học này do có ràng buộc dữ liệu.";
+      setDeleteErrorMsg(msg);
+    },
+  });
+
+  const deleteCourseMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      courseService.deleteCourse(id, reason),
+    onSuccess: () => {
+      messageApi.success("Đã chuyển khóa học vào Thùng rác thành công!");
+      setIsDeleteModalOpen(false);
+      setDeleteTarget(null);
+      setDeleteReasonInput("");
+      setDeleteErrorMsg(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-courses"] });
+      queryClient.invalidateQueries({ queryKey: ["public-courses"] });
+      queryClient.invalidateQueries({ queryKey: ["adminTrash"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.message || err?.error || "Không thể xóa khóa học này do có lớp học hoặc ràng buộc liên quan.";
+      setDeleteErrorMsg(msg);
+    },
+  });
+
+  const handleOpenDeleteModal = (type: "CATEGORY" | "SUBJECT" | "COURSE", id: string, name: string) => {
+    setDeleteTarget({ type, id, name });
+    setDeleteReasonInput("");
+    setDeleteErrorMsg(null);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.type === "CATEGORY") {
+      deleteCategoryMutation.mutate({ id: deleteTarget.id, reason: deleteReasonInput });
+    } else if (deleteTarget.type === "SUBJECT") {
+      deleteSubjectMutation.mutate({ id: deleteTarget.id, reason: deleteReasonInput });
+    } else if (deleteTarget.type === "COURSE") {
+      deleteCourseMutation.mutate({ id: deleteTarget.id, reason: deleteReasonInput });
+    }
+  };
+
+  const isDeleting =
+    deleteCategoryMutation.isPending ||
+    deleteSubjectMutation.isPending ||
+    deleteCourseMutation.isPending;
 
   // ==========================================
   // TAB 1: CATEGORIES
@@ -600,13 +694,23 @@ export default function AdminCatalogPage() {
                       key: "action",
                       align: "right",
                       render: (_: unknown, record: Category) => (
-                        <Button
-                          size="small"
-                          icon={<EditOutlined />}
-                          onClick={() => handleOpenCategoryModal(record)}
-                        >
-                          Sửa
-                        </Button>
+                        <Space size="small">
+                          <Button
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => handleOpenCategoryModal(record)}
+                          >
+                            Sửa
+                          </Button>
+                          <Button
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => handleOpenDeleteModal("CATEGORY", record.id, record.name)}
+                          >
+                            Xóa
+                          </Button>
+                        </Space>
                       ),
                     },
                   ]}
@@ -718,13 +822,23 @@ export default function AdminCatalogPage() {
                       key: "action",
                       align: "right",
                       render: (_: unknown, record: Subject) => (
-                        <Button
-                          size="small"
-                          icon={<EditOutlined />}
-                          onClick={() => handleOpenSubjectModal(record)}
-                        >
-                          Sửa
-                        </Button>
+                        <Space size="small">
+                          <Button
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => handleOpenSubjectModal(record)}
+                          >
+                            Sửa
+                          </Button>
+                          <Button
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => handleOpenDeleteModal("SUBJECT", record.id, record.name)}
+                          >
+                            Xóa
+                          </Button>
+                        </Space>
                       ),
                     },
                   ]}
@@ -1034,6 +1148,14 @@ export default function AdminCatalogPage() {
                                 </Button>
                               </Popconfirm>
                             )}
+                            <Button
+                              size="small"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => handleOpenDeleteModal("COURSE", record.id, record.title)}
+                            >
+                              Xóa
+                            </Button>
                           </Space>
                         );
                       },
@@ -1590,6 +1712,71 @@ export default function AdminCatalogPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Soft Delete Confirmation Modal */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2 text-rose-600">
+            <ExclamationCircleOutlined />
+            <span>Chuyển vào Thùng rác (Soft Delete)</span>
+          </div>
+        }
+        open={isDeleteModalOpen}
+        onCancel={() => {
+          setIsDeleteModalOpen(false);
+          setDeleteTarget(null);
+          setDeleteErrorMsg(null);
+        }}
+        confirmLoading={isDeleting}
+        okText="Chuyển vào Thùng rác"
+        cancelText="Hủy"
+        okButtonProps={{ danger: true }}
+        onOk={handleConfirmDelete}
+      >
+        {deleteTarget && (
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-slate-700">
+              Bạn có chắc chắn muốn chuyển{" "}
+              <strong>
+                {deleteTarget.type === "CATEGORY"
+                  ? "danh mục"
+                  : deleteTarget.type === "SUBJECT"
+                  ? "môn học"
+                  : "khóa học"}
+              </strong>{" "}
+              <span className="text-[#0D9488] font-bold">&ldquo;{deleteTarget.name}&rdquo;</span>{" "}
+              vào Thùng rác không?
+            </p>
+
+            {deleteErrorMsg && (
+              <Alert
+                type="error"
+                showIcon
+                message="Không thể xóa mục này"
+                description={deleteErrorMsg}
+                className="rounded-xl border-red-200"
+              />
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Lý do xóa (ghi nhận lịch sử kiểm toán):
+              </label>
+              <TextArea
+                rows={3}
+                placeholder="Nhập lý do xóa mục này..."
+                value={deleteReasonInput}
+                onChange={(e) => setDeleteReasonInput(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+
+            <p className="text-[11px] text-slate-500 italic">
+              * Dữ liệu sẽ được ẩn khỏi trang Public và chuyển vào Thùng rác. Bạn có thể khôi phục bất cứ lúc nào từ trang Thùng rác nếu không có xung đột dữ liệu.
+            </p>
           </div>
         )}
       </Modal>

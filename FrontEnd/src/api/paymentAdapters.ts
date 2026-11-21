@@ -101,6 +101,15 @@ export function adaptPayment(raw: ApiPayment): Payment {
       typeof raw.remainingSeconds === "number" ? Math.max(0, raw.remainingSeconds) : undefined,
     classId: raw.classId ? String(raw.classId) : null,
     className: raw.className,
+    teacherName: raw.teacherName,
+    classPrice: raw.classPrice,
+    studentName: raw.studentName,
+    studentEmail: raw.studentEmail,
+    studentPhone: raw.studentPhone,
+    payerName: raw.payerName,
+    isRefundPending: Boolean(raw.isRefundPending),
+    refundCase: raw.refundCase,
+    reconciliation: raw.reconciliation,
     campaignTitle: raw.campaignTitle ?? null,
     campaignStatus: raw.campaignStatus ?? null,
     isAnonymous: Boolean(raw.isAnonymous),
@@ -108,6 +117,7 @@ export function adaptPayment(raw: ApiPayment): Payment {
     reconciliationRequired: Boolean(raw.reconciliationRequired),
     reconciliationReason: raw.reconciliationReason ?? null,
     reconciliationStatus: raw.reconciliationStatus ?? null,
+    providerMetadata: raw.providerMetadata || null,
   };
 }
 

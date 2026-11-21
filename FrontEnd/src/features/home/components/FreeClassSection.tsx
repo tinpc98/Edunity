@@ -27,7 +27,7 @@ export default function FreeClassSection() {
       ) : classes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 bg-white py-10 text-center">
           <p className="text-[13px] text-slate-500">Hiện chưa có lớp miễn phí nào đang mở đăng ký.</p>
-          <Link to="/classes" className="mt-2 inline-block text-[12px] font-bold text-indigo-600 hover:text-indigo-800">
+          <Link to="/classes" className="mt-2 inline-block text-[12px] font-bold text-[#0D9488] hover:text-[#0F766E]">
             Khám phá tất cả lớp học →
           </Link>
         </div>

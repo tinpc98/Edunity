@@ -209,7 +209,34 @@ const listMyPayouts = async (teacherId) => {
 
 const adminListPayouts = async (query = {}, paging) => {
   const filter = {};
-  if (query.status && query.status !== "ALL") filter.status = query.status;
+
+  if (query.status && query.status !== "ALL") {
+    if (query.status === "AWAITING_TRANSFER") {
+      filter.status = { $in: ["APPROVED", "SCHEDULED", "PENDING_BANK_TRANSFER", "PROCESSING"] };
+    } else if (query.status === "REJECTED_FAILED") {
+      filter.status = { $in: ["REJECTED", "FAILED"] };
+    } else {
+      filter.status = query.status;
+    }
+  }
+
+  if (query.search && typeof query.search === "string" && query.search.trim()) {
+    const term = query.search.trim();
+    const matchedTeachers = await User.find({
+      $or: [
+        { email: { $regex: term, $options: "i" } },
+        { "teacherProfile.fullName": { $regex: term, $options: "i" } },
+        { fullName: { $regex: term, $options: "i" } },
+      ],
+    }).select("_id").limit(100).lean();
+
+    const teacherIds = matchedTeachers.map((t) => t._id);
+    filter.$or = [
+      { teacherId: { $in: teacherIds } },
+      { "bankTransferProof.bankReference": { $regex: term, $options: "i" } },
+      { "bankAccountSnapshot.accountHolderName": { $regex: term, $options: "i" } },
+    ];
+  }
 
   const [items, total] = await Promise.all([
     Payout.find(filter)
@@ -396,6 +423,13 @@ const completePayout = async (adminId, payoutId, body = {}, options = {}) => {
     await session.withTransaction(async () => {
       const existingPayout = await Payout.findById(payoutId).session(session);
       if (!existingPayout) throw payoutNotFound();
+      if (existingPayout.isTestData || existingPayout.testDataTag) {
+        throw new AppError(
+          "Bản ghi thử nghiệm (TEST) không thể thực hiện xác nhận chi trả thật.",
+          "TEST_DATA_PAYOUT_BLOCKED",
+          400,
+        );
+      }
       if (existingPayout.status === "COMPLETED") {
         payout = existingPayout;
         return;
@@ -658,19 +692,25 @@ const rejectPayout = async (adminId, payoutId, body = {}, options = {}) => {
   let lockedDueToDispute = false;
   try {
     await session.withTransaction(async () => {
-      payout = await Payout.findOneAndUpdate(
-        {
-          _id: payoutId,
-          status: {
-            $in: [
-              "PENDING",
-              "PROCESSING",
-              "APPROVED",
-              "SCHEDULED",
-              "PENDING_BANK_TRANSFER",
-            ],
-          },
-        },
+      const existing = await Payout.findById(payoutId).session(session);
+      if (!existing) throw payoutNotFound();
+      if (existing.status === "COMPLETED") {
+        throw new AppError(
+          "Không thể từ chối yêu cầu rút tiền đã hoàn tất (COMPLETED).",
+          "PAYOUT_ALREADY_COMPLETED",
+          400
+        );
+      }
+      if (existing.status !== "PENDING") {
+        throw new AppError(
+          "Chỉ có thể từ chối yêu cầu rút tiền đang ở trạng thái Chờ phê duyệt (PENDING).",
+          "PAYOUT_NOT_REJECTABLE",
+          400
+        );
+      }
+
+      payout = await Payout.findByIdAndUpdate(
+        payoutId,
         {
           $set: {
             status: "REJECTED",

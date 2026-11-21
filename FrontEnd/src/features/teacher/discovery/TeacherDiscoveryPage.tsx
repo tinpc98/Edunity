@@ -18,31 +18,31 @@ import type { PublicTeacherListItem } from "../../../services/catalog.service";
 
 function TeacherCard({ teacher }: { teacher: PublicTeacherListItem }) {
   return (
-    <div className="bg-white border border-slate-200/80 rounded-2xl p-5 flex flex-col h-[270px] transition-all duration-200 hover:shadow-lg hover:border-indigo-200 group">
+    <div className="bg-white border border-[#D6E5E2] rounded-2xl p-5 flex flex-col h-[270px] transition-all duration-200 hover:shadow-lg hover:border-[#0D9488] group">
       <div className="flex gap-4 mb-3">
         {teacher.avatarUrl ? (
           <img
             src={teacher.avatarUrl}
             alt={teacher.fullName}
-            className="w-14 h-14 rounded-full object-cover border border-slate-100 flex-shrink-0"
+            className="w-14 h-14 rounded-full object-cover border border-[#D6E5E2] flex-shrink-0"
           />
         ) : (
-          <div className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-xl flex-shrink-0">
+          <div className="w-14 h-14 rounded-full bg-[#CCFBF1] border border-[#99F6E4] flex items-center justify-center text-[#0F766E] text-xl flex-shrink-0 font-bold">
             <UserOutlined />
           </div>
         )}
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 mb-1">
-            <h3 className="text-base font-bold text-slate-900 truncate" title={teacher.fullName}>
+            <h3 className="text-base font-bold text-[#163B40] truncate" title={teacher.fullName}>
               {teacher.fullName}
             </h3>
-            <span title="Giáo viên đã được xác thực chuyên môn" className="shrink-0 text-emerald-500 text-sm">
+            <span title="Giáo viên đã được xác thực chuyên môn" className="shrink-0 text-[#0D9488] text-sm">
               <CheckCircleFilled />
             </span>
           </div>
           <p
-            className="text-xs text-indigo-600 font-medium line-clamp-1"
+            className="text-xs text-[#0D9488] font-medium line-clamp-1"
             title={teacher.qualificationSummary || ""}
           >
             {teacher.qualificationSummary || "Giáo viên Edunity"}
@@ -52,7 +52,7 @@ function TeacherCard({ teacher }: { teacher: PublicTeacherListItem }) {
 
       <div className="flex items-center gap-1.5 mb-3 bg-amber-50/60 w-fit px-2.5 py-1 rounded-full border border-amber-100">
         <StarFilled className="text-amber-400 text-xs" />
-        <span className="text-xs font-bold text-slate-800">
+        <span className="text-xs font-bold text-[#163B40]">
           {typeof teacher.ratingAverage === "number" ? teacher.ratingAverage.toFixed(1) : "0.0"}
         </span>
         <span className="text-xs text-slate-400">
@@ -61,17 +61,17 @@ function TeacherCard({ teacher }: { teacher: PublicTeacherListItem }) {
       </div>
 
       <div className="mb-4 flex-1 overflow-hidden">
-        <p className="text-xs text-slate-500 line-clamp-3 leading-relaxed">
+        <p className="text-xs text-[#64748B] line-clamp-3 leading-relaxed">
           {teacher.biography || "Giáo viên tận tâm với nhiều năm kinh nghiệm giảng dạy tại Edunity."}
         </p>
       </div>
 
-      <div className="mt-auto pt-2 border-t border-slate-100">
+      <div className="mt-auto pt-2 border-t border-[#D6E5E2]/60">
         <Link to={`/teachers/${teacher.id}`} className="block">
           <Button
             type="primary"
             ghost
-            className="w-full h-9 rounded-xl font-medium text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-400"
+            className="w-full h-9 rounded-xl font-medium text-xs border-[#99F6E4] text-[#0F766E] hover:bg-[#CCFBF1] hover:border-[#0D9488]"
           >
             Xem hồ sơ & Lớp học →
           </Button>

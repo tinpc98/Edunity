@@ -63,7 +63,7 @@ export default function ClassCard({ item }: ClassCardProps) {
   return (
     <div
       onClick={handleViewDetail}
-      className="group bg-white rounded-xl border border-slate-200/80 hover:border-indigo-300 hover:shadow-lg transition-all duration-300 overflow-hidden flex flex-col h-full cursor-pointer"
+      className="group bg-white rounded-xl border border-[#D6E5E2] hover:border-[#0D9488] hover:shadow-lg transition-all duration-300 overflow-hidden flex flex-col h-full cursor-pointer"
     >
       {/* Thumbnail Banner */}
       <div className="relative h-36 w-full overflow-hidden bg-slate-100 shrink-0">
@@ -75,13 +75,13 @@ export default function ClassCard({ item }: ClassCardProps) {
         />
 
         {/* Grade Badge */}
-        <span className="absolute top-2.5 left-2.5 bg-white/95 backdrop-blur text-indigo-700 text-[11px] font-bold px-2 py-0.5 rounded shadow-sm">
+        <span className="absolute top-2.5 left-2.5 bg-white/95 backdrop-blur text-[#0F766E] text-[11px] font-bold px-2 py-0.5 rounded shadow-xs">
           {gradeLabel}
         </span>
 
         {/* Free Badge if applicable */}
         {isFree && (
-          <span className="absolute top-2.5 right-2.5 bg-emerald-600/95 backdrop-blur text-white text-[10px] font-extrabold px-2 py-0.5 rounded shadow-sm tracking-wider">
+          <span className="absolute top-2.5 right-2.5 bg-[#0D9488]/95 backdrop-blur text-white text-[10px] font-extrabold px-2 py-0.5 rounded shadow-sm tracking-wider">
             FREE
           </span>
         )}
@@ -102,14 +102,14 @@ export default function ClassCard({ item }: ClassCardProps) {
               <img
                 src={teacherAvatar}
                 alt={teacherName}
-                className="w-5 h-5 rounded-full object-cover border border-slate-200"
+                className="w-5 h-5 rounded-full object-cover border border-[#D6E5E2]"
               />
             ) : (
-              <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
+              <div className="w-5 h-5 rounded-full bg-[#CCFBF1] text-[#0F766E] flex items-center justify-center text-[10px] font-bold">
                 {teacherName.charAt(0)}
               </div>
             )}
-            <span className="text-xs text-slate-600 font-medium truncate">
+            <span className="text-xs text-[#334155] font-medium truncate">
               {teacherName}
             </span>
           </div>
@@ -124,23 +124,23 @@ export default function ClassCard({ item }: ClassCardProps) {
         {/* Primary Title: Class Name */}
         <h3
           title={className || title}
-          className="text-[14px] font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors min-h-[40px] !m-0"
+          className="text-[14px] font-bold text-[#163B40] line-clamp-2 leading-snug group-hover:text-[#0D9488] transition-colors min-h-[40px] !m-0"
         >
           {className || title}
         </h3>
 
         {/* Secondary Context: Course Relationship */}
-        <div className="flex items-center gap-1.5 text-[11.5px] text-slate-500 min-h-[18px]">
+        <div className="flex items-center gap-1.5 text-[11.5px] text-[#64748B] min-h-[18px]">
           <span className="text-slate-400 shrink-0 font-normal">Thuộc khóa:</span>
-          <span className="font-medium text-slate-600 truncate" title={courseTitle}>
+          <span className="font-medium text-[#334155] truncate" title={courseTitle}>
             {courseTitle}
           </span>
         </div>
 
         {/* Schedule & Capacity Badges */}
-        <div className="rounded-lg bg-slate-50 p-2 space-y-1 text-[11px] text-slate-600 border border-slate-100">
+        <div className="rounded-lg bg-[#F5FAF9] p-2 space-y-1 text-[11px] text-[#334155] border border-[#D6E5E2]/50">
           <div className="flex items-center gap-1.5">
-            <ClockCircleOutlined className="text-indigo-500 shrink-0" />
+            <ClockCircleOutlined className="text-[#0D9488] shrink-0" />
             <span className="truncate">{scheduleText}</span>
           </div>
 
@@ -149,7 +149,7 @@ export default function ClassCard({ item }: ClassCardProps) {
                 ? "text-rose-600"
                 : nearlyFull
                   ? "text-amber-600"
-                  : "text-emerald-700"
+                  : "text-[#0F766E]"
               }`}
           >
             <TeamOutlined className="shrink-0" />
@@ -165,7 +165,7 @@ export default function ClassCard({ item }: ClassCardProps) {
         </div>
 
         {/* Price & Actions Row */}
-        <div className="mt-auto pt-2.5 border-t border-slate-100">
+        <div className="mt-auto pt-2.5 border-t border-[#D6E5E2]/60">
           {/* Price */}
           <div className="mb-2.5">
             <div className="text-[10px] text-slate-400">
@@ -173,7 +173,7 @@ export default function ClassCard({ item }: ClassCardProps) {
             </div>
 
             <div
-              className={`text-base font-extrabold ${isFree ? "text-emerald-600" : "text-indigo-700"
+              className={`text-base font-extrabold ${isFree ? "text-[#0D9488]" : "text-[#0D9488]"
                 }`}
             >
               {formattedPrice}
@@ -188,7 +188,7 @@ export default function ClassCard({ item }: ClassCardProps) {
                 e.stopPropagation();
                 handleViewDetail();
               }}
-              className="flex-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:border-indigo-400 rounded h-8"
+              className="flex-1 text-xs font-semibold text-[#334155] hover:text-[#0D9488] hover:border-[#0D9488] rounded h-8"
             >
               Chi tiết
             </Button>
@@ -197,7 +197,7 @@ export default function ClassCard({ item }: ClassCardProps) {
               <Button
                 size="small"
                 disabled
-                className="flex-1 text-xs font-semibold rounded h-8 bg-emerald-50 text-emerald-700 border-emerald-200"
+                className="flex-1 text-xs font-semibold rounded h-8 bg-[#CCFBF1] text-[#0F766E] border-[#99F6E4]"
               >
                 Đã đăng ký
               </Button>
@@ -220,7 +220,7 @@ export default function ClassCard({ item }: ClassCardProps) {
                 loading={isEnrolling && enrollingClassId === id}
                 disabled={isEnrolling}
                 onClick={handleRegister}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold rounded h-8 shadow-sm border-none inline-flex items-center justify-center gap-1"
+                className="flex-1 bg-[#0D9488] hover:bg-[#0B746C] text-xs font-semibold rounded h-8 shadow-sm border-none inline-flex items-center justify-center gap-1"
               >
                 <CheckCircleOutlined className="text-[11px]" />
                 Đăng ký ngay

@@ -53,6 +53,9 @@ import AdminFinanceOverviewPage from "../features/admin/finance/AdminFinanceOver
 import AdminBankEventsPage from "../features/admin/finance/AdminBankEventsPage";
 import AdminReconciliationsPage from "../features/admin/finance/AdminReconciliationsPage";
 import { AdminReportsPage } from "../features/admin/reports/AdminReportsPage";
+import AdminReviewsPage from "../features/admin/reviews/AdminReviewsPage";
+import AdminTrashPage from "../features/admin/trash/AdminTrashPage";
+import AdminNotificationsPage from "../features/admin/notifications/AdminNotificationsPage";
 import SponsorLayout from "../components/layout/SponsorLayout";
 import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
 import SponsorProfilePage from "../features/sponsor/profile/SponsorProfilePage";
@@ -74,6 +77,8 @@ import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { MessagesPage } from "../features/messages/MessagesPage";
 import { MyReportsPage } from "../features/reports/MyReportsPage";
 import NotFoundPage from "../components/common/NotFoundPage";
+import AboutPage from "../features/about/AboutPage";
+import SupportPage from "../features/support/SupportPage";
 
 const router = createBrowserRouter([
   {
@@ -82,6 +87,14 @@ const router = createBrowserRouter([
       {
         path: ROUTES.HOME,
         element: <HomePage />,
+      },
+      {
+        path: ROUTES.ABOUT,
+        element: <AboutPage />,
+      },
+      {
+        path: ROUTES.SUPPORT,
+        element: <SupportPage />,
       },
       {
         path: ROUTES.CLASSES,
@@ -358,6 +371,10 @@ const router = createBrowserRouter([
         element: <AdminFinanceOverviewPage />,
       },
       {
+        path: "finance/overview",
+        element: <AdminFinanceOverviewPage />,
+      },
+      {
         path: "payments",
         element: <AdminPaymentsPage />,
       },
@@ -384,6 +401,18 @@ const router = createBrowserRouter([
       {
         path: "reports",
         element: <AdminReportsPage />,
+      },
+      {
+        path: "reviews",
+        element: <AdminReviewsPage />,
+      },
+      {
+        path: "trash",
+        element: <AdminTrashPage />,
+      },
+      {
+        path: "notifications",
+        element: <AdminNotificationsPage />,
       },
     ],
   },

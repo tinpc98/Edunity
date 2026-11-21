@@ -62,6 +62,22 @@ class CourseCatalogService {
     return adaptCategory(raw);
   }
 
+  /** DELETE /admin/categories/:id — Soft delete category */
+  async deleteCategory(id: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/admin/categories/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  /** POST /admin/categories/:id/restore — Restore category */
+  async restoreCategory(id: string): Promise<Category> {
+    const raw = await apiClient<ApiCategory>(`/admin/categories/${id}/restore`, {
+      method: "POST",
+    });
+    return adaptCategory(raw);
+  }
+
   /** POST /admin/subjects */
   async createSubject(payload: CreateSubjectPayload): Promise<Subject> {
     const raw = await apiClient<ApiSubject>("/admin/subjects", {
@@ -76,6 +92,22 @@ class CourseCatalogService {
     const raw = await apiClient<ApiSubject>(`/admin/subjects/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    });
+    return adaptSubject(raw);
+  }
+
+  /** DELETE /admin/subjects/:id — Soft delete subject */
+  async deleteSubject(id: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/admin/subjects/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  /** POST /admin/subjects/:id/restore — Restore subject */
+  async restoreSubject(id: string): Promise<Subject> {
+    const raw = await apiClient<ApiSubject>(`/admin/subjects/${id}/restore`, {
+      method: "POST",
     });
     return adaptSubject(raw);
   }

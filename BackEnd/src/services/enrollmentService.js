@@ -129,8 +129,8 @@ const createEnrollment = async (studentId, classId, retried = false) => {
         enrollmentStatus = "CONFIRMED";
         paymentSource = "FREE";
       } else {
-        // BR-38: keep seat for 15 mins
-        const seatHoldDuration = getSetting("SEAT_HOLD_DURATION") || 15 * 60 * 1000;
+        // BR-38: keep seat for 10 mins (updated from 15 mins)
+        const seatHoldDuration = getSetting("SEAT_HOLD_DURATION") || 10 * 60 * 1000;
         holdExpiresAt = new Date(now.getTime() + seatHoldDuration);
       }
 
@@ -222,7 +222,7 @@ const getMyEnrollments = async (studentId, page = 1, limit = 20, includeClass = 
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate("classId", "className courseTitle teacherName subjectName coverImage classType price startDate endDate status capacity enrolledCount")
+    .populate("classId", "className courseTitle teacherName subjectName coverImage classType price startDate endDate schedule status capacity enrolledCount")
     .lean();
   
   if (includeClass) {
@@ -239,6 +239,7 @@ const getMyEnrollments = async (studentId, page = 1, limit = 20, includeClass = 
           coverImage: item.classId.coverImage,
           startDate: item.classId.startDate,
           endDate: item.classId.endDate,
+          schedule: item.classId.schedule || [],
           status: item.classId.status
         };
         const nextSession = await Session.findOne({ 

@@ -8,11 +8,17 @@ const admin = [authMiddleware, requireRole("ADMIN")];
 const teacher = [authMiddleware, requireRole("TEACHER")];
 const student = [authMiddleware, requireRole("STUDENT")];
 
-// Reviews (Class-level)
+// Reviews (Class-level) & Moderation
 router.post("/classes/:id/reviews", student, controller.createReview);
 router.get("/classes/:id/reviews", controller.getClassReviews);
 router.get("/teachers/:id/reviews", controller.getTeacherReviews);
 router.get("/me/reviews", student, controller.getMyReviews);
+router.get("/admin/reviews", admin, controller.adminListReviews);
+router.get("/admin/reviews/:id", admin, controller.adminGetReviewDetail);
+router.post("/admin/reviews/:id/hide", admin, controller.hideReview);
+router.post("/admin/reviews/:id/unhide", admin, controller.unhideReview);
+router.delete("/admin/reviews/:id", admin, controller.deleteReview);
+router.post("/admin/reviews/:id/restore", admin, controller.restoreReview);
 
 // Teacher verification (BR-01)
 router.post("/teacher/verification", teacher, controller.submitVerification);

@@ -68,18 +68,18 @@ export default function CampaignsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#F5FAF9] py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Banner / Header */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white p-8 md:p-12 shadow-xl">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#0F766E] via-[#0D9488] to-[#14B8A6] text-white p-8 md:p-12 shadow-xl">
           <div className="relative z-10 max-w-3xl space-y-4">
-            <Tag color="cyan" className="px-3 py-1 font-semibold text-xs tracking-wider uppercase border-0">
+            <Tag className="px-3 py-1 font-semibold text-xs tracking-wider uppercase border-0 bg-white/20 text-white">
               Chương trình tài trợ cộng đồng
             </Tag>
             <Title level={1} className="!text-white !mb-2 font-black tracking-tight text-3xl md:text-5xl">
               Chiến dịch Học bổng Edunity
             </Title>
-            <Paragraph className="!text-indigo-100 text-base md:text-lg leading-relaxed">
+            <Paragraph className="!text-teal-50 text-base md:text-lg leading-relaxed">
               Kết nối những tấm lòng nhân ái và các nhà tài trợ hảo tâm với các học sinh có hoàn cảnh khó khăn, cùng nhau xây dựng tương lai giáo dục bình đẳng và bền vững.
             </Paragraph>
           </div>
@@ -89,7 +89,7 @@ export default function CampaignsPage() {
         </div>
 
         {/* Filter Bar */}
-        <Card className="rounded-2xl border-slate-200/80 shadow-xs">
+        <Card className="rounded-2xl border-[#D6E5E2] shadow-xs">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <Tabs
               activeKey={statusFilter}
@@ -161,7 +161,7 @@ export default function CampaignsPage() {
                 <Col xs={24} md={12} lg={8} key={campaign.id}>
                   <Card
                     hoverable
-                    className="h-full rounded-2xl border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
+                    className="h-full rounded-2xl border-[#D6E5E2] hover:border-[#0D9488] shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
                   >
                     <div>
                       {/* Status & Deadline Header */}
@@ -183,51 +183,51 @@ export default function CampaignsPage() {
                       <Link to={`/campaigns/${campaign.id}`}>
                         <Title
                           level={4}
-                          className="!mb-2 !text-slate-900 group-hover:!text-indigo-600 transition-colors line-clamp-2 font-bold"
+                          className="!mb-2 !text-[#163B40] group-hover:!text-[#0D9488] transition-colors line-clamp-2 font-bold"
                         >
                           {campaign.title}
                         </Title>
                       </Link>
 
                       {/* Description Excerpt */}
-                      <Paragraph className="text-slate-500 text-xs line-clamp-3 mb-4 leading-relaxed">
+                      <Paragraph className="text-[#64748B] text-xs line-clamp-3 mb-4 leading-relaxed">
                         {campaign.description || "Chương trình trao học bổng hỗ trợ học viên đạt thành tích tốt trong học tập."}
                       </Paragraph>
 
                       {/* Funding Progress Bar */}
-                      <div className="space-y-1.5 mb-5 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                      <div className="space-y-1.5 mb-5 bg-[#F5FAF9] p-3.5 rounded-xl border border-[#D6E5E2]/60">
                         <div className="flex justify-between items-baseline text-xs">
-                          <span className="font-semibold text-slate-700">Tiến độ quyên góp:</span>
-                          <span className="font-bold text-indigo-600">{percent}%</span>
+                          <span className="font-semibold text-[#163B40]">Tiến độ quyên góp:</span>
+                          <span className="font-bold text-[#0D9488]">{percent}%</span>
                         </div>
                         <Progress
                           percent={percent}
                           showInfo={false}
-                          strokeColor={{ "0%": "#6366f1", "100%": "#3b82f6" }}
+                          strokeColor={{ "0%": "#0D9488", "100%": "#14B8A6" }}
                           size="small"
                         />
                         <div className="flex justify-between text-xs pt-1">
-                          <span className="font-bold text-slate-900">{formatVND(campaign.fundedAmount)}</span>
+                          <span className="font-bold text-[#163B40]">{formatVND(campaign.fundedAmount)}</span>
                           <span className="text-slate-400">/ {formatVND(campaign.targetBudget)}</span>
                         </div>
                       </div>
 
                       {/* Metric Badges */}
                       <div className="grid grid-cols-2 gap-2 text-xs mb-4">
-                        <div className="p-2.5 rounded-lg bg-indigo-50/50 border border-indigo-100/60">
-                          <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                            <TeamOutlined className="text-indigo-500" /> Suất học bổng
+                        <div className="p-2.5 rounded-lg bg-[#CCFBF1]/40 border border-[#99F6E4]/60">
+                          <div className="text-[11px] text-[#0F766E] flex items-center gap-1">
+                            <TeamOutlined className="text-[#0D9488]" /> Suất học bổng
                           </div>
-                          <div className="font-bold text-slate-800 mt-0.5">
+                          <div className="font-bold text-[#163B40] mt-0.5">
                             {campaign.expectedSlots} suất
                           </div>
                         </div>
 
-                        <div className="p-2.5 rounded-lg bg-emerald-50/50 border border-emerald-100/60">
-                          <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                            <DollarOutlined className="text-emerald-500" /> Định mức / suất
+                        <div className="p-2.5 rounded-lg bg-[#F0FDFA] border border-[#99F6E4]/60">
+                          <div className="text-[11px] text-[#0F766E] flex items-center gap-1">
+                            <DollarOutlined className="text-[#0D9488]" /> Định mức / suất
                           </div>
-                          <div className="font-bold text-emerald-700 mt-0.5">
+                          <div className="font-bold text-[#0F766E] mt-0.5">
                             {formatVND(campaign.awardAmountPerStudent)}
                           </div>
                         </div>
@@ -235,16 +235,16 @@ export default function CampaignsPage() {
                     </div>
 
                     {/* Action Button */}
-                    <div className="pt-3 border-t border-slate-100">
+                    <div className="pt-3 border-t border-[#D6E5E2]/60">
                       <Link to={`/campaigns/${campaign.id}`} className="block">
                         <Button
                           type="primary"
                           block
                           icon={<ArrowRightOutlined />}
-                          className={`rounded-xl font-semibold h-10 ${
+                          className={`rounded-xl font-semibold h-10 border-none shadow-xs ${
                             isClosed
                               ? "bg-slate-700 hover:bg-slate-600"
-                              : "bg-indigo-600 hover:bg-indigo-500"
+                              : "bg-[#0D9488] hover:bg-[#0B746C]"
                           }`}
                         >
                           {isClosed ? "Xem kết quả chiến dịch" : "Chi tiết & Tài trợ ngay"}

@@ -30,7 +30,7 @@ import {
 import {
   formatVND,
   PAYOUT_STATUS_COLORS,
-  PAYOUT_STATUS_LABELS,
+  TEACHER_PAYOUT_STATUS_LABELS,
 } from "../../../types/payment";
 import { maskBankAccountNumber } from "../../../utils/maskBankAccount";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
@@ -244,12 +244,19 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
             align: "center",
             render: (s: PayoutStatus, row) => (
               <div className="space-y-1">
-                <Tag color={PAYOUT_STATUS_COLORS[s] || "default"}>
-                  {PAYOUT_STATUS_LABELS[s] || s}
-                </Tag>
-                {row.scheduledAt && s === "SCHEDULED" && (
-                  <div className="text-[11px] text-purple-600">
-                    Lịch chi: {new Date(row.scheduledAt).toLocaleDateString("vi-VN")}
+                <div className="flex items-center justify-center gap-1">
+                  <Tag color={PAYOUT_STATUS_COLORS[s] || "default"}>
+                    {TEACHER_PAYOUT_STATUS_LABELS[s] || s}
+                  </Tag>
+                  {row.isTestData && (
+                    <Tag color="orange" className="!m-0 text-[10px] font-semibold border-0 bg-amber-100 text-amber-800">
+                      Thử nghiệm
+                    </Tag>
+                  )}
+                </div>
+                {row.scheduledAt && ["APPROVED", "SCHEDULED"].includes(s) && (
+                  <div className="text-[11px] text-purple-600 font-medium">
+                    Dự kiến nhận: {new Date(row.scheduledAt).toLocaleDateString("vi-VN")}
                   </div>
                 )}
                 {row.reviewNote && (

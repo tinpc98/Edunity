@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { classDiscoveryService, DEFAULT_MAX_PRICE } from "../../../services/classDiscovery.service";
 import type {
-  BackendClassStatus,
   BackendClassType,
   BackendGradeLevel,
   FilterState,
@@ -63,9 +62,6 @@ export function useClassDiscoveryFilters() {
     const timeOfDay = (searchParams.get("timeOfDay")?.split(",").filter(Boolean) ||
       []) as TimeOfDay[];
 
-    const statuses = (searchParams.get("statuses")?.split(",").filter(Boolean) ||
-      []) as BackendClassStatus[];
-
     const minPrice = searchParams.has("minPrice")
       ? Number(searchParams.get("minPrice"))
       : undefined;
@@ -74,7 +70,7 @@ export function useClassDiscoveryFilters() {
       ? Number(searchParams.get("maxPrice"))
       : undefined;
 
-    const sort = (searchParams.get("sort") || "relevance") as SortOption;
+    const sort = (searchParams.get("sort") || "upcoming") as SortOption;
     const page = Math.max(1, Number(searchParams.get("page") || 1));
     const pageSize = Number(searchParams.get("pageSize") || DEFAULT_PAGE_SIZE);
 
@@ -87,7 +83,7 @@ export function useClassDiscoveryFilters() {
       minPrice,
       maxPrice,
       timeOfDay,
-      statuses,
+      statuses: [],
       teacherId,
       sort,
       page,
@@ -158,11 +154,7 @@ export function useClassDiscoveryFilters() {
           }
 
           if ("statuses" in updates) {
-            if (updates.statuses && updates.statuses.length > 0) {
-              next.set("statuses", updates.statuses.join(","));
-            } else {
-              next.delete("statuses");
-            }
+            next.delete("statuses");
           }
 
           if ("minPrice" in updates) {

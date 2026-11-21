@@ -92,9 +92,6 @@ class ClassDiscoveryService {
     if (filters.classTypes && filters.classTypes.length > 0) {
       apiFilters.classTypes = filters.classTypes.join(",");
     }
-    if (filters.statuses && filters.statuses.length > 0) {
-      apiFilters.statuses = filters.statuses.join(",");
-    }
 
     // The backend replaces the FREE (price = 0) condition with the price range when both are sent,
     // so a price range is only meaningful when the result is not restricted to free classes.
@@ -107,7 +104,7 @@ class ClassDiscoveryService {
     if (filters.sort === "upcoming" || filters.sort === "price_asc" || filters.sort === "price_desc") {
       apiFilters.sort = filters.sort;
     } else {
-      apiFilters.sort = "createdAt";
+      apiFilters.sort = "upcoming";
     }
 
     return apiFilters;

@@ -47,12 +47,12 @@ export default function PriceFilter({
       <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
         <div>
           <span className="text-[10px] text-slate-400 block">Từ</span>
-          <span className="font-bold text-slate-800">{formatPriceShort(currentMin)}</span>
+          <span className="font-bold text-[#163B40]">{formatPriceShort(currentMin)}</span>
         </div>
         <span className="text-slate-300">—</span>
         <div className="text-right">
           <span className="text-[10px] text-slate-400 block">Đến</span>
-          <span className="font-bold text-indigo-700">{formatPriceShort(currentMax)}</span>
+          <span className="font-bold text-[#0D9488]">{formatPriceShort(currentMax)}</span>
         </div>
       </div>
     </div>

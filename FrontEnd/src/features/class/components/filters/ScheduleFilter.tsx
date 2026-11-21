@@ -27,7 +27,7 @@ export default function ScheduleFilter({
           <Checkbox
             key={opt.value}
             value={opt.value}
-            className="!flex items-center text-[13px] text-slate-700 hover:text-indigo-600 !ml-0"
+            className="!flex items-center text-[13px] text-[#334155] hover:text-[#0D9488] !ml-0"
           >
             <span className="flex-1 font-medium">{opt.label}</span>
             <span className="text-[11px] text-slate-400 font-normal ml-1">
