@@ -663,7 +663,7 @@ export default function TeacherProfilePage() {
             <p className="text-xs text-slate-500 mb-3">
               Tải lên cả mặt trước và mặt sau CCCD.
             </p>
-            <IdentityFields />
+            <IdentityFields frontImage={identityFrontFile} />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Front Side */}
