@@ -603,6 +603,8 @@ export default function TeacherClassDetailPage() {
           renderItem={(session: Session, index: number) => {
             const isScheduled = session.status === 'SCHEDULED';
             const isInProgress = session.status === 'IN_PROGRESS';
+            // WAITING = Teacher already in the room but not started; INTERRUPTED = Teacher can return and resume
+            const canEnterRoom = isScheduled || isInProgress || session.status === 'WAITING' || session.status === 'INTERRUPTED';
             const isCompleted = session.status === 'COMPLETED';
             const isCancelled = session.status === 'CANCELLED';
 
@@ -660,7 +662,7 @@ export default function TeacherClassDetailPage() {
                   {/* Actions per session */}
                   <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                     {/* Join Classroom button if SCHEDULED or IN_PROGRESS */}
-                    {(isScheduled || isInProgress) && (
+                    {canEnterRoom && (
                       isClassActiveForLive ? (
                         <Link to={`/classroom/${session.id}`}>
                           <Button

@@ -150,6 +150,7 @@ beforeEach(async () => {
     price: 1200000,
     capacity: 20,
     status: "IN_PROGRESS",
+    roomState: "LIVE",
     startDate: new Date(Date.now() - 10 * 24 * 3600 * 1000),
     endDate: new Date(Date.now() + 60 * 24 * 3600 * 1000),
   });
@@ -233,8 +234,9 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         const studentWaitJoin = await request(app)
           .post(`/api/sessions/${sessionWait._id}/join`)
           .set(as(student1));
-        expect(studentWaitJoin.statusCode).toBe(200);
-        expect(studentWaitJoin.body.data.isWaitingRoom).toBe(true);
+        // Only the Teacher is in the WAITING room: Students join once the Teacher presses "Bắt đầu buổi học"
+        expect(studentWaitJoin.statusCode).toBe(409);
+        expect(studentWaitJoin.body.error).toBe("SESSION_NOT_STARTED");
 
         const reloadedWait = await Session.findById(sessionWait._id).lean();
         expect(reloadedWait.status).toBe("WAITING");
@@ -250,6 +252,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
           teacherId: teacher._id,
           title: "Waiting Room Only Test",
           status: "IN_PROGRESS",
+          roomState: "LIVE",
           startDatetime: baseStart,
           endDatetime: baseEnd,
         });
@@ -300,6 +303,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         teacherId: teacher._id,
         title: "5m Boundary Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: new Date(Date.now() - 5 * 60 * 1000),
         endDatetime: new Date(Date.now() + 115 * 60 * 1000),
       });
@@ -321,6 +325,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         teacherId: teacher._id,
         title: "5m05s Late Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: new Date(Date.now() - 6 * 60 * 1000),
         endDatetime: new Date(Date.now() + 115 * 60 * 1000),
       });
@@ -342,6 +347,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         teacherId: teacher._id,
         title: "19m Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: new Date(Date.now() - 19 * 60 * 1000),
         endDatetime: new Date(Date.now() + 101 * 60 * 1000),
       });
@@ -357,6 +363,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         teacherId: teacher._id,
         title: "21m Cutoff Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: new Date(Date.now() - 21 * 60 * 1000),
         endDatetime: new Date(Date.now() + 99 * 60 * 1000),
       });
@@ -373,6 +380,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         teacherId: teacher._id,
         title: "Token Abuse Prevention Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: new Date(Date.now() - 15 * 60 * 1000),
         endDatetime: new Date(Date.now() + 105 * 60 * 1000),
       });
@@ -429,6 +437,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         teacherId: teacher._id,
         title: "Reconnection Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: startAt,
         endDatetime: endAt,
       });
@@ -486,6 +495,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
           teacherId: teacher._id,
           title,
           status: "IN_PROGRESS",
+          roomState: "LIVE",
           startDatetime: start,
           endDatetime: end,
         });
@@ -834,6 +844,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         teacherId: teacher._id,
         title: "Brief Presence Gaming Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: start,
         endDatetime: end,
       });
@@ -888,6 +899,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         teacherId: teacher._id,
         title: "Incident Review Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: new Date(Date.now() - 25 * 60 * 1000),
         endDatetime: new Date(Date.now() + 95 * 60 * 1000),
       });
@@ -1591,7 +1603,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
       // Scenario K: Move session start to 25 minutes ago -> student1 (whose forged connect was blocked) cannot bypass 20m deadline
       await Session.updateOne(
         { _id: session._id },
-        { $set: { startDatetime: new Date(Date.now() - 25 * 60 * 1000), status: "IN_PROGRESS" } }
+        { $set: { startDatetime: new Date(Date.now() - 25 * 60 * 1000), status: "IN_PROGRESS", roomState: "LIVE" } }
       );
       const bypassJoin = await request(app)
         .post(`/api/sessions/${session._id}/join`)
@@ -1628,6 +1640,7 @@ describe("TIN-05D + TIN-05E: Smart Classroom Lifecycle, Attendance, Teacher Disc
         teacherId: teacher._id,
         title: "Deduplication, Multi-Tab & Brief Presence Session (I, J, L)",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         meetingRoomId: "room_ijl_1",
         startDatetime: start,
         endDatetime: end,

@@ -219,13 +219,10 @@ const startTeachingRecordingSegmentIfNeeded = async (sessionDoc, teacherId) => {
 /**
  * Stops the active LiveKit recording segment (if any) when the teacher leaves or the session ends.
  */
-// How long a Teacher may sit in the room after the start time before the system starts teaching itself
-const getAutoStartAfterMs = () => (Number(process.env.SESSION_AUTO_START_AFTER_MINUTES) || 10) * 60 * 1000;
-
 const STARTABLE_STATUSES = ["SCHEDULED", "WAITING"];
 
 /**
- * SCHEDULED/WAITING → IN_PROGRESS, recording first (startSession and the lifecycle auto-start).
+ * SCHEDULED/WAITING → IN_PROGRESS, recording first. Called only by startSession (the Teacher's explicit action).
  * When recording is mandatory and cannot start, the Session is NOT started: RECORDING_START_FAILED is thrown
  * and the Session stays WAITING so the Teacher can retry. Never reports a recording that is not running.
  */
@@ -715,8 +712,8 @@ const recordParticipantConnected = async ({
     tp.isCurrentlyConnected = true;
     tp.lastConnectedAt = connectTime;
 
-    // Being in the room only opens it: teaching (IN_PROGRESS + recording) starts when the Teacher presses
-    // "Bắt đầu buổi học" (startSession) or when the lifecycle job auto-starts it. See startSession.
+    // Being in the room only opens it: teaching (IN_PROGRESS + recording) starts only when the Teacher presses
+    // "Bắt đầu buổi học" (startSession).
     if (connectMs < startMs) {
       if (!tp.firstPreOpenJoinAt) tp.firstPreOpenJoinAt = connectTime;
     } else {
@@ -1452,7 +1449,6 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
   const nowMs = now.getTime();
   const startMs = session.startDatetime.getTime();
   const endMs = session.endDatetime.getTime();
-  const preOpenMs = startMs - PRE_OPEN_BEFORE_MS;
   const graceEndMs = endMs + POST_END_GRACE_PERIOD_MS;
   const scheduledDurationSeconds = Math.max(1, Math.round((endMs - startMs) / 1000));
 
@@ -1478,36 +1474,9 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
     );
   };
 
-  // 1. Pre-open waiting room window (startDatetime - 10 minutes <= now < startDatetime)
-  if (nowMs >= preOpenMs && nowMs < startMs) {
-    if (session.roomState === "NOT_OPEN" || session.status === "SCHEDULED") {
-      if (session.status === "SCHEDULED") session.status = "WAITING";
-      session.roomState = "WAITING";
-      session.lifecycleState = "WAITING";
-      if (!session.preOpenedAt) session.preOpenedAt = now;
-      if (!session.meetingRoomId) session.meetingRoomId = `room_${session._id}`;
-      await session.save();
-
-      const recordingNotice = videoProvider.isRecordingRequired()
-        ? " Buổi học sẽ được ghi hình từ khi giáo viên bắt đầu giảng dạy; bản ghi chỉ dành cho giáo viên, học viên của lớp và quản trị viên."
-        : "";
-      await notifyOnce(
-        session.teacherId,
-        "Phòng học đã mở",
-        `Phòng học của buổi "${session.title}" đã mở. Bạn có thể vào kiểm tra camera, micro trước giờ học và nhấn "Bắt đầu buổi học" khi sẵn sàng.${recordingNotice}`,
-        "SESSION_ROOM_OPENED",
-        `session:${session._id}:teacher:room_opened`,
-        session._id
-      );
-      await notifyAllStudents(
-        "Buổi học sắp bắt đầu",
-        `Phòng học của buổi "${session.title}" đã mở, buổi học bắt đầu sau ít phút nữa.${recordingNotice}`,
-        "SESSION_ROOM_OPENED",
-        "room_opened"
-      );
-    }
-    return session.toObject();
-  }
+  // 1. Before startDatetime nothing happens automatically: the room opens only when the Teacher joins it, and
+  // teaching starts only when the Teacher presses "Bắt đầu buổi học" (no pre-open, no auto-start).
+  if (nowMs < startMs) return session.toObject();
 
   // 2. Official start time reached (now >= startDatetime)
   if (nowMs >= startMs) {
@@ -1525,37 +1494,18 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
       Boolean(teacherOpenInterval) ||
       Boolean(tp.isCurrentlyConnected && !tp.currentAbsenceStartedAt);
 
-    // Teacher in the room but teaching not started: lateness is measured from the room presence; if the Teacher
-    // still has not pressed "Bắt đầu buổi học" AUTO_START_AFTER_MS after the start, the system starts it.
+    // Teacher in the room but teaching not started: lateness is measured from the room presence. The system never
+    // starts teaching on its own; only the Teacher's "Bắt đầu buổi học" (startSession) does.
     if (
       (session.status === "SCHEDULED" || session.status === "WAITING") &&
       isTeacherActuallyConnected &&
-      nowMs <= endMs
+      nowMs <= endMs &&
+      !tp.firstTeachingJoinAt
     ) {
-      if (!tp.firstTeachingJoinAt) {
-        tp.firstTeachingJoinAt = session.startDatetime;
-        tp.isCurrentlyConnected = true;
-        session.teacherPresence = tp;
-        await session.save();
-      }
-      const presentSinceMs = Math.max(startMs, new Date(tp.firstTeachingJoinAt).getTime());
-      if (nowMs - presentSinceMs >= getAutoStartAfterMs()) {
-        try {
-          await beginTeaching(session._id, { startedBy: "SYSTEM", now });
-          await notifyOnce(
-            session.teacherId,
-            "Hệ thống đã tự động bắt đầu buổi học",
-            `Buổi học "${session.title}" đã được tự động bắt đầu vì bạn đã ở trong phòng nhưng chưa nhấn "Bắt đầu buổi học".`,
-            "SESSION_AUTO_STARTED",
-            `session:${session._id}:teacher:auto_started`,
-            session._id
-          );
-        } catch (err) {
-          console.error(`[sessionLifecycle] Auto-start failed for session ${session._id}:`, err.message);
-        }
-        const refreshed = await Session.findById(session._id).lean();
-        return refreshed;
-      }
+      tp.firstTeachingJoinAt = session.startDatetime;
+      tp.isCurrentlyConnected = true;
+      session.teacherPresence = tp;
+      await session.save();
     }
 
     const teacherHasJoinedTeaching = Boolean(tp.firstTeachingJoinAt);
@@ -1904,7 +1854,8 @@ const getSessionLiveStatus = async (user, sessionId) => {
     preOpenAt,
     studentFirstJoinDeadlineAt,
     autoCompleteAt,
-    isWaitingRoom: now >= preOpenAt && now < session.startDatetime,
+    // Teacher in the room but not started yet (state, not clock: the room never opens by time)
+    isWaitingRoom: session.status === "WAITING",
     isInTeachingPeriod: now >= session.startDatetime && now <= session.endDatetime,
     isOvertimeGracePeriod: now > session.endDatetime && session.status === "IN_PROGRESS",
     teacherPresence: session.teacherPresence || {},

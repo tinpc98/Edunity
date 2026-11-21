@@ -73,7 +73,7 @@ export default function TeacherAttendanceModal({
             icon={
               !record.studentId?.studentProfile?.avatarUrl && <UserOutlined />
             }
-            className="bg-indigo-100 text-indigo-600 shrink-0"
+            className="bg-teal-100 text-teal-600 shrink-0"
           >
             {record.studentId?.studentProfile?.fullName?.charAt(0) || "H"}
           </Avatar>
@@ -238,7 +238,7 @@ export default function TeacherAttendanceModal({
       title={
         <div className="flex items-center justify-between pr-8">
           <Space>
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
               <TeamOutlined className="text-base" />
             </div>
             <div>

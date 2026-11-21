@@ -1,4 +1,7 @@
+import type { ReactNode } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { ConfigProvider } from "antd";
+import { publicThemeConfig } from "../components/layout/publicTheme";
 import PublicLayout from "../components/layout/PublicLayout";
 import HomePage from "../features/home/HomePage";
 import ClassDiscoveryPage from "../features/class/ClassDiscoveryPage";
@@ -6,6 +9,12 @@ import CheckoutPage from "../features/enrollment/CheckoutPage";
 import PaymentSuccessPage from "../features/enrollment/PaymentSuccessPage";
 import EnrollmentPage from "../features/enrollment/EnrollmentPage";
 import StudentLayout from "../components/layout/StudentLayout";
+
+// Jade/teal Ant Design tokens (same as Admin/Public) for the Student learning + classroom screens.
+// Applied per page, not on StudentLayout, so Student payment screens keep their current look.
+const Jade = ({ children }: { children: ReactNode }) => (
+  <ConfigProvider theme={publicThemeConfig}>{children}</ConfigProvider>
+);
 import StudentHomePage from "../features/student/home/StudentHomePage";
 import StudentClassSessionsPage from "../features/student/classes/StudentClassSessionsPage";
 import StudentSchedulePage from "../features/student/schedule/StudentSchedulePage";
@@ -200,15 +209,15 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <StudentHomePage />,
+        element: <Jade><StudentHomePage /></Jade>,
       },
       {
         path: "classes/:classId",
-        element: <StudentClassSessionsPage />,
+        element: <Jade><StudentClassSessionsPage /></Jade>,
       },
       {
         path: "schedule",
-        element: <StudentSchedulePage />,
+        element: <Jade><StudentSchedulePage /></Jade>,
       },
       {
         path: "enrollments",
@@ -436,7 +445,7 @@ const router = createBrowserRouter([
   },
   {
     path: ROUTES.CLASSROOM,
-    element: <ClassroomPage />,
+    element: <Jade><ClassroomPage /></Jade>,
   },
   {
     path: "*",

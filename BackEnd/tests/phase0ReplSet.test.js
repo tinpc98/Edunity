@@ -254,6 +254,7 @@ describe("Phase 0 Real MongoMemoryReplSet Verification (QA-01, G0-05, G0-08, QA-
         teacherId: teacher._id,
         title: "Exact 300s Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: new Date(Date.now() - 300 * 1000),
         endDatetime: new Date(Date.now() + 3600 * 1000),
       });
@@ -269,6 +270,7 @@ describe("Phase 0 Real MongoMemoryReplSet Verification (QA-01, G0-05, G0-08, QA-
         teacherId: teacher._id,
         title: "Late 301s Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         startDatetime: new Date(Date.now() - 301 * 1000),
         endDatetime: new Date(Date.now() + 3600 * 1000),
       });

@@ -81,7 +81,7 @@ export default function ClassroomHeader({
     <header className="h-16 px-4 md:px-6 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between text-white shrink-0 z-20">
       {/* Left: Session / Class info */}
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-teal-600/30 border border-teal-500/30 flex items-center justify-center text-teal-400 shrink-0">
           <VideoCameraOutlined className="text-lg" />
         </div>
 
@@ -90,9 +90,10 @@ export default function ClassroomHeader({
             <span className="font-bold text-sm md:text-base text-slate-100 truncate max-w-[200px] md:max-w-xs">
               {sessionTitle}
             </span>
-            {isWaiting ? (
+            {/* LIVE only once the backend confirmed the Teacher's Start; unknown status is not LIVE */}
+            {status !== "IN_PROGRESS" ? (
               <Tag color="gold" className="m-0 font-bold text-[10px] tracking-wider uppercase px-2 py-0 border-0">
-                Phòng chờ
+                {isWaiting || !status ? "Chưa bắt đầu" : status === "INTERRUPTED" ? "Gián đoạn" : "Đã kết thúc"}
               </Tag>
             ) : (
               <Tag color="error" className="m-0 font-bold text-[10px] tracking-wider uppercase px-2 py-0 border-0 flex items-center gap-1">
@@ -126,7 +127,7 @@ export default function ClassroomHeader({
         {/* Participant Counter */}
         <Tooltip title="Số người đang trong phòng">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 rounded-xl border border-slate-700/60 text-xs font-semibold text-slate-300">
-            <TeamOutlined className="text-indigo-400" />
+            <TeamOutlined className="text-teal-400" />
             <span>{participantCount}</span>
           </div>
         </Tooltip>

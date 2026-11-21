@@ -41,6 +41,7 @@ export function adaptSession(api: ApiSession, index?: number): Session {
     endDatetime: api.endDatetime,
     meetingRoomId: api.meetingRoomId,
     status: api.status,
+    roomState: api.roomState,
     recording: api.recording || null,
     createdAt: api.createdAt,
     updatedAt: api.updatedAt,

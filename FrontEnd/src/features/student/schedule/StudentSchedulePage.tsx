@@ -3,14 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "antd";
 import {
-  LeftOutlined,
-  RightOutlined,
   CalendarOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "../../../stores/auth.store";
 import { sessionService, sessionKeys } from "../../../services/session.service";
 import { ROUTES } from "../../../routes/routePaths";
 import type { Session } from "../../../types/session";
+import { isSessionLive } from "../../../utils/sessionLive";
 
 export interface StudentScheduleEntry {
   session: Session;
@@ -159,7 +158,7 @@ export default function StudentSchedulePage() {
             onClick={() => setViewMode("TODAY")}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               viewMode === "TODAY"
-                ? "bg-white text-indigo-600 shadow-2xs"
+                ? "bg-white text-teal-600 shadow-2xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
@@ -169,7 +168,7 @@ export default function StudentSchedulePage() {
             onClick={() => setViewMode("WEEK")}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               viewMode === "WEEK"
-                ? "bg-white text-indigo-600 shadow-2xs"
+                ? "bg-white text-teal-600 shadow-2xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
@@ -195,29 +194,17 @@ export default function StudentSchedulePage() {
 
         <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
+            type="button"
             onClick={handlePrevWeek}
-            className="hidden sm:flex items-center justify-center gap-1.5 px-4 h-[42px] bg-white border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 rounded-xl text-[12.5px] font-semibold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-4 h-[42px] bg-white border border-slate-200 text-slate-600 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 rounded-xl text-[12.5px] font-semibold shadow-2xs transition-all cursor-pointer"
           >
-            <span className="text-[11px]">&larr;</span>
+            <span className="text-[11px]" aria-hidden="true">&larr;</span>
             <span>Tuần trước</span>
           </button>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={handlePrevWeek}
-              className="w-[42px] h-[42px] flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-            >
-              <LeftOutlined className="text-[12px]" />
-            </button>
-            <button
-              onClick={handleNextWeek}
-              className="w-[42px] h-[42px] flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-            >
-              <RightOutlined className="text-[12px]" />
-            </button>
-          </div>
           <button
+            type="button"
             onClick={handleNextWeek}
-            className="hidden sm:flex items-center justify-center gap-1.5 px-4 h-[42px] bg-white border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 rounded-xl text-[12.5px] font-semibold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-4 h-[42px] bg-white border border-slate-200 text-slate-600 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 rounded-xl text-[12.5px] font-semibold shadow-2xs transition-all cursor-pointer"
           >
             <span>Tuần tới</span>
             <span className="text-[11px]">&rarr;</span>
@@ -244,7 +231,7 @@ export default function StudentSchedulePage() {
         </div>
       ) : filteredSessions.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center shadow-sm w-full max-w-[520px] min-h-[180px] mx-auto my-8 flex flex-col items-center justify-center">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 text-xl">
+          <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 text-xl">
             <CalendarOutlined />
           </div>
           <h2 className="text-[15px] font-bold text-slate-800 mb-1">Chưa có lịch học</h2>
@@ -252,7 +239,7 @@ export default function StudentSchedulePage() {
             Bạn chưa có buổi học nào trong khoảng thời gian này. Hãy đăng ký tham gia các lớp học để xem lịch học trực tuyến.
           </p>
           <Link to={ROUTES.CLASSES}>
-            <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs">
+            <button className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold shadow-xs">
               Khám phá lớp học
             </button>
           </Link>
@@ -264,7 +251,7 @@ export default function StudentSchedulePage() {
               <div className="text-[13px] font-semibold text-slate-700">
                 {formatGroupDate(dateKey).includes("HÔM NAY") || formatGroupDate(dateKey).includes("NGÀY MAI") ? (
                   <>
-                    <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                    <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider">
                       {formatGroupDate(dateKey).split("·")[0]}
                     </span>
                     <span className="text-slate-300 mx-1.5">•</span>
@@ -286,9 +273,9 @@ export default function StudentSchedulePage() {
                     <div
                       key={session.id}
                       onClick={() => handleClassClick(session.classId)}
-                      className={`grid grid-cols-[76px_minmax(0,1fr)_auto] items-center bg-white rounded-xl border px-4 py-3 min-h-[76px] shadow-2xs hover:shadow-sm hover:border-indigo-200 transition-all cursor-pointer group w-full max-w-[1000px] ${
+                      className={`grid grid-cols-[76px_minmax(0,1fr)_auto] items-center bg-white rounded-xl border px-4 py-3 min-h-[76px] shadow-2xs hover:shadow-sm hover:border-teal-200 transition-all cursor-pointer group w-full max-w-[1000px] ${
                         isInProgress
-                          ? "border-indigo-300"
+                          ? "border-teal-300"
                           : isCancelled
                           ? "border-slate-100 opacity-80"
                           : "border-slate-200"
@@ -298,7 +285,7 @@ export default function StudentSchedulePage() {
                       <div className={`w-[76px] h-[58px] rounded-[10px] flex flex-col justify-center items-center shrink-0 ${
                         isCompleted ? "bg-emerald-50" :
                         isCancelled ? "bg-rose-50" :
-                        isInProgress ? "bg-indigo-600 text-white" :
+                        isInProgress ? "bg-teal-600 text-white" :
                         "bg-slate-50 text-slate-700"
                       }`}>
                         <span className={`text-[13px] font-bold tracking-tight leading-none ${
@@ -310,7 +297,7 @@ export default function StudentSchedulePage() {
                           {new Date(session.startDatetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                         <span className={`text-[10px] font-medium leading-none mt-1 ${
-                          isInProgress ? "text-indigo-100" :
+                          isInProgress ? "text-teal-100" :
                           isCompleted ? "text-emerald-600/80" :
                           isCancelled ? "text-rose-500/80" :
                           "text-slate-400"
@@ -322,11 +309,11 @@ export default function StudentSchedulePage() {
                       {/* CONTENT */}
                       <div className="min-w-0 pr-4">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md truncate max-w-[200px]">
+                          <span className="text-[11px] font-semibold text-teal-600 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-md truncate max-w-[200px]">
                             {session.className}
                           </span>
                         </div>
-                        <h4 className="text-[13.5px] font-bold text-slate-900 truncate mt-1 group-hover:text-indigo-600 transition-colors">
+                        <h4 className="text-[13.5px] font-bold text-slate-900 truncate mt-1 group-hover:text-teal-600 transition-colors">
                           {session.title}
                         </h4>
                       </div>
@@ -355,11 +342,12 @@ export default function StudentSchedulePage() {
                           </span>
                         )}
 
-                        {(isInProgress || isScheduled) && (
+                        {/* Students can enter only after the Teacher started the session */}
+                        {isSessionLive(session) && (
                           <Link 
                             to={`/classroom/${session.id}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs"
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold shadow-xs"
                           >
                             <span>Vào lớp</span>
                           </Link>

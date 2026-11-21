@@ -18,6 +18,7 @@ import {
 import { useAuthStore } from "../../stores/auth.store";
 import { logoutUser } from "../../services/auth.service";
 import { ROUTES } from "../../routes/routePaths";
+import { publicThemeConfig } from "./publicTheme";
 import { LOGO_URL } from "../../data/homeData";
 
 export default function StudentLayout() {
@@ -94,7 +95,7 @@ export default function StudentLayout() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex">
+    <div className="min-h-screen bg-admin-bg text-slate-800 flex">
       {/* ================= LEFT STUDENT SIDEBAR ================= */}
       <aside className="w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between shrink-0 fixed inset-y-0 left-0 z-30 shadow-2xs">
         {/* Top Section */}
@@ -104,10 +105,10 @@ export default function StudentLayout() {
             <Link to={ROUTES.HOME} className="flex items-center gap-3">
               <img src={LOGO_URL} alt="Edunity" className="h-8 w-auto object-contain" />
               <div className="flex flex-col">
-                <span className="text-lg font-black tracking-tight text-indigo-900 leading-none">
+                <span className="text-lg font-black tracking-tight text-teal-900 leading-none">
                   Edunity
                 </span>
-                <span className="text-[8px] font-bold text-indigo-600 tracking-wider uppercase mt-1">
+                <span className="text-[8px] font-bold text-teal-600 tracking-wider uppercase mt-1">
                   Học Trực Tuyến Live
                 </span>
               </div>
@@ -124,8 +125,8 @@ export default function StudentLayout() {
               to={ROUTES.STUDENT.HOME}
               className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                 location.pathname === ROUTES.STUDENT.HOME || location.pathname.startsWith("/student/classes")
-                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+                  ? "bg-teal-50 text-teal-600 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-teal-600 hover:bg-slate-50"
               }`}
             >
               <BookOutlined className="text-sm" />
@@ -136,8 +137,8 @@ export default function StudentLayout() {
               to={ROUTES.STUDENT.SCHEDULE}
               className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                 location.pathname === ROUTES.STUDENT.SCHEDULE
-                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+                  ? "bg-teal-50 text-teal-600 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-teal-600 hover:bg-slate-50"
               }`}
             >
               <CalendarOutlined className="text-sm" />
@@ -176,8 +177,8 @@ export default function StudentLayout() {
                 to={item.to}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                   item.active
-                    ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                    : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+                    ? "bg-teal-50 text-teal-600 shadow-2xs font-bold"
+                    : "text-slate-600 hover:text-teal-600 hover:bg-slate-50"
                 }`}
               >
                 {item.icon}
@@ -196,8 +197,8 @@ export default function StudentLayout() {
               to={ROUTES.STUDENT.PROFILE}
               className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                 location.pathname === ROUTES.STUDENT.PROFILE
-                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+                  ? "bg-teal-50 text-teal-600 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-teal-600 hover:bg-slate-50"
               }`}
             >
               <UserOutlined className="text-sm" />
@@ -208,8 +209,8 @@ export default function StudentLayout() {
               to={ROUTES.STUDENT.PAYMENTS}
               className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                 location.pathname === ROUTES.STUDENT.PAYMENTS
-                  ? "bg-indigo-50 text-indigo-600 shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+                  ? "bg-teal-50 text-teal-600 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-teal-600 hover:bg-slate-50"
               }`}
             >
               <WalletOutlined className="text-sm" />
@@ -222,7 +223,7 @@ export default function StudentLayout() {
         <div className="p-4 border-t border-slate-100 space-y-1">
           <Link
             to={ROUTES.HOME}
-            className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-teal-600 hover:bg-slate-50 transition-colors"
           >
             <HomeOutlined className="text-sm" />
             <span>Về trang chủ</span>
@@ -249,7 +250,7 @@ export default function StudentLayout() {
 
           <div className="flex items-center gap-4">
             {/* Notification Icon */}
-            <Badge dot color="#4f46e5">
+            <Badge dot color={publicThemeConfig.token?.colorPrimary}>
               <Button
                 type="text"
                 shape="circle"
@@ -271,7 +272,7 @@ export default function StudentLayout() {
                 ) : (
                   <Avatar
                     size={32}
-                    className="bg-indigo-600 text-white font-bold text-xs flex items-center justify-center"
+                    className="bg-teal-600 text-white font-bold text-xs flex items-center justify-center"
                   >
                     {user.fullName ? user.fullName.charAt(0).toUpperCase() : <UserOutlined />}
                   </Avatar>

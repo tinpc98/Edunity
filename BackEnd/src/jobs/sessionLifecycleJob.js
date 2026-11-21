@@ -9,8 +9,9 @@ let isRunning = false;
 /**
  * DB-backed idempotent scheduler job for Smart Classroom Lifecycle (TIN-05D + TIN-05E).
  * Handles:
- * 1. Pre-open waiting room transition at startDatetime - 10 minutes
- * 2. Official start evaluation at startDatetime
+ * 1. Nothing before startDatetime: the room opens when the Teacher joins, teaching starts only on the Teacher's
+ *    "Bắt đầu buổi học" — the job never pre-opens, auto-starts or sets LIVE
+ * 2. Official start evaluation at startDatetime (lateness is measured; no auto-start)
  * 3. Teacher lateness milestones (+10m YELLOW, +20m RED, +30m NO_SHOW auto-cancellation)
  * 4. Teacher 30-minute continuous absence detection (INTERRUPTED / TEACHER_LEFT_EARLY)
  * 5. Teacher overtime reminder after endDatetime
@@ -24,7 +25,6 @@ const runSessionLifecycleJob = async (referenceNow = new Date()) => {
   isRunning = true;
 
   const now = referenceNow instanceof Date ? referenceNow : new Date(referenceNow);
-  const preOpenHorizon = new Date(now.getTime() + presenceService.PRE_OPEN_BEFORE_MS);
   const processedSessionIds = [];
 
   try {
@@ -33,7 +33,7 @@ const runSessionLifecycleJob = async (referenceNow = new Date()) => {
       // An INTERRUPTED session that has been closed out keeps its status for the incident record but is final:
       // re-evaluating it every minute would only repeat side effects and starve newer sessions of the 200 slots.
       roomState: { $ne: "ENDED" },
-      startDatetime: { $lte: preOpenHorizon },
+      startDatetime: { $lte: now },
     })
       .select("_id")
       .sort({ startDatetime: 1 })

@@ -83,6 +83,8 @@ export default function TodaySchedule({
             const isInProgress = session.status === "IN_PROGRESS";
             const isCompleted = session.status === "COMPLETED";
             const isScheduled = session.status === "SCHEDULED";
+            // WAITING = Teacher already in the room but not started; INTERRUPTED = Teacher can return and resume
+            const canEnterRoom = isScheduled || isInProgress || session.status === "WAITING" || session.status === "INTERRUPTED";
 
             const timeStart = formatTimeOnly(session.startDatetime);
             const timeEnd = formatTimeOnly(session.endDatetime);
@@ -137,7 +139,7 @@ export default function TodaySchedule({
                 </div>
                 
                 <div className="flex items-center gap-2 sm:self-center pr-1">
-                  {isInProgress || isScheduled ? (
+                  {canEnterRoom ? (
                     <Tooltip title={!isVerified ? verificationMessage : undefined}>
                       <Button 
                         type="primary" 

@@ -17,6 +17,7 @@ import { ROUTES } from "../../../routes/routePaths";
 import { formatScheduleEntries } from "../../../api/classAdapters";
 import type { ClassDiscoveryItem, SessionEntity } from "../../../types/classDiscovery";
 import SessionDetailModal, { type SessionWithNumber } from "./components/SessionDetailModal";
+import { isSessionLive } from "../../../utils/sessionLive";
 
 function formatSessionDate(isoString: string): string {
   try {
@@ -181,7 +182,7 @@ export default function StudentClassSessionsPage() {
           Không thể tải dữ liệu lớp học hoặc lớp học không tồn tại.
         </p>
         <Link to={ROUTES.STUDENT.HOME}>
-          <Button type="primary" className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-semibold">
+          <Button type="primary" className="bg-teal-600 hover:bg-teal-700 rounded-xl text-xs font-semibold">
             Quay lại Lớp học của tôi
           </Button>
         </Link>
@@ -213,7 +214,7 @@ export default function StudentClassSessionsPage() {
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <Link
           to={ROUTES.STUDENT.HOME}
-          className="hover:text-indigo-600 font-medium transition-colors"
+          className="hover:text-teal-600 font-medium transition-colors"
         >
           Học tập của tôi
         </Link>
@@ -227,7 +228,7 @@ export default function StudentClassSessionsPage() {
       <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-6">
         {/* Left: Metadata */}
         <div className="flex-1 min-w-0">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 block mb-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-teal-600 block mb-1">
             {classItem.courseTitle}
           </span>
 
@@ -258,7 +259,7 @@ export default function StudentClassSessionsPage() {
         </div>
 
         {/* Right: 8. CLASS PROGRESS BOX */}
-        <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 sm:w-64 shrink-0">
+        <div className="bg-teal-50/70 border border-teal-100 rounded-2xl p-4 sm:w-64 shrink-0">
           <div className="text-xs font-semibold text-slate-500 mb-1">
             Tiến độ lớp học
           </div>
@@ -271,9 +272,9 @@ export default function StudentClassSessionsPage() {
               "0/0 buổi (0%)"
             )}
           </div>
-          <div className="h-1.5 w-full bg-indigo-100 rounded-full overflow-hidden mt-2.5">
+          <div className="h-1.5 w-full bg-teal-100 rounded-full overflow-hidden mt-2.5">
             <div
-              className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+              className="h-full bg-teal-600 rounded-full transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -301,7 +302,7 @@ export default function StudentClassSessionsPage() {
       {sortedSessions.length === 0 ? (
         /* 27. Empty Session State */
         <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-2xs max-w-md mx-auto my-8">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3 text-xl">
+          <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-3 text-xl">
             <CalendarOutlined />
           </div>
           <p className="text-sm font-bold text-slate-900 mb-1">Chưa có buổi học nào</p>
@@ -328,12 +329,12 @@ export default function StudentClassSessionsPage() {
                 onClick={() => setSelectedSession(session)}
                 className={`bg-white rounded-2xl border p-4 shadow-2xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between group ${
                   isInProgress
-                    ? "border-indigo-300 bg-indigo-50/15"
+                    ? "border-teal-300 bg-teal-50/15"
                     : isCompleted
                     ? "border-slate-200/80 hover:border-emerald-300"
                     : isCancelled
                     ? "border-slate-200/70 opacity-80"
-                    : "border-slate-200/80 hover:border-indigo-200"
+                    : "border-slate-200/80 hover:border-teal-200"
                 }`}
               >
                 <div>
@@ -345,10 +346,10 @@ export default function StudentClassSessionsPage() {
                         isCompleted
                           ? "bg-emerald-50 border border-emerald-200/80 text-emerald-600"
                           : isInProgress
-                          ? "bg-indigo-600 text-white shadow-xs"
+                          ? "bg-teal-600 text-white shadow-xs"
                           : isCancelled
                           ? "bg-rose-50 border border-rose-200/80 text-rose-500"
-                          : "bg-indigo-50 border border-indigo-100 text-indigo-600"
+                          : "bg-teal-50 border border-teal-100 text-teal-600"
                       }`}
                     >
                       {session.sessionNumber}
@@ -389,7 +390,7 @@ export default function StudentClassSessionsPage() {
                     <span className="text-sm font-bold text-slate-800">
                       Buổi {session.sessionNumber}
                     </span>
-                    {isInProgress && (
+                    {isSessionLive(session) && (
                       <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-rose-600 text-white tracking-wider">
                         LIVE
                       </span>
@@ -404,7 +405,7 @@ export default function StudentClassSessionsPage() {
                 </div>
 
                 {/* 17. Detail Action */}
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-indigo-600 group-hover:text-indigo-700 transition-colors">
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-teal-600 group-hover:text-teal-700 transition-colors">
                   <span>Chi tiết buổi học</span>
                   <ArrowRightOutlined className="text-[11px] group-hover:translate-x-0.5 transition-transform" />
                 </div>

@@ -96,6 +96,7 @@ export interface SessionEntity {
   endDatetime: string;
   meetingRoomId?: string;
   status: SessionStatus;
+  roomState?: string;
   createdAt?: string;
   recording?: SessionRecording | null;
 }

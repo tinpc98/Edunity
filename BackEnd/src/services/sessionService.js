@@ -587,6 +587,11 @@ const joinSession = async (user, sessionId) => {
       409
     );
   }
+  // A Student gets a token only once the Teacher has pressed "Bắt đầu buổi học" (beginTeaching is the only writer of
+  // IN_PROGRESS + LIVE). SCHEDULED/WAITING — including legacy pre-opened WAITING rows — never grant access.
+  if (role === "PARTICIPANT" && (session.status !== "IN_PROGRESS" || session.roomState !== "LIVE")) {
+    throw new AppError("The teacher has not started this session yet", "SESSION_NOT_STARTED", 409);
+  }
 
   if (!session.meetingRoomId) session.meetingRoomId = `room_${session._id}`;
 
@@ -687,10 +692,8 @@ const joinSession = async (user, sessionId) => {
         // Step 2: Atomic write-guard: mutate __v on Session document inside transaction
         // Ensures WiredTiger write-lock serialization against Teacher endSession
         const guardedSession = await Session.findOneAndUpdate(
-          {
-            _id: session._id,
-            status: { $in: ["SCHEDULED", "WAITING", "IN_PROGRESS", "INTERRUPTED"] },
-          },
+          // Only a running Session: closes the race with a Teacher end/interruption between the check above and here
+          { _id: session._id, status: "IN_PROGRESS", roomState: "LIVE" },
           {
             $inc: { __v: 1 },
           },
@@ -776,8 +779,9 @@ const joinSession = async (user, sessionId) => {
     role,
     expiresAt,
     firstJoinDeadlineAt,
-    roomState: isWaitingRoomWindow ? "WAITING" : session.roomState || "LIVE",
-    isWaitingRoom: isWaitingRoomWindow,
+    // Real state, never derived from the clock: only the Teacher's Start makes it LIVE
+    roomState: session.roomState || "NOT_OPEN",
+    isWaitingRoom: session.status === "WAITING",
     isReconnect: role === "PARTICIPANT" ? hasVerifiedPriorJoin : false,
   };
 };

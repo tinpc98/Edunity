@@ -171,8 +171,8 @@ export default function TeacherIncidentModal({
           </Form.Item>
 
           {requestedAction === "RESCHEDULE_SESSION" && (
-            <div className="p-3.5 bg-indigo-50/60 border border-indigo-100 rounded-xl mb-4">
-              <div className="flex items-center gap-1.5 text-indigo-700 font-semibold text-xs mb-2">
+            <div className="p-3.5 bg-teal-50/60 border border-teal-100 rounded-xl mb-4">
+              <div className="flex items-center gap-1.5 text-teal-700 font-semibold text-xs mb-2">
                 <CalendarOutlined />
                 <span>Thông tin lịch học bù đề xuất (Hệ thống sẽ tự kiểm tra trùng lịch)</span>
               </div>

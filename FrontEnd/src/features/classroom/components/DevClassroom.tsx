@@ -124,7 +124,7 @@ export default function DevClassroom({
               <Avatar
                 size={96}
                 icon={<UserOutlined />}
-                className="bg-indigo-600 text-white font-bold text-3xl shadow-xl"
+                className="bg-teal-600 text-white font-bold text-3xl shadow-xl"
               >
                 {userFullName.charAt(0) || "U"}
               </Avatar>
@@ -138,7 +138,7 @@ export default function DevClassroom({
           {/* Participant Overlay Info Badge */}
           <div className="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-slate-700/60 flex items-center gap-2 text-xs text-white">
             <span className="font-semibold">{userFullName} (Bạn)</span>
-            <Tag color={isTeacher ? "purple" : "blue"} className="m-0 text-[10px] font-bold px-1.5 py-0 border-0">
+            <Tag color={isTeacher ? "gold" : "cyan"} className="m-0 text-[10px] font-bold px-1.5 py-0 border-0">
               {isTeacher ? "Giảng viên" : "Học viên"}
             </Tag>
             <span className={audioEnabled ? "text-emerald-400" : "text-rose-400"}>
