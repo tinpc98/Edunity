@@ -12,12 +12,14 @@ const teacher = [authMiddleware, requireRole("TEACHER")];
 router.get("/categories", controller.listCategories);
 router.post("/admin/categories", admin, controller.createCategory);
 router.patch("/admin/categories/:id", admin, controller.updateCategory);
+router.delete("/admin/categories/:id", admin, controller.deleteCategory);
 
 // Subjects
 router.get("/categories/:id/subjects", controller.listSubjectsByCategory);
 router.get("/subjects/:id", controller.getSubject);
 router.post("/admin/subjects", admin, controller.createSubject);
 router.patch("/admin/subjects/:id", admin, controller.updateSubject);
+router.delete("/admin/subjects/:id", admin, controller.deleteSubject);
 
 // Courses (CUR-04 & Safe Delete)
 router.get("/courses", controller.searchCourses);

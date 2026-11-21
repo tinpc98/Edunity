@@ -101,6 +101,7 @@ exports.listPendingClasses = handle((req) => adminClasses.listPendingClasses(par
 exports.getClassForReview = handle((req) => adminClasses.getClassForReview(req.params.id));
 exports.approveClass = handle((req) => adminClasses.approveClass(req.user.id, req.params.id, body(req)));
 exports.rejectClass = handle((req) => adminClasses.rejectClass(req.user.id, req.params.id, body(req)));
+exports.requestChanges = handle((req) => adminClasses.requestChanges(req.user.id, req.params.id, body(req)));
 
 // Smart Classroom Lifecycle & Presence (TIN-05D)
 exports.getSessionLiveStatus = handle((req) => presenceService.getSessionLiveStatus(req.user, req.params.id));

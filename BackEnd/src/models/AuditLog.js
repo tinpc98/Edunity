@@ -4,7 +4,8 @@ const { Schema } = mongoose;
 // BR-35 / NFR-15: admin approval and financial operations must be auditable.
 const auditLogSchema = new Schema(
   {
-    actorAdminId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    actorAdminId: { type: Schema.Types.ObjectId, ref: "User", required: false, default: null },
+    actorType: { type: String, enum: ["ADMIN", "SYSTEM"], default: "ADMIN" },
     action: { type: String, required: true },
     targetType: { type: String, required: true },
     targetId: { type: Schema.Types.ObjectId, required: true },

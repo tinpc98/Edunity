@@ -57,7 +57,7 @@ const classSchema = new Schema(
     completedAt: { type: Date, default: null },
     status: {
       type: String,
-      enum: ["DRAFT", "PENDING_APPROVAL", "OPEN", "REJECTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
+      enum: ["DRAFT", "PENDING_APPROVAL", "OPEN", "NEED_CHANGES", "REJECTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
       default: "DRAFT",
     },
     settlementSyncStatus: {

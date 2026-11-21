@@ -537,13 +537,13 @@ describe("Teacher verification, class approval and classroom", () => {
     expect(review.body.data.teacher.verificationStatus).toBe("VERIFIED");
     expect(review.body.data.sessions).toHaveLength(2);
 
-    const rejected = await request(app).post(`/api/admin/classes/${classId}/reject`).set(as(admin)).send({ reviewNote: "Bổ sung mô tả" });
-    expect(rejected.body.data.status).toBe("REJECTED");
+    const reqChanges = await request(app).post(`/api/admin/classes/${classId}/request-changes`).set(as(admin)).send({ reviewNote: "Bổ sung mô tả" });
+    expect(reqChanges.body.data.status).toBe("NEED_CHANGES");
 
-    // BR-51: REJECTED → edit → resubmit
+    // BE-01: NEED_CHANGES → edit → resubmit
     const fixed = await request(app).patch(`/api/teacher/classes/${classId}`).set(as(newTeacher)).send({ description: "Mô tả đầy đủ hơn" });
     expect(fixed.statusCode).toBe(200);
-    expect(fixed.body.data.status).toBe("REJECTED");
+    expect(fixed.body.data.status).toBe("NEED_CHANGES");
     await request(app).post(`/api/teacher/classes/${classId}/submit`).set(as(newTeacher));
 
     const approved = await request(app).post(`/api/admin/classes/${classId}/approve`).set(as(admin)).send({});

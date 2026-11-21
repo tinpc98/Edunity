@@ -122,6 +122,172 @@ const updateCategory = async (adminId, categoryId, body) => {
   return presentCategory(category.toObject());
 };
 
+const deleteCategory = async (adminId, categoryId) => {
+  assertId(categoryId, "Category not found", "CATEGORY_NOT_FOUND");
+
+  if (typeof mongoose.startSession !== "function") {
+    throw new AppError(
+      "Database session is unavailable; category deletion requires transaction support",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503
+    );
+  }
+
+  let session;
+  try {
+    session = await mongoose.startSession();
+  } catch (sessionErr) {
+    throw new AppError(
+      "Failed to start database transaction session for category deletion",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503,
+      { originalError: sessionErr.message }
+    );
+  }
+
+  try {
+    if (!session || typeof session.withTransaction !== "function") {
+      throw new AppError(
+        "Database session is unavailable; category deletion requires transaction support",
+        "DATABASE_TRANSACTION_UNAVAILABLE",
+        503
+      );
+    }
+
+    let result;
+    await session.withTransaction(async () => {
+      // 1. Verify existence and non-deleted
+      const category = await Category.findOne({ _id: categoryId, ...NOT_DELETED }).session(session);
+      if (!category) {
+        throw new AppError("Category not found", "CATEGORY_NOT_FOUND", 404);
+      }
+
+      const originalStatus = category.status;
+      const beforeState = { name: category.name, status: originalStatus };
+
+      // 2. Dependency check: Subject
+      const subjectCount = await Subject.countDocuments(
+        { categoryId: category._id, ...NOT_DELETED },
+        { session }
+      );
+      if (subjectCount > 0) {
+        throw new AppError(
+          `Cannot delete category: ${subjectCount} subject(s) exist. Deactivate the category by setting status to INACTIVE instead.`,
+          "CATEGORY_HAS_SUBJECTS",
+          409,
+          { subjectCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 3. Dependency check: Course
+      const courseCount = await Course.countDocuments(
+        { categoryId: category._id, ...NOT_DELETED },
+        { session }
+      );
+      if (courseCount > 0) {
+        throw new AppError(
+          `Cannot delete category: ${courseCount} course(s) exist. Deactivate the category by setting status to INACTIVE instead.`,
+          "CATEGORY_HAS_COURSES",
+          409,
+          { courseCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 4. Dependency check: Class
+      const classCount = await Class.countDocuments(
+        { categoryId: category._id, ...NOT_DELETED },
+        { session }
+      );
+      if (classCount > 0) {
+        throw new AppError(
+          `Cannot delete category: ${classCount} class(es) exist. Deactivate the category by setting status to INACTIVE instead.`,
+          "CATEGORY_HAS_CLASSES",
+          409,
+          { classCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 5. Dependency check: LearningPath
+      const { LearningPath } = require("../models");
+      const learningPathCount = await LearningPath.countDocuments(
+        { categoryId: category._id, ...NOT_DELETED },
+        { session }
+      );
+      if (learningPathCount > 0) {
+        throw new AppError(
+          `Cannot delete category: referenced in ${learningPathCount} learning path(s). Deactivate the category by setting status to INACTIVE instead.`,
+          "CATEGORY_IN_LEARNING_PATH",
+          409,
+          { learningPathCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 6. Dependency check: ScholarshipCampaign
+      const { ScholarshipCampaign } = require("../models");
+      const scholarshipCount = await ScholarshipCampaign.countDocuments(
+        { categoryIds: category._id, ...NOT_DELETED },
+        { session }
+      );
+      if (scholarshipCount > 0) {
+        throw new AppError(
+          `Cannot delete category: referenced in ${scholarshipCount} scholarship campaign(s). Deactivate the category by setting status to INACTIVE instead.`,
+          "CATEGORY_IN_SCHOLARSHIP_CAMPAIGN",
+          409,
+          { scholarshipCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 7. Dependency check: CoursePricingPolicy
+      const { CoursePricingPolicy } = require("../models");
+      const pricingPolicyCount = await CoursePricingPolicy.countDocuments(
+        { categoryId: category._id, status: "ACTIVE", ...NOT_DELETED },
+        { session }
+      );
+      if (pricingPolicyCount > 0) {
+        throw new AppError(
+          `Cannot delete category: active pricing policy exists. Deactivate the category by setting status to INACTIVE instead.`,
+          "CATEGORY_HAS_ACTIVE_PRICING_POLICY",
+          409,
+          { pricingPolicyCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 8. Apply soft-delete
+      category.isDeleted = true;
+      category.deletedAt = new Date();
+      category.deletedBy = adminId;
+      category.status = "INACTIVE";
+      await category.save({ session });
+
+      // 9. AuditLog inside transaction
+      const { audit } = require("./auditService");
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: "CATEGORY_SOFT_DELETED",
+          targetType: "Category",
+          targetId: category._id,
+          beforeState,
+          afterState: { isDeleted: true, status: "INACTIVE" },
+        },
+        session
+      );
+
+      result = {
+        success: true,
+        message: "Category soft-deleted successfully",
+        categoryId: category._id,
+      };
+    });
+
+    return result;
+  } finally {
+    if (session && typeof session.endSession === "function") {
+      await session.endSession();
+    }
+  }
+};
+
 // ---------- Subjects ----------
 
 const listSubjectsByCategory = async (categoryId) => {
@@ -188,6 +354,180 @@ const updateSubject = async (adminId, subjectId, body) => {
     await Course.updateMany({ subjectId: subject._id }, { $set: { subjectName: subject.name } });
   }
   return subject.toObject();
+};
+
+const deleteSubject = async (adminId, subjectId) => {
+  assertId(subjectId, "Subject not found", "SUBJECT_NOT_FOUND");
+
+  if (typeof mongoose.startSession !== "function") {
+    throw new AppError(
+      "Database session is unavailable; subject deletion requires transaction support",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503
+    );
+  }
+
+  let session;
+  try {
+    session = await mongoose.startSession();
+  } catch (sessionErr) {
+    throw new AppError(
+      "Failed to start database transaction session for subject deletion",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503,
+      { originalError: sessionErr.message }
+    );
+  }
+
+  try {
+    if (!session || typeof session.withTransaction !== "function") {
+      throw new AppError(
+        "Database session is unavailable; subject deletion requires transaction support",
+        "DATABASE_TRANSACTION_UNAVAILABLE",
+        503
+      );
+    }
+
+    let result;
+    await session.withTransaction(async () => {
+      // 1. Verify existence and non-deleted
+      const subject = await Subject.findOne({ _id: subjectId, ...NOT_DELETED }).session(session);
+      if (!subject) {
+        throw new AppError("Subject not found", "SUBJECT_NOT_FOUND", 404);
+      }
+
+      const originalStatus = subject.status;
+      const beforeState = { name: subject.name, status: originalStatus };
+
+      // 2. Dependency check: Course
+      const courseCount = await Course.countDocuments(
+        { subjectId: subject._id, ...NOT_DELETED },
+        { session }
+      );
+      if (courseCount > 0) {
+        throw new AppError(
+          `Cannot delete subject: ${courseCount} course(s) exist. Deactivate the subject by setting status to INACTIVE instead.`,
+          "SUBJECT_HAS_COURSES",
+          409,
+          { courseCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 3. Dependency check: Class
+      const classCount = await Class.countDocuments(
+        { subjectId: subject._id, ...NOT_DELETED },
+        { session }
+      );
+      if (classCount > 0) {
+        throw new AppError(
+          `Cannot delete subject: ${classCount} class(es) exist. Deactivate the subject by setting status to INACTIVE instead.`,
+          "SUBJECT_HAS_CLASSES",
+          409,
+          { classCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 4. Dependency check: TeacherSubjectAuthorization
+      const { TeacherSubjectAuthorization } = require("../models");
+      const authCount = await TeacherSubjectAuthorization.countDocuments(
+        {
+          subjectId: subject._id,
+          status: { $in: ["PENDING", "APPROVED"] },
+        },
+        { session }
+      );
+      if (authCount > 0) {
+        throw new AppError(
+          `Cannot delete subject: ${authCount} teacher subject authorization(s) exist. Deactivate the subject by setting status to INACTIVE instead.`,
+          "SUBJECT_HAS_TEACHER_AUTHORIZATIONS",
+          409,
+          { authCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 5. Dependency check: ScholarshipCampaign
+      const { ScholarshipCampaign } = require("../models");
+      const scholarshipCount = await ScholarshipCampaign.countDocuments(
+        { subjectIds: subject._id, ...NOT_DELETED },
+        { session }
+      );
+      if (scholarshipCount > 0) {
+        throw new AppError(
+          `Cannot delete subject: referenced in ${scholarshipCount} scholarship campaign(s). Deactivate the subject by setting status to INACTIVE instead.`,
+          "SUBJECT_IN_SCHOLARSHIP_CAMPAIGN",
+          409,
+          { scholarshipCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 6. Dependency check: CourseProposal
+      const { CourseProposal } = require("../models");
+      const proposalCount = await CourseProposal.countDocuments(
+        {
+          subjectId: subject._id,
+          status: { $in: ["PENDING", "CHANGES_REQUESTED"] },
+          ...NOT_DELETED,
+        },
+        { session }
+      );
+      if (proposalCount > 0) {
+        throw new AppError(
+          `Cannot delete subject: ${proposalCount} active course proposal(s) exist. Deactivate the subject by setting status to INACTIVE instead.`,
+          "SUBJECT_HAS_COURSE_PROPOSALS",
+          409,
+          { proposalCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 7. Dependency check: CoursePricingPolicy
+      const { CoursePricingPolicy } = require("../models");
+      const pricingPolicyCount = await CoursePricingPolicy.countDocuments(
+        { subjectId: subject._id, status: "ACTIVE", ...NOT_DELETED },
+        { session }
+      );
+      if (pricingPolicyCount > 0) {
+        throw new AppError(
+          `Cannot delete subject: active pricing policy exists. Deactivate the subject by setting status to INACTIVE instead.`,
+          "SUBJECT_HAS_ACTIVE_PRICING_POLICY",
+          409,
+          { pricingPolicyCount, recommendedAction: "SET_INACTIVE" }
+        );
+      }
+
+      // 8. Apply soft-delete
+      subject.isDeleted = true;
+      subject.deletedAt = new Date();
+      subject.deletedBy = adminId;
+      subject.status = "INACTIVE";
+      await subject.save({ session });
+
+      // 9. AuditLog inside transaction
+      const { audit } = require("./auditService");
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: "SUBJECT_SOFT_DELETED",
+          targetType: "Subject",
+          targetId: subject._id,
+          beforeState,
+          afterState: { isDeleted: true, status: "INACTIVE" },
+        },
+        session
+      );
+
+      result = {
+        success: true,
+        message: "Subject soft-deleted successfully",
+        subjectId: subject._id,
+      };
+    });
+
+    return result;
+  } finally {
+    if (session && typeof session.endSession === "function") {
+      await session.endSession();
+    }
+  }
 };
 
 // ---------- Courses ----------
@@ -469,8 +809,8 @@ const deleteCourse = async (adminId, courseId) => {
       const originalStatus = course.status;
       const beforeState = { title: course.title, status: originalStatus };
 
-      // 2. Dependency check: Class (any existing class)
-      const classCount = await Class.countDocuments({ courseId: course._id }, { session });
+      // 2. Dependency check: Class (any non-deleted class)
+      const classCount = await Class.countDocuments({ courseId: course._id, ...NOT_DELETED }, { session });
       if (classCount > 0) {
         throw new AppError(
           `Cannot delete course: ${classCount} class(es) exist. Deactivate the course by setting status to INACTIVE instead.`,
@@ -617,10 +957,12 @@ module.exports = {
   listCategories,
   createCategory,
   updateCategory,
+  deleteCategory,
   listSubjectsByCategory,
   getSubject,
   createSubject,
   updateSubject,
+  deleteSubject,
   searchCourses,
   getCourse,
   getCourseClasses,
