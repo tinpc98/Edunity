@@ -31,6 +31,7 @@ const fileOf = (item: UploadFile): File => item.originFileObj as File;
 
 export default function TeacherQualificationPage() {
   const [form] = Form.useForm<QualificationFormValues>();
+  const identityFrontList = Form.useWatch("identityFront", form);
   const { notification } = AntdApp.useApp();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -238,7 +239,7 @@ export default function TeacherQualificationPage() {
                 <Input.TextArea placeholder="Chia sẻ ngắn gọn về kinh nghiệm giảng dạy của bạn" rows={3} />
               </Form.Item>
 
-              <IdentityFields />
+              <IdentityFields frontImage={identityFrontList?.[0]?.originFileObj ?? null} />
 
               <div className="grid gap-4 md:grid-cols-2">
                 <Form.Item

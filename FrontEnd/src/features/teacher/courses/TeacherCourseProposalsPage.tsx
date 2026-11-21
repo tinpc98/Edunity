@@ -13,7 +13,6 @@ import {
   Skeleton,
   message,
   Tooltip,
-  InputNumber,
 } from "antd";
 import {
   PlusOutlined,
@@ -33,8 +32,6 @@ import type {
   CreateProposalPayload,
   UpdateProposalPayload,
   GradeLevel,
-  ProposalPricingExpectation,
-  ProposalSyllabusUnit,
 } from "../../../types/catalog";
 import {
   GRADE_LEVELS,
@@ -50,39 +47,10 @@ import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 
 const { TextArea } = Input;
 
-interface ProposalFormValues extends Omit<CreateProposalPayload, "syllabusDraft" | "pricingExpectation"> {
-  syllabusDraft?: {
-    summary?: string;
-    units?: Array<Omit<ProposalSyllabusUnit, "unitOrder" | "topics"> & { topicsText?: string }>;
-  };
-  pricingExpectation?: ProposalPricingExpectation;
-}
-
-function toProposalPayload(values: ProposalFormValues): CreateProposalPayload {
-  const units = values.syllabusDraft?.units
-    ?.filter((unit) => unit.title.trim())
-    .map((unit, index) => ({
-      unitOrder: index + 1,
-      title: unit.title.trim(),
-      description: unit.description?.trim() || "",
-      learningObjectives: unit.learningObjectives?.trim() || "",
-      durationMinutes: unit.durationMinutes ?? null,
-      topics: unit.topicsText?.split(/\r?\n|,/).map((topic) => topic.trim()).filter(Boolean) ?? [],
-    }));
-  const expectation = values.pricingExpectation;
-  return {
-    ...values,
-    syllabusDraft: values.syllabusDraft
-      ? { summary: values.syllabusDraft.summary?.trim() || "", units: units || [] }
-      : undefined,
-    pricingExpectation: expectation
-      ? {
-          ...expectation,
-          notes: expectation.notes?.trim() || "",
-        }
-      : undefined,
-  };
-}
+type ProposalFormValues = Pick<
+  CreateProposalPayload,
+  "categoryId" | "subjectId" | "title" | "gradeLevel" | "level" | "description" | "learningObjectives" | "syllabus" | "prerequisites"
+>;
 
 const STATUS_CONFIG: Record<ProposalStatus, { color: string; label: string; icon: React.ReactNode }> = {
   PENDING_REVIEW: { color: "orange", label: "Chờ duyệt", icon: <ClockCircleOutlined /> },
@@ -188,23 +156,12 @@ export default function TeacherCourseProposalsPage() {
       level: proposal.level,
       gradeLevel: proposal.gradeLevel,
       prerequisites: proposal.prerequisites,
-      estimatedDuration: proposal.estimatedDuration,
-      syllabusDraft: proposal.syllabusDraft
-        ? {
-            summary: proposal.syllabusDraft.summary,
-            units: proposal.syllabusDraft.units?.map((unit) => ({
-              ...unit,
-              topicsText: unit.topics?.join("\n") || "",
-            })),
-          }
-        : undefined,
-      pricingExpectation: proposal.pricingExpectation,
     });
     setIsModalOpen(true);
   };
 
   const handleSubmit = (values: ProposalFormValues) => {
-    const payload = toProposalPayload(values);
+    const payload: CreateProposalPayload = values;
     if (mode === "create") {
       createMutation.mutate(payload);
     } else if (editingProposal) {
@@ -298,6 +255,8 @@ export default function TeacherCourseProposalsPage() {
   ];
 
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
+  // Same rule as the Admin course form: null = every grade level, [] = the category has none
+  const allowedGradeLevels = selectedCategory?.allowedGradeLevels ?? GRADE_LEVELS;
 
   return (
     <div className="max-w-[1200px] mx-auto space-y-5 sm:space-y-6">
@@ -396,7 +355,7 @@ export default function TeacherCourseProposalsPage() {
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit} className="mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-            <Form.Item label="Danh mục" name="categoryId" rules={[{ required: true, message: "Chọn danh mục" }]}>
+            <Form.Item label="Danh mục" name="categoryId" rules={[{ required: true, message: "Vui lòng chọn danh mục" }]}>
               <Select
                 placeholder="Chọn danh mục"
                 options={categories.map((c) => ({ value: c.id, label: c.name }))}
@@ -408,7 +367,7 @@ export default function TeacherCourseProposalsPage() {
               />
             </Form.Item>
 
-            <Form.Item label="Môn học" name="subjectId" rules={[{ required: true, message: "Chọn môn học" }]}>
+            <Form.Item label="Môn học" name="subjectId" rules={[{ required: true, message: "Vui lòng chọn môn học" }]}>
               <Select
                 placeholder={selectedCategoryId ? "Chọn môn học" : "Chọn danh mục trước"}
                 disabled={!selectedCategoryId}
@@ -417,129 +376,57 @@ export default function TeacherCourseProposalsPage() {
             </Form.Item>
           </div>
 
-          <Form.Item label="Tên khóa học đề xuất" name="title" rules={[{ required: true, message: "Nhập tên khóa học" }]}>
-            <Input placeholder="VD: Toán Đại số Lớp 10 nâng cao" />
-          </Form.Item>
-
-          <Form.Item label="Mô tả khóa học" name="description" rules={[{ required: true, message: "Nhập mô tả" }]}>
-            <TextArea rows={3} placeholder="Mô tả tổng quan về khóa học..." />
+          <Form.Item
+            name="title"
+            label="Tên khóa học"
+            rules={[{ required: true, whitespace: true, message: "Vui lòng nhập tên khóa học" }]}
+          >
+            <Input placeholder="vd: Toán nâng cao lớp 10, Luyện thi IELTS..." />
           </Form.Item>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-            <Form.Item label="Cấp độ" name="level">
+            <Form.Item name="gradeLevel" label="Khối lớp (tùy chọn)">
               <Select
-                placeholder="Chọn cấp độ (tùy chọn)"
                 allowClear
+                disabled={allowedGradeLevels.length === 0}
+                placeholder={allowedGradeLevels.length === 0 ? "Danh mục này không áp dụng khối lớp" : "Chọn khối lớp"}
+                options={allowedGradeLevels.map((g) => ({ value: g, label: GRADE_LEVEL_LABELS[g as GradeLevel] }))}
+              />
+            </Form.Item>
+
+            <Form.Item name="level" label="Cấp độ (tùy chọn)">
+              <Select
+                allowClear
+                placeholder="Chọn cấp độ"
                 options={COURSE_LEVELS.map((l) => ({ value: l, label: COURSE_LEVEL_LABELS[l] }))}
               />
             </Form.Item>
-
-            <Form.Item label="Khối lớp" name="gradeLevel">
-              <Select
-                placeholder="Chọn khối lớp (tùy chọn)"
-                allowClear
-                options={(selectedCategory?.allowedGradeLevels || GRADE_LEVELS).map((g) => ({
-                  value: g,
-                  label: GRADE_LEVEL_LABELS[g as GradeLevel],
-                }))}
-              />
-            </Form.Item>
           </div>
 
-          <Form.Item label="Mục tiêu học tập" name="learningObjectives">
-            <TextArea rows={2} placeholder="Học viên sẽ đạt được gì sau khóa học..." />
+          {/* Required here (unlike the Admin form): the proposal API requires a description */}
+          <Form.Item
+            name="description"
+            label="Mô tả khóa học"
+            rules={[{ required: true, whitespace: true, message: "Vui lòng nhập mô tả khóa học" }]}
+          >
+            <TextArea rows={3} placeholder="Mô tả nội dung, đối tượng phù hợp..." />
           </Form.Item>
 
-          <Form.Item label="Đề cương (syllabus)" name="syllabus">
-            <TextArea rows={2} placeholder="Danh sách các chủ đề/bài học..." />
+          <Form.Item name="learningObjectives" label="Mục tiêu học tập">
+            <TextArea rows={2} placeholder="Học viên sẽ đạt được những kiến thức gì..." />
           </Form.Item>
 
-          <div className="rounded-xl border border-slate-200 p-4">
-            <div className="mb-1 font-semibold text-slate-800">Đề cương có cấu trúc (tùy chọn)</div>
-            <p className="mb-3 text-xs text-slate-500">
-              Nếu được duyệt, nội dung cấu trúc này có thể được chuyển thành syllabus version đầu tiên.
-            </p>
-            <Form.Item name={["syllabusDraft", "summary"]} label="Tóm tắt đề cương">
-              <TextArea rows={2} maxLength={2000} />
-            </Form.Item>
-            <Form.List name={["syllabusDraft", "units"]}>
-              {(fields, { add, remove }) => (
-                <div className="space-y-3">
-                  {fields.map((field, index) => (
-                    <div key={field.key} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-600">Bài học {index + 1}</span>
-                        <Button size="small" danger onClick={() => remove(field.name)}>Xóa</Button>
-                      </div>
-                      <Form.Item
-                        {...field}
-                        name={[field.name, "title"]}
-                        label="Tên bài học"
-                        rules={[{ required: true, whitespace: true, message: "Nhập tên bài học." }]}
-                      >
-                        <Input maxLength={200} />
-                      </Form.Item>
-                      <Form.Item {...field} name={[field.name, "description"]} label="Mô tả">
-                        <Input />
-                      </Form.Item>
-                      <Form.Item {...field} name={[field.name, "learningObjectives"]} label="Mục tiêu">
-                        <Input />
-                      </Form.Item>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <Form.Item {...field} name={[field.name, "durationMinutes"]} label="Thời lượng (phút)">
-                          <InputNumber min={0} precision={0} className="w-full" />
-                        </Form.Item>
-                        <Form.Item {...field} name={[field.name, "topicsText"]} label="Chủ đề (phân cách bằng dấu phẩy)">
-                          <Input />
-                        </Form.Item>
-                      </div>
-                    </div>
-                  ))}
-                  <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add()}>
-                    Thêm bài học
-                  </Button>
-                </div>
-              )}
-            </Form.List>
+          <Form.Item name="syllabus" label="Khung giáo trình (Syllabus)">
+            <TextArea rows={3} placeholder="Tóm tắt các chủ đề hoặc bài học..." />
+          </Form.Item>
+
+          <Form.Item name="prerequisites" label="Yêu cầu tiên quyết">
+            <Input placeholder="Kiến thức nền tảng cần có..." />
+          </Form.Item>
+
+          <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+            Đề xuất sẽ được gửi tới Quản trị viên. Khóa học chỉ được tạo sau khi Quản trị viên <strong>duyệt</strong>.
           </div>
-
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <div className="mb-1 font-semibold text-amber-900">Đề xuất học phí (chỉ tham khảo)</div>
-            <p className="mb-3 text-xs text-amber-800">
-              Đây không phải giá được duyệt hay cam kết học phí. Admin xử lý theo chính sách giá hiện hành.
-            </p>
-            <div className="grid gap-x-4 md:grid-cols-2">
-              <Form.Item name={["pricingExpectation", "suggestedClassType"]} label="Loại lớp đề xuất">
-                <Select
-                  allowClear
-                  options={[
-                    { value: "FREE", label: "Miễn phí" },
-                    { value: "PAID", label: "Có học phí" },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item name={["pricingExpectation", "estimatedSessions"]} label="Số buổi dự kiến">
-                <InputNumber min={1} precision={0} className="w-full" />
-              </Form.Item>
-              <Form.Item name={["pricingExpectation", "suggestedMinPrice"]} label="Mức giá tham khảo từ (đ)">
-                <InputNumber min={0} precision={0} className="w-full" />
-              </Form.Item>
-              <Form.Item name={["pricingExpectation", "suggestedMaxPrice"]} label="Mức giá tham khảo đến (đ)">
-                <InputNumber min={0} precision={0} className="w-full" />
-              </Form.Item>
-            </div>
-            <Form.Item name={["pricingExpectation", "notes"]} label="Ghi chú về đề xuất giá" className="!mb-0">
-              <TextArea rows={2} maxLength={1000} />
-            </Form.Item>
-          </div>
-
-          <Form.Item label="Điều kiện tiên quyết" name="prerequisites">
-            <TextArea rows={2} placeholder="Kiến thức/kỹ năng cần có trước..." />
-          </Form.Item>
-
-          <Form.Item label="Thời lượng ước tính" name="estimatedDuration">
-            <Input placeholder="VD: 40 buổi, 3 tháng..." />
-          </Form.Item>
 
           <div className="flex justify-end gap-3 mt-2">
             <Button onClick={() => setIsModalOpen(false)} disabled={isPending}>Hủy</Button>

@@ -66,15 +66,6 @@ export default function TodaySchedule({
               ? "Thầy/Cô có thể nghỉ ngơi hoặc kiểm tra lịch các ngày tiếp theo trong tuần."
               : verificationMessage}
           </Text>
-          <Tooltip title={!isVerified ? verificationMessage : undefined}>
-            <Button 
-              disabled={!isVerified}
-              onClick={() => isVerified && navigate("/teacher/schedule")}
-              className="mt-3 rounded-xl bg-teal-50 text-teal-600 border-0 font-semibold h-8 text-[12px] cursor-pointer"
-            >
-              Mở thời khóa biểu
-            </Button>
-          </Tooltip>
         </div>
       ) : (
         <List
