@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import TeacherWelcomeHero from "./components/TeacherWelcomeHero";
 import DashboardStatCard from "../../../components/dashboard/DashboardStatCard";
 import TodaySchedule from "./components/TodaySchedule";
-import TeachingClasses from "./components/TeachingClasses";
 import RecentStudents from "./components/RecentStudents";
 import RecentMessages from "./components/RecentMessages";
 import TeacherRevenue from "./components/TeacherRevenue";
@@ -242,12 +241,6 @@ export default function TeacherHomePage() {
         <Col xs={24} xl={16} className="flex flex-col gap-5">
           <TodaySchedule
             todaySessions={todaySessions}
-            isVerified={isVerified}
-            verificationMessage={verificationGuidance}
-          />
-          <TeachingClasses
-            classes={classes}
-            total={classesTotal}
             isVerified={isVerified}
             verificationMessage={verificationGuidance}
           />

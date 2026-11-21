@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { 
   Typography, Card, Row, Col, Tag, Button, Select, Radio, 
-  Skeleton, Breadcrumb, Alert, Tooltip
+  Skeleton, Breadcrumb, Tooltip
 } from 'antd';
 import { 
   CalendarOutlined, 
@@ -10,7 +10,6 @@ import {
   ArrowRightOutlined,
   VideoCameraOutlined,
   WarningOutlined,
-  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 
 import { Link, useNavigate } from 'react-router-dom';
@@ -19,7 +18,6 @@ import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 import { ROUTES } from '../../../routes/routePaths';
 import { classService, classKeys } from '../../../services/class.service';
-import { sessionService, sessionKeys } from '../../../services/session.service';
 import type { Session, ScheduleItem } from '../../../types/session';
 import { SESSION_STATUS_LABELS, SESSION_STATUS_COLORS } from '../../../types/session';
 import { deriveScheduleItemsFromSessions, formatSessionTimeRange } from '../../../api/sessionAdapters';
@@ -52,12 +50,6 @@ export default function TeacherSchedulePage() {
   } = useQuery({
     queryKey: classKeys.teacherList({ pageSize: 50 }),
     queryFn: () => classService.listMyClasses({ pageSize: 50 }),
-  });
-
-  // Fetch Teacher Discipline & Incident Overview (TIN-05E)
-  const { data: disciplineOverview } = useQuery({
-    queryKey: sessionKeys.teacherDiscipline(),
-    queryFn: () => sessionService.getTeacherDisciplineOverview(),
   });
 
   const teacherClasses = useMemo(() => classesData?.items || [], [classesData]);
@@ -141,7 +133,6 @@ export default function TeacherSchedulePage() {
   }, [scheduleItems]);
 
   const isLoading = isLoadingClasses || (teacherClasses.length > 0 && isLoadingSessions);
-  const counts = disciplineOverview?.confirmedCounts || { yellow: 0, red: 0, noShow: 0, earlyLeave: 0 };
 
   return (
     <div className="flex flex-col w-full pb-10 max-w-[1200px] mx-auto">
@@ -167,67 +158,6 @@ export default function TeacherSchedulePage() {
           </Button>
         </Link>
       </div>
-
-      {/* Smart Discipline & Reputation Summary Banner (TIN-05E) */}
-      <Card className="rounded-2xl border-teal-100 bg-teal-50/40 mb-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0">
-              <SafetyCertificateOutlined className="text-lg" />
-            </div>
-            <div>
-              <Text className="font-bold text-gray-900 block">
-                Chỉ số chuyên cần & Kỷ luật giảng dạy (TIN-05D / TIN-05E)
-              </Text>
-              <Text className="text-gray-500 text-xs">
-                Phòng chờ mở trước 10 phút • Nhắc nhở Vàng ở +10p, Đỏ ở +20p, Tự động hủy (NO_SHOW) ở +30p • Có 24h gửi báo cáo sự cố kèm minh chứng.
-              </Text>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Tag color="gold" className="rounded-lg px-2.5 py-1 font-semibold text-xs m-0">
-              Nhắc nhở Vàng: {counts.yellow}/3
-            </Tag>
-            <Tag color="red" className="rounded-lg px-2.5 py-1 font-semibold text-xs m-0">
-              Vi phạm Đỏ: {counts.red}/1
-            </Tag>
-            <Tag color="volcano" className="rounded-lg px-2.5 py-1 font-semibold text-xs m-0">
-              Vắng không phép (NO_SHOW): {counts.noShow}/3
-            </Tag>
-          </div>
-        </div>
-
-        {Array.isArray(disciplineOverview?.incidentReports) && disciplineOverview.incidentReports.length > 0 && (
-          <Alert
-            type="info"
-            showIcon
-            className="mt-3 rounded-xl"
-            message={`Bạn đã gửi ${disciplineOverview.incidentReports.length} báo cáo sự cố / đề xuất học bù`}
-            description={
-              <div className="text-xs space-y-1 mt-1">
-                {disciplineOverview.incidentReports.slice(0, 3).map((rep: any) => (
-                  <div key={rep._id} className="flex items-center justify-between">
-                    <span>
-                      • <strong>{rep.sessionId?.title || 'Buổi học'}</strong> — {rep.incidentType} ({rep.requestedAction})
-                    </span>
-                    <Tag
-                      color={
-                        rep.reviewStatus === 'APPROVED'
-                          ? 'success'
-                          : rep.reviewStatus === 'REJECTED'
-                          ? 'error'
-                          : 'processing'
-                      }
-                    >
-                      {rep.reviewStatus}
-                    </Tag>
-                  </div>
-                ))}
-              </div>
-            }
-          />
-        )}
-      </Card>
 
       {/* Overview Cards */}
       <Row gutter={[16, 16]} className="mb-6">
