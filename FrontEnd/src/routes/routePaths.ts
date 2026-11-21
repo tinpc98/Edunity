@@ -53,7 +53,6 @@ export const ROUTES = {
     CLASSES: "/teacher/classes",
     CREATE_CLASS: "/teacher/classes/create",
     CLASS_DETAIL: "/teacher/classes/:classId",
-    COURSES: "/teacher/courses",
     COURSE_PROPOSALS: "/teacher/course-proposals",
     SCHEDULE: "/teacher/schedule",
     PROFILE: "/teacher/profile",

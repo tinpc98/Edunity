@@ -28,6 +28,7 @@ import type { SubmitVerificationRequest } from "../../../types/teacherVerificati
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 import { groupVerificationSubmissions } from "../../../utils/verificationSubmissions";
 import TeacherContractCard from "./TeacherContractCard";
+import TeacherSubjectAuthorizationCard from "./TeacherSubjectAuthorizationCard";
 import IdentityFields from "../../../components/verification/IdentityFields";
 import { toIdentityPayload, type IdentityFormValues } from "../../../utils/identityPayload";
 import {
@@ -516,6 +517,8 @@ export default function TeacherProfilePage() {
           </div>
         ) : null}
       </div>
+
+      <TeacherSubjectAuthorizationCard />
 
       {/* Profile Header & Avatar Card */}
       <div className="bg-white rounded-2xl p-5 sm:px-6 border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-4">

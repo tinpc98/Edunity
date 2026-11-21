@@ -177,7 +177,7 @@ export default function CreateTeacherClassPage() {
             ? "Course không ACTIVE hoặc không thuộc phạm vi môn, khối và cấp độ đã được duyệt."
             : approvedAuthorizations.length
               ? "Vui lòng chọn Course ACTIVE thuộc phạm vi giảng dạy được duyệt."
-              : "Bạn chưa có quyền giảng dạy được duyệt. Hãy đăng ký môn trong Danh mục khóa học."
+              : "Bạn chưa có quyền giảng dạy được duyệt. Hãy đăng ký môn ở mục Quyền giảng dạy trong Hồ sơ giáo viên."
         );
         return;
       }
@@ -283,8 +283,8 @@ export default function CreateTeacherClassPage() {
             showIcon
             className="mb-6 rounded-xl"
             message="Chưa có quyền giảng dạy được duyệt"
-            description="Đăng ký môn và phạm vi giảng dạy trong Danh mục khóa học. Chỉ Course thuộc phạm vi được Admin duyệt mới có thể dùng để tạo lớp."
-            action={<Button size="small" onClick={() => navigate("/teacher/courses")}>Mở Danh mục khóa học</Button>}
+            description="Đăng ký môn và phạm vi giảng dạy ở mục Quyền giảng dạy trong Hồ sơ giáo viên. Chỉ Course thuộc phạm vi được Admin duyệt mới có thể dùng để tạo lớp."
+            action={<Button size="small" onClick={() => navigate(ROUTES.TEACHER.PROFILE)}>Đăng ký quyền dạy môn</Button>}
           />
         ) : null}
 
