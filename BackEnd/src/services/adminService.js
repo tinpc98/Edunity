@@ -29,8 +29,28 @@ const SETTABLE_STATUSES = ["ACTIVE", "SUSPENDED", "BANNED"];
 
 const userNotFound = () => new AppError("User not found", "USER_NOT_FOUND", 404);
 
+const formatStatusChangedBy = (changedBy) => {
+  if (!changedBy) return null;
+  if (typeof changedBy === "object") {
+    if (changedBy._id) {
+      return {
+        id: changedBy._id.toString(),
+        email: changedBy.email || null,
+        fullName:
+          changedBy.studentProfile?.fullName ||
+          changedBy.teacherProfile?.fullName ||
+          "Admin",
+      };
+    }
+    if (changedBy.id) {
+      return changedBy;
+    }
+  }
+  return { id: changedBy.toString() };
+};
+
 const presentUser = (user) => ({
-  id: user._id.toString(),
+  id: (user._id || user.id).toString(),
   email: user.email,
   role: user.role,
   status: user.status,
@@ -38,6 +58,9 @@ const presentUser = (user) => ({
   verificationStatus: user.teacherProfile ? user.teacherProfile.verificationStatus : undefined,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
+  statusReason: user.statusReason || null,
+  statusChangedAt: user.statusChangedAt || null,
+  statusChangedBy: formatStatusChangedBy(user.statusChangedBy),
 });
 
 // ---------- User management (FR-ADM-01) ----------
@@ -64,7 +87,13 @@ const listUsers = async (query, paging) => {
   }
 
   const [items, total] = await Promise.all([
-    User.find(filter).select("-passwordHash").sort({ createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
+    User.find(filter)
+      .select("-passwordHash")
+      .populate("statusChangedBy", "email studentProfile teacherProfile")
+      .sort({ createdAt: -1 })
+      .skip(paging.skip)
+      .limit(paging.pageSize)
+      .lean(),
     User.countDocuments(filter),
   ]);
   return paged(items.map(presentUser), total, paging);
@@ -79,6 +108,52 @@ const getUserOrThrow = async (userId) => {
 
 const getUser = async (userId) => {
   const user = (await getUserOrThrow(userId)).toObject();
+
+  let statusReason = user.statusReason || null;
+  let statusChangedAt = user.statusChangedAt || null;
+  let statusChangedBy = user.statusChangedBy || null;
+
+  // Legacy data fallback for accounts locked before new fields were added
+  // FIX-01: Cross-check against the user's chronologically latest status change action.
+  // Only extract reason if that latest status audit transitioned the user to their CURRENT status.
+  if ((user.status === "SUSPENDED" || user.status === "BANNED") && !statusReason) {
+    const latestStatusAudit = await AuditLog.findOne({
+      targetType: "User",
+      targetId: user._id,
+      action: { $in: ["USER_ACTIVE", "USER_SUSPENDED", "USER_BANNED"] },
+    })
+      .sort({ createdAt: -1 })
+      .populate("actorAdminId", "email studentProfile teacherProfile")
+      .lean();
+
+    if (
+      latestStatusAudit &&
+      latestStatusAudit.action === `USER_${user.status}` &&
+      latestStatusAudit.afterState &&
+      latestStatusAudit.afterState.status === user.status &&
+      latestStatusAudit.afterState.reason
+    ) {
+      statusReason = latestStatusAudit.afterState.reason;
+      if (!statusChangedAt) {
+        statusChangedAt = latestStatusAudit.createdAt;
+      }
+      if (!statusChangedBy && latestStatusAudit.actorAdminId) {
+        statusChangedBy = latestStatusAudit.actorAdminId;
+      }
+    }
+  }
+
+  if (statusChangedBy && mongoose.isValidObjectId(statusChangedBy) && !statusChangedBy.email) {
+    const adminUser = await User.findById(statusChangedBy).select("_id email studentProfile teacherProfile").lean();
+    if (adminUser) {
+      statusChangedBy = adminUser;
+    }
+  }
+
+  user.statusReason = statusReason;
+  user.statusChangedAt = statusChangedAt;
+  user.statusChangedBy = statusChangedBy;
+
   const activity = {};
   if (user.role === "STUDENT") {
     activity.enrollments = await Enrollment.countDocuments({ studentId: user._id, enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] } });
@@ -101,33 +176,196 @@ const getUser = async (userId) => {
 /**
  * Suspend / ban / reactivate an account. A blocked account is rejected by the auth middleware
  * on its next request and all its refresh tokens are revoked (force logout).
+ * Runs within a MongoDB Multi-document Transaction with conditional update for concurrency safety.
  */
 const updateUserStatus = async (adminId, userId, body) => {
   const { status } = body;
-  if (!SETTABLE_STATUSES.includes(status)) throw validationError(`status must be one of ${SETTABLE_STATUSES.join(", ")}`);
-  if (status !== "ACTIVE" && isBlank(body.reason)) throw validationError("reason is required when suspending or banning an account");
+  if (!SETTABLE_STATUSES.includes(status)) {
+    throw validationError(`status must be one of ${SETTABLE_STATUSES.join(", ")}`);
+  }
 
-  const user = await getUserOrThrow(userId);
-  if (user._id.toString() === adminId.toString()) throw validationError("You cannot change the status of your own account");
-  if (user.role === "ADMIN") throw new AppError("Admin accounts cannot be suspended or banned here", "FORBIDDEN", 403);
-  if (user.status === status) return presentUser(user.toObject());
+  let reason = null;
+  if (status !== "ACTIVE") {
+    if (typeof body.reason !== "string" || isBlank(body.reason)) {
+      throw validationError("reason is required when suspending or banning an account");
+    }
+    reason = body.reason.trim();
+    if (reason.length > 500) {
+      throw validationError("reason cannot exceed 500 characters");
+    }
+  }
 
-  const before = user.status;
-  user.status = status;
-  await user.save();
-  if (status !== "ACTIVE") await authTokenService.revokeAllForUser(user._id);
+  // Pre-checks
+  if (adminId && userId.toString() === adminId.toString()) {
+    throw validationError("You cannot change the status of your own account");
+  }
 
-  await audit({
-    actorAdminId: adminId,
-    action: `USER_${status}`,
+  const existingUser = await getUserOrThrow(userId);
+  if (existingUser.role === "ADMIN") {
+    throw new AppError("Admin accounts cannot be suspended or banned here", "FORBIDDEN", 403);
+  }
+
+  // Idempotency: repeated request with same status
+  if (existingUser.status === status) {
+    // FIX-02: Idempotent recovery - retry token revocation if account is locked
+    if (status !== "ACTIVE") {
+      await authTokenService.safeRevokeAllForUser(existingUser._id);
+    }
+    let populatedUser = existingUser.toObject();
+    if (populatedUser.statusChangedBy && mongoose.isValidObjectId(populatedUser.statusChangedBy)) {
+      const adminActor = await User.findById(populatedUser.statusChangedBy).select("_id email studentProfile teacherProfile").lean();
+      if (adminActor) populatedUser.statusChangedBy = adminActor;
+    }
+    return presentUser(populatedUser);
+  }
+
+  const session = await mongoose.startSession();
+  let committedDoc = null;
+  let actuallyChanged = false;
+  try {
+    await session.withTransaction(async () => {
+      const currentUser = await User.findOne({ _id: existingUser._id, ...NOT_DELETED }).session(session);
+      if (!currentUser) throw userNotFound();
+
+      if (currentUser.role === "ADMIN") {
+        throw new AppError("Admin accounts cannot be suspended or banned here", "FORBIDDEN", 403);
+      }
+
+      if (currentUser.status === status) {
+        committedDoc = currentUser.toObject();
+        return;
+      }
+
+      const beforeState = {
+        status: currentUser.status,
+        statusReason: currentUser.statusReason || null,
+        statusChangedAt: currentUser.statusChangedAt || null,
+        statusChangedBy: currentUser.statusChangedBy || null,
+      };
+
+      const now = new Date();
+      const updateFields = {
+        status,
+        statusReason: status === "ACTIVE" ? null : reason,
+        statusChangedAt: now,
+        statusChangedBy: adminId,
+      };
+
+      const updated = await User.findOneAndUpdate(
+        { _id: currentUser._id, status: currentUser.status, ...NOT_DELETED },
+        { $set: updateFields },
+        { session, returnDocument: "after" }
+      );
+
+      if (!updated) {
+        throw new AppError(
+          "Concurrent user status update detected. Please retry.",
+          "CONCURRENT_UPDATE_CONFLICT",
+          409
+        );
+      }
+
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: `USER_${status}`,
+          targetType: "User",
+          targetId: updated._id,
+          beforeState,
+          afterState: {
+            status,
+            reason: status === "ACTIVE" ? null : reason,
+            statusChangedAt: now,
+            statusChangedBy: adminId,
+          },
+        },
+        session
+      );
+
+      committedDoc = updated.toObject();
+      actuallyChanged = true;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  // FIX-02: Post-commit side-effects (cannot be rolled back if placed inside transaction)
+  // Status change has already committed in DB. Ensure side-effect errors do not fail the request with 500.
+  if (status !== "ACTIVE") {
+    await authTokenService.safeRevokeAllForUser(committedDoc._id);
+  } else if (actuallyChanged) {
+    try {
+      await notify(
+        committedDoc._id,
+        "Tài khoản đã được kích hoạt lại",
+        "Bạn có thể tiếp tục sử dụng Edunity.",
+        "ACCOUNT_REACTIVATED"
+      );
+    } catch (notifErr) {
+      console.error(`[adminService] Post-commit notification failed for userId=${committedDoc._id}:`, notifErr);
+    }
+  }
+
+  // Populate statusChangedBy admin info
+  if (committedDoc.statusChangedBy && mongoose.isValidObjectId(committedDoc.statusChangedBy)) {
+    const adminActor = await User.findById(committedDoc.statusChangedBy).select("_id email studentProfile teacherProfile").lean();
+    if (adminActor) {
+      committedDoc.statusChangedBy = adminActor;
+    }
+  }
+
+  return presentUser(committedDoc);
+};
+
+const getUserStatusHistory = async (userId, paging) => {
+  if (!mongoose.isValidObjectId(userId)) throw userNotFound();
+  const user = await User.findOne({ _id: userId, ...NOT_DELETED });
+  if (!user) throw userNotFound();
+
+  const filter = {
     targetType: "User",
     targetId: user._id,
-    beforeState: { status: before },
-    afterState: { status, reason: body.reason || null },
-  });
-  if (status === "ACTIVE") await notify(user._id, "Tài khoản đã được kích hoạt lại", "Bạn có thể tiếp tục sử dụng Edunity.", "ACCOUNT_REACTIVATED");
+    action: { $in: ["USER_ACTIVE", "USER_SUSPENDED", "USER_BANNED"] },
+  };
 
-  return presentUser(user.toObject());
+  const [logs, total] = await Promise.all([
+    AuditLog.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(paging.skip)
+      .limit(paging.pageSize)
+      .populate("actorAdminId", "email studentProfile teacherProfile")
+      .lean(),
+    AuditLog.countDocuments(filter),
+  ]);
+
+  const items = logs.map((log) => {
+    let performedBy = null;
+    if (log.actorAdminId) {
+      const actor = log.actorAdminId;
+      performedBy = {
+        id: (actor._id || actor).toString(),
+        email: actor.email || null,
+        fullName: actor.studentProfile?.fullName || actor.teacherProfile?.fullName || "Admin",
+      };
+    }
+
+    const actionStatus = log.action.replace("USER_", "");
+    const toStatus = log.afterState?.status || actionStatus;
+    const fromStatus = log.beforeState?.status || null;
+    const reason = log.afterState?.reason || null;
+
+    return {
+      id: log._id.toString(),
+      action: log.action,
+      fromStatus,
+      toStatus,
+      reason,
+      performedBy,
+      performedAt: log.createdAt,
+    };
+  });
+
+  return paged(items, total, paging);
 };
 
 // ---------- Dashboard (FR-ADM-21) ----------
@@ -274,4 +512,4 @@ const getDashboard = async () => {
   };
 };
 
-module.exports = { listUsers, getUser, updateUserStatus, getDashboard };
+module.exports = { listUsers, getUser, updateUserStatus, getDashboard, getUserStatusHistory };

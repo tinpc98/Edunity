@@ -90,4 +90,34 @@ const revokeAllForUser = async (userId) => {
   await RefreshToken.updateMany({ userId, revokedAt: null }, { $set: { revokedAt: new Date() } });
 };
 
-module.exports = { buildAccessToken, assertAccountUsable, issueRefreshToken, refresh, logout, revokeAllForUser };
+/**
+ * Resilient token revocation with retry mechanism for post-commit side-effects.
+ * If all retries fail, it logs the error and returns a failure descriptor without
+ * throwing, preventing post-commit 500 errors when DB status is already committed.
+ */
+const safeRevokeAllForUser = async (userId, maxAttempts = 3, delayMs = 20) => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await module.exports.revokeAllForUser(userId);
+      return { success: true, attempts: attempt };
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+      }
+    }
+  }
+  console.error(`[authTokenService] Post-commit revokeAllForUser failed after ${maxAttempts} attempts for userId=${userId}:`, lastError);
+  return { success: false, error: lastError, attempts: maxAttempts };
+};
+
+module.exports = {
+  buildAccessToken,
+  assertAccountUsable,
+  issueRefreshToken,
+  refresh,
+  logout,
+  revokeAllForUser,
+  safeRevokeAllForUser,
+};
