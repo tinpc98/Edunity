@@ -149,6 +149,7 @@ const sessionSchema = new Schema(
       enum: [
         "TEACHER_ENDED",
         "AUTO_COMPLETED",
+        "AUTO_ENDED_AFTER_GRACE_PERIOD",
         "TEACHER_NO_SHOW",
         "TEACHER_LEFT_EARLY",
         "INCIDENT_CANCELLED",
@@ -161,6 +162,8 @@ const sessionSchema = new Schema(
     teacherPresence: { type: teacherPresenceSchema, default: () => ({}) },
     presenceTrackingActive: { type: Boolean, default: false },
     attendanceFinalizedAt: { type: Date, default: null },
+    // Set when the Session ended but its LiveKit room could not be closed; the lifecycle job retries until it closes
+    roomCleanupPendingAt: { type: Date, default: null },
     rescheduleMetadata: { type: rescheduleMetadataSchema, default: () => ({}) },
 
     // Recording: Session → recording → Playback (độc lập với meetingRoomId, không dùng chung identifier)

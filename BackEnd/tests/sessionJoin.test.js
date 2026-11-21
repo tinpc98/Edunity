@@ -157,7 +157,7 @@ describe("TIN-03A: Session Join, canJoin status & GET side effect regression sui
   });
 
   // TC-04: Session SCHEDULED, trong join window. Expected: canJoin = true.
-  it("TC-04: Session SCHEDULED inside join window (within 15 mins) has canJoin = true", async () => {
+  it("TC-04: Session SCHEDULED inside join window has canJoin = false until the Teacher starts it", async () => {
     const session = await Session.create({
       classId: cls._id,
       className: cls.className,
@@ -171,7 +171,7 @@ describe("TIN-03A: Session Join, canJoin status & GET side effect regression sui
     const list = await studentService.getMySessions(student._id);
     const item = list.find((s) => s.id === session._id.toString());
     expect(item).toBeDefined();
-    expect(item.canJoin).toBe(true);
+    expect(item.canJoin).toBe(false);
   });
 
   // TC-05: Session IN_PROGRESS, trong join window. Expected: canJoin = true.
@@ -182,6 +182,7 @@ describe("TIN-03A: Session Join, canJoin status & GET side effect regression sui
       teacherId: teacher._id,
       title: "Live Session",
       status: "IN_PROGRESS",
+      roomState: "LIVE",
       startDatetime: new Date(Date.now() - 10 * 60 * 1000),
       endDatetime: new Date(Date.now() + 50 * 60 * 1000),
     });
@@ -237,7 +238,8 @@ describe("TIN-03A: Session Join, canJoin status & GET side effect regression sui
       className: cls.className,
       teacherId: teacher._id,
       title: "Valid Session",
-      status: "SCHEDULED",
+      status: "IN_PROGRESS",
+      roomState: "LIVE",
       startDatetime: new Date(Date.now() - 5 * 60 * 1000),
       endDatetime: new Date(Date.now() + 55 * 60 * 1000),
     });
@@ -379,7 +381,8 @@ describe("TIN-03A: Session Join, canJoin status & GET side effect regression sui
       className: cls.className,
       teacherId: teacher._id,
       title: "Idempotent Join Session",
-      status: "SCHEDULED",
+      status: "IN_PROGRESS",
+      roomState: "LIVE",
       startDatetime: new Date(Date.now() - 5 * 60 * 1000),
       endDatetime: new Date(Date.now() + 55 * 60 * 1000),
     });
@@ -541,6 +544,7 @@ describe("TIN-03A: Session Join, canJoin status & GET side effect regression sui
         teacherId: teacher._id,
         title: "Case B Past In-Progress Session",
         status: "IN_PROGRESS",
+        roomState: "LIVE",
         meetingRoomId: "room_case_b",
         startDatetime: new Date(Date.now() - 90 * 60 * 1000),
         endDatetime: new Date(Date.now() - 15 * 60 * 1000),
@@ -629,6 +633,139 @@ describe("TIN-03A: Session Join, canJoin status & GET side effect regression sui
 
       // 4. Token issued?
       expect(res.body.data?.accessToken).toBeUndefined();
+    });
+  });
+
+  describe("LiveSession: only the Teacher starts and ends; Students join only a started session", () => {
+    const { runSessionLifecycleJob } = require("../src/jobs/sessionLifecycleJob");
+    const makeSession = (status, startOffsetMin = -5) =>
+      Session.create({
+        classId: cls._id,
+        className: cls.className,
+        teacherId: teacher._id,
+        title: `Live ${status}`,
+        status,
+        startDatetime: new Date(Date.now() + startOffsetMin * 60 * 1000),
+        endDatetime: new Date(Date.now() + 55 * 60 * 1000),
+      });
+    const join = (session, user) => request(app).post(`/api/sessions/${session._id}/join`).set(as(user));
+
+    it.each(["SCHEDULED", "WAITING"])("Student cannot join a %s session and gets no token", async (status) => {
+      const session = await makeSession(status);
+      const res = await join(session, student);
+      expect(res.statusCode).toBe(409);
+      expect(res.body.error).toBe("SESSION_NOT_STARTED");
+      expect(res.body.data?.accessToken).toBeUndefined();
+      expect(await SessionAttendance.countDocuments({ sessionId: session._id })).toBe(0);
+    });
+
+    // Not started by the Teacher, whatever the clock says: no token, no room, canJoin false
+    it.each([
+      ["tomorrow", 24 * 60, "SESSION_NOT_JOINABLE"],
+      ["in 15 minutes", 15, "SESSION_NOT_JOINABLE"],
+      ["in 1 minute", 1, "SESSION_NOT_STARTED"],
+      ["right now", 0, "SESSION_NOT_STARTED"],
+      ["past its start by 25 minutes", -25, "SESSION_NOT_STARTED"],
+      // Teacher never came: the scheduler cancels (NO_SHOW), it never opens the room
+      ["past its start by 30 minutes", -30, "SESSION_CANCELLED"],
+    ])("session %s without Teacher Start: Student rejected", async (_label, offsetMin, code) => {
+      const session = await Session.create({
+        classId: cls._id,
+        className: cls.className,
+        teacherId: teacher._id,
+        title: "Not started",
+        status: "SCHEDULED",
+        startDatetime: new Date(Date.now() + offsetMin * 60 * 1000),
+        endDatetime: new Date(Date.now() + (offsetMin + 60) * 60 * 1000),
+      });
+      await runSessionLifecycleJob(new Date());
+      await runSessionLifecycleJob(new Date());
+      const res = await join(session, student);
+      expect(res.statusCode).toBe(409);
+      expect(res.body.error).toBe(code);
+      expect(res.body.data?.accessToken).toBeUndefined();
+      const after = await Session.findById(session._id).lean();
+      expect(after.meetingRoomId).toBeFalsy();
+      expect(after.roomState).not.toBe("LIVE");
+      const listed = (await studentService.getMySessions(student._id)).find((s) => s.id === session._id.toString());
+      if (listed) expect(listed.canJoin).toBe(false);
+    });
+
+    it("legacy pre-opened WAITING rows and IN_PROGRESS rows that are not LIVE never grant a Student token", async () => {
+      const legacy = await makeSession("WAITING");
+      await Session.updateOne(
+        { _id: legacy._id },
+        { $set: { roomState: "WAITING", preOpenedAt: new Date(), meetingRoomId: `room_${legacy._id}` } }
+      );
+      expect((await join(legacy, student)).body.error).toBe("SESSION_NOT_STARTED");
+
+      const notLive = await makeSession("IN_PROGRESS");
+      await Session.updateOne({ _id: notLive._id }, { $set: { roomState: "TEACHER_DISCONNECTED" } });
+      expect((await join(notLive, student)).body.error).toBe("SESSION_NOT_STARTED");
+    });
+
+    it("a started session still needs a CONFIRMED enrollment", async () => {
+      const session = await makeSession("IN_PROGRESS");
+      await Session.updateOne({ _id: session._id }, { $set: { roomState: "LIVE" } });
+      const res = await join(session, student2);
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error).toBe("NOT_ENROLLED");
+      expect(res.body.data?.accessToken).toBeUndefined();
+    });
+
+    it("full flow: Teacher join keeps WAITING, Student blocked, Teacher start → Student joins, leave keeps it live, Teacher end", async () => {
+      const session = await makeSession("SCHEDULED");
+
+      expect((await join(session, teacher)).statusCode).toBe(200);
+      expect((await Session.findById(session._id)).status).toBe("WAITING");
+      expect((await join(session, student)).body.error).toBe("SESSION_NOT_STARTED");
+
+      // Students and other Teachers cannot start or end it
+      expect((await request(app).post(`/api/teacher/sessions/${session._id}/start`).set(as(student))).statusCode).toBe(403);
+      expect((await request(app).post(`/api/teacher/sessions/${session._id}/start`).set(as(teacher2))).statusCode).toBe(403);
+
+      const started = await request(app).post(`/api/teacher/sessions/${session._id}/start`).set(as(teacher));
+      expect(started.statusCode).toBe(200);
+      expect(started.body.data.status).toBe("IN_PROGRESS");
+      expect(started.body.data.roomState).toBe("LIVE");
+      const again = await request(app).post(`/api/teacher/sessions/${session._id}/start`).set(as(teacher));
+      expect(again.body.error).toBe("SESSION_ALREADY_STARTED");
+
+      const joined = await join(session, student);
+      expect(joined.statusCode).toBe(200);
+      expect(joined.body.data.accessToken).toBeDefined();
+      // Rejoining (reconnect) issues a fresh token
+      expect((await join(session, student)).statusCode).toBe(200);
+
+      const left = await request(app).post(`/api/sessions/${session._id}/presence/leave`).set(as(student)).send({});
+      expect(left.statusCode).toBeLessThan(500);
+      const afterLeave = await Session.findById(session._id);
+      expect(afterLeave.status).toBe("IN_PROGRESS");
+      expect(afterLeave.roomState).not.toBe("ENDED");
+
+      expect((await request(app).post(`/api/teacher/sessions/${session._id}/end`).set(as(student))).statusCode).toBe(403);
+      const ended = await request(app).post(`/api/teacher/sessions/${session._id}/end`).set(as(teacher));
+      expect(ended.body.data.status).toBe("COMPLETED");
+      expect(ended.body.data.roomState).toBe("ENDED");
+      expect((await join(session, student)).body.error).toBe("SESSION_ENDED");
+    });
+
+    it("scheduler never pre-opens a room nor starts teaching on its own", async () => {
+      const soon = await makeSession("SCHEDULED", 5); // inside the old 10-minute pre-open window
+      const teacherInRoom = await makeSession("WAITING", -15); // Teacher waiting > the old 10-minute auto-start
+      await Session.updateOne(
+        { _id: teacherInRoom._id },
+        { $set: { "teacherPresence.isCurrentlyConnected": true, "teacherPresence.firstTeachingJoinAt": new Date(Date.now() - 15 * 60 * 1000) } }
+      );
+
+      await runSessionLifecycleJob(new Date());
+
+      const soonAfter = await Session.findById(soon._id);
+      expect(soonAfter.status).toBe("SCHEDULED");
+      expect(soonAfter.preOpenedAt).toBeFalsy();
+      const waitingAfter = await Session.findById(teacherInRoom._id);
+      expect(waitingAfter.status).toBe("WAITING");
+      expect(waitingAfter.roomState).not.toBe("LIVE");
     });
   });
 });

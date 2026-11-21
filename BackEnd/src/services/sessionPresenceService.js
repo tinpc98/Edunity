@@ -27,6 +27,9 @@ const getTeacherBriefPresenceMinSeconds = () => {
 };
 const TEACHER_BRIEF_PRESENCE_MIN_SECONDS = getTeacherBriefPresenceMinSeconds(); // Proposed 5m threshold (configurable, Admin review only)
 const POST_END_GRACE_PERIOD_MS = 30 * 60 * 1000; // 30 minutes after endDatetime
+// An open interval counts as a live connection only while confirmed this recently (client heartbeat every 30s, LiveKit
+// participant list every lifecycle run); older => stale and closed at its last confirmation
+const PRESENCE_HEARTBEAT_TIMEOUT_MS = 3 * 60 * 1000;
 const ATTENDANCE_THRESHOLD_PERCENT = 70;
 
 const TRUSTED_PRESENCE_SOURCES = ["LIVEKIT_WEBHOOK", "LIVEKIT_RECONCILED"];
@@ -219,13 +222,10 @@ const startTeachingRecordingSegmentIfNeeded = async (sessionDoc, teacherId) => {
 /**
  * Stops the active LiveKit recording segment (if any) when the teacher leaves or the session ends.
  */
-// How long a Teacher may sit in the room after the start time before the system starts teaching itself
-const getAutoStartAfterMs = () => (Number(process.env.SESSION_AUTO_START_AFTER_MINUTES) || 10) * 60 * 1000;
-
 const STARTABLE_STATUSES = ["SCHEDULED", "WAITING"];
 
 /**
- * SCHEDULED/WAITING → IN_PROGRESS, recording first (startSession and the lifecycle auto-start).
+ * SCHEDULED/WAITING → IN_PROGRESS, recording first. Called only by startSession (the Teacher's explicit action).
  * When recording is mandatory and cannot start, the Session is NOT started: RECORDING_START_FAILED is thrown
  * and the Session stays WAITING so the Teacher can retry. Never reports a recording that is not running.
  */
@@ -389,6 +389,11 @@ const verifyAndRecordClientPresence = async ({
     }
 
     existingVerifiedOpen.lastHeartbeatAt = refNow;
+    // The tab reporting this connection owns it: its heartbeat/leave find the interval by this id (LiveKit allows one
+    // connection per identity, so the latest connecting tab is the live one)
+    if (connectionSessionId && (action === "CONNECT" || !existingVerifiedOpen.clientConnectionId)) {
+      existingVerifiedOpen.clientConnectionId = connectionSessionId;
+    }
     await existingVerifiedOpen.save();
 
     return {
@@ -414,7 +419,9 @@ const verifyAndRecordClientPresence = async ({
       userId,
       role: isTeacher ? "TEACHER" : "STUDENT",
       connectionSessionId: reconciledConnId,
+      clientConnectionId: connectionSessionId,
       connectedAt: joinedAtDate,
+      lastHeartbeatAt: refNow,
       source: "LIVEKIT_RECONCILED",
     });
 
@@ -496,6 +503,9 @@ const reconcileSessionWithLiveKit = async (sessionOrId, now = new Date()) => {
         disconnectedAt: disconnectAtDate,
         closeReason: "LIVEKIT_RECONCILED_DISCONNECT",
       });
+    } else {
+      // LiveKit confirms this participant is in the room: that counts as a heartbeat
+      await SessionPresenceInterval.updateOne({ _id: openInt._id }, { $set: { lastHeartbeatAt: now } });
     }
   }
 
@@ -527,6 +537,7 @@ const reconcileSessionWithLiveKit = async (sessionOrId, now = new Date()) => {
             role: isTeacher ? "TEACHER" : "STUDENT",
             connectionSessionId: p.sid || `lk_reconciled_${identity}`,
             connectedAt: joinedAtDate,
+            lastHeartbeatAt: now,
             source: "LIVEKIT_RECONCILED",
           });
         } catch {
@@ -549,7 +560,9 @@ const recordParticipantConnected = async ({
   userId,
   role,
   connectionSessionId = null,
+  clientConnectionId = null,
   connectedAt = new Date(),
+  lastHeartbeatAt = null,
   eventId = null,
   source = "LIVEKIT_WEBHOOK",
 }) => {
@@ -570,6 +583,10 @@ const recordParticipantConnected = async ({
 
   const session = await Session.findById(sessionId);
   if (!session) throw new AppError("Session not found", "SESSION_NOT_FOUND", 404);
+  // A late join event for a finished Session must not reopen presence (it would stay open forever)
+  if (isSessionFinal(session)) {
+    return { deduplicated: false, ignored: "SESSION_ENDED", interval: null };
+  }
 
   if (eventId) {
     const duplicateEvent = await SessionPresenceInterval.findOne({
@@ -630,7 +647,7 @@ const recordParticipantConnected = async ({
     }
   }
 
-  const connId = connectionSessionId || `conn_${userId}_${connectMs}`;
+  let connId = connectionSessionId || `conn_${userId}_${connectMs}`;
 
   // Upsert interval idempotently
   let interval = await SessionPresenceInterval.findOne({
@@ -638,6 +655,11 @@ const recordParticipantConnected = async ({
     userId,
     connectionSessionId: connId,
   });
+  // The same LiveKit connection confirmed again after its interval timed out is a new presence interval
+  if (interval && interval.disconnectedAt && interval.closeReason === "HEARTBEAT_TIMEOUT") {
+    connId = `${connId}#${connectMs}`;
+    interval = await SessionPresenceInterval.findOne({ sessionId: session._id, userId, connectionSessionId: connId });
+  }
 
   if (!interval) {
     interval = await SessionPresenceInterval.create({
@@ -646,7 +668,9 @@ const recordParticipantConnected = async ({
       userId,
       role: normalizedRole,
       connectionSessionId: connId,
+      clientConnectionId,
       connectedAt: connectTime,
+      lastHeartbeatAt: lastHeartbeatAt || connectTime,
       disconnectedAt: null,
       source,
       processedEventIds: eventId ? [eventId] : [],
@@ -715,8 +739,8 @@ const recordParticipantConnected = async ({
     tp.isCurrentlyConnected = true;
     tp.lastConnectedAt = connectTime;
 
-    // Being in the room only opens it: teaching (IN_PROGRESS + recording) starts when the Teacher presses
-    // "Bắt đầu buổi học" (startSession) or when the lifecycle job auto-starts it. See startSession.
+    // Being in the room only opens it: teaching (IN_PROGRESS + recording) starts only when the Teacher presses
+    // "Bắt đầu buổi học" (startSession).
     if (connectMs < startMs) {
       if (!tp.firstPreOpenJoinAt) tp.firstPreOpenJoinAt = connectTime;
     } else {
@@ -797,7 +821,8 @@ const recordParticipantDisconnected = async ({
     disconnectedAt: null,
   };
   if (connectionSessionId) {
-    filter.connectionSessionId = connectionSessionId;
+    // A tab knows only its own client id; its interval may be keyed by the LiveKit sid it was reconciled under
+    filter.$or = [{ connectionSessionId }, { clientConnectionId: connectionSessionId }];
   }
 
   const openIntervals = await SessionPresenceInterval.find(filter).sort({ connectedAt: -1 });
@@ -851,6 +876,23 @@ const recordParticipantDisconnected = async ({
   });
 
   const isTeacher = session.teacherId.toString() === userId.toString();
+
+  // A leave that closed nothing (repeated leave, or the leave of a tab another connection replaced) changes nothing:
+  // it must not move leftAt/absence forward or mark a still-connected user as gone
+  if (!updatedInterval && closeReason === "LEAVE_API") {
+    const alreadyLeft = isTeacher
+      ? !session.teacherPresence?.isCurrentlyConnected && Boolean(session.teacherPresence?.currentAbsenceStartedAt)
+      : Boolean(
+          await SessionAttendance.exists({
+            sessionId: session._id,
+            studentId: userId,
+            isCurrentlyConnected: false,
+            leftAt: { $ne: null },
+          })
+        );
+    if (alreadyLeft || remainingOpen) return { deduplicated: true, interval: null };
+  }
+
   if (!isTeacher) {
     await SessionAttendance.updateOne(
       { sessionId: session._id, studentId: userId },
@@ -1436,7 +1478,7 @@ const handleLiveKitEvent = async (event) => {
  * Designed to be idempotent and safe under concurrent or repeated scheduler invocations.
  */
 const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
-  const session = await Session.findById(sessionId);
+  let session = await Session.findById(sessionId);
   if (!session) return null;
   if (session.status === "COMPLETED" || session.status === "CANCELLED") {
     return session.toObject();
@@ -1446,13 +1488,16 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
     return session.toObject();
   }
 
-  // Reconcile with trusted LiveKit room state if LiveKit is configured/mocked
+  // Reconcile with trusted LiveKit room state if LiveKit is configured/mocked, then close connections nobody has
+  // confirmed for PRESENCE_HEARTBEAT_TIMEOUT_MS. Both write the Session through their own copy: reload it.
   await reconcileSessionWithLiveKit(session, now);
+  await closeStalePresenceIntervals(session, now);
+  session = await Session.findById(sessionId);
+  if (!session) return null;
 
   const nowMs = now.getTime();
   const startMs = session.startDatetime.getTime();
   const endMs = session.endDatetime.getTime();
-  const preOpenMs = startMs - PRE_OPEN_BEFORE_MS;
   const graceEndMs = endMs + POST_END_GRACE_PERIOD_MS;
   const scheduledDurationSeconds = Math.max(1, Math.round((endMs - startMs) / 1000));
 
@@ -1478,90 +1523,38 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
     );
   };
 
-  // 1. Pre-open waiting room window (startDatetime - 10 minutes <= now < startDatetime)
-  if (nowMs >= preOpenMs && nowMs < startMs) {
-    if (session.roomState === "NOT_OPEN" || session.status === "SCHEDULED") {
-      if (session.status === "SCHEDULED") session.status = "WAITING";
-      session.roomState = "WAITING";
-      session.lifecycleState = "WAITING";
-      if (!session.preOpenedAt) session.preOpenedAt = now;
-      if (!session.meetingRoomId) session.meetingRoomId = `room_${session._id}`;
-      await session.save();
-
-      const recordingNotice = videoProvider.isRecordingRequired()
-        ? " Buổi học sẽ được ghi hình từ khi giáo viên bắt đầu giảng dạy; bản ghi chỉ dành cho giáo viên, học viên của lớp và quản trị viên."
-        : "";
-      await notifyOnce(
-        session.teacherId,
-        "Phòng học đã mở",
-        `Phòng học của buổi "${session.title}" đã mở. Bạn có thể vào kiểm tra camera, micro trước giờ học và nhấn "Bắt đầu buổi học" khi sẵn sàng.${recordingNotice}`,
-        "SESSION_ROOM_OPENED",
-        `session:${session._id}:teacher:room_opened`,
-        session._id
-      );
-      await notifyAllStudents(
-        "Buổi học sắp bắt đầu",
-        `Phòng học của buổi "${session.title}" đã mở, buổi học bắt đầu sau ít phút nữa.${recordingNotice}`,
-        "SESSION_ROOM_OPENED",
-        "room_opened"
-      );
-    }
-    return session.toObject();
-  }
+  // 1. Before startDatetime nothing happens automatically: the room opens only when the Teacher joins it, and
+  // teaching starts only when the Teacher presses "Bắt đầu buổi học" (no pre-open, no auto-start).
+  if (nowMs < startMs) return session.toObject();
 
   // 2. Official start time reached (now >= startDatetime)
   if (nowMs >= startMs) {
     const tp = session.teacherPresence || {};
 
-    // Check actual teacher open interval in SessionPresenceInterval
-    const teacherOpenInterval = await SessionPresenceInterval.findOne({
-      sessionId: session._id,
-      userId: session.teacherId,
-      disconnectedAt: null,
-      source: { $in: TRUSTED_PRESENCE_SOURCES },
-    }).lean();
+    // Only an open LiveKit-backed interval confirmed within the heartbeat timeout proves the Teacher is connected.
+    // teacherPresence.isCurrentlyConnected is not evidence: it is never refreshed and stays true after a closed tab.
+    const isTeacherActuallyConnected = Boolean(await findFreshTeacherInterval(session, now));
 
-    const isTeacherActuallyConnected =
-      Boolean(teacherOpenInterval) ||
-      Boolean(tp.isCurrentlyConnected && !tp.currentAbsenceStartedAt);
-
-    // Teacher in the room but teaching not started: lateness is measured from the room presence; if the Teacher
-    // still has not pressed "Bắt đầu buổi học" AUTO_START_AFTER_MS after the start, the system starts it.
+    // Teacher in the room but teaching not started: lateness is measured from the room presence. The system never
+    // starts teaching on its own; only the Teacher's "Bắt đầu buổi học" (startSession) does.
     if (
       (session.status === "SCHEDULED" || session.status === "WAITING") &&
       isTeacherActuallyConnected &&
-      nowMs <= endMs
+      nowMs <= endMs &&
+      !tp.firstTeachingJoinAt
     ) {
-      if (!tp.firstTeachingJoinAt) {
-        tp.firstTeachingJoinAt = session.startDatetime;
-        tp.isCurrentlyConnected = true;
-        session.teacherPresence = tp;
-        await session.save();
-      }
-      const presentSinceMs = Math.max(startMs, new Date(tp.firstTeachingJoinAt).getTime());
-      if (nowMs - presentSinceMs >= getAutoStartAfterMs()) {
-        try {
-          await beginTeaching(session._id, { startedBy: "SYSTEM", now });
-          await notifyOnce(
-            session.teacherId,
-            "Hệ thống đã tự động bắt đầu buổi học",
-            `Buổi học "${session.title}" đã được tự động bắt đầu vì bạn đã ở trong phòng nhưng chưa nhấn "Bắt đầu buổi học".`,
-            "SESSION_AUTO_STARTED",
-            `session:${session._id}:teacher:auto_started`,
-            session._id
-          );
-        } catch (err) {
-          console.error(`[sessionLifecycle] Auto-start failed for session ${session._id}:`, err.message);
-        }
-        const refreshed = await Session.findById(session._id).lean();
-        return refreshed;
-      }
+      tp.firstTeachingJoinAt = session.startDatetime;
+      tp.isCurrentlyConnected = true;
+      session.teacherPresence = tp;
+      await session.save();
     }
 
     const teacherHasJoinedTeaching = Boolean(tp.firstTeachingJoinAt);
 
-    // 2a. Teacher has NOT joined teaching period yet -> check +10m, +20m, +30m lateness milestones
-    if (!teacherHasJoinedTeaching) {
+    // 2a. Teacher has NOT joined teaching period yet -> check +10m, +20m, +30m lateness milestones.
+    // Only for a Session not started: one the Teacher started (IN_PROGRESS/INTERRUPTED) is never a no-show, even when
+    // older data lacks firstTeachingJoinAt.
+    if (!teacherHasJoinedTeaching && (session.status === "SCHEDULED" || session.status === "WAITING")) {
       const lateMs = nowMs - startMs;
 
       // +10m YELLOW WARNING
@@ -1772,8 +1765,18 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
       }
     }
 
-    // 3. Past scheduled endDatetime: overtime reminder & safe auto-completion check
+    // 3. Past scheduled endDatetime
     if (nowMs > endMs) {
+      // Auto-end at endDatetime + 30 minutes (business rule; a late Start does not extend it). Applies only to a
+      // Session the Teacher started: IN_PROGRESS/INTERRUPTED are written only by the Teacher's Start. Presence is not
+      // consulted, so a stale connection can never keep a Session open. A Session never started is left as it is.
+      if (nowMs > graceEndMs) {
+        if (session.status === "IN_PROGRESS" || session.status === "INTERRUPTED") {
+          return autoEndStartedSession(session, now);
+        }
+        return session.toObject();
+      }
+
       if (session.status === "IN_PROGRESS") {
         if (isTeacherActuallyConnected) {
           session.roomState = "GRACE_PERIOD";
@@ -1784,7 +1787,7 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
           await notifyOnce(
             session.teacherId,
             "Nhắc nhở: Đã quá giờ kết thúc buổi học theo lịch",
-            `Buổi học "${session.title}" đã qua giờ kết thúc theo lịch. Phòng học và ghi hình vẫn đang được duy trì khi bạn còn trong lớp. Vui lòng nhấn Kết thúc buổi học khi hoàn tất giảng dạy.`,
+            `Buổi học "${session.title}" đã qua giờ kết thúc theo lịch. Hệ thống sẽ tự kết thúc buổi học 30 phút sau giờ kết thúc. Vui lòng nhấn Kết thúc buổi học khi hoàn tất giảng dạy.`,
             "TEACHER_OVERTIME_REMINDER",
             `session:${session._id}:teacher:overtime_reminder`,
             session._id
@@ -1792,60 +1795,150 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
         }
         await session.save();
       }
-
-      // APPROVED BUSINESS RULE (TIN-05D/E-FIX01):
-      // NEVER auto-complete a session while the teacher is still actively connected,
-      // OR while the teacher's continuous absence is still under the 30-minute grace threshold.
-      if (isTeacherActuallyConnected) {
-        return session.toObject();
-      }
-
-      const disconnectRef = tp.currentAbsenceStartedAt || tp.lastDisconnectedAt;
-      if (disconnectRef) {
-        const absenceElapsedMs = nowMs - new Date(disconnectRef).getTime();
-        if (absenceElapsedMs < TEACHER_CONTINUOUS_ABSENCE_LIMIT_MS) {
-          // Respect the full 30-minute continuous teacher absence period before any auto-action
-          return session.toObject();
-        }
-      }
-
-      // Only when past endDatetime + 30m AND teacher is confirmed disconnected for >= 30 continuous minutes:
-      if (nowMs > graceEndMs) {
-        await stopActiveRecordingSegment(session, "AUTO_COMPLETED");
-        await closeAllOpenIntervalsForSession(session, now, "AUTO_COMPLETED");
-
-        if (session.status === "INTERRUPTED") {
-          session.roomState = "ENDED";
-          session.actualEndAt = session.actualEndAt || now;
-          await session.save();
-          await finalizeSessionAttendance(session._id, { now, forceRecalculate: true });
-          await videoProvider.closeRoom(session.meetingRoomId);
-          return session.toObject();
-        }
-
-        session.status = "COMPLETED";
-        session.roomState = "ENDED";
-        session.lifecycleState = "AUTO_COMPLETED";
-        session.endReason = session.endReason || "AUTO_COMPLETED";
-        session.actualEndAt = now;
-        await session.save();
-
-        await finalizeSessionAttendance(session._id, { now, forceRecalculate: true });
-        await videoProvider.closeRoom(session.meetingRoomId);
-
-        await notifyOnce(
-          session.teacherId,
-          "Buổi học đã tự động hoàn tất (AUTO_COMPLETED)",
-          `Buổi học "${session.title}" đã tự động đóng và chốt điểm danh sau khi giáo viên đã rời phòng quá 30 phút sau giờ kết thúc.`,
-          "SESSION_AUTO_COMPLETED",
-          `session:${session._id}:teacher:auto_completed`,
-          session._id
-        );
-      }
     }
   }
 
   return session.toObject();
+};
+
+const isSessionFinal = (session) =>
+  session.status === "COMPLETED" ||
+  session.status === "CANCELLED" ||
+  (session.status === "INTERRUPTED" && session.roomState === "ENDED");
+
+const freshPresenceFilter = (now) => {
+  const since = new Date(now.getTime() - PRESENCE_HEARTBEAT_TIMEOUT_MS);
+  return {
+    disconnectedAt: null,
+    source: { $in: TRUSTED_PRESENCE_SOURCES },
+    $or: [{ lastHeartbeatAt: { $gte: since } }, { lastHeartbeatAt: null, connectedAt: { $gte: since } }],
+  };
+};
+
+const findFreshTeacherInterval = (session, now = new Date()) =>
+  SessionPresenceInterval.findOne({
+    sessionId: session._id,
+    userId: session.teacherId,
+    ...freshPresenceFilter(now),
+  }).lean();
+
+/**
+ * Closes the open intervals of a Session nobody confirmed (client heartbeat or LiveKit participant list) for
+ * PRESENCE_HEARTBEAT_TIMEOUT_MS, at their last confirmation time, so a closed tab or a lost webhook cannot leave a
+ * connection open. Intervals from before heartbeats were stored (lastHeartbeatAt null) are left to the Session end.
+ * Only presence changes: this never ends the Session.
+ */
+const closeStalePresenceIntervals = async (session, now = new Date()) => {
+  const cutoff = new Date(now.getTime() - PRESENCE_HEARTBEAT_TIMEOUT_MS);
+  const stale = await SessionPresenceInterval.find({
+    sessionId: session._id,
+    disconnectedAt: null,
+    lastHeartbeatAt: { $ne: null, $lt: cutoff },
+  }).lean();
+  for (const interval of stale) {
+    await recordParticipantDisconnected({
+      sessionId: session._id,
+      userId: interval.userId,
+      connectionSessionId: interval.connectionSessionId,
+      disconnectedAt: interval.lastHeartbeatAt,
+      closeReason: "HEARTBEAT_TIMEOUT",
+    });
+  }
+  if (stale.length) {
+    console.warn(
+      `[presence] session ${session._id}: closed ${stale.length} interval(s) without heartbeat for ${PRESENCE_HEARTBEAT_TIMEOUT_MS / 1000}s`
+    );
+  }
+  return stale.length;
+};
+
+/**
+ * Closes the LiveKit room of an ended Session. When LiveKit cannot be reached the Session stays ended and
+ * roomCleanupPendingAt marks the room for the lifecycle job to retry (tokens expire on their own meanwhile).
+ */
+const closeRoomOrMarkPending = async (session) => {
+  if (!session.meetingRoomId) return true;
+  const closed = await videoProvider.closeRoom(session.meetingRoomId);
+  const pending = !closed && videoProvider.getProviderName() === "LIVEKIT";
+  if (pending || session.roomCleanupPendingAt) {
+    await Session.updateOne(
+      { _id: session._id },
+      { $set: { roomCleanupPendingAt: pending ? session.roomCleanupPendingAt || new Date() : null } }
+    );
+  }
+  if (pending) console.warn(`[sessionLifecycle] room of session ${session._id} not closed; cleanup pending`);
+  return !pending;
+};
+
+/** Retries closing the rooms of ended Sessions whose close failed. Returns how many are still pending. */
+const retryPendingRoomCleanups = async (limit = 100) => {
+  const pending = await Session.find({ roomCleanupPendingAt: { $ne: null } })
+    .select("_id meetingRoomId roomCleanupPendingAt")
+    .sort({ roomCleanupPendingAt: 1 })
+    .limit(limit)
+    .lean();
+  let stillPending = 0;
+  for (const s of pending) {
+    if (!(await closeRoomOrMarkPending(s))) stillPending += 1;
+  }
+  return { retried: pending.length, stillPending };
+};
+
+/**
+ * Ends a started Session after endDatetime + 30 minutes. The conditional update is the claim: of concurrent callers
+ * (job instances, a Teacher pressing End) exactly one makes the transition, and only it runs the side effects.
+ * IN_PROGRESS -> COMPLETED/ENDED (AUTO_ENDED_AFTER_GRACE_PERIOD); INTERRUPTED keeps its status for the incident record
+ * and only closes (roomState ENDED), as before. Attendance and recordings are finalized, never deleted.
+ */
+const autoEndStartedSession = async (session, now = new Date()) => {
+  const wasInterrupted = session.status === "INTERRUPTED";
+  const set = wasInterrupted
+    ? { roomState: "ENDED", actualEndAt: session.actualEndAt || now }
+    : {
+        status: "COMPLETED",
+        roomState: "ENDED",
+        lifecycleState: "AUTO_COMPLETED",
+        endReason: "AUTO_ENDED_AFTER_GRACE_PERIOD",
+        actualEndAt: now,
+      };
+  const claimed = await Session.findOneAndUpdate(
+    { _id: session._id, status: session.status, roomState: { $ne: "ENDED" } },
+    { $set: set },
+    { returnDocument: "after" }
+  ).lean();
+  if (!claimed) {
+    // Someone else ended it first: nothing more to do here
+    const current = await Session.findById(session._id).lean();
+    return current || session.toObject();
+  }
+
+  let recordingStopped = true;
+  try {
+    await stopActiveRecordingSegment(claimed, "AUTO_COMPLETED");
+  } catch (err) {
+    recordingStopped = false;
+    console.error(`[sessionLifecycle] stop recording failed for session ${session._id}:`, err.message);
+  }
+  await closeAllOpenIntervalsForSession(claimed, now, "AUTO_COMPLETED");
+  await finalizeSessionAttendance(claimed._id, { now, forceRecalculate: true });
+  const roomClosed = await closeRoomOrMarkPending(claimed);
+
+  if (!wasInterrupted) {
+    await notifyOnce(
+      session.teacherId,
+      "Buổi học đã tự động kết thúc",
+      `Buổi học "${session.title}" đã được hệ thống tự động kết thúc và chốt điểm danh 30 phút sau giờ kết thúc theo lịch.`,
+      "SESSION_AUTO_COMPLETED",
+      `session:${session._id}:teacher:auto_completed`,
+      session._id
+    );
+  }
+  console.log(
+    `[sessionLifecycle] auto-ended session ${session._id} from ${session.status} (endDatetime ${new Date(session.endDatetime).toISOString()}, reason ${wasInterrupted ? session.endReason : "AUTO_ENDED_AFTER_GRACE_PERIOD"}, recordingStopped=${recordingStopped}, roomClosed=${roomClosed})`
+  );
+
+  const result = await Session.findById(session._id).lean();
+  return { ...result, autoEnded: true };
 };
 
 /**
@@ -1904,7 +1997,8 @@ const getSessionLiveStatus = async (user, sessionId) => {
     preOpenAt,
     studentFirstJoinDeadlineAt,
     autoCompleteAt,
-    isWaitingRoom: now >= preOpenAt && now < session.startDatetime,
+    // Teacher in the room but not started yet (state, not clock: the room never opens by time)
+    isWaitingRoom: session.status === "WAITING",
     isInTeachingPeriod: now >= session.startDatetime && now <= session.endDatetime,
     isOvertimeGracePeriod: now > session.endDatetime && session.status === "IN_PROGRESS",
     teacherPresence: session.teacherPresence || {},
@@ -1949,4 +2043,11 @@ module.exports = {
   handleLiveKitEvent,
   evaluateSessionLifecycleAt,
   getSessionLiveStatus,
+  PRESENCE_HEARTBEAT_TIMEOUT_MS,
+  isSessionFinal,
+  findFreshTeacherInterval,
+  closeStalePresenceIntervals,
+  closeRoomOrMarkPending,
+  retryPendingRoomCleanups,
+  autoEndStartedSession,
 };

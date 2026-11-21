@@ -358,6 +358,8 @@ describe("Public catalog", () => {
       className: cls.className,
       teacherId: teacher._id,
       title: "Buoi 1",
+      status: "IN_PROGRESS", // the Teacher has started it: Students can join only then
+      roomState: "LIVE",
       startDatetime: new Date(Date.now() - 60000),
       endDatetime: new Date(Date.now() + 3600000),
     });

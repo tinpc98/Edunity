@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Skeleton, App as AntdApp } from "antd";
+import { Button, Skeleton } from "antd";
 import {
   BookOutlined,
   CalendarOutlined,
@@ -10,8 +10,10 @@ import {
 import { useAuthStore } from "../../../stores/auth.store";
 import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
 import { classDiscoveryService } from "../../../services/classDiscovery.service";
+import { sessionService, sessionKeys } from "../../../services/session.service";
 import { ROUTES } from "../../../routes/routePaths";
-import type { ClassDiscoveryItem, SessionEntity } from "../../../types/classDiscovery";
+import { isSessionLive } from "../../../utils/sessionLive";
+import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
 
 type FilterTab = "ALL" | "IN_PROGRESS" | "COMPLETED";
 
@@ -22,14 +24,14 @@ interface EnrolledClassItem {
   completedSessions: number;
   progressPercent: number;
   learningStatus: "IN_PROGRESS" | "COMPLETED";
-  hasLiveSession: boolean;
-  liveSession: SessionEntity | null;
 }
+
+// Polling interval of the LIVE state: one light /me/sessions request, no WebSocket available for it yet
+const LIVE_POLL_MS = 15000;
 
 export default function StudentHomePage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { notification } = AntdApp.useApp();
   const [activeTab, setActiveTab] = useState<FilterTab>("ALL");
 
   // Query 1: Fetch enrollments for the authenticated student
@@ -97,12 +99,6 @@ export default function StudentHomePage() {
             ? "COMPLETED"
             : "IN_PROGRESS";
 
-          // LIVE state rule: strictly derived from Session.status === "IN_PROGRESS"
-          const liveSession = sessions.find(
-            (s) => s.classId === classItem.id && s.status === "IN_PROGRESS"
-          );
-          const hasLiveSession = Boolean(liveSession);
-
           return {
             enrollmentId: enr.id,
             classItem,
@@ -110,8 +106,6 @@ export default function StudentHomePage() {
             completedSessions,
             progressPercent,
             learningStatus,
-            hasLiveSession,
-            liveSession: liveSession || null,
           };
         })
       );
@@ -126,6 +120,21 @@ export default function StudentHomePage() {
     },
     enabled: Boolean(user?.userId) && confirmedEnrollments.length > 0,
   });
+
+  // Query 3: LIVE state from the backend (IN_PROGRESS + roomState LIVE, set only by the Teacher's "Bắt đầu buổi học").
+  // A single request polled every 15s and on window focus; React Query stops it when the page unmounts.
+  const { data: mySessions = [] } = useQuery({
+    queryKey: sessionKeys.studentMySessions(),
+    queryFn: () => sessionService.getMySessions(),
+    enabled: Boolean(user?.userId && user?.role === "STUDENT") && confirmedEnrollments.length > 0,
+    refetchInterval: LIVE_POLL_MS,
+    refetchOnWindowFocus: true,
+  });
+  const liveSessionIdByClass = new Map<string, string>();
+  for (const s of mySessions) {
+    if (isSessionLive(s) && !liveSessionIdByClass.has(s.classId)) liveSessionIdByClass.set(s.classId, s.id);
+  }
+  const liveSessionIdOf = (item: EnrolledClassItem) => liveSessionIdByClass.get(item.classItem.id);
 
   const isLoading = isLoadingEnrollments || (confirmedEnrollments.length > 0 && isLoadingClasses);
   const isError = isEnrollmentError || isClassesError;
@@ -142,42 +151,29 @@ export default function StudentHomePage() {
   const completedCount = allEnrolledList.filter((c) => c.learningStatus === "COMPLETED").length;
   const totalCount = allEnrolledList.length;
 
-  const filteredList = allEnrolledList.filter((c) => {
-    if (activeTab === "IN_PROGRESS") return c.learningStatus === "IN_PROGRESS";
-    if (activeTab === "COMPLETED") return c.learningStatus === "COMPLETED";
-    return true;
-  });
+  // LIVE first, then still-running classes, completed last; Array.sort is stable so the API order is kept within a group
+  const rank = (c: EnrolledClassItem) => (liveSessionIdOf(c) ? 0 : c.learningStatus === "IN_PROGRESS" ? 1 : 2);
+  const filteredList = allEnrolledList
+    .filter((c) => {
+      if (activeTab === "IN_PROGRESS") return c.learningStatus === "IN_PROGRESS";
+      if (activeTab === "COMPLETED") return c.learningStatus === "COMPLETED";
+      return true;
+    })
+    .sort((a, b) => rank(a) - rank(b));
 
   // Handler for normal non-live card click -> Student Class Learning / Session List
   const handleNormalClassClick = (item: EnrolledClassItem) => {
     navigate(`/student/classes/${item.classItem.id}`);
   };
 
-  // Handler for LIVE card click -> directly to Live Classroom
-  const handleLiveClassClick = (item: EnrolledClassItem) => {
-    const sessionId = (item.liveSession as any)?.id || (item.liveSession as any)?._id;
-    if (!sessionId) {
-      notification.warning({
-        message: "Phòng học trực tuyến",
-        description: "Phòng học hiện chưa sẵn sàng.",
-        placement: "topRight",
-      });
-      return;
-    }
-
-    navigate(`/classroom/${sessionId}`);
-  };
-
-
+  // LIVE card click -> straight into the classroom; autoJoin skips the pre-join screen (the backend still checks access)
   const handleCardClick = (item: EnrolledClassItem) => {
-    if (item.hasLiveSession) {
-      handleLiveClassClick(item);
-    } else {
-      handleNormalClassClick(item);
-    }
+    const liveSessionId = liveSessionIdOf(item);
+    if (liveSessionId) navigate(`/classroom/${liveSessionId}`, { state: { autoJoin: true } });
+    else handleNormalClassClick(item);
   };
 
-  // Secondary action handler for LIVE card: "Xem các buổi →"
+  // "Xem chi tiết lớp học" always opens the class, even on a LIVE card
   const handleViewSessionsClick = (e: React.MouseEvent, item: EnrolledClassItem) => {
     e.stopPropagation();
     handleNormalClassClick(item);
@@ -195,7 +191,7 @@ export default function StudentHomePage() {
 
         {/* Derived enrollment count */}
         <div className="flex items-center">
-          <span className="inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+          <span className="inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-100">
             Tổng số {totalCount} lớp đã đăng ký
           </span>
         </div>
@@ -207,7 +203,7 @@ export default function StudentHomePage() {
           type="button"
           onClick={() => setActiveTab("ALL")}
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === "ALL"
-            ? "bg-indigo-600 text-white shadow-xs"
+            ? "bg-teal-600 text-white shadow-xs"
             : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200/80 hover:border-slate-300"
             }`}
         >
@@ -218,7 +214,7 @@ export default function StudentHomePage() {
           type="button"
           onClick={() => setActiveTab("IN_PROGRESS")}
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === "IN_PROGRESS"
-            ? "bg-indigo-600 text-white shadow-xs"
+            ? "bg-teal-600 text-white shadow-xs"
             : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200/80 hover:border-slate-300"
             }`}
         >
@@ -229,7 +225,7 @@ export default function StudentHomePage() {
           type="button"
           onClick={() => setActiveTab("COMPLETED")}
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === "COMPLETED"
-            ? "bg-indigo-600 text-white shadow-xs"
+            ? "bg-teal-600 text-white shadow-xs"
             : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200/80 hover:border-slate-300"
             }`}
         >
@@ -270,7 +266,7 @@ export default function StudentHomePage() {
       ) : confirmedEnrollments.length === 0 ? (
         /* 16. Empty State */
         <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-2xs max-w-md mx-auto my-12">
-          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 text-2xl">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 text-2xl">
             <BookOutlined />
           </div>
           <h2 className="text-lg font-bold text-slate-900 mb-1">
@@ -282,7 +278,7 @@ export default function StudentHomePage() {
           <Link to={ROUTES.CLASSES}>
             <Button
               type="primary"
-              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-semibold text-xs px-6 h-10 shadow-xs"
+              className="bg-teal-600 hover:bg-teal-700 rounded-xl font-semibold text-xs px-6 h-10 shadow-xs"
             >
               Khám phá lớp học
             </Button>
@@ -305,11 +301,18 @@ export default function StudentHomePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-[980px]">
           {filteredList.map((item) => {
             const { classItem, enrollmentId } = item;
+            const isLive = Boolean(liveSessionIdOf(item));
             return (
               <div
                 key={enrollmentId}
+                role="link"
+                tabIndex={0}
+                aria-label={isLive ? `${classItem.className} — đang LIVE, vào phòng học` : classItem.className}
                 onClick={() => handleCardClick(item)}
-                className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-2xs hover:shadow-md hover:border-indigo-300 transition-all duration-200 cursor-pointer group"
+                onKeyDown={(e) => {
+                  if (e.target === e.currentTarget && e.key === "Enter") handleCardClick(item);
+                }}
+                className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-2xs hover:shadow-md hover:border-teal-300 transition-all duration-200 cursor-pointer group"
               >
                 {/* 4. Cover Image (height 155px) & Status Badges */}
                 <div className="relative h-[155px] w-full overflow-hidden bg-slate-100">
@@ -333,7 +336,7 @@ export default function StudentHomePage() {
                   </div>
 
                   {/* 9 & 10. LIVE Badge (Top-Right of cover image, pulse only on dot) */}
-                  {item.hasLiveSession && (
+                  {isLive && (
                     <div className="absolute top-2.5 right-2.5 z-10">
                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase bg-rose-600 text-white shadow-xs">
                         <span className="relative flex h-1.5 w-1.5">
@@ -350,14 +353,14 @@ export default function StudentHomePage() {
                 <div className="p-4 flex flex-col">
                   {/* courseTitle */}
                   <span
-                    className="text-xs font-semibold text-indigo-600 truncate block mb-1"
+                    className="text-xs font-semibold text-teal-600 truncate block mb-1"
                     title={classItem.courseTitle}
                   >
                     {classItem.courseTitle}
                   </span>
 
                   {/* className */}
-                  <h3 className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
+                  <h3 className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-teal-600 transition-colors">
                     {classItem.className}
                   </h3>
 
@@ -390,25 +393,39 @@ export default function StudentHomePage() {
                     </div>
                     <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                        className="h-full bg-teal-600 rounded-full transition-all duration-300"
                         style={{ width: `${item.progressPercent}%` }}
                       />
                     </div>
                   </div>
 
-                  {/* 14. "Xem các buổi →" ONLY for LIVE Class */}
-                  {item.hasLiveSession && (
-                    <div className="flex justify-end mt-2 pt-0.5">
+                  {/* Always opens Class Detail; stopPropagation keeps a LIVE card from entering the room */}
+                  <div className="flex items-center justify-between gap-2 mt-2 pt-0.5">
+                    {isLive ? (
                       <button
                         type="button"
-                        onClick={(e) => handleViewSessionsClick(e, item)}
-                        className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCardClick(item);
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-semibold shadow-xs cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500"
                       >
-                        <span>Xem các buổi</span>
-                        <span>&rarr;</span>
+                        Vào phòng học
                       </button>
-                    </div>
-                  )}
+                    ) : (
+                      <span />
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => handleViewSessionsClick(e, item)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 flex items-center gap-1 transition-colors cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500"
+                    >
+                      <span>Xem chi tiết lớp học</span>
+                      <span aria-hidden="true">&rarr;</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );

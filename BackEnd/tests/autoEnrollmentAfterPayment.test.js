@@ -141,6 +141,7 @@ describe("TIN-FIN-AUTO-ENROLLMENT-AFTER-REAL-PAYMENT: End-to-End Automated Acces
       startDatetime: new Date(now.getTime() - 300000), // Started 5 mins ago (within 20m first-join window)
       endDatetime: new Date(now.getTime() + 3600000),
       status: "IN_PROGRESS",
+      roomState: "LIVE",
     });
   });
 

@@ -136,7 +136,7 @@ beforeAll(async () => {
 
   const session = await Session.create({
     classId: classA._id, className: classA.className, teacherId: users.teacherA._id, title: "Buổi 1",
-    startDatetime: new Date(Date.now() - 60e3), endDatetime: new Date(Date.now() + 36e5), status: "SCHEDULED",
+    startDatetime: new Date(Date.now() - 60e3), endDatetime: new Date(Date.now() + 36e5), status: "IN_PROGRESS", roomState: "LIVE",
     recording: { status: "AVAILABLE", storageKey: `private/${users.teacherA._id}/RECORDING/00000000-0000-0000-0000-000000000000.mp4` },
   });
 

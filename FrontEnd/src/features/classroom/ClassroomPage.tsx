@@ -17,6 +17,7 @@ import { ROUTES } from "../../routes/routePaths";
 import { TeacherVerificationGateCard } from "../../components/guards/RequireVerifiedTeacher";
 import { useTeacherVerification } from "../../hooks/useTeacherVerification";
 import { getFriendlyErrorMessage } from "../../utils/apiErrorMap";
+import { isSessionLive } from "../../utils/sessionLive";
 
 import ClassroomPreJoin from "./components/ClassroomPreJoin";
 import LiveKitClassroom from "./components/LiveKitClassroom";
@@ -26,6 +27,8 @@ import TeacherAttendanceModal from "./components/TeacherAttendanceModal";
 import TeacherIncidentModal from "./components/TeacherIncidentModal";
 
 const { Title, Text, Paragraph } = Typography;
+// Presence heartbeat; the backend closes a connection not confirmed for 3 minutes
+const PRESENCE_HEARTBEAT_MS = 30 * 1000;
 
 type ClassroomStage = "prejoin" | "joining" | "in_room" | "error" | "ended";
 
@@ -36,7 +39,10 @@ export default function ClassroomPage() {
   const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuthStore();
 
-  const [stage, setStage] = useState<ClassroomStage>("prejoin");
+  // Auto-join starts on the connecting screen, so the pre-join camera preview never flashes up
+  const [stage, setStage] = useState<ClassroomStage>(() =>
+    (location.state as { autoJoin?: boolean } | null)?.autoJoin && user?.role === "STUDENT" ? "joining" : "prejoin"
+  );
   const [joinData, setJoinData] = useState<JoinSessionResponse | null>(null);
   const [joinError, setJoinError] = useState<any>(null);
 
@@ -65,6 +71,8 @@ export default function ClassroomPage() {
 
   const isTeacher = user?.role === "TEACHER";
   const userFullName = user?.fullName || (isTeacher ? "Giảng viên" : "Học viên");
+  // Students go back to My Learning, never to the Schedule
+  const studentBackRoute = ROUTES.STUDENT.HOME;
 
   const {
     verification,
@@ -84,11 +92,12 @@ export default function ClassroomPage() {
   });
 
   // Query Smart Classroom Live Status (TIN-05D)
-  const { data: liveStatus } = useQuery({
+  const { data: liveStatus, error: liveStatusError } = useQuery({
     queryKey: sessionKeys.liveStatus(sessionId || ""),
     queryFn: () => sessionService.getSessionLiveStatus(sessionId!),
     enabled: Boolean(sessionId && isAuthenticated),
-    refetchInterval: stage === "in_room" ? 15000 : 30000,
+    // A Student waiting on the "not started yet" screen polls faster so the join button appears soon after Start
+    refetchInterval: stage === "in_room" ? 15000 : stage === "prejoin" && user?.role === "STUDENT" ? 10000 : 30000,
   });
 
   const currentSession = useMemo(() => {
@@ -106,21 +115,35 @@ export default function ClassroomPage() {
     // this stage begins: an early call is rejected with 403 UNVERIFIED_LIVEKIT_PRESENCE. Retry until it is verified.
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
     const tryConnect = (attempt: number) => {
-      sessionService.connectSessionPresence(sessionId, connId).catch(() => {
-        if (!cancelled && attempt < 10) timer = setTimeout(() => tryConnect(attempt + 1), 3000);
-      });
+      sessionService
+        .connectSessionPresence(sessionId, connId)
+        .then(() => {
+          // The backend treats a connection without a heartbeat for 3 minutes as gone
+          if (!cancelled) {
+            heartbeat = setInterval(() => {
+              sessionService.heartbeatSessionPresence(sessionId, connId).catch(() => {});
+            }, PRESENCE_HEARTBEAT_MS);
+          }
+        })
+        .catch(() => {
+          if (!cancelled && attempt < 10) timer = setTimeout(() => tryConnect(attempt + 1), 3000);
+        });
     };
     timer = setTimeout(() => tryConnect(1), 1500);
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      if (heartbeat) clearInterval(heartbeat);
       sessionService.leaveSessionPresence(sessionId, connId).catch(() => {});
     };
   }, [stage, sessionId]);
 
-  // 1. Join Session Mutation
+  // 1. Join Session Mutation. Every join (first or reconnect) asks the backend again: it re-checks the Session is
+  // running and issues a fresh token, so an expired token is never reused.
+  const isReconnectRef = useRef(false);
   const joinMutation = useMutation({
     mutationFn: () => sessionService.joinSession(sessionId!),
     onSuccess: (data: JoinSessionResponse) => {
@@ -129,10 +152,44 @@ export default function ClassroomPage() {
       setStage("in_room");
     },
     onError: (err: any) => {
+      // The Teacher ended the Session while this user was reconnecting: show the ended screen, not an error
+      if (isReconnectRef.current && (err?.code === "SESSION_ENDED" || err?.code === "SESSION_CANCELLED")) {
+        setStage("ended");
+        return;
+      }
       setJoinError(err);
       setStage("error");
     },
   });
+
+  const requestJoin = () => {
+    if (joinMutation.isPending) return; // one token request at a time
+    setStage("joining");
+    joinMutation.mutate();
+  };
+
+  // At most MAX_RECONNECTS retries in a row; the counter resets once LiveKit is connected again
+  const MAX_RECONNECTS = 3;
+  const [reconnectCount, setReconnectCount] = useState(0);
+  const handleReconnect = () => {
+    isReconnectRef.current = true;
+    setReconnectCount((n) => n + 1);
+    requestJoin();
+  };
+
+  // A Student arriving from a LIVE card on My Learning goes straight in (camera and mic off; they turn them on from the
+  // LiveKit control bar, which asks the browser for permission). The backend still checks enrollment and that the
+  // Session is running. The flag is cleared so a refresh or a direct URL gets the normal pre-join screen.
+  const autoJoinRef = useRef(false);
+  const wantsAutoJoin = Boolean((location.state as { autoJoin?: boolean } | null)?.autoJoin);
+  useEffect(() => {
+    if (!wantsAutoJoin || autoJoinRef.current || user?.role !== "STUDENT" || !sessionId) return;
+    autoJoinRef.current = true; // StrictMode runs effects twice: join only once
+    navigate(location.pathname, { replace: true, state: null });
+    setMediaOptions({ videoEnabled: false, audioEnabled: false });
+    requestJoin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsAutoJoin, user?.role, sessionId]);
 
   // 2. Teacher Start Session Mutation: recording starts first; a mandatory recording failure keeps the room WAITING
   const startSessionMutation = useMutation({
@@ -176,6 +233,13 @@ export default function ClassroomPage() {
       setStage("ended");
     },
     onError: (err: any) => {
+      // Already ended (another tab, a second click, or the automatic end after +30 minutes): nothing failed
+      if (err?.code === "SESSION_NOT_IN_PROGRESS") {
+        message.info("Buổi học đã kết thúc.");
+        queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+        setStage("ended");
+        return;
+      }
       message.error(err?.message || "Không thể kết thúc buổi học.");
     },
   });
@@ -185,17 +249,18 @@ export default function ClassroomPage() {
       return;
     }
     setMediaOptions(options);
-    setStage("joining");
-    joinMutation.mutate();
+    isReconnectRef.current = false;
+    requestJoin();
   };
 
   const handleLeaveRoom = async () => {
-    // The presence "leave" is sent by the in_room effect cleanup when the page unmounts; sending it here as well
-    // produced two concurrent leaves for the same connection.
+    // Leaving only disconnects this user: unmounting LiveKitRoom closes the media connection and the in_room effect
+    // cleanup sends the presence "leave" (sending it here as well produced two concurrent leaves). It never ends the
+    // Session; closed tabs and dropped networks are covered by the LiveKit webhook / heartbeat on the backend.
     if (isTeacher) {
       navigate(isVerifiedTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.TEACHER.HOME);
     } else {
-      navigate(ROUTES.STUDENT.SCHEDULE);
+      navigate(studentBackRoute);
     }
   };
 
@@ -223,15 +288,15 @@ export default function ClassroomPage() {
         return {
           title: "Đã quá hạn 20 phút vào lớp lần đầu",
           desc: "Quy định điểm danh thông minh (TIN-05D): Học viên chỉ được vào lớp lần đầu trong vòng 20 phút đầu kể từ giờ bắt đầu. (Nếu bạn đã vào lớp trước mốc 20 phút và bị rớt mạng, hệ thống sẽ cho phép kết nối lại).",
-          actionText: "Quay lại lịch học",
-          actionRoute: ROUTES.STUDENT.SCHEDULE,
+          actionText: isTeacher ? "Quay lại lịch dạy" : "Về Lớp học của tôi",
+          actionRoute: studentBackRoute,
         };
       case "SESSION_CANCELLED":
         return {
           title: "Buổi học đã bị hủy",
           desc: "Buổi học này đã bị hủy (hoặc tự động hủy do giảng viên vắng mặt sau 30 phút). Học viên không bị tính vắng và sẽ được xếp lịch học bù / bảo vệ quyền lợi.",
-          actionText: "Quay lại lịch học",
-          actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.STUDENT.SCHEDULE,
+          actionText: isTeacher ? "Quay lại lịch dạy" : "Về Lớp học của tôi",
+          actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : studentBackRoute,
         };
       case "SESSION_ENDED":
         return {
@@ -240,12 +305,21 @@ export default function ClassroomPage() {
           actionText: "Quay lại lớp học",
           actionRoute: isTeacher ? ROUTES.TEACHER.CLASSES : ROUTES.STUDENT.HOME,
         };
+      case "SESSION_NOT_STARTED":
+        return {
+          title: "Giáo viên chưa bắt đầu buổi học",
+          desc: "Bạn có thể vào phòng khi giáo viên nhấn Bắt đầu buổi học. Thẻ lớp trên trang Lớp học của tôi sẽ hiện LIVE khi buổi học bắt đầu.",
+          actionText: "Thử lại",
+          actionRoute: null,
+        };
       case "SESSION_NOT_JOINABLE":
         return {
-          title: "Chưa đến giờ mở phòng chờ",
-          desc: msg || "Phòng chờ trực tuyến mở trước giờ bắt đầu 10 phút và đóng khi buổi học kết thúc.",
-          actionText: "Quay lại lịch học",
-          actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : ROUTES.STUDENT.SCHEDULE,
+          title: isTeacher ? "Ngoài khung giờ của buổi học" : "Chưa thể vào phòng học",
+          desc: isTeacher
+            ? "Bạn chỉ có thể mở phòng và bắt đầu buổi học trong khung giờ đã lên lịch."
+            : "Phòng học chỉ mở khi giáo viên nhấn Bắt đầu buổi học.",
+          actionText: isTeacher ? "Quay lại lịch dạy" : "Về Lớp học của tôi",
+          actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : studentBackRoute,
         };
       case "TEACHER_NOT_VERIFIED":
         return {
@@ -258,8 +332,8 @@ export default function ClassroomPage() {
         return {
           title: "Lớp học chưa được kích hoạt",
           desc: getFriendlyErrorMessage(joinError, "Lớp học chưa được phê duyệt hoặc hiện không trong trạng thái hoạt động để mở phòng học."),
-          actionText: isTeacher ? "Quay lại lớp của tôi" : "Quay lại lịch học",
-          actionRoute: isTeacher ? ROUTES.TEACHER.CLASSES : ROUTES.STUDENT.SCHEDULE,
+          actionText: isTeacher ? "Quay lại lớp của tôi" : "Về Lớp học của tôi",
+          actionRoute: isTeacher ? ROUTES.TEACHER.CLASSES : studentBackRoute,
         };
       case "FORBIDDEN":
         return {
@@ -334,7 +408,7 @@ export default function ClassroomPage() {
               <Button
                 type="primary"
                 onClick={() => navigate(errorInfo.actionRoute!)}
-                className="bg-indigo-600 hover:bg-indigo-700 rounded-xl h-11 font-semibold"
+                className="bg-teal-600 hover:bg-teal-700 rounded-xl h-11 font-semibold"
               >
                 {errorInfo.actionText}
               </Button>
@@ -342,11 +416,8 @@ export default function ClassroomPage() {
               <Button
                 type="primary"
                 icon={<ReloadOutlined />}
-                onClick={() => {
-                  setStage("joining");
-                  joinMutation.mutate();
-                }}
-                className="bg-indigo-600 hover:bg-indigo-700 rounded-xl h-11 font-semibold"
+                onClick={requestJoin}
+                className="bg-teal-600 hover:bg-teal-700 rounded-xl h-11 font-semibold"
               >
                 Thử kết nối lại
               </Button>
@@ -409,9 +480,9 @@ export default function ClassroomPage() {
             <Button
               type="primary"
               onClick={handleLeaveRoom}
-              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl h-11 font-semibold"
+              className="bg-teal-600 hover:bg-teal-700 rounded-xl h-11 font-semibold"
             >
-              {isTeacher ? "Quay lại Lịch giảng dạy" : "Quay lại Lịch học của tôi"}
+              {isTeacher ? "Quay lại Lịch giảng dạy" : "Về Lớp học của tôi"}
             </Button>
           </div>
         </div>
@@ -424,6 +495,55 @@ export default function ClassroomPage() {
             onClose={() => setIsAttendanceModalOpen(false)}
           />
         )}
+      </div>
+    );
+  }
+
+  // 3a. STUDENT, SESSION NOT LIVE (direct URL / old link): no camera preview, no join call — just say so.
+  // The live-status poll switches to the pre-join screen as soon as the Teacher presses Start.
+  if (stage === "prejoin" && !isTeacher && !isSessionLive(liveStatus)) {
+    const isClosed = liveStatus?.status === "COMPLETED" || liveStatus?.status === "CANCELLED";
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center shadow-2xl">
+          {!liveStatus && liveStatusError ? (
+            <>
+              <Title level={4} className="!text-white !mb-2 font-bold">
+                Không thể mở buổi học này
+              </Title>
+              <Paragraph className="text-slate-400 text-xs mb-6">
+                {getFriendlyErrorMessage(liveStatusError, "Bạn không có quyền tham gia hoặc không tải được trạng thái buổi học.")}
+              </Paragraph>
+            </>
+          ) : !liveStatus ? (
+            <Spin size="large" className="mb-6" />
+          ) : (
+            <>
+              <div className="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center mx-auto mb-5 text-2xl">
+                <ClockCircleOutlined />
+              </div>
+              <Title level={4} className="!text-white !mb-2 font-bold">
+                {isClosed
+                  ? liveStatus.status === "CANCELLED"
+                    ? "Buổi học đã bị hủy"
+                    : "Buổi học đã kết thúc"
+                  : "Giáo viên chưa bắt đầu buổi học"}
+              </Title>
+              <Paragraph className="text-slate-400 text-xs mb-6">
+                {isClosed
+                  ? sessionTitle
+                  : "Phòng học chỉ mở khi giáo viên nhấn Bắt đầu buổi học. Trang này tự cập nhật, nút vào phòng sẽ xuất hiện ngay khi buổi học bắt đầu."}
+              </Paragraph>
+            </>
+          )}
+          <Button
+            type="primary"
+            onClick={handleLeaveRoom}
+            className="bg-teal-600 hover:bg-teal-700 rounded-xl h-11 font-semibold w-full"
+          >
+            Về Lớp học của tôi
+          </Button>
+        </div>
       </div>
     );
   }
@@ -460,7 +580,8 @@ export default function ClassroomPage() {
 
   // 5. IN_ROOM STAGE: Dual Provider Routing + Smart Classroom Status Banner
   const effectiveRole: ClassroomRole = joinData.role;
-  const isWaitingRoom = Boolean(liveStatus?.isWaitingRoom || joinData.isWaitingRoom);
+  // WAITING = Teacher in the room, not started yet (only the Teacher can be here then); live status wins once loaded
+  const isWaitingRoom = Boolean(liveStatus ? liveStatus.isWaitingRoom : joinData.isWaitingRoom);
   const isOvertime = Boolean(liveStatus?.isOvertimeGracePeriod);
   const isInterrupted = liveStatus?.status === "INTERRUPTED";
   const teacherLateWarning = Boolean(
@@ -476,7 +597,7 @@ export default function ClassroomPage() {
         <div className="flex items-center gap-2 flex-wrap">
           {isWaitingRoom && (
             <Tag color="cyan" icon={<ClockCircleOutlined />} className="m-0 font-semibold">
-              Phòng chờ mở sớm 10 phút — Thời gian chờ chưa tính vào điểm danh chính thức
+              Chưa bắt đầu — Học viên chỉ vào được sau khi bạn nhấn Bắt đầu buổi học
             </Tag>
           )}
           {!isWaitingRoom && !isOvertime && !isInterrupted && (
@@ -500,7 +621,7 @@ export default function ClassroomPage() {
             </Tag>
           )}
           {!isTeacher && joinData.isReconnect && (
-            <Tag color="purple" className="m-0">
+            <Tag color="cyan" className="m-0">
               Đã khôi phục kết nối (Reconnected)
             </Tag>
           )}
@@ -553,6 +674,9 @@ export default function ClassroomPage() {
           onEndSession={canEndSession ? handleEndSession : undefined}
           isEndingSession={endSessionMutation.isPending}
           sessionControl={sessionControl}
+          onReconnect={reconnectCount < MAX_RECONNECTS ? handleReconnect : undefined}
+          onConnected={() => setReconnectCount(0)}
+          onRoomClosed={() => queryClient.invalidateQueries({ queryKey: sessionKeys.liveStatus(sessionId || "") })}
         />
       ) : (
         /* Fallback / Local Dev Mode (EDUNITY_DEV) */

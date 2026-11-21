@@ -95,6 +95,9 @@ export default function TeacherSchedulePage() {
       );
     },
     enabled: teacherClasses.length > 0,
+    // One request per class: refreshed on focus and every minute so an automatic end shows up
+    refetchInterval: 60000,
+    refetchOnWindowFocus: true,
   });
 
   // 3. Derive ScheduleItems
@@ -166,10 +169,10 @@ export default function TeacherSchedulePage() {
       </div>
 
       {/* Smart Discipline & Reputation Summary Banner (TIN-05E) */}
-      <Card className="rounded-2xl border-indigo-100 bg-indigo-50/40 mb-6">
+      <Card className="rounded-2xl border-teal-100 bg-teal-50/40 mb-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0">
               <SafetyCertificateOutlined className="text-lg" />
             </div>
             <div>
@@ -233,7 +236,7 @@ export default function TeacherSchedulePage() {
             <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-1">
               Hôm nay
             </Text>
-            <Title level={2} className="!m-0 text-indigo-600">{stats.todayCount}</Title>
+            <Title level={2} className="!m-0 text-teal-600">{stats.todayCount}</Title>
             <Text className="text-gray-500 text-xs font-medium">ca học trong ngày</Text>
           </Card>
         </Col>
@@ -328,7 +331,7 @@ export default function TeacherSchedulePage() {
               : 'Không tìm thấy ca học nào thỏa mãn bộ lọc hiện tại.'}
           </Text>
           <Link to={ROUTES.TEACHER.CLASSES}>
-            <Button type="primary" className="bg-indigo-600 rounded-xl">
+            <Button type="primary" className="bg-teal-600 rounded-xl">
               Đến danh sách lớp học
             </Button>
           </Link>
@@ -346,13 +349,13 @@ export default function TeacherSchedulePage() {
                   isInProgress 
                     ? 'border-amber-300 bg-amber-50/20' 
                     : isToday 
-                    ? 'border-indigo-200 bg-indigo-50/10' 
+                    ? 'border-teal-200 bg-teal-50/10'
                     : 'border-gray-200 bg-white'
                 }`}
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-start gap-4">
-                    <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-700 flex flex-col items-center justify-center shrink-0 border border-indigo-100">
+                    <div className="w-16 h-16 rounded-2xl bg-teal-50 text-teal-700 flex flex-col items-center justify-center shrink-0 border border-teal-100">
                       <span className="text-[10px] font-bold uppercase tracking-wider">
                         {dayjs(item.startDatetime).format('ddd')}
                       </span>
@@ -366,7 +369,7 @@ export default function TeacherSchedulePage() {
 
                     <div>
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <Tag color="indigo" className="font-semibold text-xs rounded-md">
+                        <Tag color="cyan" className="font-semibold text-xs rounded-md">
                           {item.className}
                         </Tag>
                         <Tag color={SESSION_STATUS_COLORS[item.status]} className="font-bold text-xs rounded-md">
@@ -385,7 +388,7 @@ export default function TeacherSchedulePage() {
 
                       <div className="flex items-center gap-3 text-xs text-gray-500 mt-2 font-medium">
                         <span className="flex items-center gap-1.5 text-gray-700">
-                          <ClockCircleOutlined className="text-indigo-500" />
+                          <ClockCircleOutlined className="text-teal-500" />
                           {formatSessionTimeRange(item.startDatetime, item.endDatetime)}
                         </span>
                       </div>
@@ -400,7 +403,7 @@ export default function TeacherSchedulePage() {
                         <Link to={`/classroom/${item.sessionId}`}>
                           <Button
                             type="primary"
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-xs flex items-center gap-1.5"
+                            className="bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium text-xs flex items-center gap-1.5"
                           >
                             <VideoCameraOutlined />
                             <span>{item.status === 'IN_PROGRESS' ? 'Vào lớp (LIVE)' : 'Vào lớp'}</span>
@@ -437,7 +440,7 @@ export default function TeacherSchedulePage() {
                     <Button 
                       type="default" 
                       onClick={() => navigate(ROUTES.TEACHER.CLASS_DETAIL.replace(':classId', item.classId))}
-                      className="rounded-xl font-medium text-xs flex items-center gap-1.5 hover:border-indigo-500 hover:text-indigo-600"
+                      className="rounded-xl font-medium text-xs flex items-center gap-1.5 hover:border-teal-500 hover:text-teal-600"
                     >
                       <span>Xem lớp học</span>
                       <ArrowRightOutlined />

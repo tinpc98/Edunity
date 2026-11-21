@@ -646,14 +646,22 @@ describe("Video provider", () => {
     expect(hostToken).toMatchObject({ iss: "APItestkey", sub: teacher._id.toString(), name: "Teacher One" });
     expect(hostToken.video).toMatchObject({ room: host.body.data.roomId, roomJoin: true, roomAdmin: true });
 
+    // A Student gets a token only after the Teacher's Start (IN_PROGRESS + LIVE); Start itself needs a real LiveKit room
+    const beforeStart = await request(app).post(`/api/sessions/${session._id}/join`).set(as(student));
+    expect(beforeStart.status).toBe(409);
+    expect(beforeStart.body.error).toBe("SESSION_NOT_STARTED");
+    expect((await Session.findById(session._id)).status).toBe("WAITING");
+    await Session.updateOne({ _id: session._id }, { $set: { status: "IN_PROGRESS", roomState: "LIVE", actualStartAt: new Date() } });
+
     const participant = await request(app).post(`/api/sessions/${session._id}/join`).set(as(student));
     const participantToken = jwt.verify(participant.body.data.accessToken, "test-livekit-secret");
     expect(participantToken.video).toMatchObject({ room: host.body.data.roomId, roomJoin: true, roomAdmin: false });
     expect(participantToken.exp).toBeLessThanOrEqual(Math.ceil(session.endDatetime.getTime() / 1000) + 1);
 
     // The room was only opened by joining; the provider is unreachable here, so mark teaching as started directly
-    expect((await Session.findById(session._id)).status).toBe("WAITING");
-    await Session.updateOne({ _id: session._id }, { $set: { status: "IN_PROGRESS" } });
+    // Started above (fixture for the Teacher's Start); joining never changed it
+    expect((await Session.findById(session._id)).status).toBe("IN_PROGRESS");
+    await Session.updateOne({ _id: session._id }, { $set: { status: "IN_PROGRESS", roomState: "LIVE" } });
     // ending the session still succeeds when the provider cannot be reached
     const ended = await request(app).post(`/api/teacher/sessions/${session._id}/end`).set(as(teacher));
     expect(ended.body.data.status).toBe("COMPLETED");
