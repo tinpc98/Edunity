@@ -14,9 +14,11 @@ const { hashPassword } = require("../src/utils/password");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
 const auditService = require("../src/services/auditService");
 const notificationService = require("../src/services/notificationService");
-const { runExclusive, acquire, release } = require("../src/jobs/jobLock");
+const { retryFailedNotifications } = require("../src/services/notificationService");
+const { runExclusive, acquire, extend, release, verifyOwnership } = require("../src/jobs/jobLock");
 const {
   rejectExpiredPendingClasses,
+  recoverMissingExpiredClassNotifications,
   runMaintenanceJob,
   resolveTzOffsetMinutes,
   isClassStartDateReached,
@@ -24,7 +26,7 @@ const {
   DEFAULT_MAINTENANCE_HEARTBEAT_MS,
 } = require("../src/jobs/maintenanceJob");
 
-describe("TASK BE-02: Automatic Class Expiration Rejection Integration Suite", () => {
+describe("TASK BE-02-FIX-05: Final Reliability Patch Suite", () => {
   let admin, teacher, otherTeacher, category, subject, course;
 
   beforeAll(async () => {
@@ -101,7 +103,7 @@ describe("TASK BE-02: Automatic Class Expiration Rejection Integration Suite", (
     });
   });
 
-  const createClassFixture = async (status = "PENDING_APPROVAL", startDate = new Date()) => {
+  const createClassFixture = async (status = "PENDING_APPROVAL", startDate = new Date(), customProps = {}) => {
     return Class.create({
       courseId: course._id,
       courseTitle: course.title,
@@ -123,436 +125,448 @@ describe("TASK BE-02: Automatic Class Expiration Rejection Integration Suite", (
       enrollmentStart: new Date(startDate.getTime() - 10 * 86400000),
       enrollmentEnd: startDate,
       schedule: [{ dayOfWeek: 1, startTime: "08:00", endTime: "10:00" }],
+      ...customProps,
     });
   };
 
   // =========================================================================
-  // TEST 1: Lớp PENDING_APPROVAL quá hạn hoặc đúng ngày khai giảng bị từ chối
+  // 1. TRANSACTION ROLLBACK (Req 1)
   // =========================================================================
-  test("1. Rejects PENDING_APPROVAL class when startDate has arrived or is in the past", async () => {
-    // Current simulated time: 2026-11-20 10:00:00 UTC (17:00:00 UTC+7)
-    const now = new Date("2026-11-20T10:00:00.000Z");
+  describe("Transaction Rollback & Atomicity", () => {
+    test("1. Transaction rollback khi notification persistence thất bại: Class giữ PENDING_APPROVAL, 0 AuditLog, 0 Notification", async () => {
+      const pastDate = new Date("2026-11-18T17:00:00.000Z");
+      const now = new Date("2026-11-20T10:00:00.000Z");
+      const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
 
-    // Class 1: Past due (startDate was yesterday: 2026-11-19)
-    const pastDate = new Date("2026-11-18T17:00:00.000Z"); // Nov 19 in UTC+7
-    const classPast = await createClassFixture("PENDING_APPROVAL", pastDate);
+      // Mock notificationService.notify to throw inside transaction
+      jest.spyOn(notificationService, "notify").mockImplementationOnce(async () => {
+        throw new Error("Simulated transient DB error persisting Notification");
+      });
 
-    // Class 2: Exact start date (startDate is today: 2026-11-20)
-    const todayDate = new Date("2026-11-19T17:00:00.000Z"); // Nov 20 in UTC+7
-    const classToday = await createClassFixture("PENDING_APPROVAL", todayDate);
+      const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
 
-    const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
+      expect(result.rejectedCount).toBe(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].error).toContain("Simulated transient DB error");
 
-    expect(result.rejectedCount).toBe(2);
-    expect(result.rejected).toContain(classPast._id.toString());
-    expect(result.rejected).toContain(classToday._id.toString());
+      // Verify strict fail-closed rollback: Class remains PENDING_APPROVAL
+      const fresh = await Class.findById(cls._id).lean();
+      expect(fresh.status).toBe("PENDING_APPROVAL");
 
-    // Verify in database: status changed to REJECTED, reviewNote set, startDate preserved
-    const freshPast = await Class.findById(classPast._id).lean();
-    expect(freshPast.status).toBe("REJECTED");
-    expect(freshPast.reviewNote).toBe("Lớp học đã đến ngày khai giảng nhưng chưa được phê duyệt.");
-    expect(new Date(freshPast.startDate).getTime()).toBe(pastDate.getTime()); // Unchanged
-
-    const freshToday = await Class.findById(classToday._id).lean();
-    expect(freshToday.status).toBe("REJECTED");
-    expect(freshToday.reviewNote).toBe("Lớp học đã đến ngày khai giảng nhưng chưa được phê duyệt.");
-    expect(new Date(freshToday.startDate).getTime()).toBe(todayDate.getTime()); // Unchanged
-  });
-
-  // =========================================================================
-  // TEST 2: Lớp chưa đến ngày khai giảng không bị ảnh hưởng
-  // =========================================================================
-  test("2. Does not reject PENDING_APPROVAL class when startDate is in the future", async () => {
-    // Current simulated time: 2026-11-20 10:00:00 UTC
-    const now = new Date("2026-11-20T10:00:00.000Z");
-
-    // Class with future startDate (2026-11-25)
-    const futureDate = new Date("2026-11-24T17:00:00.000Z"); // Nov 25 in UTC+7
-    const futureClass = await createClassFixture("PENDING_APPROVAL", futureDate);
-
-    const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
-
-    expect(result.rejectedCount).toBe(0);
-
-    const fresh = await Class.findById(futureClass._id).lean();
-    expect(fresh.status).toBe("PENDING_APPROVAL");
-    expect(fresh.reviewNote).toBeNull();
-  });
-
-  // =========================================================================
-  // TEST 3: Lớp đã được duyệt (OPEN, IN_PROGRESS) hoặc NEED_CHANGES/DRAFT không bị ảnh hưởng
-  // =========================================================================
-  test("3. Only targets PENDING_APPROVAL: OPEN, IN_PROGRESS, NEED_CHANGES, DRAFT are untouched", async () => {
-    // Past date (yesterday)
-    const pastDate = new Date("2026-11-18T17:00:00.000Z");
-    const now = new Date("2026-11-20T10:00:00.000Z");
-
-    const openClass = await createClassFixture("OPEN", pastDate);
-    const inProgressClass = await createClassFixture("IN_PROGRESS", pastDate);
-    const completedClass = await createClassFixture("COMPLETED", pastDate);
-    const needChangesClass = await createClassFixture("NEED_CHANGES", pastDate);
-    const draftClass = await createClassFixture("DRAFT", pastDate);
-
-    const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
-    expect(result.rejectedCount).toBe(0);
-
-    // Verify all statuses remain strictly intact
-    expect((await Class.findById(openClass._id).lean()).status).toBe("OPEN");
-    expect((await Class.findById(inProgressClass._id).lean()).status).toBe("IN_PROGRESS");
-    expect((await Class.findById(completedClass._id).lean()).status).toBe("COMPLETED");
-    expect((await Class.findById(needChangesClass._id).lean()).status).toBe("NEED_CHANGES");
-    expect((await Class.findById(draftClass._id).lean()).status).toBe("DRAFT");
-  });
-
-  // =========================================================================
-  // TEST 4: Kiểm tra chính xác ranh giới ngày theo timezone (trước và sau nửa đêm)
-  // =========================================================================
-  test("4. Precision Timezone Boundary Test: evaluates calendar day boundaries accurately", async () => {
-    // Class scheduled to start on 2026-11-20 (in Vietnam timezone UTC+7)
-    // 2026-11-20 00:00:00 UTC+7 is 2026-11-19 17:00:00 UTC
-    const classStartDate = new Date("2026-11-19T17:00:00.000Z");
-    const cls = await createClassFixture("PENDING_APPROVAL", classStartDate);
-
-    // Case 4a: 5 minutes before midnight in Vietnam (2026-11-19 23:55:00 UTC+7 = 2026-11-19 16:55:00 UTC)
-    const beforeMidnight = new Date("2026-11-19T16:55:00.000Z");
-    const resBefore = await rejectExpiredPendingClasses(beforeMidnight, { tzOffsetMinutes: 420 });
-    expect(resBefore.rejectedCount).toBe(0);
-    expect((await Class.findById(cls._id).lean()).status).toBe("PENDING_APPROVAL");
-
-    // Case 4b: 5 minutes after midnight in Vietnam (2026-11-20 00:05:00 UTC+7 = 2026-11-19 17:05:00 UTC)
-    // Notice that in UTC it is still Nov 19! But in Vietnam it is Nov 20!
-    const afterMidnight = new Date("2026-11-19T17:05:00.000Z");
-    const resAfter = await rejectExpiredPendingClasses(afterMidnight, { tzOffsetMinutes: 420 });
-    expect(resAfter.rejectedCount).toBe(1);
-    expect(resAfter.rejected).toContain(cls._id.toString());
-    expect((await Class.findById(cls._id).lean()).status).toBe("REJECTED");
-  });
-
-  // =========================================================================
-  // TEST 5: Job chạy hai lần không tạo audit/notification trùng (Idempotency)
-  // =========================================================================
-  test("5. Idempotent: Running the job twice produces exactly 1 audit and 1 notification", async () => {
-    const pastDate = new Date("2026-11-18T17:00:00.000Z");
-    const now = new Date("2026-11-20T10:00:00.000Z");
-    const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
-
-    // Run 1: Rejects the class
-    const res1 = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
-    expect(res1.rejectedCount).toBe(1);
-
-    // Run 2: Does nothing (class already REJECTED)
-    const res2 = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
-    expect(res2.rejectedCount).toBe(0);
-
-    // Verify exactly 1 AuditLog entry
-    const auditLogs = await AuditLog.find({
-      targetType: "Class",
-      targetId: cls._id,
-      action: "CLASS_EXPIRED_REJECTED",
-    }).lean();
-    expect(auditLogs).toHaveLength(1);
-
-    // Verify exactly 1 Notification entry
-    const notifs = await Notification.find({
-      userId: teacher._id,
-      type: "CLASS_EXPIRED_REJECTED",
-    }).lean();
-    expect(notifs).toHaveLength(1);
-  });
-
-  // =========================================================================
-  // TEST 6: Job đồng thời không ghi đè quyết định của Admin hoặc gây xung đột
-  // =========================================================================
-  test("6. Concurrency Safety: Does not overwrite concurrent Admin approval or double reject", async () => {
-    const pastDate = new Date("2026-11-18T17:00:00.000Z");
-    const now = new Date("2026-11-20T10:00:00.000Z");
-    const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
-
-    // Simulate concurrent execution: two worker instances running rejectExpiredPendingClasses simultaneously
-    const [w1, w2] = await Promise.all([
-      rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 }),
-      rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 }),
-    ]);
-
-    // Exactly one worker must perform the rejection
-    expect(w1.rejectedCount + w2.rejectedCount).toBe(1);
-
-    // AuditLog must have exactly 1 record
-    const auditCount = await AuditLog.countDocuments({
-      targetId: cls._id,
-      action: "CLASS_EXPIRED_REJECTED",
+      // Zero partial writes in database
+      expect(await AuditLog.countDocuments({ targetId: cls._id })).toBe(0);
+      expect(await Notification.countDocuments({ userId: teacher._id })).toBe(0);
     });
-    expect(auditCount).toBe(1);
+
+    test("1b. Transaction thành công trọn vẹn: Cả Class, AuditLog và Notification đều được commit", async () => {
+      const pastDate = new Date("2026-11-18T17:00:00.000Z");
+      const now = new Date("2026-11-20T10:00:00.000Z");
+      const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
+
+      const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
+
+      expect(result.rejectedCount).toBe(1);
+      const fresh = await Class.findById(cls._id).lean();
+      expect(fresh.status).toBe("REJECTED");
+      expect(fresh.reviewedBy).toBeNull(); // SYSTEM rejection marker
+
+      const auditEntry = await AuditLog.findOne({ targetId: cls._id, action: "CLASS_EXPIRED_REJECTED" }).lean();
+      expect(auditEntry).not.toBeNull();
+      expect(auditEntry.actorType).toBe("SYSTEM");
+
+      const notif = await Notification.findOne({
+        userId: teacher._id,
+        dedupeKey: `CLASS_EXPIRED_REJECTED:${cls._id.toString()}`,
+      }).lean();
+      expect(notif).not.toBeNull();
+      expect(notif.deliveryStatus).toBe("DELIVERED");
+    });
   });
 
   // =========================================================================
-  // TEST 7: Lỗi xử lý một lớp không làm hỏng toàn bộ job (Fault Isolation)
+  // 2. NOTIFICATION RETRY SEMANTICS (Req 2, 3, 4)
   // =========================================================================
-  test("7. Fault Isolation: An error on one class does not crash the processing of other classes", async () => {
-    const pastDate = new Date("2026-11-18T17:00:00.000Z");
-    const now = new Date("2026-11-20T10:00:00.000Z");
+  describe("FIX-01: Notification Retry Semantics", () => {
+    test("2. Retry không có handler: Giữ nguyên trạng thái FAILED, không fake đổi thành DELIVERED", async () => {
+      const failedNotif = await Notification.create({
+        userId: teacher._id,
+        title: "Thông báo lỗi mạng",
+        content: "Nội dung thông báo",
+        type: "CLASS_EXPIRED_REJECTED",
+        dedupeKey: "test:retry:no:handler:2",
+        deliveryStatus: "FAILED",
+        lastError: "Initial transmission failed",
+        retryCount: 0,
+      });
 
-    const cls1 = await createClassFixture("PENDING_APPROVAL", pastDate);
-    const cls2 = await createClassFixture("PENDING_APPROVAL", pastDate);
+      // Call retry without delivery handler
+      const res = await retryFailedNotifications();
 
-    // Mock Class.findOneAndUpdate to throw on cls1 only
-    const origFindOneAndUpdate = Class.findOneAndUpdate.bind(Class);
-    jest.spyOn(Class, "findOneAndUpdate").mockImplementation((filter, update, options) => {
-      if (filter._id && filter._id.toString() === cls1._id.toString()) {
-        throw new Error("Simulated transient DB error on cls1");
+      expect(res.retriedCount).toBe(0);
+      expect(res.skippedCount).toBe(1);
+      expect(res.skipped[0].reason).toBe("NO_DELIVERY_HANDLER");
+
+      // Notification MUST remain FAILED in DB
+      const after = await Notification.findById(failedNotif._id).lean();
+      expect(after.deliveryStatus).toBe("FAILED");
+      expect(after.lastError).toBe("Initial transmission failed");
+    });
+
+    test("3. Default cron notification retry: Chạy an toàn từ runMaintenanceJob mà không đổi bậy trạng thái", async () => {
+      const failedNotif = await Notification.create({
+        userId: teacher._id,
+        title: "Thông báo cron",
+        content: "Nội dung cron",
+        type: "CLASS_EXPIRED_REJECTED",
+        dedupeKey: "test:retry:cron:3",
+        deliveryStatus: "FAILED",
+        lastError: "External gateway down",
+        retryCount: 0,
+      });
+
+      const now = new Date("2026-11-20T10:00:00.000Z");
+      const jobResult = await runMaintenanceJob(now, { tzOffsetMinutes: 420 });
+
+      expect(jobResult.notificationRetry).toBeDefined();
+      expect(jobResult.notificationRetry.retriedCount).toBe(0);
+      expect(jobResult.notificationRetry.skippedCount).toBeGreaterThanOrEqual(1);
+
+      // Notification is still FAILED
+      const notifDoc = await Notification.findById(failedNotif._id).lean();
+      expect(notifDoc.deliveryStatus).toBe("FAILED");
+    });
+
+    test("4. External delivery thành công/thất bại: Handler thất bại giữ FAILED; handler thành công chuyển DELIVERED", async () => {
+      const failedNotif = await Notification.create({
+        userId: teacher._id,
+        title: "Thông báo thử lại",
+        content: "Nội dung cần gửi",
+        type: "CLASS_EXPIRED_REJECTED",
+        dedupeKey: "test:retry:semantics:4",
+        deliveryStatus: "FAILED",
+        lastError: "Initial network drop",
+        retryCount: 0,
+      });
+
+      // 1. Delivery handler throws error -> Notification MUST remain FAILED, retryCount increments
+      const failingHandler = jest.fn().mockRejectedValue(new Error("External push gateway down"));
+      const failResult = await retryFailedNotifications({ deliveryHandler: failingHandler, maxRetries: 3 });
+
+      expect(failResult.errors).toHaveLength(1);
+      expect(failResult.errors[0].error).toContain("External push gateway down");
+
+      const afterFail = await Notification.findById(failedNotif._id).lean();
+      expect(afterFail.deliveryStatus).toBe("FAILED");
+      expect(afterFail.retryCount).toBe(1);
+      expect(afterFail.lastError).toContain("External push gateway down");
+
+      // 2. Delivery handler succeeds -> Notification becomes DELIVERED
+      const successHandler = jest.fn().mockResolvedValue(true);
+      const successResult = await retryFailedNotifications({ deliveryHandler: successHandler, maxRetries: 3 });
+
+      expect(successResult.retriedCount).toBe(1);
+      const afterSuccess = await Notification.findById(failedNotif._id).lean();
+      expect(afterSuccess.deliveryStatus).toBe("DELIVERED");
+      expect(afterSuccess.lastError).toBeNull();
+      expect(afterSuccess.retriedAt).not.toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // 3. RECOVERY ERROR REPORTING & RESILIENCE (Req 5, 6, 7, 8)
+  // =========================================================================
+  describe("FIX-03: Recovery Error Reporting & Resilience", () => {
+    test("5. Recovery khi DB write thất bại: Ghi nhận lỗi có cấu trúc { classId, auditId, error }, không crash recovery", async () => {
+      const pastDate = new Date("2026-11-18T17:00:00.000Z");
+      const cls = await createClassFixture("REJECTED", pastDate, {
+        reviewedBy: null,
+        reviewNote: "Lớp học đã đến ngày khai giảng nhưng chưa được phê duyệt.",
+      });
+
+      const auditEntry = await AuditLog.create({
+        actorAdminId: null,
+        actorType: "SYSTEM",
+        action: "CLASS_EXPIRED_REJECTED",
+        targetType: "Class",
+        targetId: cls._id,
+        beforeState: { status: "PENDING_APPROVAL" },
+        afterState: { status: "REJECTED" },
+      });
+
+      // Inject error into notificationService.notify
+      jest.spyOn(notificationService, "notify").mockImplementationOnce(async () => {
+        throw new Error("Simulated socket timeout on Notification insert");
+      });
+
+      const res = await recoverMissingExpiredClassNotifications(new Date(), {});
+
+      // Does not declare recovered
+      expect(res.recoveredCount).toBe(0);
+      expect(res.errors).toHaveLength(1);
+      expect(res.errors[0].classId).toBe(cls._id.toString());
+      expect(res.errors[0].auditId).toBe(auditEntry._id.toString());
+      expect(res.errors[0].error).toContain("Simulated socket timeout");
+
+      // Notification is still missing (allowing retry)
+      expect(await Notification.countDocuments({ userId: teacher._id })).toBe(0);
+    });
+
+    test("6. Recovery sau khi DB hoạt động trở lại: Lần chạy tiếp theo phục hồi thành công", async () => {
+      const pastDate = new Date("2026-11-18T17:00:00.000Z");
+      const cls = await createClassFixture("REJECTED", pastDate, {
+        reviewedBy: null,
+        reviewNote: "Lớp học đã đến ngày khai giảng nhưng chưa được phê duyệt.",
+      });
+
+      await AuditLog.create({
+        actorAdminId: null,
+        actorType: "SYSTEM",
+        action: "CLASS_EXPIRED_REJECTED",
+        targetType: "Class",
+        targetId: cls._id,
+        beforeState: { status: "PENDING_APPROVAL" },
+        afterState: { status: "REJECTED" },
+      });
+
+      // Normal recovery run
+      const res = await recoverMissingExpiredClassNotifications(new Date(), {});
+      expect(res.recoveredCount).toBe(1);
+      expect(res.recovered).toContain(cls._id.toString());
+
+      const notif = await Notification.findOne({
+        userId: teacher._id,
+        dedupeKey: `CLASS_EXPIRED_REJECTED:${cls._id.toString()}`,
+      }).lean();
+      expect(notif).not.toBeNull();
+      expect(notif.deliveryStatus).toBe("DELIVERED");
+    });
+
+    test("7. Recovery trên 120 lớp: Keyset pagination quét sạch toàn bộ 70 lớp thiếu dù 50 lớp đầu đã có notification", async () => {
+      const pastDate = new Date("2026-11-18T17:00:00.000Z");
+      const totalClasses = 120;
+      const alreadyNotifiedCount = 50;
+      const missingCount = totalClasses - alreadyNotifiedCount; // 70
+
+      const classesToInsert = [];
+      for (let i = 0; i < totalClasses; i++) {
+        classesToInsert.push({
+          courseId: course._id,
+          courseTitle: course.title,
+          teacherId: teacher._id,
+          teacherName: "Thầy Hưng BE-02",
+          categoryId: category._id,
+          subjectId: subject._id,
+          gradeLevel: "GRADE_12",
+          level: "ADVANCED",
+          className: `Lớp Quy Mô Lớn ${i}`,
+          classType: "FREE",
+          price: 0,
+          capacity: 20,
+          enrolledCount: 0,
+          status: "REJECTED",
+          startDate: pastDate,
+          endDate: new Date(pastDate.getTime() + 30 * 86400000),
+          reviewedBy: null,
+          reviewNote: "Lớp học đã đến ngày khai giảng nhưng chưa được phê duyệt.",
+        });
       }
-      return origFindOneAndUpdate(filter, update, options);
+
+      const insertedClasses = await Class.insertMany(classesToInsert);
+
+      const auditDocs = insertedClasses.map((c) => ({
+        actorAdminId: null,
+        actorType: "SYSTEM",
+        action: "CLASS_EXPIRED_REJECTED",
+        targetType: "Class",
+        targetId: c._id,
+        beforeState: { status: "PENDING_APPROVAL" },
+        afterState: { status: "REJECTED" },
+      }));
+      await AuditLog.insertMany(auditDocs);
+
+      const notifsToInsert = [];
+      for (let i = 0; i < alreadyNotifiedCount; i++) {
+        notifsToInsert.push({
+          userId: teacher._id,
+          title: "Lớp học bị từ chối tự động",
+          content: "Đã thông báo từ trước",
+          type: "CLASS_EXPIRED_REJECTED",
+          dedupeKey: `CLASS_EXPIRED_REJECTED:${insertedClasses[i]._id.toString()}`,
+          deliveryStatus: "DELIVERED",
+        });
+      }
+      await Notification.insertMany(notifsToInsert);
+
+      expect(await Notification.countDocuments({ userId: teacher._id })).toBe(50);
+
+      const recoveryResult = await recoverMissingExpiredClassNotifications(new Date(), { batchSize: 30 });
+      expect(recoveryResult.recoveredCount).toBe(missingCount);
+
+      const totalNotifs = await Notification.countDocuments({ userId: teacher._id });
+      expect(totalNotifs).toBe(totalClasses);
+
+      const secondRun = await recoverMissingExpiredClassNotifications(new Date(), { batchSize: 30 });
+      expect(secondRun.recoveredCount).toBe(0);
     });
 
-    const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
+    test("8. Recovery không nhầm manual rejection: Bỏ qua lớp bị Admin từ chối", async () => {
+      const pastDate = new Date("2026-11-18T17:00:00.000Z");
+      const manualCls = await createClassFixture("REJECTED", pastDate, {
+        reviewedBy: admin._id,
+        reviewNote: "Admin từ chối vì đã đến ngày khai giảng mà hồ sơ chưa hoàn chỉnh.",
+      });
 
-    // cls2 should have succeeded despite cls1 failure
-    expect(result.rejected).toContain(cls2._id.toString());
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].classId).toBe(cls1._id.toString());
+      await AuditLog.create({
+        actorAdminId: admin._id,
+        actorType: "ADMIN",
+        action: "CLASS_REJECTED",
+        targetType: "Class",
+        targetId: manualCls._id,
+        beforeState: { status: "PENDING_APPROVAL" },
+        afterState: { status: "REJECTED", reviewNote: manualCls.reviewNote },
+      });
 
-    // Verify cls2 is REJECTED in database
-    const fresh2 = await Class.findById(cls2._id).lean();
-    expect(fresh2.status).toBe("REJECTED");
-  });
-
-  // =========================================================================
-  // TEST 8: Audit Actor hệ thống được ghi hợp lệ (actorAdminId: null, actorType: "SYSTEM")
-  // =========================================================================
-  test("8. Audit System Actor: Correctly records actorType=SYSTEM without faking Admin ID", async () => {
-    const pastDate = new Date("2026-11-18T17:00:00.000Z");
-    const now = new Date("2026-11-20T10:00:00.000Z");
-    const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
-
-    await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
-
-    const auditEntry = await AuditLog.findOne({
-      targetType: "Class",
-      targetId: cls._id,
-      action: "CLASS_EXPIRED_REJECTED",
-    }).lean();
-
-    expect(auditEntry).not.toBeNull();
-    expect(auditEntry.actorAdminId).toBeNull(); // No fake Admin ID
-    expect(auditEntry.actorType).toBe("SYSTEM"); // Proper system actor
-    expect(auditEntry.beforeState).toMatchObject({ status: "PENDING_APPROVAL" });
-    expect(auditEntry.afterState).toMatchObject({
-      status: "REJECTED",
-      reason: "START_DATE_PASSED_WITHOUT_APPROVAL",
+      const res = await recoverMissingExpiredClassNotifications(new Date(), {});
+      expect(res.recoveredCount).toBe(0);
+      expect(await Notification.countDocuments({ userId: teacher._id })).toBe(0);
     });
   });
 
   // =========================================================================
-  // TEST 9: Tích hợp trong runMaintenanceJob tổng thể
+  // 4. CONCURRENCY & LEASE FENCING (Req 9, 10, 11)
   // =========================================================================
-  test("9. Integration: runMaintenanceJob executes expiredPendingClasses step successfully", async () => {
-    const pastDate = new Date("2026-11-18T17:00:00.000Z");
-    const now = new Date("2026-11-20T10:00:00.000Z");
-    const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
+  describe("FIX-02: Concurrency & Lock Fencing Safety", () => {
+    test("9. Hai worker đồng thời: Đúng 1 worker reject thành công, không tạo duplicate audit hoặc notification", async () => {
+      const now = new Date("2026-11-20T10:00:00.000Z");
+      const pastDate = new Date("2026-11-18T17:00:00.000Z");
+      const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
 
-    const jobResult = await runMaintenanceJob(now, { tzOffsetMinutes: 420 });
+      const [res1, res2] = await Promise.all([
+        rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 }),
+        rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 }),
+      ]);
 
-    expect(jobResult.expiredPendingClasses).toBeDefined();
-    expect(jobResult.expiredPendingClasses.rejectedCount).toBe(1);
-    expect(jobResult.expiredPendingClasses.rejected).toContain(cls._id.toString());
+      const totalRejected = res1.rejectedCount + res2.rejectedCount;
+      expect(totalRejected).toBe(1);
 
-    const fresh = await Class.findById(cls._id).lean();
-    expect(fresh.status).toBe("REJECTED");
-  });
-
-  // =========================================================================
-  // TEST 10: Atomic Rejection & Rollback: Lỗi ghi audit rollback Class về PENDING_APPROVAL
-  // =========================================================================
-  test("10. Atomic Rejection & Rollback: If audit fails, Class is NOT rejected (remains PENDING_APPROVAL), transaction aborts, no notification sent, and subsequent run recovers", async () => {
-    const pastDate = new Date("2026-11-18T17:00:00.000Z");
-    const now = new Date("2026-11-20T10:00:00.000Z");
-    const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
-
-    // Mock audit to throw inside transaction
-    jest.spyOn(auditService, "audit").mockRejectedValueOnce(new Error("Simulated audit write failure"));
-
-    const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
-
-    // Job captures error and does not include class in rejected list
-    expect(result.rejectedCount).toBe(0);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].classId).toBe(cls._id.toString());
-    expect(result.errors[0].error).toContain("Simulated audit write failure");
-
-    // CRITICAL: Database verification that transaction rolled back cleanly
-    const freshAfterAbort = await Class.findById(cls._id).lean();
-    expect(freshAfterAbort.status).toBe("PENDING_APPROVAL");
-    expect(freshAfterAbort.reviewNote).toBeNull();
-
-    // Verify 0 AuditLog and 0 Notification
-    const auditCount = await AuditLog.countDocuments({ targetId: cls._id });
-    expect(auditCount).toBe(0);
-    const notifCount = await Notification.countDocuments({ userId: teacher._id });
-    expect(notifCount).toBe(0);
-
-    // SUBSEQUENT RUN RECOVERY: restore audit mock and run again
-    jest.restoreAllMocks();
-    const recoveryResult = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
-
-    expect(recoveryResult.rejectedCount).toBe(1);
-    expect(recoveryResult.rejected).toContain(cls._id.toString());
-    expect(recoveryResult.errors).toHaveLength(0);
-
-    const freshAfterRecovery = await Class.findById(cls._id).lean();
-    expect(freshAfterRecovery.status).toBe("REJECTED");
-    expect(freshAfterRecovery.reviewNote).toBe("Lớp học đã đến ngày khai giảng nhưng chưa được phê duyệt.");
-
-    const auditAfterRecovery = await AuditLog.countDocuments({
-      targetId: cls._id,
-      action: "CLASS_EXPIRED_REJECTED",
+      expect(await AuditLog.countDocuments({ targetId: cls._id })).toBe(1);
+      expect(await Notification.countDocuments({ userId: teacher._id })).toBe(1);
     });
-    expect(auditAfterRecovery).toBe(1);
 
-    const notifAfterRecovery = await Notification.countDocuments({
-      userId: teacher._id,
-      type: "CLASS_EXPIRED_REJECTED",
-    });
-    expect(notifAfterRecovery).toBe(1);
-  });
+    test("10. Lease expiration / stolen lock giữa transaction (Lock Fencing): Transaction lập tức abort", async () => {
+      const now = new Date("2026-11-20T10:00:00.000Z");
+      const pastDate = new Date("2026-11-18T17:00:00.000Z");
+      const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
 
-  // =========================================================================
-  // TEST 11: Notification Resilience: Lỗi notification không rollback Class & AuditLog
-  // =========================================================================
-  test("11. Notification Resilience: If notification service throws, transaction is NOT rolled back, class remains REJECTED, AuditLog is recorded, and job completes successfully", async () => {
-    const pastDate = new Date("2026-11-18T17:00:00.000Z");
-    const now = new Date("2026-11-20T10:00:00.000Z");
-    const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
+      await acquire("test-fencing-lock", 60000, "worker-fencing-1");
 
-    // Mock notify to throw
-    jest.spyOn(notificationService, "notify").mockRejectedValueOnce(new Error("Simulated push gateway timeout"));
-
-    const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
-
-    // Job succeeds for class rejection
-    expect(result.rejectedCount).toBe(1);
-    expect(result.rejected).toContain(cls._id.toString());
-    expect(result.errors).toHaveLength(0);
-
-    // Database verification: class is REJECTED, AuditLog is written
-    const fresh = await Class.findById(cls._id).lean();
-    expect(fresh.status).toBe("REJECTED");
-
-    const auditLog = await AuditLog.findOne({
-      targetId: cls._id,
-      action: "CLASS_EXPIRED_REJECTED",
-    }).lean();
-    expect(auditLog).not.toBeNull();
-    expect(auditLog.actorType).toBe("SYSTEM");
-  });
-
-  // =========================================================================
-  // TEST 12: Race condition với Admin phê duyệt cùng lúc
-  // =========================================================================
-  test("12. Race with Admin approval: If Admin approves class concurrently, job gracefully skips class without overwriting OPEN status and without emitting audit", async () => {
-    const pastDate = new Date("2026-11-18T17:00:00.000Z");
-    const now = new Date("2026-11-20T10:00:00.000Z");
-    const cls = await createClassFixture("PENDING_APPROVAL", pastDate);
-
-    // Before worker reaches findOneAndUpdate, Admin approves the class
-    await Class.updateOne(
-      { _id: cls._id },
-      { $set: { status: "OPEN", reviewedBy: admin._id, reviewedAt: new Date() } }
-    );
-
-    // Now run worker (status in DB is already OPEN)
-    const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
-
-    expect(result.rejectedCount).toBe(0);
-    expect(result.errors).toHaveLength(0);
-
-    // Ensure status remains OPEN and NOT overwritten to REJECTED
-    const fresh = await Class.findById(cls._id).lean();
-    expect(fresh.status).toBe("OPEN");
-    expect(fresh.reviewedBy.toString()).toBe(admin._id.toString());
-
-    // Ensure no CLASS_EXPIRED_REJECTED audit was created
-    const auditCount = await AuditLog.countDocuments({
-      targetId: cls._id,
-      action: "CLASS_EXPIRED_REJECTED",
-    });
-    expect(auditCount).toBe(0);
-  });
-
-  // =========================================================================
-  // TEST 13: Distributed Job Lock Heartbeat gia hạn lease tự động
-  // =========================================================================
-  test("13. Distributed Job Lock Heartbeat: runExclusive extends lockedUntil periodically via heartbeat interval", async () => {
-    const lockName = "test-maintenance-heartbeat";
-    const initialTtlMs = 1200;
-    const heartbeatMs = 300;
-
-    let observedHeartbeatExtension = false;
-    let initialLockedUntil = null;
-
-    await runExclusive(
-      lockName,
-      initialTtlMs,
-      async () => {
-        const initialDoc = await JobLock.findOne({ name: lockName }).lean();
-        expect(initialDoc).not.toBeNull();
-        initialLockedUntil = initialDoc.lockedUntil;
-
-        // Sleep 700ms to allow at least 2 heartbeats to execute at 300ms and 600ms
-        await new Promise((resolve) => setTimeout(resolve, 700));
-
-        const updatedDoc = await JobLock.findOne({ name: lockName }).lean();
-        expect(updatedDoc).not.toBeNull();
-        if (updatedDoc.lockedUntil.getTime() > initialLockedUntil.getTime()) {
-          observedHeartbeatExtension = true;
-        }
-      },
-      "worker-heartbeat-test",
-      { heartbeatIntervalMs: heartbeatMs }
-    );
-
-    expect(observedHeartbeatExtension).toBe(true);
-
-    // After task finishes, lock is cleanly released
-    const releasedDoc = await JobLock.findOne({ name: lockName }).lean();
-    expect(releasedDoc.lockedUntil.getTime()).toBeLessThanOrEqual(Date.now());
-  });
-
-  // =========================================================================
-  // TEST 14: Distributed Job Lock Crash Recovery: Lease hết hạn cho phép worker mới nhận lock
-  // =========================================================================
-  test("14. Distributed Job Lock Crash Recovery: Expired lock allows a new instance to acquire lease after TTL expires", async () => {
-    const lockName = "test-maintenance-crash";
-
-    // Simulate dead worker that crashed 10 seconds ago leaving lease expired
-    await JobLock.findOneAndUpdate(
-      { name: lockName },
-      {
-        $set: {
-          name: lockName,
-          owner: "dead-crashed-worker",
-          lockedUntil: new Date(Date.now() - 10000),
+      const mockLockContext = {
+        name: "test-fencing-lock",
+        instanceId: "worker-fencing-1",
+        isLeaseActive: () => true,
+        verifyOwnership: async (session = null) => {
+          if (!session) {
+            return true; // Pre-transaction check passes
+          }
+          // Inside transaction: simulate lease expired/stolen by worker 2 in MongoDB
+          await JobLock.updateOne(
+            { name: "test-fencing-lock" },
+            { $set: { owner: "worker-fencing-2", lockedUntil: new Date(Date.now() + 60000) } }
+          );
+          // With session, verifyOwnership performs write update on JobLock matching owner
+          return verifyOwnership("test-fencing-lock", "worker-fencing-1", session);
         },
-      },
-      { upsert: true }
-    );
+      };
 
-    // A healthy worker should be able to acquire this expired lock immediately
-    const acquired = await acquire(lockName, 5000, "healthy-worker");
-    expect(acquired).toBe(true);
+      const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420, lockContext: mockLockContext });
 
-    const doc = await JobLock.findOne({ name: lockName }).lean();
-    expect(doc.owner).toBe("healthy-worker");
-    expect(doc.lockedUntil.getTime()).toBeGreaterThan(Date.now());
+      expect(result.rejectedCount).toBe(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].error).toContain("Lock fencing error");
 
-    // Clean up
-    await release(lockName, "healthy-worker");
+      // Verify Class is still PENDING_APPROVAL
+      const fresh = await Class.findById(cls._id).lean();
+      expect(fresh.status).toBe("PENDING_APPROVAL");
+
+      expect(await AuditLog.countDocuments({ targetId: cls._id })).toBe(0);
+      expect(await Notification.countDocuments({ userId: teacher._id })).toBe(0);
+    });
+
+    test("11. FencingToken increments on transactional verification", async () => {
+      await acquire("test-token-lock", 60000, "worker-token");
+
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          const ok = await verifyOwnership("test-token-lock", "worker-token", session);
+          expect(ok).toBe(true);
+        });
+      } finally {
+        await session.endSession();
+      }
+
+      const lockDoc = await JobLock.findOne({ name: "test-token-lock" }).lean();
+      expect(lockDoc.fencingToken).toBe(1);
+    });
   });
 
   // =========================================================================
-  // TEST 15: Cấu hình mặc định hằng số bảo trì được xuất đúng
+  // 5. BASELINE & BOUNDARY CHECKS (Scenarios 12 - 16)
   // =========================================================================
-  test("15. Default Maintenance Constants: Exported TTL (4 mins) and heartbeat (1 min) are properly configured", () => {
-    expect(DEFAULT_MAINTENANCE_LOCK_TTL_MS).toBe(4 * 60 * 1000);
-    expect(DEFAULT_MAINTENANCE_HEARTBEAT_MS).toBe(60 * 1000);
+  describe("Distributed Lock Baseline & Timezone Precision", () => {
+    test("12. Notification deduplication qua unique index", async () => {
+      const dedupeKey = "unique:dedupe:key:12";
+      const res1 = await notificationService.notify(teacher._id, "T1", "C1", "CLASS_EXPIRED_REJECTED", { dedupeKey });
+      const res2 = await notificationService.notify(teacher._id, "T2", "C2", "CLASS_EXPIRED_REJECTED", { dedupeKey });
+      expect(res1.success).toBe(true);
+      expect(res2.success).toBe(true);
+      expect(await Notification.countDocuments({ userId: teacher._id, dedupeKey })).toBe(1);
+    });
+
+    test("13. Heartbeat gia hạn khóa thành công", async () => {
+      let initialExpiry, finalExpiry;
+      await runExclusive(
+        "test-lock-hb-13",
+        1000,
+        async (lockContext) => {
+          const doc1 = await JobLock.findOne({ name: "test-lock-hb-13" }).lean();
+          initialExpiry = new Date(doc1.lockedUntil).getTime();
+          await new Promise((r) => setTimeout(r, 350));
+          const doc2 = await JobLock.findOne({ name: "test-lock-hb-13" }).lean();
+          finalExpiry = new Date(doc2.lockedUntil).getTime();
+        },
+        undefined,
+        { heartbeatIntervalMs: 150 }
+      );
+      expect(finalExpiry).toBeGreaterThan(initialExpiry);
+    });
+
+    test("14. Release không xóa lock của worker khác", async () => {
+      await acquire("test-lock-rel-14", 5000, "worker-14A");
+      await JobLock.updateOne(
+        { name: "test-lock-rel-14" },
+        { $set: { owner: "worker-14B", lockedUntil: new Date(Date.now() + 10000) } }
+      );
+      const released = await release("test-lock-rel-14", "worker-14A");
+      expect(released).toBe(false);
+      const doc = await JobLock.findOne({ name: "test-lock-rel-14" }).lean();
+      expect(doc.owner).toBe("worker-14B");
+    });
+
+    test("15. Lớp tương lai không bị từ chối", async () => {
+      const now = new Date("2026-11-20T10:00:00.000Z");
+      const futureDate = new Date("2026-11-24T17:00:00.000Z");
+      const futureClass = await createClassFixture("PENDING_APPROVAL", futureDate);
+
+      const result = await rejectExpiredPendingClasses(now, { tzOffsetMinutes: 420 });
+      expect(result.rejectedCount).toBe(0);
+      expect((await Class.findById(futureClass._id).lean()).status).toBe("PENDING_APPROVAL");
+    });
+
+    test("16. Hằng số bảo trì được xuất đúng chuẩn", () => {
+      expect(DEFAULT_MAINTENANCE_LOCK_TTL_MS).toBe(240000);
+      expect(DEFAULT_MAINTENANCE_HEARTBEAT_MS).toBe(60000);
+      expect(resolveTzOffsetMinutes(420)).toBe(420);
+    });
   });
 });
