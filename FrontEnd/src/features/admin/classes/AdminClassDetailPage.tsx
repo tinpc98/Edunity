@@ -13,6 +13,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ROUTES } from '../../../routes/routePaths';
 import { classService, classKeys } from '../../../services/class.service';
 import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../types/class';
+import { GRADE_LEVEL_LABELS } from '../../../types/catalog';
+import type { GradeLevel } from '../../../types/catalog';
 import { deriveScheduleText } from '../../../api/classAdapters';
 import { getFriendlyErrorMessage } from '../../../utils/apiErrorMap';
 import ClassReadinessCard from '../../../components/common/ClassReadinessCard';
@@ -253,7 +255,8 @@ export default function AdminClassDetailPage() {
           readiness={readinessQuery.data}
           isFetching={readinessQuery.isFetching}
           isError={readinessQuery.isError}
-          onRefresh={() => void readinessQuery.refetch()}
+          // The detail key is the readiness key's prefix: the price shown below is refreshed with it
+          onRefresh={() => void queryClient.invalidateQueries({ queryKey: classKeys.adminDetail(classId!) })}
         />
       )}
 
@@ -357,7 +360,9 @@ export default function AdminClassDetailPage() {
                 {cls.course?.gradeLevel && (
                   <div>
                     <Text className="text-gray-400 block mb-0.5">Khối lớp:</Text>
-                    <div className="font-medium text-gray-800">{cls.course.gradeLevel}</div>
+                    <div className="font-medium text-gray-800">
+                      {GRADE_LEVEL_LABELS[cls.course.gradeLevel as GradeLevel] ?? cls.course.gradeLevel}
+                    </div>
                   </div>
                 )}
               </div>

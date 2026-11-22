@@ -1,4 +1,5 @@
 import { FetchError } from "../api/apiClient";
+import { CLASS_PRICE_HINT } from "./classForm";
 
 export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có lỗi xảy ra. Vui lòng thử lại."): string {
   if (error instanceof FetchError || (typeof error === "object" && error !== null && ("code" in error || "status" in error))) {
@@ -106,6 +107,9 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
     if (err.code === "COURSE_CATALOG_INACTIVE") {
       return "Môn học hoặc danh mục của khóa học này đã tạm ngưng. Vui lòng chọn khóa học khác.";
     }
+    if (err.code === "CLASS_PRICE_OUT_OF_RANGE") {
+      return `${CLASS_PRICE_HINT}; lớp miễn phí là 0đ.`;
+    }
     if (err.code === "CLASS_NOT_EDITABLE") {
       return "Lớp học hiện không thể chỉnh sửa ở trạng thái này.";
     }
@@ -150,8 +154,33 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
     if (err.code === "SUBJECT_CATEGORY_MISMATCH") {
       return "Môn học đã chọn không thuộc danh mục tương ứng. Vui lòng chọn lại môn học.";
     }
+    if (
+      err.code === "SUBJECT_AUTHORIZATION_CONFLICT" ||
+      err.code === "SUBJECT_AUTHORIZATION_ALREADY_APPROVED" ||
+      err.code === "SUBJECT_AUTHORIZATION_ALREADY_SUSPENDED"
+    ) {
+      return "Quyền giảng dạy này vừa được cập nhật ở nơi khác. Vui lòng xem lại trạng thái mới rồi thao tác.";
+    }
+    if (err.code === "SUBJECT_AUTHORIZATION_NOT_FOUND") {
+      return "Không tìm thấy yêu cầu quyền giảng dạy.";
+    }
+    if (err.code === "SUBJECT_AUTHORIZATION_SUSPENDED") {
+      return "Quyền giảng dạy cho môn, khối và cấp độ này đang bị đình chỉ. Chỉ Admin mở lại được.";
+    }
     if (err.code === "COURSE_PROPOSAL_NOT_PENDING") {
       return "Đề xuất khóa học này không còn ở trạng thái chờ duyệt. Vui lòng làm mới danh sách.";
+    }
+    if (err.code === "COURSE_PROPOSAL_CHANGED") {
+      return "Giáo viên vừa cập nhật đề xuất này. Vui lòng xem lại nội dung mới rồi duyệt.";
+    }
+    if (err.code === "PROPOSAL_CATALOG_INACTIVE") {
+      return "Danh mục hoặc môn học của đề xuất đã tạm ngưng hoạt động.";
+    }
+    if (err.code === "GRADE_LEVEL_REQUIRED") {
+      return "Vui lòng chọn khối lớp: Lớp 6–12 hoặc Ôn thi đại học.";
+    }
+    if (err.code === "GRADE_LEVEL_NOT_SUPPORTED") {
+      return "Edunity chỉ nhận khóa học và lớp học thuộc Lớp 6–12 hoặc Ôn thi đại học.";
     }
     if (err.code === "COURSE_PROPOSAL_NOT_EDITABLE") {
       return "Đề xuất khóa học này hiện không thể chỉnh sửa.";

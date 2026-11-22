@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { 
   Typography, Steps, Button, Card, Form, Input, InputNumber, 
-  DatePicker, Radio, message, Breadcrumb, Tag, Row, Col, Divider, Spin, Alert
+  DatePicker, Radio, message, Breadcrumb, Tag, Row, Col, Divider, Spin, Alert, Select
 } from 'antd';
 import { 
   BookOutlined, 
@@ -19,13 +19,26 @@ import { classService, classKeys } from '../../../../services/class.service';
 import { TeacherVerificationGateCard } from '../../../../components/guards/RequireVerifiedTeacher';
 import { useTeacherVerification } from '../../../../hooks/useTeacherVerification';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
-import { hasInvalidSlot, INVALID_SLOT_MESSAGE, notBeforeField } from '../../../../utils/classForm';
-import type { Course } from '../../../../types/catalog';
+import {
+  CLASS_PRICE_HINT,
+  MIN_CLASS_PRICE,
+  classPriceRule,
+  hasInvalidSlot,
+  INVALID_SLOT_MESSAGE,
+  notBeforeField,
+  parsePrice,
+} from '../../../../utils/classForm';
+import PriceInput from '../../../../components/common/PriceInput';
+import { COURSE_LEVEL_LABELS, GRADE_LEVEL_LABELS, SUPPORTED_GRADE_LEVELS } from '../../../../types/catalog';
+import type { Course, GradeLevel } from '../../../../types/catalog';
 import { formatDayOfWeek } from '../../../../types/class';
 import type { ScheduleEntry, CreateClassPayload } from '../../../../types/class';
 import ScheduleEditor from '../components/ScheduleEditor';
 
 const { Title, Text, Paragraph } = Typography;
+
+const isOffered = (course: Course) =>
+  course.status === 'ACTIVE' && SUPPORTED_GRADE_LEVELS.some((grade) => grade === course.gradeLevel);
 
 export default function CreateTeacherClassPage() {
   const navigate = useNavigate();
@@ -36,6 +49,8 @@ export default function CreateTeacherClassPage() {
   
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(() => searchParams.get('courseId'));
   const [courseSearch, setCourseSearch] = useState<string>('');
+  const [gradeFilter, setGradeFilter] = useState<GradeLevel>();
+  const [subjectFilter, setSubjectFilter] = useState<string>();
 
   // Schedule list
   const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
@@ -53,7 +68,8 @@ export default function CreateTeacherClassPage() {
     refetch: refetchVerification,
   } = useTeacherVerification();
 
-  // 2. Every ACTIVE course can be drafted on; teaching authorization is checked when Admin approves.
+  // 2. Every ACTIVE course of an offered grade can be drafted on; teaching authorization is checked when Admin approves.
+  // All of them are loaded at once, so both filters always know their options.
   const {
     data: coursesData,
     isPending: isCoursesLoading, // not isLoading: a query paused offline would render as an empty catalog
@@ -61,9 +77,9 @@ export default function CreateTeacherClassPage() {
     error: coursesError,
     refetch: refetchCourses,
   } = useQuery({
-    queryKey: ["courses", "active", courseSearch, "class-creation"],
+    queryKey: ["courses", "active", "class-creation"],
     queryFn: async () => {
-      const params = { search: courseSearch || undefined, pageSize: 100, page: 1 };
+      const params = { pageSize: 100, page: 1 };
       const firstPage = await courseService.searchCourses(params);
       if (firstPage.totalPages <= 1) return firstPage;
       const remainingPages = await Promise.all(
@@ -80,10 +96,37 @@ export default function CreateTeacherClassPage() {
     staleTime: 1000 * 60 * 2,
   });
 
-  const courses: Course[] = (coursesData?.items || []).filter((course) => course.status === "ACTIVE");
+  const courses: Course[] = (coursesData?.items || []).filter(isOffered);
   const matchedCourseInList = courses.find((c) => c.id === selectedCourseId);
 
-  // A URL-provided course must pass the same active status check.
+  const coursesOfGrade = courses.filter((course) => !gradeFilter || course.gradeLevel === gradeFilter);
+  // Each subject names the grades it can be taught at
+  const subjectOptions = [...new Map(coursesOfGrade.map((course) => [course.subjectId, course.subjectName ?? '']))]
+    .map(([id, name]) => {
+      const grades = SUPPORTED_GRADE_LEVELS.filter((grade) =>
+        coursesOfGrade.some((course) => course.subjectId === id && course.gradeLevel === grade)
+      );
+      return { value: id, label: `${name} (${grades.map((grade) => GRADE_LEVEL_LABELS[grade]).join(', ')})` };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label, 'vi'));
+  const keyword = courseSearch.trim().toLocaleLowerCase('vi');
+  const visibleCourses = coursesOfGrade.filter(
+    (course) =>
+      (!subjectFilter || course.subjectId === subjectFilter) &&
+      [course.title, course.subjectName, course.description, course.curriculumReference]
+        .join(' ')
+        .toLocaleLowerCase('vi')
+        .includes(keyword)
+  );
+
+  const changeGradeFilter = (grade?: GradeLevel) => {
+    setGradeFilter(grade);
+    if (grade && !courses.some((course) => course.subjectId === subjectFilter && course.gradeLevel === grade)) {
+      setSubjectFilter(undefined);
+    }
+  };
+
+  // A URL-provided course must pass the same status and grade check.
   const {
     data: fetchedSelectedCourse,
     isLoading: isVerifyingSelectedCourse,
@@ -101,7 +144,7 @@ export default function CreateTeacherClassPage() {
   });
 
   const selectedCourse: Course | undefined =
-    matchedCourseInList || (fetchedSelectedCourse?.status === "ACTIVE" ? fetchedSelectedCourse : undefined);
+    matchedCourseInList || (fetchedSelectedCourse && isOffered(fetchedSelectedCourse) ? fetchedSelectedCourse : undefined);
 
   const isCheckingSelectedCourse =
     Boolean(selectedCourseId) && !matchedCourseInList && (isCoursesLoading || isVerifyingSelectedCourse);
@@ -111,7 +154,7 @@ export default function CreateTeacherClassPage() {
     !matchedCourseInList &&
     !isCoursesLoading &&
     !isVerifyingSelectedCourse &&
-    (isSelectedCourseError || fetchedSelectedCourse?.status !== "ACTIVE");
+    (isSelectedCourseError || !selectedCourse);
 
   // Form watches
   const classType = Form.useWatch('classType', form) || 'PAID';
@@ -139,7 +182,7 @@ export default function CreateTeacherClassPage() {
     if (!selectedCourse) {
       message.warning(
         isInvalidSelectedCourse
-          ? "Khóa học đã chọn không còn hoạt động. Vui lòng chọn khóa học khác."
+          ? "Khóa học đã chọn không còn hoạt động hoặc ngoài phạm vi Lớp 6–12 và Ôn thi đại học. Vui lòng chọn khóa học khác."
           : "Vui lòng chọn một khóa học chuẩn."
       );
       return false;
@@ -187,7 +230,7 @@ export default function CreateTeacherClassPage() {
       className: values.className,
       description: values.description || undefined,
       classType: values.classType || 'PAID',
-      price: (values.classType === 'FREE') ? 0 : Number(values.price ?? 500000),
+      price: values.classType === 'FREE' ? 0 : parsePrice(values.price),
       capacity: Number(values.capacity || 20),
       enrollmentStart: values.enrollmentStart ? values.enrollmentStart.toISOString() : null,
       enrollmentEnd: values.enrollmentEnd ? values.enrollmentEnd.toISOString() : null,
@@ -220,14 +263,14 @@ export default function CreateTeacherClassPage() {
 
   // ---------------- Render Step 0: Chọn khóa chuẩn ----------------
   const renderStep0 = () => (
-    <div className="flex flex-col md:flex-row gap-6 mt-6">
-      <div className="flex-1">
+    <div className="flex flex-col lg:flex-row gap-6 mt-6">
+      <div className="flex-1 min-w-0">
         <div className="bg-emerald-50 text-emerald-800 px-4 py-3 rounded-xl mb-6 flex items-start gap-3 border border-emerald-100">
           <CheckCircleOutlined className="mt-1 text-emerald-600 text-base" />
           <div>
             <div className="font-bold">Chọn khóa học chuẩn từ Edunity</div>
             <div className="text-sm">
-              Giáo viên khởi tạo lớp dựa trên khung học liệu và giáo trình đã qua kiểm duyệt sư phạm.
+              Giáo viên khởi tạo lớp dựa trên khung học liệu và giáo trình đã qua kiểm duyệt sư phạm, dành cho Lớp 6–12 và Ôn thi đại học.
             </div>
           </div>
         </div>
@@ -238,7 +281,7 @@ export default function CreateTeacherClassPage() {
             showIcon
             className="mb-6 rounded-xl"
             message="Course từ đường dẫn không khả dụng"
-            description="Khóa học không tồn tại, đã tạm ngưng hoặc chưa tải được. Hãy chọn khóa học khác trong danh sách."
+            description="Khóa học không tồn tại, đã tạm ngưng, ngoài phạm vi Lớp 6–12 và Ôn thi đại học hoặc chưa tải được. Hãy chọn khóa học khác trong danh sách."
             action={
               <Button size="small" onClick={() => setSelectedCourseId(null)}>
                 Chọn lại
@@ -247,6 +290,30 @@ export default function CreateTeacherClassPage() {
           />
         )}
 
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mb-3">
+          <Select<GradeLevel>
+            aria-label="Lọc theo lớp"
+            placeholder="Tất cả các lớp"
+            size="large"
+            className="w-full"
+            allowClear
+            value={gradeFilter}
+            onChange={changeGradeFilter}
+            options={SUPPORTED_GRADE_LEVELS.map((grade) => ({ value: grade, label: GRADE_LEVEL_LABELS[grade] }))}
+          />
+          <Select<string>
+            aria-label="Lọc theo môn học"
+            placeholder="Tất cả môn học"
+            size="large"
+            className="w-full"
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            value={subjectFilter}
+            onChange={setSubjectFilter}
+            options={subjectOptions}
+          />
+        </div>
         <div className="flex gap-3 mb-6">
           <Input 
             placeholder="Tìm khóa học theo tên hoặc chủ đề..." 
@@ -284,13 +351,16 @@ export default function CreateTeacherClassPage() {
               </Button>
             }
           />
-        ) : courses.length === 0 ? (
+        ) : visibleCourses.length === 0 ? (
           <div className="p-8 text-center bg-gray-50 rounded-xl border border-gray-200">
-            <Text className="text-gray-500">Không tìm thấy khóa học đang hoạt động nào phù hợp.</Text>
+            <Text className="text-gray-500">
+              Chưa có khóa học nào phù hợp. Hãy đổi bộ lọc hoặc{' '}
+              <Link to={ROUTES.TEACHER.COURSE_PROPOSALS}>đề xuất khóa học mới</Link>.
+            </Text>
           </div>
         ) : (
           <div className="flex flex-col gap-3.5 max-h-[500px] overflow-y-auto pr-1">
-            {courses.map((course) => {
+            {visibleCourses.map((course) => {
               const isSelected = selectedCourse?.id === course.id;
               return (
                 <div 
@@ -315,7 +385,7 @@ export default function CreateTeacherClassPage() {
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         {course.gradeLevel && (
                           <span className="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded">
-                            {course.gradeLevel}
+                            {GRADE_LEVEL_LABELS[course.gradeLevel]}
                           </span>
                         )}
                         {course.subjectName && (
@@ -323,6 +393,9 @@ export default function CreateTeacherClassPage() {
                             • {course.subjectName}
                           </span>
                         )}
+                        <span className="text-xs font-medium text-gray-500">
+                          • {course.level ? COURSE_LEVEL_LABELS[course.level] : 'Chưa có cấp độ'}
+                        </span>
                       </div>
                       <Title level={5} className="!m-0 !mb-1 text-gray-900">{course.title}</Title>
                       {course.description && (
@@ -343,7 +416,7 @@ export default function CreateTeacherClassPage() {
       </div>
 
       {/* Preview Column */}
-      <div className="w-full md:w-[350px]">
+      <div className="w-full lg:w-[350px]">
         <Card className="rounded-2xl border border-indigo-100 shadow-sm sticky top-6 overflow-hidden" bodyStyle={{ padding: 0 }}>
           <div className="bg-indigo-50/60 p-4 border-b border-indigo-100 flex justify-between items-center">
             <span className="font-semibold text-indigo-900">Khóa học đã chọn</span>
@@ -368,7 +441,15 @@ export default function CreateTeacherClassPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400 font-medium">Khối lớp:</span>
-                <span className="font-semibold text-gray-800">{selectedCourse?.gradeLevel || '-'}</span>
+                <span className="font-semibold text-gray-800">
+                  {selectedCourse?.gradeLevel ? GRADE_LEVEL_LABELS[selectedCourse.gradeLevel] : '-'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 font-medium">Cấp độ:</span>
+                <span className="font-semibold text-gray-800">
+                  {selectedCourse?.level ? COURSE_LEVEL_LABELS[selectedCourse.level] : '-'}
+                </span>
               </div>
             </div>
           </div>
@@ -390,7 +471,7 @@ export default function CreateTeacherClassPage() {
           initialValues={{ 
             classType: 'PAID', 
             capacity: 20,
-            price: 500000 
+            price: MIN_CLASS_PRICE
           }}
         >
           <Form.Item 
@@ -402,16 +483,7 @@ export default function CreateTeacherClassPage() {
           </Form.Item>
           
           <Form.Item label="Loại hình lớp học" name="classType" rules={[{ required: true }]}>
-            <Radio.Group 
-              className="w-full"
-              onChange={(e) => {
-                if (e.target.value === 'FREE') {
-                  form.setFieldsValue({ price: 0 });
-                } else if (!form.getFieldValue('price')) {
-                  form.setFieldsValue({ price: 500000 });
-                }
-              }}
-            >
+            <Radio.Group className="w-full">
               <Row gutter={16}>
                 <Col span={12}>
                   <Radio.Button 
@@ -420,7 +492,7 @@ export default function CreateTeacherClassPage() {
                   >
                     <div className="font-semibold text-gray-800 mb-1">Lớp có thu phí (PAID)</div>
                     <div className="text-xs text-gray-500 font-normal leading-tight">
-                      Học viên đóng học phí để ghi danh. Giá &gt; 0 VNĐ.
+                      Học viên đóng học phí để ghi danh.
                     </div>
                   </Radio.Button>
                 </Col>
@@ -445,18 +517,11 @@ export default function CreateTeacherClassPage() {
                 <Form.Item 
                   label="Học phí trọn khóa (VNĐ)" 
                   name="price" 
-                  rules={[
-                    { required: true, message: 'Vui lòng nhập học phí' },
-                    { type: 'number', min: 1000, message: 'Học phí lớp PAID phải lớn hơn 0' }
-                  ]}
+                  required
+                  extra={CLASS_PRICE_HINT}
+                  rules={[classPriceRule]}
                 >
-                  <InputNumber 
-                    size="large" 
-                    className="w-full rounded-lg" 
-                    formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                    parser={value => Number(value!.replace(/\$\s?|(,*)/g, ''))}
-                    addonAfter="VNĐ"
-                  />
+                  <PriceInput size="large" className="w-full rounded-lg" />
                 </Form.Item>
               </Col>
             )}
@@ -565,7 +630,7 @@ export default function CreateTeacherClassPage() {
                 {values.classType === 'FREE' ? (
                   <Tag color="green">Miễn phí (FREE)</Tag>
                 ) : (
-                  <span className="text-indigo-600 font-bold">{Number(values.price || 0).toLocaleString('vi-VN')} VNĐ</span>
+                  <span className="text-indigo-600 font-bold">{parsePrice(values.price).toLocaleString('vi-VN')} VNĐ/học viên</span>
                 )}
               </div>
             </Col>
@@ -592,7 +657,7 @@ export default function CreateTeacherClassPage() {
           showIcon
           className="mt-4 rounded-xl text-left"
           message="Sau khi lưu nháp"
-          description="Để gửi duyệt, lớp cần đủ thông tin, lịch học và buổi học. Quyền giảng dạy, hợp đồng và chính sách giá không chặn việc gửi duyệt; Admin kiểm tra các điều kiện này trước khi mở lớp."
+          description="Để gửi duyệt, lớp cần đủ thông tin, học phí hợp lệ, lịch học và buổi học. Quyền giảng dạy và hợp đồng không chặn việc gửi duyệt; Admin kiểm tra hai điều kiện này trước khi mở lớp."
         />
       </div>
     );

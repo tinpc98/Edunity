@@ -166,7 +166,7 @@ export type ReadinessCheckKey =
   | "CLASS_INFORMATION"
   | "SCHEDULE_SESSIONS"
   | "TEACHING_AUTHORIZATION"
-  | "PRICING_POLICY"
+  | "CLASS_PRICE_RANGE"
   | "TEACHER_CONTRACT";
 
 export interface ReadinessCheck {
@@ -184,6 +184,8 @@ export interface ClassReadiness {
   canSaveDraft: boolean;
   canSubmit: boolean;
   canApprove: boolean;
+  /** current is null when the stored price is not a number */
+  tuition: { current: number | null; minPrice: number; maxPrice: number };
   checks: ReadinessCheck[];
 }
 

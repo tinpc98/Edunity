@@ -12,7 +12,6 @@ const {
   Notification,
   TeacherSubjectAuthorization,
   TeacherContract,
-  CoursePricingPolicy,
 } = require("../src/models");
 const teacherClassService = require("../src/services/teacherClassService");
 const adminClassService = require("../src/services/adminClassService");
@@ -93,21 +92,6 @@ const grant = {
       signedAt: new Date(),
       ...overrides,
     }),
-  policy: (overrides = {}) =>
-    CoursePricingPolicy.create({
-      policyKey: "GLOBAL:ALL:FLOW02",
-      version: 1,
-      name: "Khung giá",
-      scopeType: "GLOBAL",
-      classType: "ALL",
-      minPrice: 100000,
-      maxPrice: 2000000,
-      minSessions: 1,
-      maxSessions: 50,
-      effectiveFrom: inDays(-1),
-      createdBy: admin._id,
-      ...overrides,
-    }),
 };
 const grantAllExcept = async (...skipped) => {
   for (const [name, create] of Object.entries(grant)) if (!skipped.includes(name)) await create();
@@ -158,8 +142,8 @@ describe("Creating and saving a DRAFT", () => {
   test.each([
     ["1. without an APPROVED authorization", ["authorization"]],
     ["2. without a contract", ["contract"]],
-    ["3. without a pricing policy", ["policy"]],
-    ["1-3. without any of the three", ["authorization", "contract", "policy"]],
+    ["3. without a pricing policy", []],
+    ["1-3. without any of the three", ["authorization", "contract"]],
   ])("%s", async (_name, skipped) => {
     await grantAllExcept(...skipped);
 
@@ -167,7 +151,7 @@ describe("Creating and saving a DRAFT", () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.body.data.status).toBe("DRAFT");
-    if (skipped.includes("policy")) expect(res.body.data.pricingPolicyId).toBeNull();
+    expect(res.body.data.pricingPolicyId).toBeNull();
   });
 
   test("4. a DRAFT without schedule, dates or sessions is saved and can be saved again", async () => {
@@ -292,7 +276,6 @@ describe("Submitting", () => {
   test.each([
     ["authorization", "SUBJECT_AUTHORIZATION_REQUIRED"],
     ["contract", "TEACHER_CONTRACT_NOT_FOUND"],
-    ["policy", "PRICING_POLICY_NOT_CONFIGURED"],
   ])("6. a complete class missing %s is submitted with a warning and grants nothing", async (skipped, code) => {
     await grantAllExcept(skipped);
     const id = await completeDraft();
@@ -308,26 +291,8 @@ describe("Submitting", () => {
     expect(log.afterState).toMatchObject({ submittedBy: teacher._id.toString(), pendingConditions: [code] });
     expect(await Notification.countDocuments({ type: "CLASS_SUBMITTED" })).toBe(2); // one per admin
 
-    const granted = {
-      authorization: TeacherSubjectAuthorization,
-      contract: TeacherContract,
-      policy: CoursePricingPolicy,
-    };
+    const granted = { authorization: TeacherSubjectAuthorization, contract: TeacherContract };
     expect(await granted[skipped].countDocuments()).toBe(0);
-  });
-
-  test("a price outside the policy warns; too few sessions blocks", async () => {
-    await grantAllExcept("policy");
-    const policy = await grant.policy({ minPrice: 900000, minSessions: 2 });
-    const id = await completeDraft();
-    expect(codes((await submit(id)).body.data.approvalWarnings)).toEqual(["PRICE_OUT_OF_POLICY_RANGE"]);
-
-    // the session rule holds even while the price is wrong as well
-    await CoursePricingPolicy.updateOne({ _id: policy._id }, { $set: { minSessions: 3 } });
-    await Class.updateOne({ _id: id }, { $set: { status: "DRAFT" } });
-    const res = await submit(id);
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toBe("SESSION_COUNT_OUT_OF_POLICY_RANGE");
   });
 
   test.each([
@@ -357,7 +322,6 @@ describe("Approving", () => {
   test.each([
     ["7. authorization", "authorization", "SUBJECT_AUTHORIZATION_REQUIRED", 403],
     ["8. contract", "contract", "TEACHER_CONTRACT_NOT_FOUND", 403],
-    ["9. pricing policy", "policy", "PRICING_POLICY_NOT_CONFIGURED", 400],
   ])("%s missing is refused", async (_name, skipped, code, statusCode) => {
     await grantAllExcept(skipped);
     const id = await pendingClass();
@@ -376,7 +340,6 @@ describe("Approving", () => {
     const id = await pendingClass();
     expect(codes((await approve(id)).body.details.pendingChecks)).toEqual([
       "SUBJECT_AUTHORIZATION_REQUIRED",
-      "PRICING_POLICY_NOT_CONFIGURED",
       "TEACHER_CONTRACT_NOT_FOUND",
     ]);
   });
@@ -388,7 +351,6 @@ describe("Approving", () => {
     ["contract is terminated", "contract", { status: "TERMINATED" }, "TEACHER_CONTRACT_NOT_ACTIVE"],
     ["contract has expired", "contract", { effectiveFrom: inDays(-9), expiresAt: inDays(-1) }, "TEACHER_CONTRACT_EXPIRED"],
     ["contract is not effective yet", "contract", { effectiveFrom: inDays(9) }, "TEACHER_CONTRACT_NOT_ACTIVE"],
-    ["policy range excludes the price", "policy", { minPrice: 900000 }, "PRICE_OUT_OF_POLICY_RANGE"],
   ])("is refused when the %s", async (_name, which, overrides, code) => {
     await grantAllExcept(which);
     await grant[which](overrides);
@@ -412,7 +374,7 @@ describe("Approving", () => {
     await Course.updateOne({ _id: course._id }, { $set: { status: "INACTIVE" } });
     const res = await approve(id);
     expect(res.body.error).toBe("COURSE_NOT_ACTIVE");
-    expect(codes(res.body.details.pendingChecks)).not.toContain("PRICING_POLICY_NOT_CONFIGURED");
+    expect(codes(res.body.details.pendingChecks)).toEqual(["COURSE_NOT_ACTIVE"]);
   });
 
   test("10. with every condition met the class opens, once audited and notified", async () => {
@@ -423,7 +385,6 @@ describe("Approving", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.data.status).toBe("OPEN");
-    expect(res.body.data.pricingPolicyVersion).toBe(1);
     expect(await auditsOf(id, "CLASS_APPROVED")).toBe(1);
     expect(await Notification.countDocuments({ userId: teacher._id, type: "CLASS_APPROVED" })).toBe(1);
     expect(JSON.stringify((await request(app).get("/api/classes")).body)).toContain(id);
@@ -594,19 +555,15 @@ describe("Readiness", () => {
     expect((await approve(ready)).statusCode).toBe(200);
   });
 
-  test.each([
-    ["no session yet", false],
-    ["fewer sessions than the policy", true],
-  ])("%s is a blocking schedule failure, never shown as an optional pricing one", async (_name, withSessions) => {
-    await grantAllExcept("policy");
-    await grant.policy({ minSessions: 3 });
-    const id = withSessions ? await completeDraft() : (await create(completeFields())).body.data.id;
+  test("no session yet is a blocking schedule failure, never shown as a tuition one", async () => {
+    await grantAllExcept();
+    const id = (await create(completeFields())).body.data.id;
 
     const { body } = await call(teacher, "get", `/teacher/classes/${id}/readiness`);
     const check = (key) => body.data.checks.find((item) => item.key === key);
 
     expect(check("SCHEDULE_SESSIONS")).toMatchObject({ status: "PENDING", blocksSubmit: true });
-    expect(check("PRICING_POLICY").status).toBe("PASSED");
+    expect(check("CLASS_PRICE_RANGE").status).toBe("PASSED");
     expect(body.data.canSubmit).toBe(false);
   });
 

@@ -8,10 +8,9 @@ const catalog = require("./courseCatalogService");
 const {
   assertVerificationCurrent,
   assertCourseAlignment,
-  assertPricingPolicyGate,
+  assertClassPrice,
+  getClassPriceRange,
   assertTeacherContractGate,
-  assertSessionCountWithinPolicy,
-  findSatisfiedPricingPolicy,
   runClassChecks,
   presentCheck,
   throwFailedChecks,
@@ -22,6 +21,7 @@ const { resolveTzOffsetMinutes, isClassStartDateReached } = require("../utils/ap
 const auditService = require("./auditService");
 const { notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
+const { assertSupportedGradeLevel } = require("../utils/gradeLevel");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const EDITABLE_STATUSES = ["DRAFT", "NEED_CHANGES"]; // BE-01: REJECTED is final terminal status
@@ -157,9 +157,7 @@ const applyClassInput = (cls, body) => {
   if (!cls.classType) throw validationError("classType is required");
   if (!cls.capacity) throw validationError("capacity is required");
 
-  const price = toNum(cls.price);
-  if (cls.classType === "FREE" && price !== 0) throw validationError("FREE class must have price = 0");
-  if (cls.classType === "PAID" && price <= 0) throw validationError("PAID class must have price > 0");
+  assertClassPrice(cls.classType, toNum(cls.price));
 
   if (cls.enrollmentStart && cls.enrollmentEnd && cls.enrollmentStart > cls.enrollmentEnd) {
     throw validationError("enrollmentStart must be before enrollmentEnd");
@@ -179,7 +177,7 @@ const applyCourse = (cls, course) => {
   cls.level = course.level ? catalog.resolveLevel(course.level) : null;
 };
 
-const createClass = async (teacherId, body = {}, options = {}) => {
+const createClass = async (teacherId, body = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   assertVerificationCurrent({ teacher });
   if (!body.courseId) throw validationError("courseId is required");
@@ -237,15 +235,9 @@ const createClass = async (teacherId, body = {}, options = {}) => {
       applyClassInput(cls, body);
 
       await assertCourseAlignment({ course, cls, body });
-      const pricingResult = await findSatisfiedPricingPolicy({
-        teacher,
-        course,
-        cls,
-        body,
-        pricingPolicyVerifier: options.pricingPolicyVerifier,
-      });
+      assertSupportedGradeLevel(course.gradeLevel);
 
-      const snapshots = await captureClassSnapshots({ course, pricingResult });
+      const snapshots = await captureClassSnapshots({ course });
       Object.assign(cls, snapshots);
 
       await cls.save({ session });
@@ -259,7 +251,7 @@ const createClass = async (teacherId, body = {}, options = {}) => {
   }
 };
 
-const updateClass = async (teacherId, classId, body = {}, options = {}) => {
+const updateClass = async (teacherId, classId, body = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (!EDITABLE_STATUSES.includes(cls.status)) throw classNotEditable();
@@ -275,15 +267,9 @@ const updateClass = async (teacherId, classId, body = {}, options = {}) => {
   applyClassInput(cls, body);
 
   await assertCourseAlignment({ course, cls, body });
-  const pricingResult = await findSatisfiedPricingPolicy({
-    teacher,
-    course,
-    cls,
-    body,
-    pricingPolicyVerifier: options.pricingPolicyVerifier,
-  });
+  if (switchingCourse) assertSupportedGradeLevel(course.gradeLevel);
 
-  const snapshots = await captureClassSnapshots({ course, pricingResult });
+  const snapshots = await captureClassSnapshots({ course });
   Object.assign(cls, snapshots);
 
   if (!cls.level && course.level) {
@@ -330,7 +316,7 @@ const assertClassInformation = (cls, now) => {
   }
 };
 
-const assertScheduleAndSessions = async ({ cls, course, sessions }) => {
+const assertScheduleAndSessions = ({ cls, sessions }) => {
   const missing = [];
   if (!cls.schedule || cls.schedule.length === 0) missing.push("schedule");
   if (sessions.length === 0) missing.push("sessions");
@@ -348,8 +334,6 @@ const assertScheduleAndSessions = async ({ cls, course, sessions }) => {
       sessionIds: outOfRange.map((s) => s._id.toString()),
     });
   }
-
-  await assertSessionCountWithinPolicy({ course, cls, totalSessions: sessions.length });
 };
 
 /**
@@ -366,8 +350,6 @@ const evaluateClass = async (cls, options = {}) => {
   const scope = course || cls;
 
   let level = null;
-  let pricingResult = null;
-  let checkedSessionCount = null;
   const checks = await runClassChecks([
     [
       "TEACHER_VERIFICATION",
@@ -379,17 +361,11 @@ const evaluateClass = async (cls, options = {}) => {
       true,
       async () => {
         ({ level } = await assertCourseAlignment({ course, cls }));
+        assertSupportedGradeLevel(course.gradeLevel); // so an older class can neither be submitted nor opened
       },
     ],
     ["CLASS_INFORMATION", true, async () => assertClassInformation(cls, now)],
-    [
-      "SCHEDULE_SESSIONS",
-      true,
-      async () => {
-        await assertScheduleAndSessions({ cls, course, sessions });
-        checkedSessionCount = sessions.length;
-      },
-    ],
+    ["SCHEDULE_SESSIONS", true, () => assertScheduleAndSessions({ cls, sessions })],
     [
       "TEACHING_AUTHORIZATION",
       false,
@@ -401,22 +377,7 @@ const evaluateClass = async (cls, options = {}) => {
           level: scope.level,
         }),
     ],
-    [
-      "PRICING_POLICY",
-      false,
-      async () => {
-        // Without its course a policy cannot be resolved; "not configured" would send Admin to fix the wrong thing
-        if (!course) throw new AppError("Selected course is not active", "COURSE_NOT_ACTIVE", 400);
-        pricingResult = await assertPricingPolicyGate({
-          teacher: teacherRef,
-          course,
-          cls,
-          // A bad count is the schedule's failure (it blocks submit); repeating it here would show it as optional
-          totalSessions: checkedSessionCount,
-          pricingPolicyVerifier: options.pricingPolicyVerifier,
-        });
-      },
-    ],
+    ["CLASS_PRICE_RANGE", true, () => assertClassPrice(cls.classType, toNum(cls.price))],
     [
       "TEACHER_CONTRACT",
       false,
@@ -424,7 +385,7 @@ const evaluateClass = async (cls, options = {}) => {
     ],
   ]);
 
-  return { checks, course, level, pricingResult };
+  return { checks, course, level };
 };
 
 const getReadiness = async (cls) => {
@@ -437,13 +398,14 @@ const getReadiness = async (cls) => {
     canSaveDraft: editable && passes((check) => ["TEACHER_VERIFICATION", "COURSE"].includes(check.key)),
     canSubmit: editable && passes((check) => check.blocksSubmit),
     canApprove: cls.status === "PENDING_APPROVAL" && passes(() => true),
+    tuition: { current: toNum(cls.price), ...getClassPriceRange(cls.classType) },
     checks: checks.map(presentCheck),
   };
 };
 
 const getMyClassReadiness = async (teacherId, classId) => getReadiness(await getOwnClass(teacherId, classId));
 
-// BR-48 / BR-49 / CUR-10: submit a completed Class. Authorization, contract and price range are left to Admin approval
+// BR-48 / BR-49 / CUR-10: submit a completed Class. Authorization and contract are left to Admin approval
 const submitClass = async (teacherId, classId, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
@@ -452,11 +414,11 @@ const submitClass = async (teacherId, classId, options = {}) => {
   }
 
   const course = await getActiveCourse(cls.courseId);
-  const { checks, level, pricingResult } = await evaluateClass(cls, { ...options, teacher, course });
+  const { checks, level } = await evaluateClass(cls, { ...options, teacher, course });
   throwFailedChecks(checks.filter((check) => check.blocksSubmit));
 
   const approvalWarnings = checks.filter((check) => check.error).map(presentCheck);
-  const snapshots = await captureClassSnapshots({ course, pricingResult });
+  const snapshots = await captureClassSnapshots({ course });
 
   const updated = await runInTransaction(async (session) => {
     const doc = await Class.findOneAndUpdate(

@@ -3,7 +3,7 @@ const { TeacherSubjectAuthorization, Category, Subject, User } = require("../mod
 const { TEACHER_SUBJECT_AUTH_STATUSES, GRADE_LEVELS } = require("../models/constants");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { assertId, paged, validationError, isBlank } = require("../utils/http");
-const { allowedGradeLevelsForCategory, resolveGradeLevel } = require("../utils/gradeLevel");
+const { requireGradeLevel } = require("../utils/gradeLevel");
 const { withoutReviewer } = require("../utils/publicView");
 const catalog = require("./courseCatalogService");
 const { audit } = require("./auditService");
@@ -104,15 +104,7 @@ const validateAuthorizationScope = async (body = {}) => {
     throw validationError("level is required and must be BEGINNER, INTERMEDIATE, or ADVANCED");
   }
 
-  const allowedGrades = allowedGradeLevelsForCategory(category);
-  const rawGrade = body.gradeLevel === "" ? null : body.gradeLevel;
-  if (allowedGrades && (rawGrade === undefined || rawGrade === null)) {
-    const err = new AppError("gradeLevel is required for this category", "GRADE_LEVEL_REQUIRED", 400);
-    err.details = { allowedGradeLevels: allowedGrades };
-    throw err;
-  }
-
-  const gradeLevel = resolveGradeLevel(category, rawGrade);
+  const gradeLevel = requireGradeLevel(category, body.gradeLevel);
   return { category, subject, gradeLevel, level };
 };
 

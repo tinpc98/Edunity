@@ -47,7 +47,15 @@ import {
   useTeacherVerification,
 } from '../../../../hooks/useTeacherVerification';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
-import { hasInvalidSlot, INVALID_SLOT_MESSAGE, notBeforeField } from '../../../../utils/classForm';
+import {
+  CLASS_PRICE_HINT,
+  classPriceRule,
+  hasInvalidSlot,
+  INVALID_SLOT_MESSAGE,
+  notBeforeField,
+  parsePrice,
+} from '../../../../utils/classForm';
+import PriceInput from '../../../../components/common/PriceInput';
 import ClassReadinessCard from '../../../../components/common/ClassReadinessCard';
 import ScheduleEditor from '../components/ScheduleEditor';
 
@@ -326,7 +334,7 @@ export default function TeacherClassDetailPage() {
         className: values.className,
         description: values.description,
         capacity: Number(values.capacity),
-        price: cls.classType === 'FREE' ? 0 : Number(values.price || 0),
+        price: cls.classType === 'FREE' ? 0 : parsePrice(values.price),
         enrollmentStart: values.enrollmentStart ? values.enrollmentStart.toISOString() : null,
         enrollmentEnd: values.enrollmentEnd ? values.enrollmentEnd.toISOString() : null,
         startDate: values.startDate ? values.startDate.toISOString() : null,
@@ -1035,7 +1043,7 @@ export default function TeacherClassDetailPage() {
           {isEditable && (
             <Popconfirm
               title="Gửi duyệt lớp học"
-              description="Admin sẽ kiểm tra quyền giảng dạy, hợp đồng và chính sách giá trước khi mở lớp. Bạn không thể sửa lớp trong lúc chờ duyệt."
+              description="Admin sẽ kiểm tra học phí, quyền giảng dạy và hợp đồng trước khi mở lớp. Bạn không thể sửa lớp trong lúc chờ duyệt."
               onConfirm={() => submitMutation.mutate()}
               okText="Gửi duyệt"
               cancelText="Hủy"
@@ -1102,25 +1110,19 @@ export default function TeacherClassDetailPage() {
 
           <Row gutter={16}>
             {cls.classType === 'PAID' && (
-              <Col span={12}>
+              <Col xs={24} sm={12}>
                 <Form.Item 
                   label="Học phí (VNĐ)" 
                   name="price" 
-                  rules={[
-                    { required: true, message: 'Vui lòng nhập học phí' },
-                    { type: 'number', min: 1000, message: 'Học phí phải > 0' }
-                  ]}
+                  required
+                  extra={CLASS_PRICE_HINT}
+                  rules={[classPriceRule]}
                 >
-                  <InputNumber 
-                    size="large" 
-                    className="w-full" 
-                    formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                    parser={value => Number(value!.replace(/\$\s?|(,*)/g, ''))}
-                  />
+                  <PriceInput size="large" className="w-full" />
                 </Form.Item>
               </Col>
             )}
-            <Col span={cls.classType === 'PAID' ? 12 : 24}>
+            <Col xs={24} sm={cls.classType === 'PAID' ? 12 : 24}>
               <Form.Item 
                 label="Sĩ số tối đa" 
                 name="capacity" 

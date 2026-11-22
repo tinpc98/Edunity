@@ -56,6 +56,7 @@ import AdminSubjectsPage from "../features/admin/catalog/AdminSubjectsPage";
 import AdminCoursesPage from "../features/admin/catalog/AdminCoursesPage";
 import AdminSyllabusPage from "../features/admin/catalog/AdminSyllabusPage";
 import AdminCourseProposalsPage from "../features/admin/catalog/AdminCourseProposalsPage";
+import AdminSubjectAuthorizationsPage from "../features/admin/teachers/authorizations/AdminSubjectAuthorizationsPage";
 import AdminPaymentsPage from "../features/admin/finance/AdminPaymentsPage";
 import AdminTransactionsPage from "../features/admin/finance/AdminTransactionsPage";
 import AdminPayoutsPage from "../features/admin/finance/AdminPayoutsPage";
@@ -364,6 +365,10 @@ const router = createBrowserRouter([
       {
         path: "teachers/verifications/:teacherId",
         element: <TeacherVerificationDetailPage />,
+      },
+      {
+        path: "subject-authorizations",
+        element: <AdminSubjectAuthorizationsPage />,
       },
       {
         path: "campaigns",

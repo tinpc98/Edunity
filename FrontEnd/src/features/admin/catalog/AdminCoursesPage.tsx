@@ -43,6 +43,7 @@ import type {
 } from "../../../types/catalog";
 import {
   GRADE_LEVELS,
+  offeredGradeLevels,
   GRADE_LEVEL_LABELS,
   COURSE_LEVELS,
   COURSE_LEVEL_LABELS,
@@ -180,15 +181,14 @@ export default function AdminCoursesPage() {
     staleTime: 60_000,
   });
 
-  // Allowed grade levels for category in modal
+  // Allowed grade levels for category in modal. An older grade stays selectable on its own course.
   const allowedCourseModalGradeLevels = useMemo(() => {
-    if (!courseModalCategoryId) return GRADE_LEVELS;
-    const cat = categories.find((c) => c.id === courseModalCategoryId);
-    if (cat?.allowedGradeLevels && cat.allowedGradeLevels.length > 0) {
-      return cat.allowedGradeLevels;
-    }
-    return GRADE_LEVELS;
-  }, [categories, courseModalCategoryId]);
+    const offered = offeredGradeLevels(categories.find((c) => c.id === courseModalCategoryId));
+    const current = editingCourse?.gradeLevel;
+    return current && !offered.includes(current) ? [current, ...offered] : offered;
+  }, [categories, courseModalCategoryId, editingCourse]);
+  // Only a course saved without a grade may stay without one
+  const courseGradeRequired = !editingCourse || Boolean(editingCourse.gradeLevel);
 
   // Main Courses query using adminListCourses (supports ACTIVE & INACTIVE & status filter)
   const {
@@ -338,7 +338,7 @@ export default function AdminCoursesPage() {
       });
     } else {
       setEditingCourse(null);
-      const defaultCatId = categories[0]?.id || "";
+      const defaultCatId = categories.find((c) => offeredGradeLevels(c).length > 0)?.id || "";
       setCourseModalCategoryId(defaultCatId);
       courseForm.resetFields();
       courseForm.setFieldsValue({
@@ -673,7 +673,7 @@ export default function AdminCoursesPage() {
                 rules={[{ required: true, message: "Vui lòng chọn danh mục" }]}
               >
                 <Select
-                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                  options={categories.map((c) => ({ value: c.id, label: c.name, disabled: offeredGradeLevels(c).length === 0 }))}
                   onChange={(val) => {
                     setCourseModalCategoryId(val);
                     courseForm.setFieldsValue({ subjectId: undefined, gradeLevel: undefined });
@@ -704,9 +704,14 @@ export default function AdminCoursesPage() {
           </Form.Item>
 
           <div className="grid grid-cols-2 gap-4">
-            <Form.Item name="gradeLevel" label="Khối lớp (tùy chọn)">
+            <Form.Item
+              name="gradeLevel"
+              label="Khối lớp"
+              rules={[{ required: courseGradeRequired, message: "Vui lòng chọn khối lớp" }]}
+              extra={editingCourse ? "Đổi khối sẽ đổi khối của mọi lớp thuộc khóa này." : undefined}
+            >
               <Select
-                allowClear
+                allowClear={!courseGradeRequired}
                 placeholder="Chọn khối lớp"
                 options={allowedCourseModalGradeLevels.map((g) => ({
                   value: g,

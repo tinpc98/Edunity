@@ -75,6 +75,7 @@ export const ROUTES = {
     COURSE_PROPOSALS: "/admin/course-proposals",
     TEACHER_VERIFICATIONS: "/admin/teachers/verifications",
     TEACHER_VERIFICATION_DETAIL: "/admin/teachers/verifications/:teacherId",
+    SUBJECT_AUTHORIZATIONS: "/admin/subject-authorizations",
     CAMPAIGNS: "/admin/campaigns",
     CREATE_CAMPAIGN: "/admin/campaigns/create",
     CAMPAIGN_CREATE: "/admin/campaigns/create",

@@ -19,7 +19,6 @@ const {
   Notification,
 } = require("../src/models");
 const { hashPassword } = require("../src/utils/password");
-const { toNum } = require("../src/utils/money");
 const syllabusService = require("../src/services/syllabusService");
 const coursePricingPolicyService = require("../src/services/coursePricingPolicyService");
 const classCreationGateService = require("../src/services/classCreationGateService");
@@ -123,11 +122,10 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
   // =========================================================================
   // 1. TEA-07 + CUR-09 + CUR-10 + approveClass Bypass Closure
   // =========================================================================
-  test("TEA-07, CUR-09 & CUR-10: Closes approveClass bypass, keeps TEA-12 fail-closed, validates CUR-07 sessions & freezes immutable snapshots", async () => {
+  test("TEA-07, CUR-09 & CUR-10: Closes approveClass bypass, keeps TEA-12 fail-closed, ignores CUR-07 bounds & freezes the syllabus snapshot", async () => {
     const { admin, teacher, student, sub, course, sv1, policyV1 } = await bootstrap();
 
     expect(classCreationGateService.getDependencyStatus()).toEqual({
-      cur07PricingPolicyReady: true,
       tea12ContractReady: true, // wired to teacherContractService
     });
 
@@ -172,14 +170,17 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
       .send({ courseId: course._id, className: "Missing TEA-12", classType: "PAID", price: 500000, capacity: 20 })
       .expect(201);
 
-    // Step 3: an out-of-policy price can be drafted but gets no CUR-09 policy snapshot; approval refuses it in 4a-bis
+    // Step 3: the fixed range holds for a draft too; policyV1 (300000..1200000) plays no part
     const contractOk = { contractVerifier: async () => ({ id: "c-1", status: "ACTIVE" }) };
-    const tooCheap = await teacherClassService.createClass(
-      teacher._id,
-      { courseId: course._id, className: "Too Cheap", classType: "PAID", price: 100000, capacity: 20 },
-      contractOk
-    );
-    expect(tooCheap.pricingPolicyId).toBeNull();
+    await expect(
+      teacherClassService.createClass(teacher._id, {
+        courseId: course._id,
+        className: "Too Cheap",
+        classType: "PAID",
+        price: 999,
+        capacity: 20,
+      })
+    ).rejects.toMatchObject({ code: "CLASS_PRICE_OUT_OF_RANGE", statusCode: 400 });
 
     const created = await teacherClassService.createClass(
       teacher._id,
@@ -188,10 +189,8 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     );
     expect(created.syllabusVersionId.toString()).toBe(sv1._id.toString());
     expect(created.syllabusVersionNumber).toBe(1);
-    expect(created.pricingPolicyId.toString()).toBe(policyV1._id.toString());
-    expect(created.pricingPolicyVersion).toBe(1);
-    expect(toNum(created.pricingPolicySnapshot.minPrice)).toBe(300000);
-    expect(toNum(created.pricingPolicySnapshot.maxPrice)).toBe(1200000);
+    expect(created.pricingPolicyId).toBeNull();
+    expect(created.pricingPolicySnapshot).toBeNull();
 
     // Update dates & schedule
     const day = 86400000;
@@ -210,15 +209,13 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
       contractOk
     );
 
-    // Create 1 session (< minSessions=2 in policyV1) -> submitClass MUST reject SESSION_COUNT_OUT_OF_POLICY_RANGE
+    // Create 1 session (< minSessions=2 in policyV1) -> the schedule check no longer reads the policy
     const s1 = await sessionService.createSessions(teacher._id, created._id.toString(), {
       title: "Buổi 1",
       startDatetime: new Date(now + 3 * day),
       endDatetime: new Date(now + 3 * day + 7200000),
     });
-    await expect(
-      teacherClassService.submitClass(teacher._id, created._id.toString(), contractOk)
-    ).rejects.toMatchObject({ code: "SESSION_COUNT_OUT_OF_POLICY_RANGE", statusCode: 400 });
+    expect((await teacherClassService.getMyClassReadiness(teacher._id, created._id.toString())).canSubmit).toBe(true);
 
     // Create 2nd session & temporary 3rd session, verify transactional deleteSession works in DRAFT
     await sessionService.createSessions(teacher._id, created._id.toString(), {
@@ -251,11 +248,11 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     expect(adminHttpBlocked.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
     expect((await Class.findById(created._id).lean()).status).toBe("PENDING_APPROVAL");
 
-    // 4a-bis) CUR-07 price range is enforced by approval
-    await Class.updateOne({ _id: created._id }, { $set: { price: mongoose.Types.Decimal128.fromString("100000") } });
+    // 4a-bis) the fixed price range is enforced by approval
+    await Class.updateOne({ _id: created._id }, { $set: { price: mongoose.Types.Decimal128.fromString("999") } });
     await expect(
       adminClassService.approveClass(admin._id, created._id.toString(), {}, contractOk)
-    ).rejects.toMatchObject({ code: "PRICE_OUT_OF_POLICY_RANGE", statusCode: 400 });
+    ).rejects.toMatchObject({ code: "CLASS_PRICE_OUT_OF_RANGE", statusCode: 400 });
     await Class.updateOne({ _id: created._id }, { $set: { price: mongoose.Types.Decimal128.fromString("600000") } });
 
     // 4b) Suspend TEA-07 while PENDING_APPROVAL -> approveClass MUST reject with 403 even if TEA-12 OK!
@@ -291,7 +288,7 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     );
     expect(opened.status).toBe("OPEN");
     expect(opened.syllabusVersionNumber).toBe(1);
-    expect(opened.pricingPolicyVersion).toBe(1);
+    expect(opened.pricingPolicyVersion).toBeNull();
     expect(
       await AuditLog.countDocuments({
         actorAdminId: admin._id,
@@ -304,7 +301,7 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
       await Notification.countDocuments({ userId: teacher._id, type: "CLASS_APPROVED" })
     ).toBeGreaterThanOrEqual(1);
 
-    // Step 5: Publish Syllabus v2 & Policy v2 -> existing OPEN Class retains immutable v1 snapshots
+    // Step 5: Publish Syllabus v2 & Policy v2 -> the OPEN Class keeps its v1 syllabus and takes no policy
     const sv2 = await syllabusService.createDraftVersion(admin._id, course._id.toString(), {
       cloneFromVersionId: sv1._id.toString(),
       title: "Giáo trình v2",
@@ -322,9 +319,8 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     const lockedClass = await Class.findById(created._id).lean();
     expect(lockedClass.syllabusVersionId.toString()).toBe(sv1._id.toString());
     expect(lockedClass.syllabusVersionNumber).toBe(1);
-    expect(lockedClass.pricingPolicyId.toString()).toBe(policyV1._id.toString());
-    expect(lockedClass.pricingPolicyVersion).toBe(1);
-    expect(toNum(lockedClass.pricingPolicySnapshot.minPrice)).toBe(300000);
+    expect(lockedClass.pricingPolicyId).toBeNull();
+    expect(lockedClass.pricingPolicySnapshot).toBeNull();
 
     // Step 6: Verify CUR-09 handover helper & Enrollment schema snapshot persistence
     const enrollSnap = coursePricingPolicyService.buildEnrollmentSnapshotFromClass(lockedClass);
@@ -340,8 +336,8 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     });
     expect(enrollment.syllabusVersionId.toString()).toBe(sv1._id.toString());
     expect(enrollment.syllabusVersionNumber).toBe(1);
-    expect(enrollment.pricingPolicyVersion).toBe(1);
-    expect(enrollment.pricingPolicyKey).toBe(lockedClass.pricingPolicyKey);
+    expect(enrollment.pricingPolicyVersion).toBeNull();
+    expect(enrollment.pricingPolicyKey).toBeNull();
   });
 
   // =========================================================================
@@ -544,10 +540,12 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     }
 
     await expect(
-      classCreationGateService.assertPricingPolicyGate({
-        teacher,
-        course,
-        body: { price: true, classType: "PAID" },
+      teacherClassService.createClass(teacher._id, {
+        courseId: course._id,
+        className: "Bad Price",
+        classType: "PAID",
+        price: true,
+        capacity: 15,
       })
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
 

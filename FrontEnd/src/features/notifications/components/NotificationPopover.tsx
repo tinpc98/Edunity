@@ -119,6 +119,12 @@ export const NotificationPopover: React.FC = () => {
     if (item.type === "TEACHER_VERIFICATION_REJECTED" || item.type === "TEACHER_VERIFIED") {
       void invalidateTeacherVerificationState(queryClient, user?.userId);
     }
+    // The page it opens may already be on screen, and navigating to it again does not refetch
+    if (item.type?.startsWith("TEACHER_SUBJECT_AUTH_") || item.type?.startsWith("TEACHER_CONTRACT_")) {
+      for (const key of ["admin-subject-authorizations", "teacher-subject-authorizations", "teacher-contracts"]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    }
 
     navigate(getNotificationRoute(item.type, user?.role));
   };

@@ -1,8 +1,11 @@
 import { apiClient } from "../api/apiClient";
+import type { PagedResult } from "../types/catalog";
 import type {
+  AdminSubjectAuthorization,
   CreateTeacherSubjectAuthorizationPayload,
   TeacherSubjectAuthorization,
   TeacherSubjectAuthorizationPage,
+  TeacherSubjectAuthorizationStatus,
 } from "../types/teacherSubjectAuthorization";
 
 const PAGE_SIZE = 100;
@@ -50,6 +53,30 @@ class TeacherSubjectAuthorizationService {
     const id = result.id || result._id;
     if (!id) throw new Error("The subject authorization API returned an item without an id.");
     return { ...result, id };
+  }
+
+  adminList(status: TeacherSubjectAuthorizationStatus | "ALL", page: number, pageSize: number) {
+    const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (status !== "ALL") query.set("status", status);
+    return apiClient<PagedResult<AdminSubjectAuthorization>>(`/admin/subject-authorizations?${query.toString()}`);
+  }
+
+  adminGet(id: string) {
+    return apiClient<AdminSubjectAuthorization>(`/admin/subject-authorizations/${id}`);
+  }
+
+  adminApprove(id: string) {
+    return apiClient<AdminSubjectAuthorization>(`/admin/subject-authorizations/${id}/approve`, {
+      method: "POST",
+      body: "{}",
+    });
+  }
+
+  adminSuspend(id: string, reason: string) {
+    return apiClient<AdminSubjectAuthorization>(`/admin/subject-authorizations/${id}/suspend`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
   }
 }
 

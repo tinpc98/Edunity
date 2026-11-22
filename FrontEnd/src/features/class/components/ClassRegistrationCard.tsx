@@ -219,27 +219,6 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
         <div className="text-3xl font-black tracking-tight text-[#0D9488]">
           {item.formattedPrice}
         </div>
-        {item.pricingPolicySnapshot && (
-          <div className="mt-2 rounded-lg bg-[#F5FAF9] border border-[#D6E5E2]/60 p-3 text-xs text-[#334155]">
-            <div className="font-semibold text-[#163B40]">Khung chính sách lúc tạo lớp</div>
-            <div className="mt-1">
-              {item.pricingPolicySnapshot.minPrice != null && item.pricingPolicySnapshot.maxPrice != null
-                ? `${Number(item.pricingPolicySnapshot.minPrice).toLocaleString("vi-VN")}đ – ${Number(item.pricingPolicySnapshot.maxPrice).toLocaleString("vi-VN")}đ`
-                : "Không có giới hạn giá trong bản lưu"}
-              {item.pricingPolicySnapshot.minSessions != null && item.pricingPolicySnapshot.maxSessions != null
-                ? ` · ${item.pricingPolicySnapshot.minSessions}–${item.pricingPolicySnapshot.maxSessions} buổi`
-                : ""}
-            </div>
-            {item.pricingPolicySnapshot.version != null && (
-              <div className="mt-1 text-[11px] text-slate-500">
-                Policy {item.pricingPolicySnapshot.policyKey || ""} v{item.pricingPolicySnapshot.version}
-              </div>
-            )}
-            <div className="mt-1 text-[11px]">
-              Mức học phí trên là giá của lớp; phần trích theo từng học viên hoặc ngoại lệ không được API pricing hiện tại cung cấp.
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Capacity & Progress */}

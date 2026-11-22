@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -37,16 +37,13 @@ import type {
   GradeLevel,
 } from "../../../types/catalog";
 import {
-  GRADE_LEVELS,
+  offeredGradeLevels,
   GRADE_LEVEL_LABELS,
   COURSE_LEVEL_LABELS,
   PROPOSAL_STATUSES,
 } from "../../../types/catalog";
 
 const { TextArea } = Input;
-const PROPOSAL_APPROVAL_ENABLED = false;
-const PROPOSAL_APPROVAL_BLOCK_REASON =
-  "Phê duyệt đang tạm khóa: BA/PO chưa xác nhận trạng thái Course được tạo sau khi duyệt đề xuất.";
 
 const STATUS_CONFIG: Record<ProposalStatus, { color: string; label: string; icon: React.ReactNode }> = {
   PENDING_REVIEW: { color: "orange", label: "Chờ duyệt", icon: <ClockCircleOutlined /> },
@@ -129,6 +126,14 @@ export default function AdminCourseProposalsPage() {
     staleTime: 30_000,
   });
 
+  // Reviewing the last proposal of a page removes that page
+  const totalPages = proposalsData?.totalPages;
+  useEffect(() => {
+    if (totalPages !== undefined && page > Math.max(1, totalPages)) {
+      updateSearchParams({ page: String(Math.max(1, totalPages)) }, { replace: true });
+    }
+  }, [page, totalPages, updateSearchParams]);
+
   // Categories for gradeLevel filtering (BR-45)
   const { data: categories = [] } = useQuery({
     queryKey: ["admin-categories"],
@@ -171,6 +176,13 @@ export default function AdminCourseProposalsPage() {
     },
     onError: (err: unknown) => {
       messageApi.error(getFriendlyErrorMessage(err, "Lỗi khi phê duyệt đề xuất."));
+      const code = (err as { code?: string }).code;
+      if (code === "COURSE_PROPOSAL_CHANGED" || code === "COURSE_PROPOSAL_NOT_PENDING") {
+        // What is on screen is stale: close the confirmation and show the current proposal
+        setActionType(null);
+        queryClient.invalidateQueries({ queryKey: ["admin-course-proposals"] });
+        queryClient.invalidateQueries({ queryKey: ["admin-course-proposal-detail"] });
+      }
     },
   });
 
@@ -213,17 +225,12 @@ export default function AdminCourseProposalsPage() {
   });
 
   const handleOpenReview = (proposal: CourseProposal, type: ReviewActionType) => {
-    if (type === "approve" && !PROPOSAL_APPROVAL_ENABLED) {
-      messageApi.warning(PROPOSAL_APPROVAL_BLOCK_REASON);
-      return;
-    }
     setSelectedProposal(proposal);
     setActionType(type);
     reviewForm.resetFields();
     if (type === "approve") {
       const cat = categories.find((c) => c.id === proposal.categoryId);
-      const allowedGrades =
-        cat && cat.allowedGradeLevels !== null ? cat.allowedGradeLevels : GRADE_LEVELS;
+      const allowedGrades = offeredGradeLevels(cat);
       const validGradeLevel =
         proposal.gradeLevel && (allowedGrades as readonly string[]).includes(proposal.gradeLevel)
           ? proposal.gradeLevel
@@ -238,23 +245,16 @@ export default function AdminCourseProposalsPage() {
   const selectedProposalCategory = categories.find(
     (c) => c.id === selectedProposal?.categoryId
   );
-  const allowedProposalGradeLevels: readonly GradeLevel[] = selectedProposalCategory
-    ? selectedProposalCategory.allowedGradeLevels === null
-      ? GRADE_LEVELS
-      : selectedProposalCategory.allowedGradeLevels
-    : GRADE_LEVELS;
+  const allowedProposalGradeLevels: readonly GradeLevel[] = offeredGradeLevels(selectedProposalCategory);
 
   const handleExecuteAction = (values: ReviewFormValues) => {
     if (!selectedProposal || !actionType) return;
     if (actionType === "approve") {
-      if (!PROPOSAL_APPROVAL_ENABLED) {
-        messageApi.warning(PROPOSAL_APPROVAL_BLOCK_REASON);
-        return;
-      }
       approveMutation.mutate({
         id: selectedProposal.id,
         payload: {
-          gradeLevel: values.gradeLevel,
+          gradeLevel: values.gradeLevel ?? null, // a cleared select must not fall back to the teacher's grade
+          revisionNumber: selectedProposal.revisionNumber,
           reviewNote: values.reviewNote?.trim() || undefined,
         },
       });
@@ -446,8 +446,6 @@ export default function AdminCourseProposalsPage() {
                         size="small"
                         type="primary"
                         className="bg-emerald-600 hover:bg-emerald-700"
-                        disabled={!PROPOSAL_APPROVAL_ENABLED}
-                        title={!PROPOSAL_APPROVAL_ENABLED ? PROPOSAL_APPROVAL_BLOCK_REASON : undefined}
                         onClick={() => handleOpenReview(record, "approve")}
                       >
                         Duyệt
@@ -522,8 +520,7 @@ export default function AdminCourseProposalsPage() {
                 <Button
                   key="approve"
                   type="primary"
-                  disabled={isSubmitting || !PROPOSAL_APPROVAL_ENABLED}
-                  title={!PROPOSAL_APPROVAL_ENABLED ? PROPOSAL_APPROVAL_BLOCK_REASON : undefined}
+                  disabled={isSubmitting}
                   className="bg-emerald-600 hover:bg-emerald-700"
                   onClick={() => handleOpenReview(activeProposal, "approve")}
                 >
@@ -688,7 +685,7 @@ export default function AdminCourseProposalsPage() {
                       <div>Ghi chú: {activeProposal.pricingExpectation.notes}</div>
                     )}
                     <div className="text-xs text-amber-700">
-                      Đây không phải giá áp dụng; chính sách giá cần được cấu hình riêng.
+                      Đây không phải giá áp dụng; giáo viên đặt học phí khi tạo lớp, trong giới hạn của Edunity.
                     </div>
                   </div>
                 </div>
@@ -773,23 +770,37 @@ export default function AdminCourseProposalsPage() {
           {actionType === "approve" && (
             <>
               <Alert
-                type="warning"
-                message="Phê duyệt đang bị khóa"
-                description={PROPOSAL_APPROVAL_BLOCK_REASON}
+                type="info"
+                message={`Khóa học "${selectedProposal?.title ?? ""}" sẽ được tạo ở trạng thái Hoạt động`}
+                description="Giáo viên có thể chọn khóa học này để tạo lớp và người gửi đề xuất sẽ nhận thông báo."
                 showIcon
                 className="mb-4"
               />
+              {!selectedProposal?.level && (
+                <Alert
+                  type="warning"
+                  message="Đề xuất chưa có cấp độ"
+                  description="Sau khi duyệt, cần bổ sung cấp độ ở trang Khóa học thì giáo viên mới tạo lớp được."
+                  showIcon
+                  className="mb-4"
+                />
+              )}
 
               <Form.Item
                 name="gradeLevel"
                 label="Xác nhận Khối lớp áp dụng (Admin có thể điều chỉnh)"
+                rules={[
+                  {
+                    required: true,
+                    message: "Chọn khối: Lớp 6–12 hoặc Ôn thi đại học.",
+                  },
+                ]}
               >
                 <Select
-                  allowClear
                   disabled={allowedProposalGradeLevels.length === 0}
                   placeholder={
                     allowedProposalGradeLevels.length === 0
-                      ? "Danh mục này không áp dụng khối lớp"
+                      ? "Danh mục ngoài phạm vi Lớp 6–12 và Ôn thi đại học"
                       : "Chọn khối lớp phù hợp"
                   }
                   options={allowedProposalGradeLevels.map((g) => ({

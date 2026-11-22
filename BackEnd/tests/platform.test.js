@@ -236,9 +236,11 @@ describe("Catalog", () => {
     const created = await request(app).post("/api/admin/courses").set(as(admin)).send({ subjectId: subject._id, title: "Toán 7", gradeLevel: "GRADE_7", level: "BEGINNER" });
     expect(created.statusCode).toBe(201);
 
-    const ielts = await request(app).post("/api/admin/courses").set(as(admin)).send({ subjectId: sub.body.data.id, title: "IELTS 6.5" });
+    const ungraded = await request(app).post("/api/admin/courses").set(as(admin)).send({ subjectId: sub.body.data.id, title: "IELTS 6.5" });
+    expect(ungraded.body.error).toBe("GRADE_LEVEL_REQUIRED"); // also in a category without grade groups
+    const ielts = await request(app).post("/api/admin/courses").set(as(admin)).send({ subjectId: sub.body.data.id, title: "IELTS 6.5", gradeLevel: "UNIVERSITY_EXAM_PREP" });
     expect(ielts.statusCode).toBe(201);
-    expect(ielts.body.data.gradeLevel).toBeNull();
+    expect(ielts.body.data.gradeLevel).toBe("UNIVERSITY_EXAM_PREP");
 
     const byGrade = await request(app).get("/api/courses?gradeLevel=GRADE_6");
     expect(byGrade.body.data.total).toBe(1);

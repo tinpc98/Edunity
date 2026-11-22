@@ -67,7 +67,7 @@ export default function Footer() {
           <div>
             <h4 className="text-sm font-extrabold text-[#163B40] mb-4 uppercase tracking-wider">Khám phá</h4>
             <ul className="space-y-2.5 text-xs text-[#64748B]">
-              <li><a href="/classes?grades=GRADE_10,GRADE_11,GRADE_12" className="hover:text-[#0D9488] transition-colors">Trung học phổ thông</a></li>
+              <li><a href="/classes?grades=GRADE_10,GRADE_11,GRADE_12,UNIVERSITY_EXAM_PREP" className="hover:text-[#0D9488] transition-colors">Trung học phổ thông</a></li>
               <li><a href="/classes?grades=GRADE_6,GRADE_7,GRADE_8,GRADE_9" className="hover:text-[#0D9488] transition-colors">Trung học cơ sở</a></li>
               <li><a href="/classes" className="hover:text-[#0D9488] transition-colors">Luyện thi đại học</a></li>
               <li><a href="/classes?classTypes=FREE" className="hover:text-[#0D9488] transition-colors">Lớp học miễn phí</a></li>

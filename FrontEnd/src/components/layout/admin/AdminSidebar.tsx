@@ -11,6 +11,7 @@ import {
   BookOutlined,
   SafetyCertificateOutlined,
   ProfileOutlined,
+  SolutionOutlined,
   InboxOutlined,
   BarChartOutlined,
   FileTextOutlined,
@@ -74,6 +75,12 @@ const navGroups: NavGroup[] = [
         label: "Giáo viên",
         icon: <IdcardOutlined className="text-[17px]" />,
         path: ROUTES.ADMIN.TEACHER_VERIFICATIONS,
+      },
+      {
+        key: ROUTES.ADMIN.SUBJECT_AUTHORIZATIONS,
+        label: "Duyệt quyền giảng dạy",
+        icon: <SolutionOutlined className="text-[17px]" />,
+        path: ROUTES.ADMIN.SUBJECT_AUTHORIZATIONS,
       },
       {
         key: ROUTES.ADMIN.CATEGORIES,

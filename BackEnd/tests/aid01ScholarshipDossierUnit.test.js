@@ -35,7 +35,7 @@ describe("AID-01 Unit Tests — Dossier Validation, Checklist Evaluation, Consen
     expect(SCHOLARSHIP_APPLICATION_STATUSES).toContain("DRAFT");
     expect(SCHOLARSHIP_APPLICATION_STATUSES).toContain("DOSSIER_VERIFIED");
     expect(PAPER_RECEIPT_STATUSES).toContain("RECONCILED");
-    expect(GRADE_LEVELS).toHaveLength(15);
+    expect(GRADE_LEVELS).toHaveLength(16);
   });
 
   test("AID-01.U2: parseGuardianInfo validates required fields, formats phone/email/last4, and rejects NoSQL/bad shapes", () => {

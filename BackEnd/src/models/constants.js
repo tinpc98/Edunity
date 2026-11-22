@@ -12,8 +12,22 @@ const GRADE_LEVELS = [
   "GRADE_10",
   "GRADE_11",
   "GRADE_12",
+  "UNIVERSITY_EXAM_PREP",
   "UNIVERSITY",
   "COLLEGE",
+];
+
+// Offered for new courses, proposals, teaching registrations and classes. GRADE_LEVELS also keeps what older
+// records hold, so they still save.
+const SUPPORTED_GRADE_LEVELS = [
+  "GRADE_6",
+  "GRADE_7",
+  "GRADE_8",
+  "GRADE_9",
+  "GRADE_10",
+  "GRADE_11",
+  "GRADE_12",
+  "UNIVERSITY_EXAM_PREP",
 ];
 
 const COURSE_LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED"];
@@ -76,6 +90,7 @@ const CONVERSATION_STATUSES = ["ACTIVE", "ARCHIVED"];
 
 module.exports = {
   GRADE_LEVELS,
+  SUPPORTED_GRADE_LEVELS,
   COURSE_LEVELS,
   SYLLABUS_VERSION_STATUSES,
   LEARNING_PATH_STATUSES,

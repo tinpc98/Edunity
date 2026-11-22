@@ -10,18 +10,10 @@ import { classService } from "./class.service";
 import { catalogService } from "./catalog.service";
 import { adaptClassModelToDiscoveryItem } from "../api/classAdapters";
 import { apiClient } from "../api/apiClient";
-import { GRADE_LEVEL_LABELS } from "../types/catalog";
+import { GRADE_LEVEL_LABELS, SUPPORTED_GRADE_LEVELS } from "../types/catalog";
 import type { ClassListFilters } from "../types/class";
 
-export const COMMON_DISCOVERY_GRADES: BackendGradeLevel[] = [
-  "GRADE_6",
-  "GRADE_7",
-  "GRADE_8",
-  "GRADE_9",
-  "GRADE_10",
-  "GRADE_11",
-  "GRADE_12",
-];
+export const COMMON_DISCOVERY_GRADES: BackendGradeLevel[] = [...SUPPORTED_GRADE_LEVELS];
 
 /** Upper bound of the price slider; GET /api/catalog/filters returns the same value. */
 export const DEFAULT_MAX_PRICE = 5000000;

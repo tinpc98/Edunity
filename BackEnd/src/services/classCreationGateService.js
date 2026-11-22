@@ -1,33 +1,29 @@
 const { Category, Subject, SyllabusVersion } = require("../models");
 const { COURSE_LEVELS } = require("../models/constants");
 const { AppError } = require("../utils/errors");
-const { validationError } = require("../utils/http");
-const { toNum, toDec } = require("../utils/money");
 const { resolveGradeLevel } = require("../utils/gradeLevel");
 const catalog = require("./courseCatalogService");
-const pricingPolicyService = require("./coursePricingPolicyService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 
+// Tuition per student for the whole course. FrontEnd/src/utils/classForm.ts mirrors these two limits.
+const MIN_CLASS_PRICE = 1000;
+const MAX_CLASS_PRICE = 5000000;
+
 /**
- * External dependency verifier ports for CUR-10:
- * - CUR-07 (CoursePricingPolicy): WIRED by default to coursePricingPolicyService.verifyClassPricingPolicy.
+ * External dependency verifier port for CUR-10:
  * - TEA-12 (TeacherContract ACTIVE): WIRED by default to teacherContractService.verifyContract.
  *
  * IMPORTANT: User.teacherProfile.verificationStatus === "VERIFIED" is NEVER treated as equivalent
  * to TEA-12 contract ACTIVE. Without a contract verifier, the contract gate fails closed (503).
  */
 const defaultVerifiers = () => ({
-  pricingPolicyVerifier: pricingPolicyService.verifyClassPricingPolicy,
   contractVerifier: (args) => require("./teacherContractService").verifyContract(args), // lazy: avoids a require cycle
 });
 
 let registeredVerifiers = defaultVerifiers();
 
 const setDependencyVerifiers = (overrides = {}) => {
-  if ("pricingPolicyVerifier" in overrides) {
-    registeredVerifiers.pricingPolicyVerifier = overrides.pricingPolicyVerifier || null;
-  }
   if ("contractVerifier" in overrides) {
     registeredVerifiers.contractVerifier = overrides.contractVerifier || null;
   }
@@ -38,7 +34,6 @@ const resetDependencyVerifiers = () => {
 };
 
 const getDependencyStatus = () => ({
-  cur07PricingPolicyReady: typeof registeredVerifiers.pricingPolicyVerifier === "function",
   tea12ContractReady: typeof registeredVerifiers.contractVerifier === "function",
 });
 
@@ -124,51 +119,21 @@ const assertCourseAlignment = async ({ course, cls = null, body = {} }) => {
   return { subject, category, level: normalizedCourseLevel, gradeLevel: normalizedCourseGrade };
 };
 
-/**
- * Step 4: CUR-07 CoursePricingPolicy verification gate (fail-closed if CUR-07 is missing).
- */
-const assertPricingPolicyGate = async ({ teacher, course, cls, body, totalSessions = null, pricingPolicyVerifier }) => {
-  const verifier = pricingPolicyVerifier !== undefined ? pricingPolicyVerifier : registeredVerifiers.pricingPolicyVerifier;
-  if (typeof verifier !== "function") {
-    const err = new AppError(
-      "Class pricing policy check is blocked because CUR-07 (CoursePricingPolicy) is not available in this codebase",
-      "PRICING_POLICY_DEPENDENCY_BLOCKED",
-      503
-    );
-    err.details = { dependency: "CUR-07", status: "BLOCKED" };
-    throw err;
-  }
+const getClassPriceRange = (classType) =>
+  classType === "FREE" ? { minPrice: 0, maxPrice: 0 } : { minPrice: MIN_CLASS_PRICE, maxPrice: MAX_CLASS_PRICE };
 
-  let price = 0;
-  if (cls && cls.price !== undefined) {
-    price = toNum(cls.price);
-  } else if (body && body.price !== undefined) {
-    if (
-      body.price === null ||
-      typeof body.price === "boolean" ||
-      Array.isArray(body.price) ||
-      typeof body.price === "object" ||
-      (typeof body.price === "string" && body.price.trim() === "")
-    ) {
-      throw validationError("price must be a finite number");
-    }
-    price = Number(body.price);
-    if (!Number.isFinite(price)) {
-      throw validationError("price must be a finite number");
-    }
-  }
-  const classType = (cls && cls.classType) || (body && body.classType) || null;
-  const result = await verifier({ teacher, course, cls, body, price, classType, totalSessions });
-  if (result && result.valid === false) {
-    const err = new AppError(
-      result.message || "Class pricing violates active CoursePricingPolicy",
-      result.code || "PRICING_POLICY_VIOLATION",
-      result.statusCode || 400
-    );
-    if (result.details) err.details = result.details;
-    throw err;
-  }
-  return result || { valid: true };
+/**
+ * Step 4: one tuition range for every course. CoursePricingPolicy no longer takes part in opening a class.
+ */
+const assertClassPrice = (classType, price) => {
+  const { minPrice, maxPrice } = getClassPriceRange(classType);
+  if (Number.isInteger(price) && price >= minPrice && price <= maxPrice) return;
+  throw new AppError(
+    `${classType} class price must be an integer from ${minPrice} to ${maxPrice} VND per student`,
+    "CLASS_PRICE_OUT_OF_RANGE",
+    400,
+    { classType, minPrice, maxPrice }
+  );
 };
 
 /**
@@ -217,32 +182,6 @@ const assertVerificationCurrent = ({ teacher, now = new Date() }) => {
   }
 };
 
-/**
- * A DRAFT is not held to CUR-07, but still records the policy it already satisfies (CUR-09).
- * Approval re-evaluates the policy and overwrites this snapshot.
- */
-const findSatisfiedPricingPolicy = async (args) => {
-  try {
-    return await assertPricingPolicyGate(args);
-  } catch (err) {
-    if (err instanceof AppError) return null;
-    throw err;
-  }
-};
-
-/** CUR-07 also defines how many sessions make a class complete; unlike its price range, that part blocks submission. */
-const assertSessionCountWithinPolicy = async ({ course, cls, totalSessions }) => {
-  if (!course) return;
-  const policy = await pricingPolicyService.resolveEffectivePolicy({ course, classType: cls.classType });
-  if (!policy || (totalSessions >= policy.minSessions && totalSessions <= policy.maxSessions)) return;
-  throw new AppError(
-    `Class session count ${totalSessions} violates active CoursePricingPolicy bounds [${policy.minSessions}, ${policy.maxSessions}]`,
-    "SESSION_COUNT_OUT_OF_POLICY_RANGE",
-    400,
-    { minSessions: policy.minSessions, maxSessions: policy.maxSessions, actualSessions: totalSessions }
-  );
-};
-
 const CHECK_LABELS = {
   TEACHER_VERIFICATION: "Xác minh giáo viên",
   COURSE: "Khóa học chuẩn",
@@ -250,7 +189,7 @@ const CHECK_LABELS = {
   SCHEDULE_SESSIONS: "Lịch học và buổi học",
   TEACHING_AUTHORIZATION: "Quyền giảng dạy",
   TEACHER_CONTRACT: "Hợp đồng giảng dạy",
-  PRICING_POLICY: "Chính sách giá",
+  CLASS_PRICE_RANGE: "Học phí",
 };
 
 const FIELD_LABELS = {
@@ -282,13 +221,12 @@ const FAILURE_MESSAGES = {
   COURSE_CATALOG_INACTIVE: "Môn học hoặc danh mục của khóa học không còn hoạt động",
   COURSE_LEVEL_REQUIRED: "Khóa học chuẩn chưa có cấp độ hợp lệ",
   COURSE_ATTRIBUTE_MISMATCH: "Thông tin lớp không còn khớp với khóa học chuẩn",
+  GRADE_LEVEL_NOT_SUPPORTED: "Khóa học ngoài phạm vi Lớp 6–12 và Ôn thi đại học",
   CLASS_INCOMPLETE: ({ missing = [] }) => `Còn thiếu: ${missing.map((field) => FIELD_LABELS[field] || field).join(", ")}`,
   CLASS_DATES_INVALID: "Ngày bắt đầu phải trước ngày kết thúc",
   CLASS_START_DATE_REACHED: "Ngày khai giảng phải sau hôm nay để kịp xét duyệt",
   SCHEDULE_OVERLAP: "Các ca học trong tuần đang trùng giờ nhau",
   SESSION_OUT_OF_CLASS_RANGE: "Có buổi học nằm ngoài khoảng ngày khai giảng – kết thúc",
-  SESSION_COUNT_OUT_OF_POLICY_RANGE: ({ minSessions, maxSessions, actualSessions }) =>
-    `Lớp có ${actualSessions} buổi, chính sách yêu cầu từ ${minSessions} đến ${maxSessions} buổi`,
   SUBJECT_AUTHORIZATION_REQUIRED: "Giáo viên chưa có quyền giảng dạy được duyệt cho môn, khối và cấp độ này",
   SUBJECT_AUTHORIZATION_PENDING: "Quyền giảng dạy đang chờ Admin duyệt",
   SUBJECT_AUTHORIZATION_SUSPENDED: "Quyền giảng dạy đang bị đình chỉ",
@@ -297,13 +235,10 @@ const FAILURE_MESSAGES = {
     `Hợp đồng giảng dạy ${CONTRACT_STATES[contractStatus] || "không ở trạng thái có hiệu lực"}`,
   TEACHER_CONTRACT_EXPIRED: "Hợp đồng giảng dạy đã hết hạn",
   CONTRACT_DEPENDENCY_BLOCKED: "Chưa kiểm tra được hợp đồng giảng dạy",
-  PRICING_POLICY_NOT_CONFIGURED: "Chưa có chính sách giá hiệu lực cho khóa học này",
-  PRICING_POLICY_FREE_NOT_ALLOWED: "Chính sách giá không cho phép mở lớp miễn phí",
-  PRICING_POLICY_DEPENDENCY_BLOCKED: "Chưa kiểm tra được chính sách giá",
-  PRICE_OUT_OF_POLICY_RANGE: ({ minPrice, maxPrice }) =>
-    minPrice === undefined
-      ? "Học phí nằm ngoài khung chính sách giá"
-      : `Học phí phải từ ${formatVnd(minPrice)} đến ${formatVnd(maxPrice)} VNĐ`,
+  CLASS_PRICE_OUT_OF_RANGE: ({ classType, minPrice, maxPrice }) =>
+    classType === "FREE"
+      ? "Lớp miễn phí phải có học phí 0 VNĐ"
+      : `Học phí phải là số nguyên từ ${formatVnd(minPrice)} đến ${formatVnd(maxPrice)} VNĐ/học viên`,
 };
 
 const describeFailure = (key, err) => {
@@ -351,9 +286,10 @@ const throwFailedChecks = (results) => {
 };
 
 /**
- * CUR-09: Captures immutable SyllabusVersion + CoursePricingPolicy snapshots for a Class.
+ * CUR-09: Captures the immutable SyllabusVersion snapshot for a Class.
+ * The pricingPolicy* fields are history: they are neither filled nor cleared any more.
  */
-const captureClassSnapshots = async ({ course, pricingResult = null, now = new Date() }) => {
+const captureClassSnapshots = async ({ course }) => {
   let syllabusVersionId = course && course.publishedSyllabusVersionId ? course.publishedSyllabusVersionId : null;
   let syllabusVersionNumber = null;
 
@@ -367,60 +303,23 @@ const captureClassSnapshots = async ({ course, pricingResult = null, now = new D
     }
   }
 
-  const hasRichPolicy = Boolean(
-    pricingResult &&
-      (pricingResult.policyId || pricingResult.policyKey || pricingResult.policyVersion !== undefined)
-  );
-
-  const pricingPolicyId = hasRichPolicy && pricingResult.policyId ? pricingResult.policyId : null;
-  const pricingPolicyKey = hasRichPolicy && pricingResult.policyKey ? pricingResult.policyKey : null;
-  const pricingPolicyVersion =
-    hasRichPolicy && pricingResult.policyVersion !== undefined && pricingResult.policyVersion !== null
-      ? Number(pricingResult.policyVersion)
-      : null;
-
-  const pricingPolicySnapshot = hasRichPolicy
-    ? {
-        policyId: pricingPolicyId,
-        policyKey: pricingPolicyKey,
-        version: pricingPolicyVersion,
-        scopeType: pricingResult.scopeType || null,
-        classType: pricingResult.classType || null,
-        allowFree: pricingResult.allowFree !== undefined ? pricingResult.allowFree : null,
-        minPrice: pricingResult.minPrice !== undefined && pricingResult.minPrice !== null ? toDec(pricingResult.minPrice) : null,
-        maxPrice: pricingResult.maxPrice !== undefined && pricingResult.maxPrice !== null ? toDec(pricingResult.maxPrice) : null,
-        minSessions: pricingResult.minSessions !== undefined ? pricingResult.minSessions : null,
-        maxSessions: pricingResult.maxSessions !== undefined ? pricingResult.maxSessions : null,
-        effectiveFrom: pricingResult.effectiveFrom || null,
-        effectiveTo: pricingResult.effectiveTo || null,
-        capturedAt: now,
-      }
-    : null;
-
-  return {
-    syllabusVersionId,
-    syllabusVersionNumber,
-    pricingPolicyId,
-    pricingPolicyKey,
-    pricingPolicyVersion,
-    pricingPolicySnapshot,
-  };
+  return { syllabusVersionId, syllabusVersionNumber };
 };
 
 module.exports = {
+  MIN_CLASS_PRICE,
+  MAX_CLASS_PRICE,
+  getClassPriceRange,
+  assertClassPrice,
   assertVerificationCurrent,
   setDependencyVerifiers,
   resetDependencyVerifiers,
   getDependencyStatus,
   assertCourseAlignment,
-  assertPricingPolicyGate,
   assertTeacherContractGate,
-  findSatisfiedPricingPolicy,
-  assertSessionCountWithinPolicy,
   runClassChecks,
   presentCheck,
   throwFailedChecks,
   captureClassSnapshots,
-  buildEnrollmentSnapshotFromClass: pricingPolicyService.buildEnrollmentSnapshotFromClass,
 };
 

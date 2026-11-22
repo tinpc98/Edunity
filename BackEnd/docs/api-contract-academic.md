@@ -64,11 +64,10 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `COURSE_ATTRIBUTE_MISMATCH` | Thuộc tính môn/danh mục/khối lớp/trình độ truyền lên không khớp Course (`CUR-10`) |
 | | `COURSE_LEVEL_REQUIRED` | Khóa học chưa cấu hình `level` hợp lệ để mở lớp |
 | | `LEARNING_PATH_INVALID_PREREQUISITE` | Môn tiên quyết tự tham chiếu, tham chiếu vòng hoặc nằm ở bước sau (`CUR-03`) |
-| | `PRICE_OUT_OF_POLICY_RANGE` | Học phí lớp học vượt ngoài `[minPrice, maxPrice]` của `CoursePricingPolicy` hiệu lực (`CUR-07`) |
-| | `SESSION_COUNT_OUT_OF_POLICY_RANGE` | Số buổi học vượt ngoài `[minSessions, maxSessions]` của `CoursePricingPolicy` (`CUR-07`) |
-| | `PRICING_POLICY_FREE_NOT_ALLOWED` | Chính sách giá hiện hành không cho phép mở lớp `FREE` (`CUR-07`) |
-| | `PRICING_POLICY_NOT_CONFIGURED` | Chưa cấu hình `CoursePricingPolicy` hiệu lực cho khóa học (`CUR-07`) |
-| | `GRADE_LEVEL_REQUIRED` | Thiếu `gradeLevel` cho danh mục có ràng buộc khối lớp (`TEA-07`) |
+| | `CLASS_PRICE_OUT_OF_RANGE` | Học phí/học viên không phải số nguyên `1000..5000000` (`PAID`) hoặc khác `0` (`FREE`) |
+| | `PROPOSAL_CATALOG_INACTIVE` | Danh mục hoặc môn học của đề xuất khóa học không `ACTIVE` |
+| | `GRADE_LEVEL_REQUIRED` | Thiếu `gradeLevel` khi tạo khóa học, gửi/sửa/duyệt đề xuất hoặc đăng ký quyền dạy (bắt buộc với mọi danh mục) |
+| | `GRADE_LEVEL_NOT_SUPPORTED` | Khối ngoài `GRADE_6..GRADE_12`, `UNIVERSITY_EXAM_PREP` khi ghi mới, tạo, gửi duyệt hoặc phê duyệt lớp (`details.supportedGradeLevels`). Dữ liệu cũ vẫn đọc và lưu được |
 | | `CLASS_INCOMPLETE` | Lớp học chưa đủ thông tin bắt buộc khi bấm gửi duyệt (`details.missing`) |
 | | `SESSION_OUT_OF_CLASS_RANGE` | Lịch buổi học nằm ngoài khoảng `startDate` đến `endDate` của Lớp học |
 | **401 Unauthorized** | `UNAUTHORIZED` | Thiếu token xác thực, token không hợp lệ hoặc sai chữ ký webhook |
@@ -166,7 +165,6 @@ Theo chuẩn `parsePaging` và `paged` tại `BackEnd/src/utils/http.js`:
 | | `AI_OUTPUT_UNGROUNDED` | Chặn tóm tắt AI chứa số liệu bịa đặt không khớp tập dữ liệu tổng hợp xác thực |
 | **503 Service Unavailable** | `VIDEO_PROVIDER_UNAVAILABLE` | Lỗi kết nối dịch vụ LiveKit Server |
 | | `RECORDING_START_FAILED` | Không thể khởi động phiên ghi hình bài giảng |
-| | `PRICING_POLICY_DEPENDENCY_BLOCKED` | Cổng kiểm tra chính sách giá (`CUR-07` `CoursePricingPolicy`) chưa sẵn sàng (fail-closed) |
 | | `CONTRACT_DEPENDENCY_BLOCKED` | Cổng xác minh hợp đồng giảng viên `ACTIVE` (`TEA-12` của Bảo) chưa sẵn sàng (fail-closed, không thay thế bằng `VERIFIED`) |
 | | `CONSENT_DEPENDENCY_BLOCKED` | Cổng xác minh đồng thuận người giám hộ (`AID-08` của Bảo) chưa sẵn sàng (fail-closed khi campaign bật `requireGuardianConsentForMinor`) |
 | | `AI_PROVIDER_BLOCKED` | Chặn thực thi AI (fail-closed) khi chưa có nhà cung cấp AI/API key/chính sách `AID-08` được phê duyệt |
@@ -211,7 +209,7 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 | **CUR** | `PATCH` | `/api/teacher/course-proposals/:id` | `TEACHER` | Chỉ sửa khi `PENDING_REVIEW` hoặc `NEED_CHANGES` |
 | **CUR** | `GET` | `/api/admin/course-proposals` | `ADMIN` | Danh sách đề xuất chờ duyệt |
 | **CUR** | `GET` | `/api/admin/course-proposals/:id` | `ADMIN` | Chi tiết đề xuất kèm thông tin giảng viên |
-| **CUR** | `POST` | `/api/admin/course-proposals/:id/approve` | `ADMIN` | Transaction tạo Course + tự động xuất bản `SyllabusVersion` v1 nếu có `syllabusDraft` (`CUR-05`) |
+| **CUR** | `POST` | `/api/admin/course-proposals/:id/approve` | `ADMIN` | Transaction tạo Course `ACTIVE` + tự động xuất bản `SyllabusVersion` v1 nếu có `syllabusDraft` (`CUR-05`). Nhận `revisionNumber` (tùy chọn); lệch bản thì `409 COURSE_PROPOSAL_CHANGED` |
 | **CUR** | `POST` | `/api/admin/course-proposals/:id/reject` | `ADMIN` | Từ chối đề xuất khóa học |
 | **CUR** | `POST` | `/api/admin/course-proposals/:id/request-changes` | `ADMIN` | Yêu cầu sửa đổi kèm `reviewNote` (lưu `revisionHistory`) |
 | **CUR** | `GET` | `/api/learning-paths` | Public | Danh sách lộ trình học tập `PUBLISHED` (`CUR-03`) |
@@ -237,11 +235,11 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 | **LMS** | `GET` | `/api/classes/:id` | Public | Chi tiết lớp học + hồ sơ giảng viên |
 | **LMS** | `GET` | `/api/classes/:id/sessions` | Public | Danh sách buổi học công khai |
 | **LMS** | `GET` | `/api/teacher/classes` | `TEACHER` | Lớp của giảng viên đăng nhập |
-| **LMS** | `POST` | `/api/teacher/classes` | `TEACHER` | Tạo `DRAFT`: yêu cầu `VERIFIED` còn hạn + `Course ACTIVE` khớp. Không yêu cầu `TEA-07`/`CUR-07`/`TEA-12` |
+| **LMS** | `POST` | `/api/teacher/classes` | `TEACHER` | Tạo `DRAFT`: yêu cầu `VERIFIED` còn hạn + `Course ACTIVE` khớp. Học phí/học viên: `PAID` 1000..5000000, `FREE` 0. Không yêu cầu `TEA-07`/`TEA-12` |
 | **LMS** | `GET` | `/api/teacher/classes/:id` | `TEACHER` | Chi tiết lớp của tôi + sessions |
 | **LMS** | `PATCH` | `/api/teacher/classes/:id` | `TEACHER` | Chỉ sửa khi `DRAFT` hoặc `NEED_CHANGES`; cùng điều kiện với tạo `DRAFT` |
-| **LMS** | `POST` | `/api/teacher/classes/:id/submit` | `TEACHER` | Bắt buộc đủ thông tin, ngày, lịch, buổi học. `TEA-07`/`CUR-07` (khung giá)/`TEA-12` chỉ trả `approvalWarnings` |
-| **LMS** | `GET` | `/api/teacher/classes/:id/readiness` | `TEACHER` | `canSaveDraft`, `canSubmit`, `canApprove`, `checks` của lớp mình |
+| **LMS** | `POST` | `/api/teacher/classes/:id/submit` | `TEACHER` | Bắt buộc đủ thông tin, ngày, lịch, buổi học, học phí hợp lệ. `TEA-07`/`TEA-12` chỉ trả `approvalWarnings` |
+| **LMS** | `GET` | `/api/teacher/classes/:id/readiness` | `TEACHER` | `canSaveDraft`, `canSubmit`, `canApprove`, `tuition` (`current`, `minPrice`, `maxPrice`), `checks` của lớp mình |
 | **LMS** | `GET` | `/api/teacher/classes/:id/students` | `TEACHER` | Xem học viên lớp của mình |
 | **LMS** | `GET` | `/api/teacher/classes/:id/planned-sessions`| `TEACHER`| Dự kiến lịch từ schedule theo múi giờ `Asia/Ho_Chi_Minh` $\rightarrow$ UTC |
 | **LMS** | `GET` | `/api/admin/classes/pending` | `ADMIN` | Danh sách lớp chờ phê duyệt |

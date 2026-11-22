@@ -4,7 +4,7 @@ import { Alert, App as AntdApp, Button, Form, Input, Modal, Select, Skeleton, Sp
 import { PlusOutlined } from "@ant-design/icons";
 import { teacherSubjectAuthorizationService } from "../../../services/teacherSubjectAuthorization.service";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
-import { GRADE_LEVELS, GRADE_LEVEL_LABELS, COURSE_LEVELS, COURSE_LEVEL_LABELS } from "../../../types/catalog";
+import { GRADE_LEVEL_LABELS, COURSE_LEVELS, COURSE_LEVEL_LABELS, offeredGradeLevels } from "../../../types/catalog";
 import type {
   CreateTeacherSubjectAuthorizationPayload,
   TeacherSubjectAuthorization,
@@ -48,7 +48,6 @@ export default function TeacherSubjectAuthorizationCard() {
     queryKey: ["teacher-subject-authorizations", user?.userId],
     queryFn: () => teacherSubjectAuthorizationService.listAllMyAuthorizations(),
     enabled: isTeacher,
-    staleTime: 30_000,
   });
   const authorizations = authorizationsQuery.data ?? [];
 
@@ -67,7 +66,7 @@ export default function TeacherSubjectAuthorizationCard() {
     onError: (error: unknown) => message.error(getFriendlyErrorMessage(error, "Không thể gửi yêu cầu đăng ký môn.")),
   });
   const requestCategory = categories.find((category) => category.id === requestCategoryId);
-  const requestGradeLevels = requestCategory?.allowedGradeLevels ?? GRADE_LEVELS;
+  const requestGradeLevels = offeredGradeLevels(requestCategory);
 
   return (
     <div className="bg-white rounded-2xl p-5 sm:px-6 border border-slate-100 shadow-sm flex flex-col gap-3">
@@ -133,7 +132,7 @@ export default function TeacherSubjectAuthorizationCard() {
             layout="vertical"
             onFinish={(values) => requestMutation.mutate(values)}
             onValuesChange={(changed) => {
-              if ("categoryId" in changed) requestForm.setFieldValue("subjectId", undefined);
+              if ("categoryId" in changed) requestForm.setFieldsValue({ subjectId: undefined, gradeLevel: undefined });
             }}
           >
             <Form.Item name="categoryId" label="Danh mục" rules={[{ required: true, message: "Chọn danh mục." }]}>
@@ -141,7 +140,9 @@ export default function TeacherSubjectAuthorizationCard() {
                 showSearch
                 optionFilterProp="label"
                 loading={categoriesQuery.isLoading}
-                options={categories.map((category) => ({ value: category.id, label: category.name }))}
+                options={categories
+                  .filter((category) => offeredGradeLevels(category).length > 0)
+                  .map((category) => ({ value: category.id, label: category.name }))}
               />
             </Form.Item>
             <Form.Item name="subjectId" label="Môn học" rules={[{ required: true, message: "Chọn môn học." }]}>
@@ -166,9 +167,13 @@ export default function TeacherSubjectAuthorizationCard() {
             <Form.Item
               name="gradeLevel"
               label="Khối lớp"
-              rules={requestCategory?.allowedGradeLevels ? [{ required: true, message: "Chọn khối lớp theo phạm vi của danh mục." }] : []}
+              rules={[{ required: true, message: "Chọn khối lớp cụ thể cho môn học." }]}
             >
-              <Select allowClear options={requestGradeLevels.map((grade) => ({ value: grade, label: GRADE_LEVEL_LABELS[grade] }))} />
+              <Select
+                disabled={!requestCategoryId}
+                placeholder={requestCategoryId ? "Chọn khối lớp" : "Chọn danh mục trước"}
+                options={requestGradeLevels.map((grade) => ({ value: grade, label: GRADE_LEVEL_LABELS[grade] }))}
+              />
             </Form.Item>
             <Form.Item name="level" label="Cấp độ" rules={[{ required: true, message: "Chọn cấp độ." }]}>
               <Select options={COURSE_LEVELS.map((level) => ({ value: level, label: COURSE_LEVEL_LABELS[level] }))} />

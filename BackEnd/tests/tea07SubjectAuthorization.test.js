@@ -182,7 +182,7 @@ describe("TASK TEA-07: Teacher Subject Authorization Suite", () => {
       ).rejects.toMatchObject({ code: "GRADE_LEVEL_CATEGORY_MISMATCH", statusCode: 400 });
     });
 
-    test("TEA-07.REQ.3: Normalizes BASIC->BEGINNER, supports gradeLevel=null for open categories, redacts admin fields", async () => {
+    test("TEA-07.REQ.3: Normalizes BASIC->BEGINNER, requires a grade for open categories too, redacts admin fields", async () => {
       stubActiveTeacher();
       jest.spyOn(Subject, "findOne").mockImplementation(() =>
         mockQuery({ _id: subEng, categoryId: catLang, name: "IELTS", status: "ACTIVE" })
@@ -202,14 +202,19 @@ describe("TASK TEA-07: Teacher Subject Authorization Suite", () => {
       jest.spyOn(Subject, "find").mockReturnValue(mockQuery([{ _id: subEng, name: "IELTS" }]));
       jest.spyOn(Category, "find").mockReturnValue(mockQuery([{ _id: catLang, name: "Ngoại ngữ" }]));
 
+      await expect(
+        teacherSubjectAuthService.requestAuthorization(teacherA, { subjectId: subEng.toString(), level: "BASIC" })
+      ).rejects.toMatchObject({ code: "GRADE_LEVEL_REQUIRED", statusCode: 400 });
+
       const res = await teacherSubjectAuthService.requestAuthorization(teacherA, {
         subjectId: subEng.toString(),
+        gradeLevel: "UNIVERSITY_EXAM_PREP",
         level: "BASIC",
         requestNote: "Có chứng chỉ IELTS 8.0",
       });
 
       expect(capturedDoc.level).toBe("BEGINNER");
-      expect(capturedDoc.gradeLevel).toBeNull();
+      expect(capturedDoc.gradeLevel).toBe("UNIVERSITY_EXAM_PREP");
       expect(capturedDoc.status).toBe("PENDING");
       expect(res.level).toBe("BEGINNER");
       expect(res.status).toBe("PENDING");

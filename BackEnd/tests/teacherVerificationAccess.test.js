@@ -220,6 +220,7 @@ describe("Teacher Access Control by verificationStatus (P0-01, P1-01..P1-05)", (
           subjectId: subject._id,
           title: "Vật lý Hạt nhân",
           description: "Chuyên đề nâng cao",
+          gradeLevel: "GRADE_12",
         });
       expect(created.statusCode).toBe(201);
 
