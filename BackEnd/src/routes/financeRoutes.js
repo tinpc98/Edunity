@@ -79,6 +79,11 @@ router.patch("/finance/admin/reconciliations/:id/assign", admin, financeControll
 router.post("/admin/reconciliations/:id/notes", admin, financeController.addReconciliationNote);
 router.post("/finance/admin/reconciliations/:id/notes", admin, financeController.addReconciliationNote);
 
+router.patch("/admin/reconciliations/:id/resolve", admin, financeController.resolveReconciliation);
+router.post("/admin/reconciliations/:id/resolve", admin, financeController.resolveReconciliation);
+router.patch("/finance/admin/reconciliations/:id/resolve", admin, financeController.resolveReconciliation);
+router.post("/finance/admin/reconciliations/:id/resolve", admin, financeController.resolveReconciliation);
+
 // ======================
 // Payout Proof Verification
 // ======================

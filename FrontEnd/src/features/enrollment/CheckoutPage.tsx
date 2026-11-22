@@ -394,11 +394,11 @@ export default function CheckoutPage() {
           type="text"
           icon={<ArrowLeftOutlined />}
           onClick={() => navigate(ROUTES.STUDENT.ENROLLMENTS)}
-          className="text-xs font-semibold text-slate-600 hover:text-indigo-600 px-0"
+          className="text-xs font-semibold text-[#64748B] hover:text-[#0D9488] px-0"
         >
           Quay lại danh sách đơn đăng ký
         </Button>
-        <Tag color="indigo" className="font-bold text-xs px-3 py-0.5 rounded-full">
+        <Tag className="font-bold text-xs px-3 py-0.5 rounded-full bg-[#CCFBF1] text-[#0F766E] border-none">
           Thanh toán học phí VietQR (Kênh TUITION)
         </Tag>
       </div>
@@ -406,48 +406,48 @@ export default function CheckoutPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Class Info & Scholarship Option */}
         <div className="lg:col-span-5 space-y-5">
-          <Card className="rounded-2xl border border-slate-200 shadow-xs">
+          <Card className="rounded-2xl border border-[#D6E5E2] shadow-xs">
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 text-lg shrink-0">
+                <div className="w-11 h-11 rounded-xl bg-[#CCFBF1] border border-[#99F6E4] flex items-center justify-center text-[#0D9488] text-lg shrink-0">
                   <BookOutlined />
                 </div>
                 <div>
-                  <Text className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">
+                  <Text className="text-[11px] font-bold uppercase tracking-wider text-[#0D9488]">
                     Thông tin lớp học đăng ký
                   </Text>
-                  <Title level={4} className="!m-0 !text-base font-extrabold text-slate-900">
+                  <Title level={4} className="!m-0 !text-base font-extrabold text-[#163B40]">
                     {classTitle}
                   </Title>
                   <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
                     <UserOutlined />
                     <span>Giảng viên:</span>
-                    <strong className="text-slate-700">{teacherName}</strong>
+                    <strong className="text-[#163B40]">{teacherName}</strong>
                   </div>
                 </div>
               </div>
 
-              <Divider className="!my-3" />
+              <Divider className="!my-3 border-[#D6E5E2]/60" />
 
               {/* Pricing Summary */}
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between items-center text-slate-600">
                   <span>Học phí niêm yết:</span>
-                  <span className="font-bold text-slate-800">
+                  <span className="font-bold text-[#163B40]">
                     {formatVND(enrollment.tuitionAmount)}
                   </span>
                 </div>
 
                 {scholarshipDeduction > 0 && (
-                  <div className="flex justify-between items-center text-emerald-700">
+                  <div className="flex justify-between items-center text-[#0F766E]">
                     <span>Học bổng áp dụng ({enrollment.paymentSource === "MIXED" ? "Đồng chi trả" : "Học bổng"}):</span>
                     <span className="font-bold">- {formatVND(scholarshipDeduction)}</span>
                   </div>
                 )}
 
-                <div className="flex justify-between items-baseline pt-2 border-t border-slate-100">
-                  <span className="font-bold text-slate-800">Số tiền cần thanh toán:</span>
-                  <span className="text-lg font-black text-indigo-700">
+                <div className="flex justify-between items-baseline pt-2 border-t border-[#D6E5E2]/60">
+                  <span className="font-bold text-[#163B40]">Số tiền cần thanh toán:</span>
+                  <span className="text-lg font-black text-[#0D9488]">
                     {formatVND(amountDue)}
                   </span>
                 </div>

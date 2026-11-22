@@ -162,6 +162,81 @@ export interface CreateReviewPayload {
   comment?: string;
 }
 
+// Admin Moderation Review Types
+export interface AdminReviewItem {
+  id: string;
+  rating: number;
+  comment: string;
+  isHidden: boolean;
+  hiddenAt: string | null;
+  hiddenBy: { id: string; email: string | null; fullName: string } | null;
+  hideReason: string | null;
+  isDeleted: boolean;
+  deletedAt: string | null;
+  deletedBy: { id: string; email: string | null; fullName: string } | null;
+  deleteReason: string | null;
+  student: {
+    id: string | null;
+    email: string | null;
+    fullName: string;
+    avatarUrl: string | null;
+  };
+  teacher: {
+    id: string | null;
+    email: string | null;
+    fullName: string;
+  };
+  class: {
+    id: string | null;
+    className: string;
+  };
+  reportsCount: number;
+  hasReports: boolean;
+  openReportsCount: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface AdminReviewDetail extends AdminReviewItem {
+  reports: Array<{
+    id: string;
+    type: string;
+    description: string;
+    status: string;
+    reporter: { id?: string; fullName: string; email?: string };
+    reviewNote?: string;
+    reviewedAt?: string;
+    createdAt: string;
+  }>;
+  auditLogs: Array<{
+    id: string;
+    action: string;
+    adminEmail: string;
+    createdAt: string;
+    beforeState?: any;
+    afterState?: any;
+  }>;
+}
+
+export interface AdminReviewFilterQuery {
+  status?: "ALL" | "VISIBLE" | "HIDDEN" | "REPORTED";
+  search?: string;
+  rating?: number;
+  classId?: string;
+  teacherId?: string;
+  studentId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AdminReviewListResponse {
+  items: AdminReviewItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 // ==========================================
 // Complaint / Report Types
 // ==========================================

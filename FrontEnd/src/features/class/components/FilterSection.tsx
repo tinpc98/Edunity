@@ -19,24 +19,24 @@ export default function FilterSection({
   children,
 }: FilterSectionProps) {
   return (
-    <div className="border-b border-slate-200/80 last:border-b-0 py-3.5">
+    <div className="border-b border-[#D6E5E2] last:border-b-0 py-3.5">
       <button
         type="button"
         id={`filter-header-${id}`}
         aria-controls={`filter-content-${id}`}
         aria-expanded={isOpen}
         onClick={onToggle}
-        className="w-full flex items-center justify-between py-1 text-left cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
+        className="w-full flex items-center justify-between py-1 text-left cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0D9488] rounded"
       >
-        <span className="text-[13px] font-bold tracking-wide uppercase text-slate-800 group-hover:text-indigo-600 transition-colors flex items-center gap-2">
+        <span className="text-[13px] font-bold tracking-wide uppercase text-[#163B40] group-hover:text-[#0D9488] transition-colors flex items-center gap-2">
           {title}
           {activeCount > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[11px] font-semibold text-white bg-indigo-600 rounded-full">
+            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[11px] font-semibold text-white bg-[#0D9488] rounded-full">
               {activeCount}
             </span>
           )}
         </span>
-        <span className="text-slate-400 group-hover:text-indigo-600 text-xs transition-colors">
+        <span className="text-slate-400 group-hover:text-[#0D9488] text-xs transition-colors">
           {isOpen ? <UpOutlined /> : <DownOutlined />}
         </span>
       </button>

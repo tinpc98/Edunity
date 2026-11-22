@@ -17,9 +17,6 @@ const {
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 
-const isBlank = (val) => val === undefined || val === null || (typeof val === "string" && val.trim() === "");
-const validationError = (msg) => new AppError(msg, "VALIDATION_ERROR", 400);
-
 // UC-ADM-07 bước 1
 const listPendingClasses = async (paging) => {
   const filter = { status: "PENDING_APPROVAL", ...NOT_DELETED };
@@ -177,11 +174,14 @@ const rejectClass = async (adminId, classId, body = {}) => {
   await notify(
     updated.teacherId,
     "Lớp học bị từ chối",
-    updated.reviewNote || `Lớp "${updated.className}" đã bị từ chối.`,
+    updated.reviewNote || `Lớp "${updated.className}" cần chỉnh sửa và gửi duyệt lại.`,
     "CLASS_REJECTED"
   );
   return updated;
 };
+
+const isBlank = (val) => val === undefined || val === null || (typeof val === "string" && val.trim() === "");
+const validationError = (msg) => new AppError(msg, "VALIDATION_ERROR", 400);
 
 // BE-01.2: Admin requests changes on pending class with mandatory reviewNote and transactional consistency
 const requestChanges = async (adminId, classId, body = {}) => {
@@ -288,6 +288,129 @@ const requestChanges = async (adminId, classId, body = {}) => {
   return updated;
 };
 
+const deleteClass = async (adminId, classId, reason = null) => {
+  if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
+  const cls = await Class.findOne({ _id: classId, ...NOT_DELETED });
+  if (!cls) throw CLASS_NOT_FOUND();
+
+  // 1. Dependency check: Enrollments (paid or confirmed or pending payment)
+  const { Enrollment } = require("../models");
+  const paidEnrollmentCount = await Enrollment.countDocuments({
+    classId: cls._id,
+    enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED", "PENDING_PAYMENT"] },
+  });
+  if (paidEnrollmentCount > 0) {
+    throw new AppError(
+      "Không thể xóa lớp học vì lớp đã có học viên đăng ký hoặc thanh toán.",
+      "DEPENDENCY_CONFLICT",
+      409,
+      { paidEnrollmentCount, recommendedAction: "CANNOT_DELETE_ACTIVE_ENROLLMENTS" }
+    );
+  }
+
+  // 2. Lifecycle check: Class in progress
+  if (cls.status === "IN_PROGRESS") {
+    throw new AppError(
+      "Không thể xóa lớp học đang trong thời gian diễn ra.",
+      "DEPENDENCY_CONFLICT",
+      409,
+      { currentStatus: cls.status }
+    );
+  }
+
+  // 3. Financial dispute / refund review check
+  const { SessionRefundReview } = require("../models");
+  const disputeCount = await SessionRefundReview.countDocuments({
+    classId: cls._id,
+    status: { $in: ["PENDING", "IN_REVIEW"] },
+  });
+  if (disputeCount > 0) {
+    throw new AppError(
+      "Không thể xóa lớp học đang có khiếu nại hoàn tiền chưa xử lý.",
+      "DEPENDENCY_CONFLICT",
+      409,
+      { disputeCount }
+    );
+  }
+
+  const beforeState = { className: cls.className, status: cls.status };
+
+  cls.isDeleted = true;
+  cls.deletedAt = new Date();
+  cls.deletedBy = adminId;
+  cls.deleteReason = reason || null;
+  cls.status = "CANCELLED";
+  cls.updatedBy = adminId;
+  await cls.save();
+
+  // Cancel any scheduled sessions
+  await Session.updateMany(
+    { classId: cls._id, status: "SCHEDULED" },
+    { $set: { status: "CANCELLED" } }
+  );
+
+  await audit({
+    actorAdminId: adminId,
+    action: "CLASS_SOFT_DELETED",
+    targetType: "Class",
+    targetId: cls._id,
+    beforeState,
+    afterState: { isDeleted: true, status: "CANCELLED", deleteReason: reason || null },
+  });
+
+  return { success: true, message: "Class soft-deleted successfully", classId: cls._id };
+};
+
+const restoreClass = async (adminId, classId) => {
+  if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
+  const cls = await Class.findById(classId);
+  if (!cls) throw CLASS_NOT_FOUND();
+  if (!cls.isDeleted) return cls.toObject();
+
+  // 1. Parent Course check
+  const course = await Course.findOne({ _id: cls.courseId, ...NOT_DELETED });
+  if (!course) {
+    throw new AppError(
+      "Cannot restore class: parent course is deleted or missing.",
+      "RESTORE_CONFLICT",
+      409,
+      { courseId: cls.courseId }
+    );
+  }
+
+  // 2. Teacher check
+  const teacher = await User.findOne({ _id: cls.teacherId, status: "ACTIVE", ...NOT_DELETED });
+  if (!teacher) {
+    throw new AppError(
+      "Cannot restore class: teacher account is inactive or deleted.",
+      "RESTORE_CONFLICT",
+      409,
+      { teacherId: cls.teacherId }
+    );
+  }
+
+  // 3. Restore to safe lifecycle state: DRAFT
+  // Never restore directly to OPEN (requires governance check / re-schedule if needed)
+  cls.isDeleted = false;
+  cls.deletedAt = null;
+  cls.deletedBy = null;
+  cls.deleteReason = null;
+  cls.status = "DRAFT";
+  cls.updatedBy = adminId;
+  await cls.save();
+
+  await audit({
+    actorAdminId: adminId,
+    action: "CLASS_RESTORED",
+    targetType: "Class",
+    targetId: cls._id,
+    beforeState: { isDeleted: true },
+    afterState: { isDeleted: false, status: "DRAFT" },
+  });
+
+  return cls.toObject();
+};
+
 module.exports = {
   listPendingClasses,
   getClassForReview,
@@ -295,4 +418,6 @@ module.exports = {
   rejectClass,
   requestChanges,
   requestClassChanges: requestChanges,
+  deleteClass,
+  restoreClass,
 };

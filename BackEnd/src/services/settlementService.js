@@ -84,6 +84,7 @@ function getBlockerMessage(code) {
     ACTIVE_PAYMENT_RECONCILIATIONS: "Giao dịch thanh toán đang cần đối soát.",
     SEVEN_DAY_HOLD_ACTIVE: "Đang trong thời gian chờ an toàn 7 ngày theo quy định BR-07.",
     COMMISSION_POLICY_INVALID: "Chính sách hoa hồng của bản ghi thu nhập không hợp lệ.",
+    POLICY_BLOCKED: "Chính sách hoa hồng chưa được phê duyệt chính thức (Commission policy unapproved).",
     ALREADY_PAID_OUT: "Khoản thu nhập đã được chi trả.",
   };
   return map[code] || code;
@@ -237,6 +238,7 @@ const createTeacherEarning = async (
           options.settlementHoldRequired !== undefined
             ? Boolean(options.settlementHoldRequired)
             : true, // Default to true in PR7
+        settlementBlockers: !policy.isApproved ? ["POLICY_BLOCKED"] : (options.settlementBlockers || []),
       },
     ],
     { session },
@@ -441,6 +443,8 @@ const evaluateEarningSettlement = async (earningId, options = {}) => {
   // Rule 10: Snapshot Commission Policy Check
   if (!Number.isFinite(earning.commissionRate) || earning.commissionRate < 0 || earning.commissionRate > 1) {
     blockers.push("COMMISSION_POLICY_INVALID");
+  } else if (Array.isArray(earning.settlementBlockers) && earning.settlementBlockers.includes("POLICY_BLOCKED")) {
+    blockers.push("POLICY_BLOCKED");
   }
 
   // Rule 11 & 12: The 7-Day Waiting Period (BR-07, BR-08)
@@ -672,6 +676,14 @@ const getTeacherSettlementSummary = async (teacherId, options = {}) => {
   const { weekday, hour, minute } = getVietnamTimeParts(now);
   const isWindowOpen = isMondayWithdrawalWindow(now);
 
+  const Payout = require("../models/Payout");
+  const activePayouts = await Payout.find({
+    teacherId,
+    status: { $in: ["PENDING", "PROCESSING", "APPROVED", "SCHEDULED", "PENDING_BANK_TRANSFER"] },
+  }).lean();
+  const totalPayoutInFlight = activePayouts.reduce((sum, p) => sum + toNum(p.amount), 0);
+  const effectiveInPayout = Math.max(inWithdrawalRequest, totalPayoutInFlight);
+
   return {
     summary: {
       totalGross,
@@ -679,7 +691,8 @@ const getTeacherSettlementSummary = async (teacherId, options = {}) => {
       pendingSettlement,
       availableForWithdrawal,
       available: availableForWithdrawal,
-      inWithdrawalRequest,
+      inWithdrawalRequest: effectiveInPayout,
+      inPayout: effectiveInPayout,
       paidOut,
     },
     withdrawalWindow: {

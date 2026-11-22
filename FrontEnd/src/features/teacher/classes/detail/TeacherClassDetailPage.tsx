@@ -127,6 +127,9 @@ export default function TeacherClassDetailPage() {
     queryFn: () => classService.getMyClass(classId!),
     enabled: Boolean(classId),
     staleTime: 1000 * 30,
+    // Session statuses change by Start / End and the automatic end after +30 minutes
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
   // 2. Mutation: Update Class
@@ -421,7 +424,7 @@ export default function TeacherClassDetailPage() {
           <Card className="rounded-2xl shadow-sm border-gray-100 bg-white">
             <div className="flex justify-between items-start mb-2">
               <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Sĩ số lớp</Text>
-              <div className="w-8 h-8 rounded bg-indigo-50 flex items-center justify-center text-indigo-500">
+              <div className="w-8 h-8 rounded bg-teal-50 flex items-center justify-center text-teal-500">
                 <TeamOutlined />
               </div>
             </div>
@@ -430,7 +433,7 @@ export default function TeacherClassDetailPage() {
               <span className="text-gray-500 text-lg mb-1">/ {cls.capacity}</span>
             </div>
             <div className="flex items-center justify-between text-xs font-medium">
-              <span className="text-indigo-600 font-semibold">{progressPercent}% Đầy chỗ</span>
+              <span className="text-teal-600 font-semibold">{progressPercent}% Đầy chỗ</span>
               <span className="text-gray-500">Còn {cls.seatsLeft} chỗ</span>
             </div>
           </Card>
@@ -445,7 +448,7 @@ export default function TeacherClassDetailPage() {
               </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={3} className={`!m-0 ${cls.classType === 'FREE' ? 'text-emerald-600' : 'text-indigo-700'}`}>
+              <Title level={3} className={`!m-0 ${cls.classType === 'FREE' ? 'text-emerald-600' : 'text-teal-700'}`}>
                 {cls.formattedPrice}
               </Title>
             </div>
@@ -498,7 +501,7 @@ export default function TeacherClassDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
           <div>
             <Text className="text-gray-400 block mb-1">Khóa học chuẩn:</Text>
-            <div className="font-semibold text-indigo-700 text-base">{cls.courseTitle}</div>
+            <div className="font-semibold text-teal-700 text-base">{cls.courseTitle}</div>
           </div>
           <div>
             <Text className="text-gray-400 block mb-1">Lịch học cố định:</Text>
@@ -552,7 +555,7 @@ export default function TeacherClassDetailPage() {
               onConfirm={() => autoPlanMutation.mutate()}
               okText="Đồng ý tạo"
               cancelText="Hủy"
-              okButtonProps={{ loading: autoPlanMutation.isPending, className: 'bg-indigo-600' }}
+              okButtonProps={{ loading: autoPlanMutation.isPending, className: 'bg-teal-600' }}
             >
               <Button 
                 icon={<CalendarOutlined />}
@@ -570,7 +573,7 @@ export default function TeacherClassDetailPage() {
               type="primary"
               icon={<PlusOutlined />}
               onClick={handleOpenCreateSession}
-              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold px-5"
+              className="bg-teal-600 hover:bg-teal-700 rounded-xl font-bold px-5"
             >
               Thêm buổi học
             </Button>
@@ -591,7 +594,7 @@ export default function TeacherClassDetailPage() {
               icon={<PlusOutlined />}
               size="large"
               onClick={handleOpenCreateSession}
-              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-medium"
+              className="bg-teal-600 hover:bg-teal-700 rounded-xl font-medium"
             >
               Tạo buổi học đầu tiên
             </Button>
@@ -603,6 +606,8 @@ export default function TeacherClassDetailPage() {
           renderItem={(session: Session, index: number) => {
             const isScheduled = session.status === 'SCHEDULED';
             const isInProgress = session.status === 'IN_PROGRESS';
+            // WAITING = Teacher already in the room but not started; INTERRUPTED = Teacher can return and resume
+            const canEnterRoom = isScheduled || isInProgress || session.status === 'WAITING' || session.status === 'INTERRUPTED';
             const isCompleted = session.status === 'COMPLETED';
             const isCancelled = session.status === 'CANCELLED';
 
@@ -622,7 +627,7 @@ export default function TeacherClassDetailPage() {
                         ? 'bg-emerald-100 text-emerald-700' 
                         : isCancelled 
                         ? 'bg-gray-100 text-gray-400' 
-                        : 'bg-indigo-50 text-indigo-600'
+                        : 'bg-teal-50 text-teal-600'
                     }`}>
                       {index + 1}
                     </div>
@@ -645,12 +650,12 @@ export default function TeacherClassDetailPage() {
 
                       <div className="flex items-center gap-4 text-xs text-gray-500 mt-2 flex-wrap">
                         <span className="flex items-center gap-1 font-medium text-gray-700">
-                          <CalendarOutlined className="text-indigo-500" />
+                          <CalendarOutlined className="text-teal-500" />
                           {session.startDatetime ? new Date(session.startDatetime).toLocaleDateString('vi-VN') : '-'}
                         </span>
                         <span>•</span>
                         <span className="flex items-center gap-1 font-medium text-gray-700">
-                          <ClockCircleOutlined className="text-indigo-500" />
+                          <ClockCircleOutlined className="text-teal-500" />
                           {formatSessionTimeRange(session.startDatetime, session.endDatetime)}
                         </span>
                       </div>
@@ -660,14 +665,14 @@ export default function TeacherClassDetailPage() {
                   {/* Actions per session */}
                   <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                     {/* Join Classroom button if SCHEDULED or IN_PROGRESS */}
-                    {(isScheduled || isInProgress) && (
+                    {canEnterRoom && (
                       isClassActiveForLive ? (
                         <Link to={`/classroom/${session.id}`}>
                           <Button
                             type="primary"
                             size="small"
                             icon={<VideoCameraOutlined />}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold"
+                            className="bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold"
                           >
                             {isInProgress ? "Vào lớp (LIVE)" : "Vào lớp"}
                           </Button>
@@ -891,7 +896,7 @@ export default function TeacherClassDetailPage() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Text className="font-semibold text-slate-800 text-base">Danh sách học viên</Text>
-          <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">
+          <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-xs font-bold">
             {students.length} học viên
           </span>
         </div>
@@ -973,7 +978,7 @@ export default function TeacherClassDetailPage() {
         <div>
           <Title level={2} className="!m-0 mb-3 text-gray-900">{cls.className}</Title>
           <div className="flex flex-wrap items-center gap-3">
-            <Tag color={cls.classType === 'PAID' ? 'indigo' : 'green'} className="!m-0 px-2.5 py-0.5 rounded font-bold">
+            <Tag color={cls.classType === 'PAID' ? 'cyan' : 'green'} className="!m-0 px-2.5 py-0.5 rounded font-bold">
               {cls.classType}
             </Tag>
             <Tag color={CLASS_STATUS_COLORS[cls.status]} className="!m-0 px-2.5 py-0.5 rounded font-bold">
@@ -995,7 +1000,7 @@ export default function TeacherClassDetailPage() {
             </span>
             <span className="text-gray-300">•</span>
             <span className="flex items-center gap-1.5">
-              <BookOutlined /> Khóa học: <strong className="text-indigo-600">{cls.courseTitle}</strong>
+              <BookOutlined /> Khóa học: <strong className="text-teal-600">{cls.courseTitle}</strong>
             </span>
           </div>
         </div>
@@ -1010,7 +1015,7 @@ export default function TeacherClassDetailPage() {
               onConfirm={() => submitMutation.mutate()}
               okText="Gửi duyệt"
               cancelText="Hủy"
-              okButtonProps={{ loading: submitMutation.isPending, className: 'bg-indigo-600' }}
+              okButtonProps={{ loading: submitMutation.isPending, className: 'bg-teal-600' }}
             >
               <Button 
                 type="primary" 
@@ -1059,7 +1064,7 @@ export default function TeacherClassDetailPage() {
         confirmLoading={updateMutation.isPending}
         okText="Lưu thay đổi"
         cancelText="Hủy"
-        okButtonProps={{ className: 'bg-indigo-600' }}
+        okButtonProps={{ className: 'bg-teal-600' }}
         width={600}
       >
         <Form layout="vertical" form={editForm} className="mt-4">
@@ -1133,7 +1138,7 @@ export default function TeacherClassDetailPage() {
         confirmLoading={createSessionMutation.isPending}
         okText="Tạo buổi học"
         cancelText="Hủy"
-        okButtonProps={{ className: 'bg-indigo-600' }}
+        okButtonProps={{ className: 'bg-teal-600' }}
         width={560}
       >
         <Form layout="vertical" form={createSessionForm} className="mt-4">
@@ -1207,7 +1212,7 @@ export default function TeacherClassDetailPage() {
         confirmLoading={updateSessionMutation.isPending}
         okText="Lưu thay đổi"
         cancelText="Hủy"
-        okButtonProps={{ className: 'bg-indigo-600' }}
+        okButtonProps={{ className: 'bg-teal-600' }}
         width={560}
       >
         <Form layout="vertical" form={editSessionForm} className="mt-4">
@@ -1261,14 +1266,14 @@ export default function TeacherClassDetailPage() {
       <Modal
         title={
           <div className="flex items-center gap-2">
-            <TeamOutlined className="text-indigo-600" />
+            <TeamOutlined className="text-teal-600" />
             <span>Danh sách điểm danh: {attendanceSessionTitle}</span>
           </div>
         }
         open={isAttendanceModalOpen}
         onCancel={() => setIsAttendanceModalOpen(false)}
         footer={[
-          <Button key="close" type="primary" onClick={() => setIsAttendanceModalOpen(false)} className="bg-indigo-600">
+          <Button key="close" type="primary" onClick={() => setIsAttendanceModalOpen(false)} className="bg-teal-600">
             Đóng
           </Button>
         ]}

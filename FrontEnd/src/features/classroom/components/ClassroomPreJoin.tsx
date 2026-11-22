@@ -127,7 +127,7 @@ export default function ClassroomPreJoin({
           </Button>
 
           <Tag
-            color={role === "HOST" ? "purple" : "blue"}
+            color={role === "HOST" ? "gold" : "cyan"}
             className="rounded-full px-3 py-1 font-bold text-xs uppercase tracking-wider border-0"
           >
             {role === "HOST" ? "Giảng viên (Host)" : "Học viên (Participant)"}
@@ -136,7 +136,7 @@ export default function ClassroomPreJoin({
 
         {/* Session Heading */}
         <div className="text-center mb-6">
-          <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 block mb-1">
+          <span className="text-xs font-bold uppercase tracking-wider text-teal-400 block mb-1">
             {className || "Lớp học trực tuyến"}
           </span>
           <Title level={3} className="!m-0 !text-white font-black leading-snug">
@@ -213,14 +213,14 @@ export default function ClassroomPreJoin({
           type="info"
           showIcon
           // antd renders Alert text in its own dark color, unreadable on this dark card: set the colors on the content
-          message={<span className="font-semibold text-indigo-100">Buổi học sẽ được ghi hình</span>}
+          message={<span className="font-semibold text-teal-100">Buổi học sẽ được ghi hình</span>}
           description={
-            <span className="text-indigo-200/90">
+            <span className="text-teal-200/90">
               Ghi hình bắt đầu khi giáo viên nhấn Bắt đầu buổi học và kéo dài đến khi buổi học kết thúc. Bản ghi chỉ dành
               cho giáo viên, học viên của lớp và quản trị viên, được lưu trữ có thời hạn.
             </span>
           }
-          className="mb-6 rounded-2xl bg-indigo-950/40 border-indigo-900 text-indigo-200 text-xs"
+          className="mb-6 rounded-2xl bg-teal-950/40 border-teal-900 text-teal-200 text-xs"
         />
 
         {/* Join CTA */}
@@ -230,7 +230,7 @@ export default function ClassroomPreJoin({
             size="large"
             loading={isJoining}
             onClick={handleJoinClick}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl h-12 shadow-lg shadow-indigo-600/30 text-sm"
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-2xl h-12 shadow-lg shadow-teal-600/30 text-sm"
           >
             {isJoining ? "Đang kết nối vào phòng học..." : "Tham gia lớp học ngay"}
           </Button>

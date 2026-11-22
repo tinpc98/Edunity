@@ -122,7 +122,7 @@ const updateCategory = async (adminId, categoryId, body) => {
   return presentCategory(category.toObject());
 };
 
-const deleteCategory = async (adminId, categoryId) => {
+const deleteCategory = async (adminId, categoryId, reason = null) => {
   assertId(categoryId, "Category not found", "CATEGORY_NOT_FOUND");
 
   if (typeof mongoose.startSession !== "function") {
@@ -163,7 +163,7 @@ const deleteCategory = async (adminId, categoryId) => {
       }
 
       const originalStatus = category.status;
-      const beforeState = { name: category.name, status: originalStatus };
+      const beforeState = { name: category.name, status: originalStatus, slug: category.slug };
 
       // 2. Dependency check: Subject
       const subjectCount = await Subject.countDocuments(
@@ -222,44 +222,26 @@ const deleteCategory = async (adminId, categoryId) => {
         );
       }
 
-      // 6. Dependency check: ScholarshipCampaign
-      const { ScholarshipCampaign } = require("../models");
-      const scholarshipCount = await ScholarshipCampaign.countDocuments(
-        { categoryIds: category._id, ...NOT_DELETED },
-        { session }
+      // 6. Perform soft delete conditionally
+      const updated = await Category.findOneAndUpdate(
+        { _id: category._id, ...NOT_DELETED },
+        {
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: adminId,
+            deleteReason: reason || null,
+            status: "INACTIVE",
+            updatedBy: adminId,
+          },
+        },
+        { session, returnDocument: "after" }
       );
-      if (scholarshipCount > 0) {
-        throw new AppError(
-          `Cannot delete category: referenced in ${scholarshipCount} scholarship campaign(s). Deactivate the category by setting status to INACTIVE instead.`,
-          "CATEGORY_IN_SCHOLARSHIP_CAMPAIGN",
-          409,
-          { scholarshipCount, recommendedAction: "SET_INACTIVE" }
-        );
+
+      if (!updated) {
+        throw new AppError("Category not found", "CATEGORY_NOT_FOUND", 404);
       }
 
-      // 7. Dependency check: CoursePricingPolicy
-      const { CoursePricingPolicy } = require("../models");
-      const pricingPolicyCount = await CoursePricingPolicy.countDocuments(
-        { categoryId: category._id, status: "ACTIVE", ...NOT_DELETED },
-        { session }
-      );
-      if (pricingPolicyCount > 0) {
-        throw new AppError(
-          `Cannot delete category: active pricing policy exists. Deactivate the category by setting status to INACTIVE instead.`,
-          "CATEGORY_HAS_ACTIVE_PRICING_POLICY",
-          409,
-          { pricingPolicyCount, recommendedAction: "SET_INACTIVE" }
-        );
-      }
-
-      // 8. Apply soft-delete
-      category.isDeleted = true;
-      category.deletedAt = new Date();
-      category.deletedBy = adminId;
-      category.status = "INACTIVE";
-      await category.save({ session });
-
-      // 9. AuditLog inside transaction
       const { audit } = require("./auditService");
       await audit(
         {
@@ -268,16 +250,12 @@ const deleteCategory = async (adminId, categoryId) => {
           targetType: "Category",
           targetId: category._id,
           beforeState,
-          afterState: { isDeleted: true, status: "INACTIVE" },
+          afterState: { isDeleted: true, status: "INACTIVE", deleteReason: reason || null },
         },
         session
       );
 
-      result = {
-        success: true,
-        message: "Category soft-deleted successfully",
-        categoryId: category._id,
-      };
+      result = { success: true, message: "Category soft-deleted successfully", categoryId: category._id };
     });
 
     return result;
@@ -286,6 +264,48 @@ const deleteCategory = async (adminId, categoryId) => {
       await session.endSession();
     }
   }
+};
+
+const restoreCategory = async (adminId, categoryId) => {
+  assertId(categoryId, "Category not found", "CATEGORY_NOT_FOUND");
+  const category = await Category.findById(categoryId);
+  if (!category) throw new AppError("Category not found", "CATEGORY_NOT_FOUND", 404);
+  if (!category.isDeleted) return presentCategory(category.toObject());
+
+  // Slug conflict check with active categories
+  const conflict = await Category.findOne({
+    slug: category.slug,
+    _id: { $ne: category._id },
+    ...NOT_DELETED,
+  });
+  if (conflict) {
+    throw new AppError(
+      `Cannot restore category: slug '${category.slug}' conflicts with an active category.`,
+      "RESTORE_CONFLICT",
+      409,
+      { slug: category.slug, conflictingId: conflict._id }
+    );
+  }
+
+  category.isDeleted = false;
+  category.deletedAt = null;
+  category.deletedBy = null;
+  category.deleteReason = null;
+  category.status = "INACTIVE";
+  category.updatedBy = adminId;
+  await category.save();
+
+  const { audit } = require("./auditService");
+  await audit({
+    actorAdminId: adminId,
+    action: "CATEGORY_RESTORED",
+    targetType: "Category",
+    targetId: category._id,
+    beforeState: { isDeleted: true },
+    afterState: { isDeleted: false, status: "INACTIVE" },
+  });
+
+  return presentCategory(category.toObject());
 };
 
 // ---------- Subjects ----------
@@ -356,7 +376,7 @@ const updateSubject = async (adminId, subjectId, body) => {
   return subject.toObject();
 };
 
-const deleteSubject = async (adminId, subjectId) => {
+const deleteSubject = async (adminId, subjectId, reason = null) => {
   assertId(subjectId, "Subject not found", "SUBJECT_NOT_FOUND");
 
   if (typeof mongoose.startSession !== "function") {
@@ -390,118 +410,73 @@ const deleteSubject = async (adminId, subjectId) => {
 
     let result;
     await session.withTransaction(async () => {
-      // 1. Verify existence and non-deleted
       const subject = await Subject.findOne({ _id: subjectId, ...NOT_DELETED }).session(session);
-      if (!subject) {
-        throw new AppError("Subject not found", "SUBJECT_NOT_FOUND", 404);
-      }
+      if (!subject) throw new AppError("Subject not found", "SUBJECT_NOT_FOUND", 404);
 
-      const originalStatus = subject.status;
-      const beforeState = { name: subject.name, status: originalStatus };
+      const beforeState = { name: subject.name, status: subject.status, slug: subject.slug };
 
-      // 2. Dependency check: Course
-      const courseCount = await Course.countDocuments(
+      // 1. Dependency check: Courses
+      const activeCourseCount = await Course.countDocuments(
         { subjectId: subject._id, ...NOT_DELETED },
         { session }
       );
-      if (courseCount > 0) {
+      if (activeCourseCount > 0) {
         throw new AppError(
-          `Cannot delete subject: ${courseCount} course(s) exist. Deactivate the subject by setting status to INACTIVE instead.`,
+          `Cannot delete subject: ${activeCourseCount} active course(s) exist.`,
           "SUBJECT_HAS_COURSES",
           409,
-          { courseCount, recommendedAction: "SET_INACTIVE" }
+          { activeCourseCount, recommendedAction: "DELETE_OR_MOVE_COURSES" }
         );
       }
 
-      // 3. Dependency check: Class
-      const classCount = await Class.countDocuments(
+      // 2. Dependency check: Classes
+      const { Class, TeacherSubjectAuthorization } = require("../models");
+      const activeClassCount = await Class.countDocuments(
         { subjectId: subject._id, ...NOT_DELETED },
         { session }
       );
-      if (classCount > 0) {
+      if (activeClassCount > 0) {
         throw new AppError(
-          `Cannot delete subject: ${classCount} class(es) exist. Deactivate the subject by setting status to INACTIVE instead.`,
+          `Cannot delete subject: ${activeClassCount} active class(es) exist.`,
           "SUBJECT_HAS_CLASSES",
           409,
-          { classCount, recommendedAction: "SET_INACTIVE" }
+          { activeClassCount, recommendedAction: "CANCEL_OR_DELETE_CLASSES" }
         );
       }
 
-      // 4. Dependency check: TeacherSubjectAuthorization
-      const { TeacherSubjectAuthorization } = require("../models");
+      // 3. Dependency check: TeacherSubjectAuthorization
       const authCount = await TeacherSubjectAuthorization.countDocuments(
-        {
-          subjectId: subject._id,
-          status: { $in: ["PENDING", "APPROVED"] },
-        },
+        { subjectId: subject._id, ...NOT_DELETED },
         { session }
       );
       if (authCount > 0) {
         throw new AppError(
-          `Cannot delete subject: ${authCount} teacher subject authorization(s) exist. Deactivate the subject by setting status to INACTIVE instead.`,
+          `Cannot delete subject: ${authCount} teacher authorization(s) exist.`,
           "SUBJECT_HAS_TEACHER_AUTHORIZATIONS",
           409,
-          { authCount, recommendedAction: "SET_INACTIVE" }
+          { authCount, recommendedAction: "REVOKE_AUTHORIZATIONS" }
         );
       }
 
-      // 5. Dependency check: ScholarshipCampaign
-      const { ScholarshipCampaign } = require("../models");
-      const scholarshipCount = await ScholarshipCampaign.countDocuments(
-        { subjectIds: subject._id, ...NOT_DELETED },
-        { session }
-      );
-      if (scholarshipCount > 0) {
-        throw new AppError(
-          `Cannot delete subject: referenced in ${scholarshipCount} scholarship campaign(s). Deactivate the subject by setting status to INACTIVE instead.`,
-          "SUBJECT_IN_SCHOLARSHIP_CAMPAIGN",
-          409,
-          { scholarshipCount, recommendedAction: "SET_INACTIVE" }
-        );
-      }
-
-      // 6. Dependency check: CourseProposal
-      const { CourseProposal } = require("../models");
-      const proposalCount = await CourseProposal.countDocuments(
+      const updated = await Subject.findOneAndUpdate(
+        { _id: subject._id, ...NOT_DELETED },
         {
-          subjectId: subject._id,
-          status: { $in: ["PENDING", "CHANGES_REQUESTED"] },
-          ...NOT_DELETED,
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: adminId,
+            deleteReason: reason || null,
+            status: "INACTIVE",
+            updatedBy: adminId,
+          },
         },
-        { session }
+        { session, returnDocument: "after" }
       );
-      if (proposalCount > 0) {
-        throw new AppError(
-          `Cannot delete subject: ${proposalCount} active course proposal(s) exist. Deactivate the subject by setting status to INACTIVE instead.`,
-          "SUBJECT_HAS_COURSE_PROPOSALS",
-          409,
-          { proposalCount, recommendedAction: "SET_INACTIVE" }
-        );
+
+      if (!updated) {
+        throw new AppError("Subject not found", "SUBJECT_NOT_FOUND", 404);
       }
 
-      // 7. Dependency check: CoursePricingPolicy
-      const { CoursePricingPolicy } = require("../models");
-      const pricingPolicyCount = await CoursePricingPolicy.countDocuments(
-        { subjectId: subject._id, status: "ACTIVE", ...NOT_DELETED },
-        { session }
-      );
-      if (pricingPolicyCount > 0) {
-        throw new AppError(
-          `Cannot delete subject: active pricing policy exists. Deactivate the subject by setting status to INACTIVE instead.`,
-          "SUBJECT_HAS_ACTIVE_PRICING_POLICY",
-          409,
-          { pricingPolicyCount, recommendedAction: "SET_INACTIVE" }
-        );
-      }
-
-      // 8. Apply soft-delete
-      subject.isDeleted = true;
-      subject.deletedAt = new Date();
-      subject.deletedBy = adminId;
-      subject.status = "INACTIVE";
-      await subject.save({ session });
-
-      // 9. AuditLog inside transaction
       const { audit } = require("./auditService");
       await audit(
         {
@@ -510,16 +485,12 @@ const deleteSubject = async (adminId, subjectId) => {
           targetType: "Subject",
           targetId: subject._id,
           beforeState,
-          afterState: { isDeleted: true, status: "INACTIVE" },
+          afterState: { isDeleted: true, status: "INACTIVE", deleteReason: reason || null },
         },
         session
       );
 
-      result = {
-        success: true,
-        message: "Subject soft-deleted successfully",
-        subjectId: subject._id,
-      };
+      result = { success: true, message: "Subject soft-deleted successfully", subjectId: subject._id };
     });
 
     return result;
@@ -528,6 +499,62 @@ const deleteSubject = async (adminId, subjectId) => {
       await session.endSession();
     }
   }
+};
+
+const restoreSubject = async (adminId, subjectId) => {
+  assertId(subjectId, "Subject not found", "SUBJECT_NOT_FOUND");
+  const subject = await Subject.findById(subjectId);
+  if (!subject) throw new AppError("Subject not found", "SUBJECT_NOT_FOUND", 404);
+  if (!subject.isDeleted) return subject.toObject();
+
+  // 1. Parent Category check
+  const parentCategory = await Category.findOne({
+    _id: subject.categoryId,
+    ...NOT_DELETED,
+  });
+  if (!parentCategory) {
+    throw new AppError(
+      "Cannot restore subject: parent category is deleted or inactive. Restore category first.",
+      "RESTORE_CONFLICT",
+      409,
+      { categoryId: subject.categoryId }
+    );
+  }
+
+  // 2. Slug conflict check with active subjects
+  const conflict = await Subject.findOne({
+    slug: subject.slug,
+    _id: { $ne: subject._id },
+    ...NOT_DELETED,
+  });
+  if (conflict) {
+    throw new AppError(
+      `Cannot restore subject: slug '${subject.slug}' conflicts with an active subject.`,
+      "RESTORE_CONFLICT",
+      409,
+      { slug: subject.slug, conflictingId: conflict._id }
+    );
+  }
+
+  subject.isDeleted = false;
+  subject.deletedAt = null;
+  subject.deletedBy = null;
+  subject.deleteReason = null;
+  subject.status = "INACTIVE";
+  subject.updatedBy = adminId;
+  await subject.save();
+
+  const { audit } = require("./auditService");
+  await audit({
+    actorAdminId: adminId,
+    action: "SUBJECT_RESTORED",
+    targetType: "Subject",
+    targetId: subject._id,
+    beforeState: { isDeleted: true },
+    afterState: { isDeleted: false, status: "INACTIVE" },
+  });
+
+  return subject.toObject();
 };
 
 // ---------- Courses ----------
@@ -763,7 +790,7 @@ const adminGetCourse = async (courseId) => {
   return { ...course.toObject(), openClassCount, totalClassCount };
 };
 
-const deleteCourse = async (adminId, courseId) => {
+const deleteCourse = async (adminId, courseId, reason = null) => {
   assertId(courseId, "Course not found", "COURSE_NOT_FOUND");
 
   if (typeof mongoose.startSession !== "function") {
@@ -809,8 +836,8 @@ const deleteCourse = async (adminId, courseId) => {
       const originalStatus = course.status;
       const beforeState = { title: course.title, status: originalStatus };
 
-      // 2. Dependency check: Class (any non-deleted class)
-      const classCount = await Class.countDocuments({ courseId: course._id, ...NOT_DELETED }, { session });
+      // 2. Dependency check: Class (any existing class)
+      const classCount = await Class.countDocuments({ courseId: course._id }, { session });
       if (classCount > 0) {
         throw new AppError(
           `Cannot delete course: ${classCount} class(es) exist. Deactivate the course by setting status to INACTIVE instead.`,
@@ -903,6 +930,7 @@ const deleteCourse = async (adminId, courseId) => {
       course.isDeleted = true;
       course.deletedAt = new Date();
       course.deletedBy = adminId;
+      course.deleteReason = reason || null;
       course.status = "INACTIVE";
       await course.save({ session });
 
@@ -911,12 +939,12 @@ const deleteCourse = async (adminId, courseId) => {
       await Promise.all([
         SyllabusVersion.updateMany(
           { courseId: course._id, ...NOT_DELETED },
-          { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: adminId } },
+          { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: adminId, deleteReason: reason || null } },
           { session }
         ),
         CurriculumUnit.updateMany(
           { courseId: course._id, ...NOT_DELETED },
-          { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: adminId } },
+          { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: adminId, deleteReason: reason || null } },
           { session }
         ),
       ]);
@@ -930,7 +958,7 @@ const deleteCourse = async (adminId, courseId) => {
           targetType: "Course",
           targetId: course._id,
           beforeState,
-          afterState: { isDeleted: true, status: "INACTIVE" },
+          afterState: { isDeleted: true, status: "INACTIVE", deleteReason: reason || null },
         },
         session
       );
@@ -950,6 +978,82 @@ const deleteCourse = async (adminId, courseId) => {
   }
 };
 
+const restoreCourse = async (adminId, courseId) => {
+  assertId(courseId, "Course not found", "COURSE_NOT_FOUND");
+  const course = await Course.findById(courseId);
+  if (!course) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
+  if (!course.isDeleted) return presentCourse(course.toObject());
+
+  // 1. Parent Category & Subject existence check
+  const parentCategory = await Category.findOne({ _id: course.categoryId, ...NOT_DELETED });
+  if (!parentCategory) {
+    throw new AppError(
+      "Cannot restore course: parent category is deleted or inactive. Restore category first.",
+      "RESTORE_CONFLICT",
+      409,
+      { categoryId: course.categoryId }
+    );
+  }
+
+  const parentSubject = await Subject.findOne({ _id: course.subjectId, ...NOT_DELETED });
+  if (!parentSubject) {
+    throw new AppError(
+      "Cannot restore course: parent subject is deleted or inactive. Restore subject first.",
+      "RESTORE_CONFLICT",
+      409,
+      { subjectId: course.subjectId }
+    );
+  }
+
+  // 2. Slug conflict check with active courses
+  const conflict = await Course.findOne({
+    slug: course.slug,
+    _id: { $ne: course._id },
+    ...NOT_DELETED,
+  });
+  if (conflict) {
+    throw new AppError(
+      `Cannot restore course: slug '${course.slug}' conflicts with an active course.`,
+      "RESTORE_CONFLICT",
+      409,
+      { slug: course.slug, conflictingId: conflict._id }
+    );
+  }
+
+  course.isDeleted = false;
+  course.deletedAt = null;
+  course.deletedBy = null;
+  course.deleteReason = null;
+  course.status = "INACTIVE"; // Admin reviews before activating
+  course.updatedBy = adminId;
+  await course.save();
+
+  // Atomically restore associated syllabus versions and curriculum units
+  const { SyllabusVersion, CurriculumUnit } = require("../models");
+  await Promise.all([
+    SyllabusVersion.updateMany(
+      { courseId: course._id, isDeleted: true },
+      { $set: { isDeleted: false, deletedAt: null, deletedBy: null, deleteReason: null } }
+    ),
+    CurriculumUnit.updateMany(
+      { courseId: course._id, isDeleted: true },
+      { $set: { isDeleted: false, deletedAt: null, deletedBy: null, deleteReason: null } }
+    ),
+  ]);
+
+  const { audit } = require("./auditService");
+  await audit({
+    actorAdminId: adminId,
+    action: "COURSE_RESTORED",
+    targetType: "Course",
+    targetId: course._id,
+    beforeState: { isDeleted: true },
+    afterState: { isDeleted: false, status: "INACTIVE" },
+  });
+
+  return presentCourse(course.toObject());
+};
+
 module.exports = {
   getCategoryOrThrow,
   getSubjectOrThrow,
@@ -958,11 +1062,13 @@ module.exports = {
   createCategory,
   updateCategory,
   deleteCategory,
+  restoreCategory,
   listSubjectsByCategory,
   getSubject,
   createSubject,
   updateSubject,
   deleteSubject,
+  restoreSubject,
   searchCourses,
   getCourse,
   getCourseClasses,
@@ -972,6 +1078,7 @@ module.exports = {
   adminListCourses,
   adminGetCourse,
   deleteCourse,
+  restoreCourse,
   normalizeLevel,
   resolveLevel,
 };

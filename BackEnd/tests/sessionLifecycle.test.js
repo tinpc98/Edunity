@@ -151,6 +151,7 @@ describe("TIN-05A: Session End Data Integrity, Idempotency & Lifecycle Test Suit
       title: "Session 1: Introduction",
       sessionNumber: 1,
       status: "IN_PROGRESS",
+      roomState: "LIVE",
       meetingRoomId: `room_${new mongoose.Types.ObjectId()}`,
       startDatetime: new Date(now.getTime() - 20 * 60 * 1000),
       endDatetime: new Date(now.getTime() + 40 * 60 * 1000),

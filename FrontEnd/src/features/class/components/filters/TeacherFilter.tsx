@@ -48,7 +48,7 @@ export default function TeacherFilter({
           }}
           className="flex flex-col gap-2 w-full"
         >
-          <Radio value="ALL" className="!flex items-center text-[13px] text-slate-700 hover:text-indigo-600">
+          <Radio value="ALL" className="!flex items-center text-[13px] text-[#334155] hover:text-[#0D9488]">
             <span className="font-medium text-xs">Tất cả giáo viên</span>
           </Radio>
 
@@ -56,7 +56,7 @@ export default function TeacherFilter({
             <Radio
               key={t.id}
               value={t.id}
-              className="!flex items-center text-[12.5px] text-slate-700 hover:text-indigo-600"
+              className="!flex items-center text-[12.5px] text-[#334155] hover:text-[#0D9488]"
             >
               <span className="flex-1 font-medium truncate">{t.name}</span>
               {t.count > 0 && (

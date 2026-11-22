@@ -11,14 +11,16 @@ const body = (req) => req.body || {};
 exports.listCategories = handle(() => catalog.listCategories());
 exports.createCategory = handle((req) => catalog.createCategory(req.user.id, body(req)), 201);
 exports.updateCategory = handle((req) => catalog.updateCategory(req.user.id, req.params.id, body(req)));
-exports.deleteCategory = handle((req) => catalog.deleteCategory(req.user.id, req.params.id));
+exports.deleteCategory = handle((req) => catalog.deleteCategory(req.user.id, req.params.id, body(req).reason));
+exports.restoreCategory = handle((req) => catalog.restoreCategory(req.user.id, req.params.id));
 
 // Subjects
 exports.listSubjectsByCategory = handle((req) => catalog.listSubjectsByCategory(req.params.id));
 exports.getSubject = handle((req) => catalog.getSubject(req.params.id));
 exports.createSubject = handle((req) => catalog.createSubject(req.user.id, body(req)), 201);
 exports.updateSubject = handle((req) => catalog.updateSubject(req.user.id, req.params.id, body(req)));
-exports.deleteSubject = handle((req) => catalog.deleteSubject(req.user.id, req.params.id));
+exports.deleteSubject = handle((req) => catalog.deleteSubject(req.user.id, req.params.id, body(req).reason));
+exports.restoreSubject = handle((req) => catalog.restoreSubject(req.user.id, req.params.id));
 
 // Courses
 exports.searchCourses = handle((req) => catalog.searchCourses(req.query, parsePaging(req.query)));
@@ -28,7 +30,8 @@ exports.adminListCourses = handle((req) => catalog.adminListCourses(req.query, p
 exports.adminGetCourse = handle((req) => catalog.adminGetCourse(req.params.id));
 exports.createCourse = handle((req) => catalog.createCourse(req.user.id, body(req)), 201);
 exports.updateCourse = handle((req) => catalog.updateCourse(req.user.id, req.params.id, body(req)));
-exports.deleteCourse = handle((req) => catalog.deleteCourse(req.user.id, req.params.id));
+exports.deleteCourse = handle((req) => catalog.deleteCourse(req.user.id, req.params.id, body(req).reason));
+exports.restoreCourse = handle((req) => catalog.restoreCourse(req.user.id, req.params.id));
 
 // Course proposals — Teacher
 exports.createProposal = handle((req) => proposals.createProposal(req.user.id, body(req)), 201);

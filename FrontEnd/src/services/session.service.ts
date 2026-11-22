@@ -181,6 +181,14 @@ export const sessionService = {
     });
   },
 
+  // Keeps this tab's verified connection fresh: without heartbeats the backend closes it after a few minutes
+  async heartbeatSessionPresence(sessionId: string, connectionSessionId: string): Promise<any> {
+    return apiClient<any>(`/sessions/${sessionId}/presence/heartbeat`, {
+      method: "POST",
+      body: JSON.stringify({ connectionSessionId }),
+    });
+  },
+
   async leaveSessionPresence(sessionId: string, connectionSessionId?: string): Promise<any> {
     return apiClient<any>(`/sessions/${sessionId}/presence/leave`, {
       method: "POST",

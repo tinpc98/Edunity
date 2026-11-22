@@ -29,7 +29,7 @@ export default function GradeFilter({
           <Checkbox
             key={grade.level}
             value={grade.level}
-            className="!flex items-center text-[13px] text-slate-700 hover:text-indigo-600 !ml-0"
+            className="!flex items-center text-[13px] text-[#334155] hover:text-[#0D9488] !ml-0"
           >
             <span className="flex-1 font-medium">{grade.label}</span>
             {grade.count > 0 && (

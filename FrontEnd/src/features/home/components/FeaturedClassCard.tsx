@@ -51,7 +51,7 @@ export default function FeaturedClassCard({
   const nearlyFull = seatsLeft <= 3;
 
   return (
-    <div className="bg-white rounded-xl border border-indigo-100 shadow-sm p-3 flex flex-col group h-full">
+    <div className="bg-white rounded-xl border border-[#D6E5E2] hover:border-[#0D9488] shadow-xs hover:shadow-md transition-all duration-300 p-3 flex flex-col group h-full">
       {/* Image */}
       <div className="relative h-[200px] rounded-lg overflow-hidden mb-2.5 bg-slate-800">
         <img
@@ -62,7 +62,7 @@ export default function FeaturedClassCard({
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
 
-        <span className="absolute top-2.5 left-2.5 bg-white/95 text-emerald-700 text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-sm">
+        <span className="absolute top-2.5 left-2.5 bg-white/95 text-[#0F766E] text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-sm">
           {badge}
         </span>
 
@@ -73,7 +73,7 @@ export default function FeaturedClassCard({
 
       {/* Level + Rating */}
       <div className="flex items-center justify-between gap-2 mb-1.5">
-        <span className="bg-indigo-50 text-indigo-700 text-[11px] font-bold px-2 py-1 rounded">
+        <span className="bg-[#CCFBF1] text-[#0F766E] text-[11px] font-bold px-2 py-1 rounded">
           {levelBadge}
         </span>
 
@@ -84,37 +84,37 @@ export default function FeaturedClassCard({
       </div>
 
       {/* Title */}
-      <h3 className="text-[16px] font-extrabold text-slate-900 leading-[1.45] line-clamp-2 group-hover:text-indigo-600 transition">
+      <h3 className="text-[16px] font-extrabold text-[#163B40] leading-[1.45] line-clamp-2 group-hover:text-[#0D9488] transition">
         {title}
       </h3>
 
       {/* Teacher */}
       <div className="mt-2 flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-[11px] shrink-0">
+        <div className="w-9 h-9 rounded-full bg-[#CCFBF1] flex items-center justify-center font-bold text-[#0F766E] text-[11px] shrink-0">
           {teacherInitials}
         </div>
 
         <div className="min-w-0">
-          <h4 className="text-[13px] font-bold text-slate-800 leading-tight truncate">
+          <h4 className="text-[13px] font-bold text-[#163B40] leading-tight truncate">
             {teacherName}
           </h4>
 
-          <p className="text-[11px] text-slate-500 leading-tight mt-0.5 truncate">
+          <p className="text-[11px] text-[#64748B] leading-tight mt-0.5 truncate">
             {teacherRole}
           </p>
         </div>
       </div>
 
       {/* Live class info */}
-      <div className="mt-2 rounded-lg bg-slate-50 p-2.5 space-y-2 text-[11.5px] text-slate-600">
+      <div className="mt-2 rounded-lg bg-[#F5FAF9] p-2.5 space-y-2 text-[11.5px] text-[#334155] border border-[#D6E5E2]/40">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-extrabold text-emerald-700">
+          <span className="font-extrabold text-[#0F766E]">
             Khai giảng {startDate}
           </span>
 
           <span
             className={`font-extrabold ${
-              nearlyFull ? "text-rose-600" : "text-emerald-700"
+              nearlyFull ? "text-rose-600" : "text-[#0F766E]"
             }`}
           >
             {nearlyFull && seatsLeft > 0 && "Sắp đầy • "}
@@ -123,7 +123,7 @@ export default function FeaturedClassCard({
         </div>
 
         <div className="flex items-center gap-1.5">
-          <ClockCircleOutlined className="text-indigo-500" />
+          <ClockCircleOutlined className="text-[#0D9488]" />
 
           <span className="font-medium">{schedule}</span>
         </div>
@@ -142,7 +142,7 @@ export default function FeaturedClassCard({
               key={i}
               className="flex items-start gap-1.5 text-[11px] leading-4"
             >
-              <CheckCircleFilled className="text-emerald-500 shrink-0 mt-0.5" />
+              <CheckCircleFilled className="text-[#0D9488] shrink-0 mt-0.5" />
 
               <span className="line-clamp-1">{perk}</span>
             </div>
@@ -151,10 +151,10 @@ export default function FeaturedClassCard({
       )}
 
       {/* Price + CTA */}
-      <div className="mt-auto pt-2.5 border-t border-slate-100 flex items-end justify-between gap-3">
+      <div className="mt-auto pt-2.5 border-t border-[#D6E5E2]/70 flex items-end justify-between gap-3">
         <div>
           <div className="flex items-center gap-1.5">
-            <span className="text-[17px] font-black text-indigo-600 leading-tight">
+            <span className="text-[17px] font-black text-[#0D9488] leading-tight">
               {discountPrice}
             </span>
 
@@ -174,7 +174,7 @@ export default function FeaturedClassCard({
 
         <Link
           to={to}
-          className="inline-flex items-center bg-indigo-600 hover:bg-indigo-700 text-white hover:text-white font-bold text-[12px] px-3.5 h-8 rounded-md shadow-sm transition-colors"
+          className="inline-flex items-center bg-[#0D9488] hover:bg-[#0B746C] text-white hover:text-white font-bold text-[12px] px-3.5 h-8 rounded-md shadow-xs transition-colors"
         >
           Xem lớp
         </Link>

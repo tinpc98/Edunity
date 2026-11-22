@@ -53,6 +53,7 @@ export const gatewayPaymentService = {
       paymentSource: adapted.paymentSource,
       isAnonymous: adapted.isAnonymous,
       donorDisplayName: adapted.donorDisplayName,
+      providerMetadata: adapted.providerMetadata || null,
     };
   },
 

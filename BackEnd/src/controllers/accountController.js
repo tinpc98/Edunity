@@ -11,6 +11,12 @@ exports.createReview = handle((req) => reviews.createReview(req.user.id, req.par
 exports.getClassReviews = handle((req) => reviews.getClassReviews(req.params.id, parsePaging(req.query)));
 exports.getTeacherReviews = handle((req) => reviews.getTeacherReviews(req.params.id, parsePaging(req.query)));
 exports.getMyReviews = handle((req) => reviews.getMyReviews(req.user.id, parsePaging(req.query)));
+exports.adminListReviews = handle((req) => reviews.adminListReviews(req.query, parsePaging(req.query)));
+exports.adminGetReviewDetail = handle((req) => reviews.adminGetReviewDetail(req.params.id));
+exports.hideReview = handle((req) => reviews.hideReview(req.user.id, req.params.id, body(req).reason));
+exports.unhideReview = handle((req) => reviews.unhideReview(req.user.id, req.params.id));
+exports.deleteReview = handle((req) => reviews.deleteReview(req.user.id, req.params.id, body(req).reason));
+exports.restoreReview = handle((req) => reviews.restoreReview(req.user.id, req.params.id));
 
 // Teacher verification
 exports.submitVerification = handle((req) => verifications.submitVerification(req.user.id, body(req)), 201);

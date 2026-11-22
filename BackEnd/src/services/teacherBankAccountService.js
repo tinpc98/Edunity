@@ -1,6 +1,6 @@
 const { User } = require("../models");
 const { AppError, FORBIDDEN } = require("../utils/errors");
-const { assertId, validationError, isBlank, paged } = require("../utils/http");
+const { assertId, validationError, isBlank, paged, escapeRegex } = require("../utils/http");
 const pii = require("../utils/pii");
 const { audit } = require("./auditService");
 const { notify, notifyAdmins } = require("./notificationService");
@@ -82,13 +82,30 @@ const submitBankAccount = async (teacherId, body = {}) => {
 
 // ---------- Admin ----------
 
-const adminListBankAccounts = async (query, paging) => {
+const adminListBankAccounts = async (query = {}, paging) => {
   const status = query.status || "PENDING_REVIEW";
-  if (!["PENDING_REVIEW", "VERIFIED", "REJECTED"].includes(status)) throw validationError("status is invalid");
-  const filter = { role: "TEACHER", "teacherProfile.bankAccount.status": status, ...NOT_DELETED };
+  const filter = { role: "TEACHER", ...NOT_DELETED };
+  if (status !== "ALL") {
+    if (!["PENDING_REVIEW", "VERIFIED", "REJECTED"].includes(status)) throw validationError("status is invalid");
+    filter["teacherProfile.bankAccount.status"] = status;
+  } else {
+    filter["teacherProfile.bankAccount.status"] = { $in: ["PENDING_REVIEW", "VERIFIED", "REJECTED"] };
+  }
+
+  if (query.search && typeof query.search === "string" && query.search.trim()) {
+    const term = query.search.trim();
+    const rx = new RegExp(escapeRegex(term), "i");
+    filter.$or = [
+      { email: rx },
+      { "teacherProfile.fullName": rx },
+      { "teacherProfile.bankAccount.bankName": rx },
+      { "teacherProfile.bankAccount.accountHolderName": rx },
+    ];
+  }
+
   const [items, total] = await Promise.all([
     User.find(filter)
-      .sort({ "teacherProfile.bankAccount.submittedAt": 1 })
+      .sort({ "teacherProfile.bankAccount.submittedAt": -1 })
       .skip(paging.skip)
       .limit(paging.pageSize)
       .select("email teacherProfile.fullName teacherProfile.identity.fullName teacherProfile.bankAccount")

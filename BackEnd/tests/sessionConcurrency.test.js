@@ -115,6 +115,8 @@ describe("TIN-05B-FINAL: Session Race & Egress Recovery Test Suite", () => {
       title: "Session Concurrency Test",
       sessionNumber: 1,
       status,
+      // An IN_PROGRESS session is one the Teacher started: beginTeaching always sets roomState LIVE
+      ...(status === "IN_PROGRESS" ? { roomState: "LIVE" } : {}),
       meetingRoomId: `room_${new mongoose.Types.ObjectId()}`,
       startDatetime: new Date(now.getTime() - minutesAgo * 60 * 1000),
       endDatetime: new Date(now.getTime() + 40 * 60 * 1000),

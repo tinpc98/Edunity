@@ -1,5 +1,7 @@
 export const ROUTES = {
   HOME: "/",
+  ABOUT: "/about",
+  SUPPORT: "/support",
   CLASSES: "/classes",
   TEACHERS: "/teachers",
   TEACHER_DETAIL: "/teachers/:teacherId",
@@ -61,11 +63,16 @@ export const ROUTES = {
   },
   ADMIN: {
     HOME: "/admin",
+    NOTIFICATIONS: "/admin/notifications",
     FINANCE_OVERVIEW: "/admin/finance-overview",
     USERS: "/admin/users",
     CLASSES: "/admin/classes",
     CLASS_DETAIL: "/admin/classes/:classId",
     CATALOG: "/admin/catalog",
+    CATEGORIES: "/admin/categories",
+    SUBJECTS: "/admin/subjects",
+    COURSES: "/admin/courses",
+    SYLLABUS: "/admin/syllabus",
     COURSE_PROPOSALS: "/admin/course-proposals",
     TEACHER_VERIFICATIONS: "/admin/teachers/verifications",
     TEACHER_VERIFICATION_DETAIL: "/admin/teachers/verifications/:teacherId",
@@ -84,6 +91,8 @@ export const ROUTES = {
     REFUNDS: "/admin/refunds",
     REPORTS: "/admin/reports",
     REPORT_DETAIL: "/admin/reports/:reportId",
+    REVIEWS: "/admin/reviews",
+    TRASH: "/admin/trash",
   },
   SPONSOR: {
     HOME: "/sponsor",

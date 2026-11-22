@@ -186,8 +186,12 @@ exports.getAdminPayments = async (req, res, next) => {
       return res.status(403).json({ success: false, error: "FORBIDDEN", message: "Only admins can access" });
     }
     const { page, pageSize } = parsePaging(req.query);
-    const result = await financeService.getAdminPayments(page, pageSize, req.query.status);
-    res.status(200).json({ success: true, data: result });
+    const result = await financeService.getAdminPayments({
+      ...req.query,
+      page,
+      limit: pageSize,
+    });
+    res.status(200).json({ success: true, data: result, ...result });
   } catch (err) {
     next(err);
   }
@@ -270,7 +274,19 @@ exports.addReconciliationNote = async (req, res, next) => {
     if (req.user.role !== "ADMIN") {
       return res.status(403).json({ success: false, error: "FORBIDDEN", message: "Only admins can access" });
     }
-    const result = await financeService.addReconciliationNote(req.params.id, req.user.id, req.body || {});
+    const result = await financeService.addReconciliationNote(req.params.id, req.user, req.body || {});
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.resolveReconciliation = async (req, res, next) => {
+  try {
+    if (req.user.role !== "ADMIN") {
+      return res.status(403).json({ success: false, error: "FORBIDDEN", message: "Only admins can access" });
+    }
+    const result = await financeService.resolveReconciliation(req.params.id, req.user, req.body || {});
     res.status(200).json({ success: true, data: result });
   } catch (err) {
     next(err);

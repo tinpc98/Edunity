@@ -9,7 +9,6 @@ import {
   Avatar,
   Alert,
   message,
-  Tooltip,
   Pagination,
 } from "antd";
 import {
@@ -20,7 +19,6 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   SyncOutlined,
-  CopyOutlined,
   CloseOutlined,
   BookOutlined,
   SafetyCertificateOutlined,
@@ -195,11 +193,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    message.success("Đã sao chép mã người dùng!");
-  };
-
   const columns = [
     {
       title: "Người dùng",
@@ -219,17 +212,6 @@ export default function AdminUsersPage() {
             <div className="text-xs text-[#64748B] truncate">{record.email}</div>
           </div>
         </div>
-      ),
-    },
-    {
-      title: "Mã người dùng",
-      dataIndex: "id",
-      key: "id",
-      width: 140,
-      render: (id: string) => (
-        <span className="font-mono text-xs font-semibold text-[#0F766E] bg-[#F0F8F6] px-2 py-0.5 rounded border border-[#D6E5E2]">
-          {id.slice(-8).toUpperCase()}
-        </span>
       ),
     },
     {
@@ -669,27 +651,7 @@ export default function AdminUsersPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* Mã người dùng */}
-                  <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
-                    <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
-                      Mã người dùng
-                    </span>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs font-mono font-bold text-[#0F766E] truncate mr-2">
-                        {userDetail.id}
-                      </span>
-                      <Tooltip title="Sao chép mã">
-                        <button
-                          onClick={() => copyToClipboard(userDetail.id)}
-                          className="p-1 rounded text-[#64748B] hover:text-[#0F766E] hover:bg-[#E5F5F1] transition-colors cursor-pointer"
-                        >
-                          <CopyOutlined className="text-xs" />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </div>
-
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {/* Vai trò */}
                   <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
                     <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">

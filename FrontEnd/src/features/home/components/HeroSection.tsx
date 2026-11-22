@@ -29,23 +29,23 @@ export default function HeroSection() {
             <img src={HERO_BANNER_URL} alt="Edunity Live Classroom" className="w-full h-full object-cover opacity-90" />
             <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-900/45 to-transparent flex items-center px-8 py-6">
               <div className="max-w-[560px] text-white space-y-4">
-                <div className="inline-flex items-center gap-2 bg-amber-400 text-slate-950 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wide">
-                  <ThunderboltFilled /> Khai Giảng Học Kỳ II & Lớp Live Tương Tác 2 Chiều
+                <div className="inline-flex items-center gap-2 bg-[#0D9488] text-white text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wide shadow-sm">
+                  <ThunderboltFilled className="text-amber-300" /> Khai Giảng Học Kỳ II & Lớp Live Tương Tác 2 Chiều
                 </div>
                 <h1 className="text-[31px] font-black leading-[1.16] tracking-tight">Học Trực Tiếp Cùng Giáo Viên Phù Hợp Với Bạn</h1>
                 <p className="text-sm text-slate-100 leading-6 max-w-[520px]">Tìm lớp học live phù hợp, trao đổi trực tiếp với giáo viên qua micro và bảng số, được giải đáp ngay trong buổi học.</p>
                 <div className="flex items-center gap-2.5 pt-1">
                   <a href="/classes">
-                    <Button type="primary" className="bg-indigo-600 hover:bg-indigo-700 font-bold text-[13px] h-10 px-4 rounded-lg border-none">Khám phá lớp học</Button>
+                    <Button type="primary" className="bg-[#0D9488] hover:bg-[#0B746C] font-bold text-[13px] h-10 px-5 rounded-lg border-none shadow-md shadow-teal-950/20">Khám phá lớp học</Button>
                   </a>
-                  <a href="/classes?statuses=OPEN">
-                    <Button className="bg-white/15 hover:bg-white/25 text-white font-bold text-[13px] h-10 px-4 rounded-lg border-white/30 backdrop-blur">Xem lớp đang mở</Button>
+                  <a href="/classes">
+                    <Button className="bg-white/15 hover:bg-white/25 text-white font-bold text-[13px] h-10 px-4 rounded-lg border-white/30 backdrop-blur">Xem tất cả lớp</Button>
                   </a>
                 </div>
               </div>
             </div>
             <div className="absolute top-4 right-4">
-              <span className="bg-black/60 backdrop-blur text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-white/10">
+              <span className="bg-[#163B40]/80 backdrop-blur text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-teal-500/30">
                 <StarFilled className="text-amber-400" /> 4.9/5 • 45.000+ học sinh yêu thích
               </span>
             </div>

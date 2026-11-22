@@ -21,6 +21,7 @@ const { getDisplayProfile } = require("../utils/userProfile");
 const { audit } = require("./auditService");
 const { notify } = require("./notificationService");
 const authTokenService = require("./authTokenService");
+const tokenRevocationService = require("./tokenRevocationService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const ROLES = ["STUDENT", "TEACHER", "SPONSOR", "ADMIN"];
@@ -207,9 +208,9 @@ const updateUserStatus = async (adminId, userId, body) => {
 
   // Idempotency: repeated request with same status
   if (existingUser.status === status) {
-    // FIX-02: Idempotent recovery - retry token revocation if account is locked
+    // Durable idempotent recovery - flush any pending tasks or unrevoked tokens
     if (status !== "ACTIVE") {
-      await authTokenService.safeRevokeAllForUser(existingUser._id);
+      await tokenRevocationService.processPendingTasksForUser(existingUser._id);
     }
     let populatedUser = existingUser.toObject();
     if (populatedUser.statusChangedBy && mongoose.isValidObjectId(populatedUser.statusChangedBy)) {
@@ -282,6 +283,19 @@ const updateUserStatus = async (adminId, userId, body) => {
         session
       );
 
+      // BE-USER-FIX-02: Atomically record durable TokenRevocationTask within the same transaction
+      if (status !== "ACTIVE") {
+        await tokenRevocationService.recordRevocationTask(
+          {
+            userId: updated._id,
+            targetStatus: status,
+            reason,
+            revokeBefore: now,
+          },
+          session
+        );
+      }
+
       committedDoc = updated.toObject();
       actuallyChanged = true;
     });
@@ -289,10 +303,17 @@ const updateUserStatus = async (adminId, userId, body) => {
     await session.endSession();
   }
 
-  // FIX-02: Post-commit side-effects (cannot be rolled back if placed inside transaction)
+  // BE-USER-FIX-02: Post-commit side-effects (cannot be rolled back if placed inside transaction)
   // Status change has already committed in DB. Ensure side-effect errors do not fail the request with 500.
   if (status !== "ACTIVE") {
-    await authTokenService.safeRevokeAllForUser(committedDoc._id);
+    try {
+      await tokenRevocationService.processPendingTasksForUser(committedDoc._id);
+    } catch (err) {
+      console.error(
+        `[adminService] Immediate token revocation sweep failed for userId=${committedDoc._id}:`,
+        err
+      );
+    }
   } else if (actuallyChanged) {
     try {
       await notify(

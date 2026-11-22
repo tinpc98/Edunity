@@ -133,6 +133,10 @@ const validateVerifiedWebhookData = (verifiedData, webhookBody) => {
       typeof verifiedData.accountNumber === "string" && verifiedData.accountNumber.trim()
         ? verifiedData.accountNumber.trim()
         : null,
+    virtualAccountNumber:
+      typeof verifiedData.virtualAccountNumber === "string" && verifiedData.virtualAccountNumber.trim()
+        ? verifiedData.virtualAccountNumber.trim()
+        : null,
     transactionDateTime:
       typeof verifiedData.transactionDateTime === "string" ? verifiedData.transactionDateTime : null,
     description: typeof verifiedData.description === "string" ? verifiedData.description : null,
@@ -140,9 +144,115 @@ const validateVerifiedWebhookData = (verifiedData, webhookBody) => {
 };
 
 /**
+ * Determine if the receiver bank account in the verified webhook matches
+ * the expected receiver (configured env account, intent virtual account, or linked VietQR alias).
+ */
+const TRUSTED_CHANNEL_PHYSICAL_ACCOUNTS = Object.freeze({
+  TUITION: ["4008999999"], // Verified MBBank merchant account for Edunity Tuition
+  DONATION: ["4008999999"], // Verified MBBank merchant account for Edunity Donation
+});
+
+/**
+ * Determine if the receiver bank account in the verified webhook matches
+ * the expected receiver (configured env account, verified platform physical account,
+ * or linked VietQR Pro virtual account alias).
+ *
+ * Security Requirements (TIN-PAYOS-FINAL-RECOVERY-CHECK):
+ * 1. An alias in the description is NEVER sufficient on its own.
+ * 2. The physical receiving account must be an approved trusted physical account.
+ * 3. When a VietQR virtual account is used, BOTH the physical receiving account
+ *    AND the virtual alias association must be valid.
+ * 4. Untrusted physical accounts must ALWAYS trigger ACCOUNT_MISMATCH even if the
+ *    description contains the virtual alias (blocks alias injection).
+ */
+const isReceiverAccountMatch = (channelKey, intent, parsed) => {
+  const parsedAcc = typeof parsed?.accountNumber === "string" ? parsed.accountNumber.trim() : "";
+  const parsedVirtAcc = typeof parsed?.virtualAccountNumber === "string" ? parsed.virtualAccountNumber.trim() : "";
+  const parsedDesc = typeof parsed?.description === "string" ? parsed.description.trim().toUpperCase() : "";
+
+  const envAccount = (
+    process.env[`PAYOS_${channelKey}_EXPECTED_ACCOUNT_NUMBER`] ||
+    (channelKey === "TUITION" ? process.env.PAYOS_EXPECTED_ACCOUNT_NUMBER : "") ||
+    ""
+  ).trim();
+
+  const intentAcc = (
+    intent &&
+    intent.providerMetadata &&
+    typeof intent.providerMetadata.accountNumber === "string"
+      ? intent.providerMetadata.accountNumber.trim()
+      : ""
+  );
+
+  // If neither envAccount nor intentAcc is configured, account is not restricted
+  if (!envAccount && !intentAcc) {
+    return true;
+  }
+
+  // 1. Direct match with configured env account
+  if (envAccount) {
+    if (parsedAcc === envAccount || parsedVirtAcc === envAccount) return true;
+  }
+
+  // 2. Direct match with intent's providerMetadata account
+  if (intentAcc) {
+    if (parsedAcc === intentAcc || parsedVirtAcc === intentAcc) return true;
+
+    // 3. VietQR Pro virtual account matching:
+    // When intent specifies a virtual QR account (starts with VQR):
+    // The payment MUST be received on an approved, trusted physical merchant account!
+    // An alias in description ALONE is NEVER sufficient without a trusted physical receiver.
+    if (/^VQR/i.test(intentAcc)) {
+      const trustedPhysicals = [
+        ...(envAccount ? [envAccount] : []),
+        ...(TRUSTED_CHANNEL_PHYSICAL_ACCOUNTS[channelKey] || []),
+      ];
+
+      // Physical receiver account MUST be in the trusted physical list
+      const isPhysicalAccountTrusted = trustedPhysicals.includes(parsedAcc);
+      if (!isPhysicalAccountTrusted) {
+        return false; // Blocks alias injection on untrusted receiver account!
+      }
+
+      // Physical account is trusted. Now verify the VietQR alias association:
+      const vqrSuffix = intentAcc.replace(/^VQR/i, "").toUpperCase();
+      const hasAliasInDescription =
+        (vqrSuffix && parsedDesc.includes(vqrSuffix)) ||
+        parsedDesc.includes(intentAcc.toUpperCase());
+      const hasMatchingVirtualAcc = parsedVirtAcc && parsedVirtAcc === intentAcc;
+
+      if (hasAliasInDescription || hasMatchingVirtualAcc) {
+        return true;
+      }
+
+      // Physical account was trusted, but no virtual alias was found in description or virtualAccountNumber
+      return false;
+    }
+  }
+
+  // If envAccount was set and did not match
+  if (envAccount) {
+    return false;
+  }
+
+  // If intentAcc was set and did not match
+  if (intentAcc && parsedAcc && intentAcc !== parsedAcc) {
+    return false;
+  }
+
+  return true;
+};
+
+/**
  * Determine expected receiver account (if reliably configured on the server or stored in intent's providerMetadata).
  */
 const resolveTrustedExpectedAccount = (channelKey, intent) => {
+  const envAccount = (
+    process.env[`PAYOS_${channelKey}_EXPECTED_ACCOUNT_NUMBER`] ||
+    (channelKey === "TUITION" ? process.env.PAYOS_EXPECTED_ACCOUNT_NUMBER : "") ||
+    ""
+  ).trim();
+  if (envAccount) return envAccount;
   if (
     intent &&
     intent.providerMetadata &&
@@ -151,12 +261,7 @@ const resolveTrustedExpectedAccount = (channelKey, intent) => {
   ) {
     return intent.providerMetadata.accountNumber.trim();
   }
-  const envAccount = (
-    process.env[`PAYOS_${channelKey}_EXPECTED_ACCOUNT_NUMBER`] ||
-    (channelKey === "TUITION" ? process.env.PAYOS_EXPECTED_ACCOUNT_NUMBER : "") ||
-    ""
-  ).trim();
-  return envAccount || null;
+  return null;
 };
 
 /**
@@ -283,33 +388,19 @@ const findExistingEventResponse = async (channelKey, parsed, fingerprint) => {
 };
 
 /**
- * Unified payOS Webhook Processor for both TUITION and DONATION channels (PR2 + PR3).
+ * Shared Idempotent Settlement Processor for verified bank transfer events.
+ * Provenance can be:
+ * - "INBOUND_WEBHOOK": arrived via verified inbound payOS webhook HTTP callback
+ * - "SERVER_PROVIDER_QUERY": arrived via authenticated server-side payOS REST API query
  */
-const processPayosChannelWebhook = async (routeChannelKey, webhookBody, options = {}) => {
+const settleVerifiedTransfer = async (routeChannelKey, verifiedData, options = {}) => {
   const channelKey = payosService.resolveChannelForPurpose(routeChannelKey);
   const expectedPurpose = channelKey === "DONATION" ? "DONATION" : "TUITION";
   const verifyOnly =
     options?.verifyOnly === true ||
     process.env.PAYOS_WEBHOOK_VERIFY_ONLY === "true";
-
-  // Step 1 & 2: Verify webhook structure and cryptographic signature using official @payos/node SDK
-  const verifiedData = await payosService.verifyWebhookPayload(channelKey, webhookBody);
-
-  // Step 3: Check if this is a payOS webhook URL registration test probe
-  if (isPayosWebhookTestProbe(webhookBody, verifiedData)) {
-    return {
-      acknowledged: true,
-      idempotent: false,
-      dispatched: false,
-      isTestWebhook: true,
-      channelKey,
-      purpose: expectedPurpose,
-      eventStatus: "WEBHOOK_TEST_IGNORED",
-      dispatchStatus: "NOT_REQUIRED",
-      eventId: null,
-      reconciliationId: null,
-    };
-  }
+  const provenance = options?.provenance || "INBOUND_WEBHOOK";
+  const webhookBody = options?.webhookBody || null;
 
   // Step 4: Validate verified fields inside signed `data`
   const parsed = validateVerifiedWebhookData(verifiedData, webhookBody);
@@ -390,13 +481,11 @@ const processPayosChannelWebhook = async (routeChannelKey, webhookBody, options 
       eventStatus = "LINK_MISMATCH";
       reconciliationReason = "LINK_MISMATCH";
       normalizedError = `paymentLinkId mismatch for orderCode ${parsed.orderCode}`;
-    } else {
-      const trustedAccount = resolveTrustedExpectedAccount(channelKey, matchedIntent);
-      if (trustedAccount && parsed.accountNumber && trustedAccount !== parsed.accountNumber) {
-        eventStatus = "ACCOUNT_MISMATCH";
-        reconciliationReason = "ACCOUNT_MISMATCH";
-        normalizedError = "Receiver bank account does not match verified channel account";
-      } else if (parsed.amountNum !== toNum(matchedIntent.amount)) {
+    } else if (!isReceiverAccountMatch(channelKey, matchedIntent, parsed)) {
+      eventStatus = "ACCOUNT_MISMATCH";
+      reconciliationReason = "ACCOUNT_MISMATCH";
+      normalizedError = "Receiver bank account does not match verified channel account";
+    } else if (parsed.amountNum !== toNum(matchedIntent.amount)) {
         eventStatus = "AMOUNT_MISMATCH";
         reconciliationReason = "AMOUNT_MISMATCH";
         normalizedError = `Amount mismatch: expected ${toNum(matchedIntent.amount)}, received ${parsed.amountNum}`;
@@ -444,9 +533,9 @@ const processPayosChannelWebhook = async (routeChannelKey, webhookBody, options 
           reconciliationReason = null;
         }
       }
-    }
 
     const safeMetadata = {
+      provenance,
       outerCode: parsed.outerCode,
       signedDataCode: parsed.signedDataCode,
       transactionDateTime: parsed.transactionDateTime,
@@ -638,9 +727,96 @@ const processPayosChannelWebhook = async (routeChannelKey, webhookBody, options 
   }
 };
 
+/**
+ * Unified payOS Webhook Processor for both TUITION and DONATION channels (PR2 + PR3).
+ * Exclusively for INBOUND WEBHOOKS. Cryptographically verifies HMAC signature.
+ */
+const processPayosChannelWebhook = async (routeChannelKey, webhookBody, options = {}) => {
+  const channelKey = payosService.resolveChannelForPurpose(routeChannelKey);
+  const expectedPurpose = channelKey === "DONATION" ? "DONATION" : "TUITION";
+
+  // Step 1 & 2: Verify webhook structure and cryptographic signature using official @payos/node SDK
+  const verifiedData = await payosService.verifyWebhookPayload(channelKey, webhookBody);
+
+  // Step 3: Check if this is a payOS webhook URL registration test probe
+  if (isPayosWebhookTestProbe(webhookBody, verifiedData)) {
+    return {
+      acknowledged: true,
+      idempotent: false,
+      dispatched: false,
+      isTestWebhook: true,
+      channelKey,
+      purpose: expectedPurpose,
+      eventStatus: "WEBHOOK_TEST_IGNORED",
+      dispatchStatus: "NOT_REQUIRED",
+      eventId: null,
+      reconciliationId: null,
+    };
+  }
+
+  return settleVerifiedTransfer(channelKey, verifiedData, {
+    ...options,
+    provenance: "INBOUND_WEBHOOK",
+    webhookBody,
+  });
+};
+
+/**
+ * Server-Initiated Provider Query Settlement:
+ * Directly settles a verified payment link status returned by payOS REST API query.
+ * Provenance is explicitly tagged as "SERVER_PROVIDER_QUERY" (NO synthetic webhook, NO forged HMAC).
+ */
+const settleVerifiedProviderQuery = async (routeChannelKey, paymentLinkInfo, options = {}) => {
+  const channelKey = payosService.resolveChannelForPurpose(routeChannelKey);
+
+  if (!paymentLinkInfo || typeof paymentLinkInfo !== "object") {
+    throw new AppError("Invalid payOS payment link info response", "PROVIDER_ERROR", 502);
+  }
+
+  if (paymentLinkInfo.status !== "PAID") {
+    return {
+      acknowledged: true,
+      idempotent: false,
+      dispatched: false,
+      channelKey,
+      eventStatus: "PAYMENT_NOT_PAID",
+      dispatchStatus: "NOT_REQUIRED",
+    };
+  }
+
+  const transactions = Array.isArray(paymentLinkInfo.transactions) ? paymentLinkInfo.transactions : [];
+  if (transactions.length === 0) {
+    throw new AppError("payOS payment link is PAID but contains no transactions", "PROVIDER_ERROR", 502);
+  }
+
+  const tx = transactions[transactions.length - 1];
+  const verifiedData = {
+    orderCode: paymentLinkInfo.orderCode,
+    amount: paymentLinkInfo.amountPaid || paymentLinkInfo.amount,
+    description: tx.description || `EDUNITY HP ${paymentLinkInfo.orderCode}`,
+    accountNumber: tx.accountNumber || "",
+    virtualAccountNumber: tx.virtualAccountNumber || null,
+    reference: tx.reference || `REF_${paymentLinkInfo.orderCode}`,
+    transactionDateTime: tx.transactionDateTime || new Date().toISOString(),
+    currency: "VND",
+    paymentLinkId: paymentLinkInfo.id,
+    code: "00",
+    desc: "success",
+  };
+
+  return settleVerifiedTransfer(channelKey, verifiedData, {
+    ...options,
+    provenance: "SERVER_PROVIDER_QUERY",
+  });
+};
+
 module.exports = {
   processPayosChannelWebhook,
+  settleVerifiedProviderQuery,
+  settleVerifiedTransfer,
   isPayosWebhookTestProbe,
   buildEventFingerprint,
   maskAccountNumber,
+  isReceiverAccountMatch,
+  resolveTrustedExpectedAccount,
 };

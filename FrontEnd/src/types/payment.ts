@@ -53,6 +53,31 @@ export interface ApiPayment {
   remainingSeconds?: number;
   classId?: string | null;
   className?: string;
+  teacherName?: string;
+  classPrice?: number | string | null;
+  studentName?: string;
+  studentEmail?: string;
+  studentPhone?: string;
+  payerName?: string | null;
+  isRefundPending?: boolean;
+  refundCase?: {
+    caseNumber: string;
+    status: string;
+    reason: string;
+    eligibleAmount?: number | string | null;
+    approvedAmount?: number | string | null;
+    beneficiaryBankAccount?: {
+      bankName?: string;
+      accountNumber?: string;
+      accountHolderName?: string;
+    };
+    notes?: string;
+  } | null;
+  reconciliation?: {
+    status: string;
+    reason: string;
+    resolutionAction?: string;
+  } | null;
   campaignTitle?: string | null;
   campaignStatus?: string | null;
   isAnonymous?: boolean;
@@ -60,6 +85,7 @@ export interface ApiPayment {
   reconciliationRequired?: boolean;
   reconciliationReason?: string | null;
   reconciliationStatus?: string | null;
+  providerMetadata?: any;
 }
 
 export interface Payment {
@@ -72,6 +98,31 @@ export interface Payment {
   campaignId?: string | null;
   contributionId?: string | null;
   payerUserId: string;
+  studentName?: string;
+  studentEmail?: string;
+  studentPhone?: string;
+  payerName?: string | null;
+  teacherName?: string;
+  classPrice?: number | string | null;
+  isRefundPending?: boolean;
+  refundCase?: {
+    caseNumber: string;
+    status: string;
+    reason: string;
+    eligibleAmount?: number | string | null;
+    approvedAmount?: number | string | null;
+    beneficiaryBankAccount?: {
+      bankName?: string;
+      accountNumber?: string;
+      accountHolderName?: string;
+    };
+    notes?: string;
+  } | null;
+  reconciliation?: {
+    status: string;
+    reason: string;
+    resolutionAction?: string;
+  } | null;
   gateway: string;
   gatewayReference: string;
   orderCode: number | null;
@@ -103,6 +154,12 @@ export interface Payment {
   reconciliationReason?: string | null;
   reconciliationStatus?: string | null;
   errorMessage?: string;
+  providerMetadata?: {
+    bin?: string | null;
+    accountNumber?: string | null;
+    accountName?: string | null;
+    description?: string | null;
+  } | null;
 }
 
 export type PaymentEntity = Payment;
@@ -139,6 +196,12 @@ export interface CreatePaymentResponse {
   paymentSource?: string | null;
   isAnonymous?: boolean;
   donorDisplayName?: string | null;
+  providerMetadata?: {
+    bin?: string | null;
+    accountNumber?: string | null;
+    accountName?: string | null;
+    description?: string | null;
+  } | null;
 }
 
 export interface WebhookResult {
@@ -174,16 +237,33 @@ export interface ApiTransaction {
 
 export interface Transaction {
   id: string;
+  _id?: string;
   transactionType: TransactionType;
-  sourceUserId: string;
-  sourceUser?: { email?: string; fullName?: string; role?: string };
-  destinationUserId?: string;
-  destinationUser?: { email?: string; fullName?: string; role?: string };
-  relatedEnrollmentId?: string;
-  relatedPaymentId?: string;
-  relatedContributionId?: string;
-  relatedBankEventId?: string;
-  orderCode?: number | null;
+  sourceUserId: string | any;
+  sourceUser?: {
+    email?: string;
+    fullName?: string;
+    role?: string;
+    studentProfile?: { fullName?: string };
+    teacherProfile?: { fullName?: string };
+    sponsorProfile?: { representativeName?: string; organizationName?: string };
+  };
+  destinationUserId?: string | any;
+  destinationUser?: {
+    email?: string;
+    fullName?: string;
+    role?: string;
+    studentProfile?: { fullName?: string };
+    teacherProfile?: { fullName?: string };
+    sponsorProfile?: { representativeName?: string; organizationName?: string };
+  };
+  relatedEnrollmentId?: any;
+  relatedPaymentId?: any;
+  relatedContributionId?: any;
+  relatedBankEventId?: any;
+  relatedScholarshipUsageId?: any;
+  orderCode?: number | string | null;
+  refundCase?: any;
   amount: number;
   status: TransactionStatus;
   createdAt: string;
@@ -255,19 +335,19 @@ export const PAYMENT_UI_STATE_COLORS: Record<PaymentUiState, string> = {
 };
 
 export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
-  ENROLLMENT_PAYMENT: "Thanh toán học phí",
-  UNAPPLIED_TUITION_RECEIPT: "Khoản thu học phí tạm giữ (đến muộn / cần đối soát)",
+  ENROLLMENT_PAYMENT: "Thu học phí",
+  UNAPPLIED_TUITION_RECEIPT: "Thu học phí chờ xử lý",
   SCHOLARSHIP_USAGE: "Sử dụng học bổng",
-  SPONSOR_CONTRIBUTION: "Đóng góp tài trợ",
-  TEACHER_PAYOUT: "Rút tiền giảng viên",
+  SPONSOR_CONTRIBUTION: "Nhận tài trợ",
+  TEACHER_PAYOUT: "Chi trả giáo viên",
   REFUND: "Hoàn tiền",
 };
 
 export const TRANSACTION_TYPE_COLORS: Record<TransactionType, string> = {
-  ENROLLMENT_PAYMENT: "blue",
-  UNAPPLIED_TUITION_RECEIPT: "volcano",
+  ENROLLMENT_PAYMENT: "teal",
+  UNAPPLIED_TUITION_RECEIPT: "gold",
   SCHOLARSHIP_USAGE: "cyan",
-  SPONSOR_CONTRIBUTION: "green",
+  SPONSOR_CONTRIBUTION: "blue",
   TEACHER_PAYOUT: "magenta",
   REFUND: "purple",
 };
@@ -286,12 +366,20 @@ export interface BankTransferEventItem {
   dispatchStatus: string;
   dispatchAttempts: number;
   lastDispatchError?: string | null;
+  normalizedError?: string | null;
   receivedAt: string;
   processedAt?: string;
   dispatchedAt?: string | null;
   linkedPaymentId?: any;
   contributionId?: any;
   metadata?: any;
+  reconciliation?: {
+    _id: string;
+    status: string;
+    reason?: string;
+    orderCode?: number | null;
+    resolutionNote?: string | null;
+  } | null;
 }
 
 export interface PaymentReconciliationItem {
@@ -304,6 +392,7 @@ export interface PaymentReconciliationItem {
   contributionId?: any;
   enrollmentId?: any;
   campaignId?: any;
+  refundCase?: any;
   reason: string;
   expectedAmount?: number | string | null;
   receivedAmount: number | string;
@@ -322,7 +411,122 @@ export interface PaymentReconciliationItem {
   updatedAt?: string;
 }
 
+export type FinancePeriodType = "today" | "yesterday" | "3d" | "7d" | "30d" | "custom";
+
+export interface FinanceOverviewParams {
+  period?: FinancePeriodType;
+  from?: string;
+  to?: string;
+}
+
+export interface FinanceAnalyticsKpi {
+  title: string;
+  value: string;
+  previousValue?: string;
+  deltaPercent?: number | null;
+  hasComparison?: boolean;
+  trendDirection?: "up" | "down" | "neutral";
+  trendLabel?: string;
+  subtext?: string;
+  variant?: "teal" | "mint" | "amber" | "rose" | "indigo" | "emerald";
+  isSnapshot?: boolean;
+  count?: number;
+  openCasesCount?: number;
+  completedValue?: string;
+  pendingHold?: string;
+  availableToWithdraw?: string;
+}
+
+export interface FinanceOverviewKpis {
+  tuitionRevenue: FinanceAnalyticsKpi;
+  donationRevenue: FinanceAnalyticsKpi;
+  reconciliationPending: FinanceAnalyticsKpi;
+  refundLiability: FinanceAnalyticsKpi;
+  teacherPendingPayout: FinanceAnalyticsKpi;
+  teacherPaidOut: FinanceAnalyticsKpi;
+}
+
+export interface RevenueTimeSeriesPoint {
+  key: string;
+  label: string;
+  tuition: number;
+  donation: number;
+  total: number;
+}
+
+export interface FundStructureDonut {
+  tuition: number;
+  donation: number;
+  other: number;
+  total: number;
+  tuitionPercent: number;
+  donationPercent: number;
+  otherPercent: number;
+}
+
+export interface ReconciliationDistributionItem {
+  key: string;
+  status: string;
+  label: string;
+  count: number;
+  amount: number;
+  percent: number;
+  color: string;
+}
+
+export interface RecentFinanceTransaction {
+  id: string;
+  code: string;
+  type: string;
+  rawType: string;
+  amount: number;
+  formattedAmount: string;
+  isDebit: boolean;
+  isCredit: boolean;
+  createdAt: string;
+  formattedDate: string;
+  status: string;
+  statusType: "success" | "warning" | "error" | "neutral";
+  actorName?: string;
+}
+
+export interface FinanceOperationsSummary {
+  syncStatus: string;
+  syncStatusType: "success" | "warning" | "error" | "neutral";
+  isRunning: boolean;
+  processedCount: number;
+  pendingCount: number;
+  attentionCount: number;
+  refundCasesOpen: number;
+}
+
+export interface TransactionStatusItem {
+  key: string;
+  label: string;
+  count: number;
+  amount: number;
+  percent: number;
+  color: string;
+  subtext: string;
+}
+
 export interface FinanceOverviewData {
+  period?: {
+    key: string;
+    from: string;
+    to: string;
+    label: string;
+    granularity: string;
+  };
+  kpis?: FinanceOverviewKpis;
+  charts?: {
+    revenueTimeSeries: RevenueTimeSeriesPoint[];
+    fundStructure: FundStructureDonut;
+    reconciliationDistribution: ReconciliationDistributionItem[];
+    transactionStatusDistribution?: TransactionStatusItem[];
+  };
+  recentTransactions?: RecentFinanceTransaction[];
+  operationsSummary?: FinanceOperationsSummary;
   revenue: {
     confirmedTuitionRevenue: string;
     confirmedDonationRevenue: string;
@@ -375,17 +579,17 @@ export interface FinanceOverviewData {
     lastRunStatus: string;
     lastError: any;
     lastSummary: any;
-    totalRuns: number;
-    totalDispatched: number;
-    totalReconciled: number;
-    totalFailed: number;
-    backlogCount: number;
-    exhaustedCount: number;
+    totalRuns?: number;
+    totalDispatched?: number;
+    totalReconciled?: number;
+    totalFailed?: number;
+    backlogCount?: number;
+    exhaustedCount?: number;
   };
-  disclaimer: {
-    receiptVsRevenue: string;
-    donationVsTuition: string;
-    refundExecution: string;
+  disclaimer?: {
+    receiptVsRevenue?: string;
+    donationVsTuition?: string;
+    refundExecution?: string;
   };
 }
 
@@ -432,6 +636,28 @@ export const PAYOUT_STATUS_LABELS: Record<PayoutStatus, string> = {
   COMPLETED: "Đã chi trả thành công",
   FAILED: "Thất bại",
   REJECTED: "Đã từ chối",
+};
+
+export const ADMIN_PAYOUT_STATUS_LABELS: Record<PayoutStatus, string> = {
+  PENDING: "Chờ phê duyệt",
+  PROCESSING: "Đang xử lý",
+  APPROVED: "Chờ chuyển tiền",
+  SCHEDULED: "Chờ chuyển tiền (Thứ Sáu)",
+  PENDING_BANK_TRANSFER: "Chờ xác nhận CK",
+  COMPLETED: "Đã chi trả",
+  FAILED: "Thất bại",
+  REJECTED: "Đã từ chối",
+};
+
+export const TEACHER_PAYOUT_STATUS_LABELS: Record<PayoutStatus, string> = {
+  PENDING: "Chờ Admin duyệt",
+  PROCESSING: "Đang xử lý",
+  APPROVED: "Chờ nhận tiền",
+  SCHEDULED: "Chờ nhận tiền",
+  PENDING_BANK_TRANSFER: "Chờ nhận tiền",
+  COMPLETED: "Đã nhận tiền",
+  FAILED: "Thất bại",
+  REJECTED: "Bị từ chối",
 };
 
 export const PAYOUT_STATUS_COLORS: Record<PayoutStatus, string> = {
@@ -492,9 +718,22 @@ export interface TeacherSettlementSummaryResponse {
   items: any[];
 }
 
-export const formatVND = (amount: number | string | undefined | null): string => {
-  const num = typeof amount === "number" ? amount : parseFloat(String(amount || 0));
-  return `${(isNaN(num) ? 0 : num).toLocaleString("vi-VN")} đ`;
+export const parseAmountValue = (amount: any): number => {
+  if (amount === null || amount === undefined) return 0;
+  if (typeof amount === "number") return isNaN(amount) ? 0 : amount;
+  if (typeof amount === "object") {
+    if (amount.$numberDecimal !== undefined) {
+      const parsed = parseFloat(amount.$numberDecimal);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+  }
+  const parsed = parseFloat(String(amount));
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+export const formatVND = (amount: number | string | any | undefined | null): string => {
+  const num = parseAmountValue(amount);
+  return `${num.toLocaleString("vi-VN")} đ`;
 };
 
 // ==========================================
@@ -514,23 +753,36 @@ export type RefundStatus =
 export const REFUND_STATUS_LABELS: Record<RefundStatus, string> = {
   NEEDS_REVIEW: "Chờ xem xét",
   IN_REVIEW: "Đang xem xét",
-  APPROVED: "Đã duyệt (Chờ chi)",
-  REJECTED: "Đã từ chối",
-  PENDING_BANK_TRANSFER: "Chờ chuyển khoản",
-  AWAITING_BANK_VERIFICATION: "Chờ xác minh chứng từ",
+  APPROVED: "Chờ chuyển tiền",
+  PENDING_BANK_TRANSFER: "Chờ chuyển tiền",
+  AWAITING_BANK_VERIFICATION: "Chờ xác minh hoàn tiền",
   COMPLETED: "Đã hoàn tất",
+  REJECTED: "Từ chối",
   CANCELLED: "Đã hủy",
 };
 
 export const REFUND_STATUS_COLORS: Record<RefundStatus, string> = {
   NEEDS_REVIEW: "gold",
   IN_REVIEW: "blue",
-  APPROVED: "cyan",
-  REJECTED: "red",
+  APPROVED: "orange",
   PENDING_BANK_TRANSFER: "orange",
   AWAITING_BANK_VERIFICATION: "purple",
   COMPLETED: "green",
+  REJECTED: "red",
   CANCELLED: "default",
+};
+
+export const REFUND_REASON_LABELS: Record<string, string> = {
+  OVERPAYMENT: "Thanh toán trùng",
+  LATE_PAYMENT: "Thanh toán trễ",
+  CLASS_CANCELLED: "Hủy lớp",
+  STUDENT_DROPPED: "Học viên rút lui",
+  TEACHER_NO_SHOW: "Giảng viên vắng",
+  SESSION_CANCELLED: "Hủy buổi học",
+  DISPUTE_SETTLED: "Giải quyết khiếu nại",
+  CAMPAIGN_CLOSED: "Đóng chiến dịch",
+  PURPOSE_MISMATCH: "Sai mục đích thanh toán",
+  OTHER: "Lý do khác",
 };
 
 export interface RefundCaseItem {

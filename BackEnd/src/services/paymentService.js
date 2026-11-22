@@ -714,18 +714,17 @@ const getPaymentById = async (user, paymentId) => {
       throw PAYMENT_NOT_FOUND();
     }
 
-    const { providerMetadata, ...safePayment } = payment;
-    const expiredAt = payment.expiredAt || null;
-
     if (payment.purpose === "DONATION") {
+      const { providerMetadata: dMeta, ...safeDonation } = payment;
+      const donationExpiredAt = payment.expiredAt || null;
       return {
-        ...safePayment,
+        ...safeDonation,
         paymentId: payment._id,
         purpose: "DONATION",
         channelKey: payment.channelKey || "DONATION",
         provider: payment.provider || "PAYOS",
         currency: payment.currency || "VND",
-        remainingSeconds: computeRemainingSeconds(expiredAt),
+        remainingSeconds: computeRemainingSeconds(donationExpiredAt),
       };
     }
 
@@ -734,40 +733,76 @@ const getPaymentById = async (user, paymentId) => {
           .select("enrollmentStatus paymentSource holdExpiresAt classId tuitionAmount amountPaidViaScholarship")
           .lean()
       : null;
-    const holdExpiresAt = enrollment ? enrollment.holdExpiresAt : expiredAt;
+
+    let currentPayment = payment;
+    let currentEnrollment = enrollment;
+
+    // Active polling sync with payOS when payment is PENDING and enrollment is PENDING_PAYMENT
+    if (
+      currentPayment.paymentStatus === "PENDING" &&
+      currentPayment.provider === "PAYOS" &&
+      currentEnrollment &&
+      currentEnrollment.enrollmentStatus === "PENDING_PAYMENT"
+    ) {
+      const channelKey = currentPayment.channelKey || "TUITION";
+      const isEnabled = payosService.isPayosEnabled(channelKey);
+      if (isEnabled && currentPayment.orderCode) {
+        try {
+          const info = await payosService.getPaymentLinkInfo(channelKey, currentPayment.orderCode);
+          if (info && info.status === "PAID" && Array.isArray(info.transactions) && info.transactions.length > 0) {
+            const payosWebhookService = require("./payosWebhookService");
+            await payosWebhookService.settleVerifiedProviderQuery(channelKey, info, {
+              paymentId: currentPayment._id,
+            });
+            const updatedP = await Payment.findById(paymentId).lean();
+            if (updatedP) currentPayment = updatedP;
+            const updatedE = await Enrollment.findById(currentPayment.enrollmentId)
+              .select("enrollmentStatus paymentSource holdExpiresAt classId tuitionAmount amountPaidViaScholarship")
+              .lean();
+            if (updatedE) currentEnrollment = updatedE;
+          }
+        } catch (syncErr) {
+          // Swallow query error to allow normal read path
+        }
+      }
+    }
+
+    const { providerMetadata, ...safePayment } = currentPayment;
+    const expiredAt = currentPayment.expiredAt || null;
+    const holdExpiresAt = currentEnrollment ? currentEnrollment.holdExpiresAt : expiredAt;
 
     let reconciliation = null;
     if (mongoose.connection && mongoose.connection.readyState === 1) {
-      reconciliation = await PaymentReconciliation.findOne({ paymentId: payment._id })
+      reconciliation = await PaymentReconciliation.findOne({ paymentId: currentPayment._id })
         .sort({ createdAt: -1 })
         .select("reason status")
         .lean()
         .catch(() => null);
     }
 
-    const tuitionAmountNum = enrollment && enrollment.tuitionAmount != null ? toNum(enrollment.tuitionAmount) : null;
-    const paymentAmountNum = payment.amount != null ? toNum(payment.amount) : 0;
+    const tuitionAmountNum = currentEnrollment && currentEnrollment.tuitionAmount != null ? toNum(currentEnrollment.tuitionAmount) : null;
+    const paymentAmountNum = currentPayment.amount != null ? toNum(currentPayment.amount) : 0;
     const scholarshipAmountNum =
-      enrollment && enrollment.amountPaidViaScholarship != null && toNum(enrollment.amountPaidViaScholarship) > 0
-        ? toNum(enrollment.amountPaidViaScholarship)
+      currentEnrollment && currentEnrollment.amountPaidViaScholarship != null && toNum(currentEnrollment.amountPaidViaScholarship) > 0
+        ? toNum(currentEnrollment.amountPaidViaScholarship)
         : tuitionAmountNum != null && tuitionAmountNum > paymentAmountNum
         ? Math.max(0, tuitionAmountNum - paymentAmountNum)
         : 0;
 
     const isLateCompleted =
-      payment.paymentStatus === "COMPLETED" &&
-      enrollment &&
-      !["CONFIRMED", "COMPLETED"].includes(enrollment.enrollmentStatus);
+      currentPayment.paymentStatus === "COMPLETED" &&
+      currentEnrollment &&
+      !["CONFIRMED", "COMPLETED"].includes(currentEnrollment.enrollmentStatus);
 
     return {
       ...safePayment,
-      paymentId: payment._id,
-      purpose: payment.purpose || "TUITION",
-      channelKey: payment.channelKey || "TUITION",
-      provider: payment.provider || "PAYOS",
-      currency: payment.currency || "VND",
-      enrollmentStatus: enrollment ? enrollment.enrollmentStatus : null,
-      paymentSource: enrollment ? enrollment.paymentSource : null,
+      paymentId: currentPayment._id,
+      purpose: currentPayment.purpose || "TUITION",
+      channelKey: currentPayment.channelKey || "TUITION",
+      provider: currentPayment.provider || "PAYOS",
+      currency: currentPayment.currency || "VND",
+      enrollmentStatus: currentEnrollment ? currentEnrollment.enrollmentStatus : null,
+      paymentSource: currentEnrollment ? currentEnrollment.paymentSource : null,
       tuitionAmount: tuitionAmountNum != null ? tuitionAmountNum : paymentAmountNum,
       scholarshipAmount: scholarshipAmountNum,
       reconciliationRequired: Boolean(reconciliation) || isLateCompleted,
@@ -780,7 +815,7 @@ const getPaymentById = async (user, paymentId) => {
       holdExpiresAt,
       expiredAt: expiredAt || holdExpiresAt,
       remainingSeconds: computeRemainingSeconds(expiredAt || holdExpiresAt),
-      classId: enrollment ? enrollment.classId : null,
+      classId: currentEnrollment ? currentEnrollment.classId : null,
     };
   }
 

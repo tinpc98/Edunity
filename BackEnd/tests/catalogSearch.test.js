@@ -563,7 +563,11 @@ describe("TIN-04A: Catalog Search, Filtering, Pagination & Stable Sorting Test S
     const mySessions = await request(app).get("/api/me/sessions").set(as(student));
     expect(mySessions.statusCode).toBe(200);
     const sessionItem = mySessions.body.data.find((s) => s._id === scheduledSession._id.toString());
-    expect(sessionItem.canJoin).toBe(true);
+    // Not started by the Teacher yet: a Student cannot join
+    expect(sessionItem.canJoin).toBe(false);
+    await Session.updateOne({ _id: scheduledSession._id }, { $set: { status: "IN_PROGRESS", roomState: "LIVE" } });
+    const afterStart = await request(app).get("/api/me/sessions").set(as(student));
+    expect(afterStart.body.data.find((s) => s._id === scheduledSession._id.toString()).canJoin).toBe(true);
 
     // 3. completed session canJoin = false
     const completedSession = await Session.create({

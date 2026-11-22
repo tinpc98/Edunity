@@ -6,6 +6,7 @@ import type {
   ApiTransaction,
   TeacherEarningsResponse,
   FinanceOverviewData,
+  FinanceOverviewParams,
   BankTransferEventItem,
   PaymentReconciliationItem,
   PayoutStatus,
@@ -40,6 +41,8 @@ export interface Payout {
     note?: string | null;
   };
   attachedEarningsCount?: number;
+  isTestData?: boolean;
+  testDataTag?: string;
 }
 
 /** Bank details are never sent: the payout goes to the teacher's verified bank account (BAO-09). */
@@ -62,6 +65,8 @@ export interface BankEventFilterParams {
   page?: number;
   limit?: number;
   channelKey?: string;
+  status?: string;
+  businessStatus?: string;
   eventStatus?: string;
   dispatchStatus?: string;
   provider?: string;
@@ -76,6 +81,7 @@ export interface ReconciliationFilterParams {
   page?: number;
   limit?: number;
   status?: string;
+  tab?: string;
   reason?: string;
   channelKey?: string;
   purpose?: string;
@@ -87,14 +93,14 @@ export interface ReconciliationFilterParams {
 
 export const financeKeys = {
   all: ["finance"] as const,
-  overview: () => ["finance", "overview"] as const,
+  overview: (params?: FinanceOverviewParams) => ["finance", "overview", params] as const,
   teacherPayouts: () => ["finance", "teacherPayouts"] as const,
   teacherSettlements: () => ["finance", "teacherSettlements"] as const,
-  adminPayouts: (page = 1, status?: string) => ["finance", "adminPayouts", page, status] as const,
+  adminPayouts: (page = 1, status?: string, search?: string) => ["finance", "adminPayouts", page, status, search] as const,
   adminPayoutDetail: (id: string) => ["finance", "adminPayoutDetail", id] as const,
   teacherEarnings: () => ["finance", "teacherEarnings"] as const,
-  adminPayments: (page = 1, limit = 20, status?: string) =>
-    ["finance", "adminPayments", page, limit, status] as const,
+  adminPayments: (page = 1, limit = 20, status?: string, search?: string) =>
+    ["finance", "adminPayments", page, limit, status, search] as const,
   adminTransactions: (params?: TransactionFilterParams) =>
     ["finance", "adminTransactions", params] as const,
   adminBankEvents: (params?: BankEventFilterParams) =>
@@ -107,8 +113,13 @@ export const financeKeys = {
 
 export const financeService = {
   /** Admin: Financial Dashboard Overview */
-  async getFinanceOverview(): Promise<FinanceOverviewData> {
-    return apiClient<FinanceOverviewData>(`/admin/overview`);
+  async getFinanceOverview(params?: FinanceOverviewParams): Promise<FinanceOverviewData> {
+    const query = new URLSearchParams();
+    if (params?.period) query.set("period", params.period);
+    if (params?.from) query.set("from", params.from);
+    if (params?.to) query.set("to", params.to);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return apiClient<FinanceOverviewData>(`/admin/overview${queryString}`);
   },
 
   /** Teacher: payout requests. GET /api/teacher/payouts */
@@ -132,9 +143,14 @@ export const financeService = {
   },
 
   /** Admin: payout queue. GET /api/admin/payouts */
-  async getAdminPayouts(page = 1, status?: string): Promise<{ items: Payout[]; total: number; page: number; totalPages: number }> {
+  async getAdminPayouts(
+    page = 1,
+    status?: string,
+    search?: string
+  ): Promise<{ items: Payout[]; total: number; page: number; totalPages: number }> {
     const query = new URLSearchParams({ page: String(page), pageSize: "20" });
     if (status && status !== "ALL") query.set("status", status);
+    if (search && search.trim()) query.set("search", search.trim());
     return apiClient(`/admin/payouts?${query.toString()}`);
   },
 
@@ -172,7 +188,8 @@ export const financeService = {
   async getAdminPayments(
     page = 1,
     limit = 20,
-    status?: string
+    status?: string,
+    search?: string
   ): Promise<{ items: Payment[]; total: number; page: number; limit: number; totalPages: number }> {
     const query = new URLSearchParams({
       page: String(page),
@@ -180,6 +197,9 @@ export const financeService = {
     });
     if (status && status !== "ALL") {
       query.set("status", status);
+    }
+    if (search && search.trim()) {
+      query.set("search", search.trim());
     }
 
     const data = await apiClient<{
@@ -270,6 +290,8 @@ export const financeService = {
     if (params.page) query.set("page", String(params.page));
     if (params.limit) query.set("limit", String(params.limit));
     if (params.channelKey && params.channelKey !== "ALL") query.set("channelKey", params.channelKey);
+    if (params.status && params.status !== "ALL") query.set("status", params.status);
+    if (params.businessStatus && params.businessStatus !== "ALL") query.set("businessStatus", params.businessStatus);
     if (params.eventStatus && params.eventStatus !== "ALL") query.set("eventStatus", params.eventStatus);
     if (params.dispatchStatus && params.dispatchStatus !== "ALL") query.set("dispatchStatus", params.dispatchStatus);
     if (params.provider && params.provider !== "ALL") query.set("provider", params.provider);
@@ -299,10 +321,17 @@ export const financeService = {
     page: number;
     limit: number;
     totalPages: number;
+    tabCounts?: {
+      needsReview: number;
+      inReview: number;
+      resolved: number;
+      all: number;
+    };
   }> {
     const query = new URLSearchParams();
     if (params.page) query.set("page", String(params.page));
     if (params.limit) query.set("limit", String(params.limit));
+    if (params.tab && params.tab !== "ALL") query.set("tab", params.tab);
     if (params.status && params.status !== "ALL") query.set("status", params.status);
     if (params.reason && params.reason !== "ALL") query.set("reason", params.reason);
     if (params.channelKey && params.channelKey !== "ALL") query.set("channelKey", params.channelKey);
@@ -343,6 +372,29 @@ export const financeService = {
   ): Promise<PaymentReconciliationItem> {
     return apiClient<PaymentReconciliationItem>(`/admin/reconciliations/${id}/notes`, {
       method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Admin: Complete reconciliation resolution workflow.
+   * PATCH /api/admin/reconciliations/:id/resolve
+   */
+  async resolveReconciliation(
+    id: string,
+    payload: {
+      outcome: "RESOLVED_APPROVED" | "RESOLVED_REFUNDED" | "RESOLVED_IGNORED";
+      note: string;
+      recipientUserId?: string;
+      beneficiaryBankAccount?: {
+        bankName: string;
+        accountNumber: string;
+        accountHolderName: string;
+      };
+    }
+  ): Promise<PaymentReconciliationItem> {
+    return apiClient<PaymentReconciliationItem>(`/admin/reconciliations/${id}/resolve`, {
+      method: "PATCH",
       body: JSON.stringify(payload),
     });
   },

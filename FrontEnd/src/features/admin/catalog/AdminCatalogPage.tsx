@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Tabs,
   Table,
@@ -25,12 +25,13 @@ import {
   PlusOutlined,
   EditOutlined,
   EyeOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined,
   SearchOutlined,
   ReloadOutlined,
   CheckCircleOutlined,
   StopOutlined,
   FileTextOutlined,
-  DollarOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
@@ -59,7 +60,6 @@ import {
   COURSE_STATUS_LABELS,
 } from "../../../types/catalog";
 import AdminSyllabusManagementPage from "./AdminSyllabusManagementPage";
-import AdminPricingPoliciesPage from "./AdminPricingPoliciesPage";
 
 const { TextArea } = Input;
 
@@ -70,7 +70,7 @@ function renderCourseStatusTag(status: CourseStatus) {
   return <Tag color="default">{COURSE_STATUS_LABELS.INACTIVE}</Tag>;
 }
 
-const VALID_TABS = ["categories", "subjects", "courses", "syllabus", "pricing"] as const;
+const VALID_TABS = ["categories", "subjects", "courses", "syllabus"] as const;
 type CatalogTab = (typeof VALID_TABS)[number];
 
 function parseTabParam(raw: string | null): CatalogTab {
@@ -100,12 +100,17 @@ function parsePageParam(raw: string | null): number {
   return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : 1;
 }
 
-export default function AdminCatalogPage() {
+interface AdminCatalogPageProps {
+  fixedTab?: "categories" | "subjects" | "courses" | "syllabus";
+}
+
+export default function AdminCatalogPage({ fixedTab }: AdminCatalogPageProps = {}) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [messageApi, contextHolder] = message.useMessage();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const activeTab = parseTabParam(searchParams.get("tab"));
+  const activeTab = fixedTab || parseTabParam(searchParams.get("tab"));
   const courseSearch = searchParams.get("search") || "";
   const courseCatFilter = searchParams.get("categoryId") || "";
   const courseSubFilter = searchParams.get("subjectId") || "";
@@ -151,6 +156,98 @@ export default function AdminCatalogPage() {
 
     return () => window.clearTimeout(timer);
   }, [searchDraft, courseSearch, updateSearchParams]);
+
+  // ==========================================
+  // SOFT DELETE MANAGEMENT
+  // ==========================================
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: "CATEGORY" | "SUBJECT" | "COURSE";
+    id: string;
+    name: string;
+  } | null>(null);
+  const [deleteReasonInput, setDeleteReasonInput] = useState<string>("");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteErrorMsg, setDeleteErrorMsg] = useState<string | null>(null);
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      catalogService.deleteCategory(id, reason),
+    onSuccess: () => {
+      messageApi.success("Đã chuyển danh mục vào Thùng rác thành công!");
+      setIsDeleteModalOpen(false);
+      setDeleteTarget(null);
+      setDeleteReasonInput("");
+      setDeleteErrorMsg(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["public-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["adminTrash"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.message || err?.error || "Không thể xóa danh mục này do có ràng buộc dữ liệu.";
+      setDeleteErrorMsg(msg);
+    },
+  });
+
+  const deleteSubjectMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      catalogService.deleteSubject(id, reason),
+    onSuccess: () => {
+      messageApi.success("Đã chuyển môn học vào Thùng rác thành công!");
+      setIsDeleteModalOpen(false);
+      setDeleteTarget(null);
+      setDeleteReasonInput("");
+      setDeleteErrorMsg(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["public-subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["adminTrash"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.message || err?.error || "Không thể xóa môn học này do có ràng buộc dữ liệu.";
+      setDeleteErrorMsg(msg);
+    },
+  });
+
+  const deleteCourseMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      courseService.deleteCourse(id, reason),
+    onSuccess: () => {
+      messageApi.success("Đã chuyển khóa học vào Thùng rác thành công!");
+      setIsDeleteModalOpen(false);
+      setDeleteTarget(null);
+      setDeleteReasonInput("");
+      setDeleteErrorMsg(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-courses"] });
+      queryClient.invalidateQueries({ queryKey: ["public-courses"] });
+      queryClient.invalidateQueries({ queryKey: ["adminTrash"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.message || err?.error || "Không thể xóa khóa học này do có lớp học hoặc ràng buộc liên quan.";
+      setDeleteErrorMsg(msg);
+    },
+  });
+
+  const handleOpenDeleteModal = (type: "CATEGORY" | "SUBJECT" | "COURSE", id: string, name: string) => {
+    setDeleteTarget({ type, id, name });
+    setDeleteReasonInput("");
+    setDeleteErrorMsg(null);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.type === "CATEGORY") {
+      deleteCategoryMutation.mutate({ id: deleteTarget.id, reason: deleteReasonInput });
+    } else if (deleteTarget.type === "SUBJECT") {
+      deleteSubjectMutation.mutate({ id: deleteTarget.id, reason: deleteReasonInput });
+    } else if (deleteTarget.type === "COURSE") {
+      deleteCourseMutation.mutate({ id: deleteTarget.id, reason: deleteReasonInput });
+    }
+  };
+
+  const isDeleting =
+    deleteCategoryMutation.isPending ||
+    deleteSubjectMutation.isPending ||
+    deleteCourseMutation.isPending;
 
   // ==========================================
   // TAB 1: CATEGORIES
@@ -468,6 +565,54 @@ export default function AdminCatalogPage() {
       : selectedCourseModalCategory.allowedGradeLevels
     : GRADE_LEVELS;
 
+  const handleTabChange = (nextTab: string) => {
+    if (fixedTab) {
+      if (nextTab === "categories") navigate("/admin/categories");
+      else if (nextTab === "subjects") navigate("/admin/subjects");
+      else if (nextTab === "courses") navigate("/admin/courses");
+      else if (nextTab === "syllabus") navigate("/admin/syllabus");
+    } else {
+      updateSearchParams({ tab: nextTab });
+    }
+  };
+
+  const getHeaderMeta = () => {
+    switch (activeTab) {
+      case "categories":
+        return {
+          title: "Quản lý Danh mục đào tạo",
+          icon: <FolderOutlined className="text-[#0D9488]" />,
+          desc: "Phân loại cấp bậc học và các nhóm chương trình đào tạo trên toàn hệ thống.",
+        };
+      case "subjects":
+        return {
+          title: "Quản lý Môn học",
+          icon: <ReadOutlined className="text-[#0D9488]" />,
+          desc: "Quản trị môn học trực thuộc từng danh mục, thiết lập mã môn và phân bổ đào tạo.",
+        };
+      case "courses":
+        return {
+          title: "Quản lý Khóa học chuẩn",
+          icon: <BookOutlined className="text-[#0D9488]" />,
+          desc: "Chương trình khung khóa học chuẩn hóa phục vụ mở lớp giảng dạy trực tuyến.",
+        };
+      case "syllabus":
+        return {
+          title: "Quản lý Giáo trình & Phiên bản",
+          icon: <FileTextOutlined className="text-[#0D9488]" />,
+          desc: "Quản trị khung bài giảng, phân phối phiên bản và học liệu học thuật.",
+        };
+      default:
+        return {
+          title: "Quản lý Danh mục & Khóa học",
+          icon: <BookOutlined className="text-[#0D9488]" />,
+          desc: "Quản trị các Danh mục, Môn học, Khóa học chuẩn và Giáo trình đào tạo.",
+        };
+    }
+  };
+
+  const headerMeta = getHeaderMeta();
+
   return (
     <div className="space-y-6">
       {contextHolder}
@@ -475,18 +620,18 @@ export default function AdminCatalogPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-            <BookOutlined className="text-brand-600" />
-            Quản lý Danh mục & Khóa học
+            {headerMeta.icon}
+            {headerMeta.title}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Quản trị các Danh mục (Category), Môn học (Subject), và Khóa học chuẩn (Course) trong hệ thống.
+            {headerMeta.desc}
           </p>
         </div>
       </div>
 
       <Tabs
         activeKey={activeTab}
-        onChange={(nextTab) => updateSearchParams({ tab: nextTab })}
+        onChange={handleTabChange}
         items={[
           // ===============================
           // TAB 1: CATEGORIES
@@ -600,13 +745,23 @@ export default function AdminCatalogPage() {
                       key: "action",
                       align: "right",
                       render: (_: unknown, record: Category) => (
-                        <Button
-                          size="small"
-                          icon={<EditOutlined />}
-                          onClick={() => handleOpenCategoryModal(record)}
-                        >
-                          Sửa
-                        </Button>
+                        <Space size="small">
+                          <Button
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => handleOpenCategoryModal(record)}
+                          >
+                            Sửa
+                          </Button>
+                          <Button
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => handleOpenDeleteModal("CATEGORY", record.id, record.name)}
+                          >
+                            Xóa
+                          </Button>
+                        </Space>
                       ),
                     },
                   ]}
@@ -718,13 +873,23 @@ export default function AdminCatalogPage() {
                       key: "action",
                       align: "right",
                       render: (_: unknown, record: Subject) => (
-                        <Button
-                          size="small"
-                          icon={<EditOutlined />}
-                          onClick={() => handleOpenSubjectModal(record)}
-                        >
-                          Sửa
-                        </Button>
+                        <Space size="small">
+                          <Button
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => handleOpenSubjectModal(record)}
+                          >
+                            Sửa
+                          </Button>
+                          <Button
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => handleOpenDeleteModal("SUBJECT", record.id, record.name)}
+                          >
+                            Xóa
+                          </Button>
+                        </Space>
                       ),
                     },
                   ]}
@@ -1034,6 +1199,14 @@ export default function AdminCatalogPage() {
                                 </Button>
                               </Popconfirm>
                             )}
+                            <Button
+                              size="small"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => handleOpenDeleteModal("COURSE", record.id, record.title)}
+                            >
+                              Xóa
+                            </Button>
                           </Space>
                         );
                       },
@@ -1053,15 +1226,6 @@ export default function AdminCatalogPage() {
               </span>
             ),
             children: <AdminSyllabusManagementPage />,
-          },
-          {
-            key: "pricing",
-            label: (
-              <span className="flex items-center gap-2 font-medium">
-                <DollarOutlined /> Chính sách giá
-              </span>
-            ),
-            children: <AdminPricingPoliciesPage />,
           },
         ]}
       />
@@ -1590,6 +1754,71 @@ export default function AdminCatalogPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Soft Delete Confirmation Modal */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2 text-rose-600">
+            <ExclamationCircleOutlined />
+            <span>Chuyển vào Thùng rác (Soft Delete)</span>
+          </div>
+        }
+        open={isDeleteModalOpen}
+        onCancel={() => {
+          setIsDeleteModalOpen(false);
+          setDeleteTarget(null);
+          setDeleteErrorMsg(null);
+        }}
+        confirmLoading={isDeleting}
+        okText="Chuyển vào Thùng rác"
+        cancelText="Hủy"
+        okButtonProps={{ danger: true }}
+        onOk={handleConfirmDelete}
+      >
+        {deleteTarget && (
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-slate-700">
+              Bạn có chắc chắn muốn chuyển{" "}
+              <strong>
+                {deleteTarget.type === "CATEGORY"
+                  ? "danh mục"
+                  : deleteTarget.type === "SUBJECT"
+                  ? "môn học"
+                  : "khóa học"}
+              </strong>{" "}
+              <span className="text-[#0D9488] font-bold">&ldquo;{deleteTarget.name}&rdquo;</span>{" "}
+              vào Thùng rác không?
+            </p>
+
+            {deleteErrorMsg && (
+              <Alert
+                type="error"
+                showIcon
+                message="Không thể xóa mục này"
+                description={deleteErrorMsg}
+                className="rounded-xl border-red-200"
+              />
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Lý do xóa (ghi nhận lịch sử kiểm toán):
+              </label>
+              <TextArea
+                rows={3}
+                placeholder="Nhập lý do xóa mục này..."
+                value={deleteReasonInput}
+                onChange={(e) => setDeleteReasonInput(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+
+            <p className="text-[11px] text-slate-500 italic">
+              * Dữ liệu sẽ được ẩn khỏi trang Public và chuyển vào Thùng rác. Bạn có thể khôi phục bất cứ lúc nào từ trang Thùng rác nếu không có xung đột dữ liệu.
+            </p>
           </div>
         )}
       </Modal>

@@ -74,6 +74,7 @@ app.use("/api", require("./routes/scholarshipRoutes"));
 app.use("/api", require("./routes/accountRoutes"));
 app.use("/api", require("./routes/communityRoutes"));
 app.use("/api", require("./routes/scholarshipPrivacyRoutes"));
+app.use("/api", require("./routes/trashRoutes"));
 
 // AID-08: guardian consent for minors is checked against Admin-verified consent forms (BAO-11)
 require("./services/scholarshipDossierGateService").setConsentVerifier(require("./services/scholarshipPrivacyService").verifyConsent);

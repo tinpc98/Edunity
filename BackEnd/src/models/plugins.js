@@ -12,6 +12,7 @@ function softDeletePlugin(schema) {
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
     deletedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    deleteReason: { type: String, default: null },
   });
   schema.index({ isDeleted: 1 });
 }

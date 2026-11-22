@@ -48,7 +48,7 @@ export default function CourseFilter({
           }}
           className="flex flex-col gap-2 w-full"
         >
-          <Radio value="ALL" className="!flex items-start text-[13px] text-slate-700 hover:text-indigo-600">
+          <Radio value="ALL" className="!flex items-start text-[13px] text-[#334155] hover:text-[#0D9488]">
             <span className="font-medium text-xs leading-5">Tất cả khóa học</span>
           </Radio>
 
@@ -56,7 +56,7 @@ export default function CourseFilter({
             <Radio
               key={c.id}
               value={c.id}
-              className="!flex items-start text-[12.5px] text-slate-700 hover:text-indigo-600"
+              className="!flex items-start text-[12.5px] text-[#334155] hover:text-[#0D9488]"
             >
               <span className="leading-snug line-clamp-2">{c.title}</span>
               {c.count > 0 && (

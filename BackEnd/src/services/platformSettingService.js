@@ -8,7 +8,7 @@ const SETTING_DEFINITIONS = Object.freeze({
     key: "SEAT_HOLD_MINUTES",
     valueType: "INTEGER",
     envVar: "SEAT_HOLD_MINUTES",
-    defaultValue: 15,
+    defaultValue: 10,
     min: 1,
     max: 1440,
     description: "Seat reservation hold duration in minutes",

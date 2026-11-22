@@ -2,6 +2,7 @@ import { Modal, Button, App as AntdApp } from "antd";
 import { Link } from "react-router-dom";
 import { CloseOutlined, CaretRightOutlined, VideoCameraOutlined } from "@ant-design/icons";
 import type { SessionEntity, SessionStatus } from "../../../../types/classDiscovery";
+import { isSessionLive } from "../../../../utils/sessionLive";
 
 export interface SessionWithNumber extends SessionEntity {
   sessionNumber: number;
@@ -110,7 +111,7 @@ export default function SessionDetailModal({
       <div className="flex flex-col">
         {/* ================= 1. HEADER: BUỔI X BADGE + CLOSE ICON ================= */}
         <div className="flex items-center justify-between">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-teal-50 text-teal-600">
             BUỔI {session.sessionNumber}
           </span>
 
@@ -118,7 +119,7 @@ export default function SessionDetailModal({
             type="button"
             onClick={onClose}
             aria-label="Đóng"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer"
           >
             <CloseOutlined className="text-sm" />
           </button>
@@ -134,23 +135,26 @@ export default function SessionDetailModal({
 
         {/* Live Classroom CTA if SCHEDULED or IN_PROGRESS */}
         {(session.status === "SCHEDULED" || session.status === "IN_PROGRESS") && (
-          <div className="mb-6 p-4 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-between gap-4">
+          <div className="mb-6 p-4 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-between gap-4">
             <div>
               <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <VideoCameraOutlined className="text-indigo-600" />
+                <VideoCameraOutlined className="text-teal-600" />
                 <span>Phòng học trực tuyến Live Classroom</span>
               </div>
               <div className="text-xs text-slate-500 mt-0.5">
-                {session.status === "IN_PROGRESS"
-                  ? "Buổi học đang diễn ra. Bạn có thể tham gia lớp học ngay bây giờ."
-                  : "Phòng học mở trước giờ học 15 phút."}
+                {isSessionLive(session)
+                  ? "Giáo viên đã bắt đầu buổi học. Bạn có thể tham gia ngay bây giờ."
+                  : "Phòng học chỉ mở khi giáo viên nhấn Bắt đầu buổi học."}
               </div>
             </div>
-            <Link to={`/classroom/${session._id}`}>
-              <Button type="primary" className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-bold">
-                {session.status === "IN_PROGRESS" ? "Vào lớp ngay" : "Vào phòng học"}
-              </Button>
-            </Link>
+            {/* The button appears only once the Teacher started; the backend re-checks access on join */}
+            {isSessionLive(session) && (
+              <Link to={`/classroom/${session._id}`}>
+                <Button type="primary" className="bg-teal-600 hover:bg-teal-700 rounded-xl text-xs font-bold">
+                  Vào phòng học
+                </Button>
+              </Link>
+            )}
 
           </div>
         )}
@@ -164,10 +168,10 @@ export default function SessionDetailModal({
 
           {isRecordingAvailable ? (
             /* 4A. Compact Recording Row */
-            <div className="bg-indigo-50/40 border border-indigo-100 rounded-xl p-3.5 sm:p-4 flex items-center justify-between gap-3 sm:gap-4">
+            <div className="bg-teal-50/40 border border-teal-100 rounded-xl p-3.5 sm:p-4 flex items-center justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-3 min-w-0">
                 {/* Left: Small square Edunity indigo play icon */}
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <CaretRightOutlined className="text-base translate-x-0.5" />
                 </div>
 
@@ -189,7 +193,7 @@ export default function SessionDetailModal({
               <button
                 type="button"
                 onClick={handleWatchRecordingClick}
-                className="text-xs sm:text-sm font-semibold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 shrink-0 transition-colors cursor-pointer group focus:outline-none focus:underline"
+                className="text-xs sm:text-sm font-semibold text-teal-600 hover:text-teal-700 inline-flex items-center gap-1 shrink-0 transition-colors cursor-pointer group focus:outline-none focus:underline"
               >
                 <span>Xem lại buổi học</span>
                 <span className="group-hover:translate-x-0.5 transition-transform">→</span>

@@ -19,7 +19,7 @@ export default function ClassDetailHeader({ item }: ClassDetailHeaderProps) {
             title: (
               <Link
                 to="/"
-                className="text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 text-xs transition-colors"
+                className="text-[#64748B] hover:text-[#0D9488] flex items-center gap-1.5 text-xs transition-colors"
               >
                 <HomeOutlined />
                 <span>Trang chủ</span>
@@ -30,7 +30,7 @@ export default function ClassDetailHeader({ item }: ClassDetailHeaderProps) {
             title: (
               <Link
                 to="/classes"
-                className="text-slate-500 hover:text-indigo-600 text-xs transition-colors"
+                className="text-[#64748B] hover:text-[#0D9488] text-xs transition-colors"
               >
                 Khám phá lớp học
               </Link>
@@ -38,7 +38,7 @@ export default function ClassDetailHeader({ item }: ClassDetailHeaderProps) {
           },
           {
             title: (
-              <span className="text-slate-800 font-semibold text-xs truncate max-w-xs">
+              <span className="text-[#163B40] font-semibold text-xs truncate max-w-xs">
                 {item.className}
               </span>
             ),
@@ -47,21 +47,21 @@ export default function ClassDetailHeader({ item }: ClassDetailHeaderProps) {
       />
 
       {/* Main Class Information Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs flex flex-col gap-4">
+      <div className="bg-white rounded-2xl border border-[#D6E5E2] p-6 shadow-xs flex flex-col gap-4">
         {/* Badges */}
         <div className="flex flex-wrap items-center gap-2">
           {item.gradeLabel && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#CCFBF1] text-[#0F766E] border border-[#99F6E4]">
               {item.gradeLabel}
             </span>
           )}
           {item.subjectName && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#F0FDFA] text-[#0D9488] border border-[#99F6E4]/70">
               {item.subjectName}
             </span>
           )}
           {isFree ? (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#CCFBF1] text-[#0F766E] border border-[#99F6E4]">
               Lớp miễn phí
             </span>
           ) : (
@@ -73,7 +73,7 @@ export default function ClassDetailHeader({ item }: ClassDetailHeaderProps) {
 
         {/* Primary Title: Class Name */}
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-snug !mb-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-[#163B40] tracking-tight leading-snug !mb-1">
             {item.className}
           </h1>
 
@@ -81,19 +81,19 @@ export default function ClassDetailHeader({ item }: ClassDetailHeaderProps) {
           {item.courseTitle && (
             <div className="text-sm font-medium text-slate-500 flex items-center gap-1.5 mt-1">
               <span>Thuộc khóa học:</span>
-              <span className="text-slate-700 font-semibold">{item.courseTitle}</span>
+              <span className="text-[#334155] font-semibold">{item.courseTitle}</span>
             </div>
           )}
         </div>
 
         {/* Teacher Summary Line (Compact, no avatar) */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-2 border-t border-slate-100">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-2 border-t border-[#D6E5E2]/60">
           <div className="flex items-center gap-1.5">
             <span className="text-slate-400">Giảng viên:</span>
-            <span className="font-semibold text-slate-700">{item.teacherName}</span>
+            <span className="font-semibold text-[#163B40]">{item.teacherName}</span>
           </div>
 
-          <div className="flex items-center gap-1 font-semibold text-slate-700">
+          <div className="flex items-center gap-1 font-semibold text-[#163B40]">
             <StarFilled className="text-amber-400 text-xs" />
             <span>{item.ratingAverage.toFixed(1)}</span>
             <span className="text-slate-400 font-normal">({item.ratingCount} đánh giá)</span>
@@ -101,8 +101,8 @@ export default function ClassDetailHeader({ item }: ClassDetailHeaderProps) {
         </div>
 
         {/* Class Description: Appeared ONCE only */}
-        <div className="mt-2 pt-4 border-t border-slate-100">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+        <div className="mt-2 pt-4 border-t border-[#D6E5E2]/60">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-[#64748B] mb-2">
             Giới thiệu lớp học
           </div>
           {item.description ? (

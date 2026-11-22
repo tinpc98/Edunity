@@ -16,7 +16,9 @@ export function getNotificationRoute(type: string | undefined, role: Role): stri
       return ROUTES.MESSAGES;
     case "TEACHER_VERIFIED":
     case "TEACHER_VERIFICATION_REJECTED":
-      return role === "TEACHER" ? ROUTES.TEACHER.PROFILE : ROUTES.NOTIFICATIONS;
+      if (role === "TEACHER") return ROUTES.TEACHER.PROFILE;
+      if (role === "ADMIN") return ROUTES.ADMIN.TEACHER_VERIFICATIONS;
+      return ROUTES.NOTIFICATIONS;
     case "TEACHER_VERIFICATION_SUBMITTED":
       return role === "ADMIN" ? ROUTES.ADMIN.TEACHER_VERIFICATIONS : ROUTES.NOTIFICATIONS;
     case "ENROLLMENT_CONFIRMED":
@@ -34,16 +36,31 @@ export function getNotificationRoute(type: string | undefined, role: Role): stri
     case "PAYMENT_FAILED":
     case "SESSION_REFUND_APPROVED":
       return role === "STUDENT" ? ROUTES.STUDENT.PAYMENTS : ROUTES.NOTIFICATIONS;
+    case "REFUND_REQUIRED":
+    case "REFUND_REQUESTED":
+    case "REFUND_APPROVED":
+    case "REFUND_REJECTED":
+    case "REFUND_COMPLETED":
+      return role === "ADMIN" ? ROUTES.ADMIN.REFUNDS : ROUTES.STUDENT.PAYMENTS;
   }
   if (t.startsWith("PAYOUT_")) {
     if (role === "TEACHER") return ROUTES.TEACHER.REVENUE;
     if (role === "ADMIN") return ROUTES.ADMIN.PAYOUTS;
   }
+  if (t.startsWith("REFUND_")) {
+    if (role === "ADMIN") return ROUTES.ADMIN.REFUNDS;
+    if (role === "STUDENT") return ROUTES.STUDENT.PAYMENTS;
+  }
 
   if (role === "ADMIN") {
+    if (t.includes("RECONCIL")) return ROUTES.ADMIN.RECONCILIATIONS;
+    if (t.startsWith("PAYMENT_")) return ROUTES.ADMIN.PAYMENTS;
+    if (t.startsWith("PAYOUT_")) return ROUTES.ADMIN.PAYOUTS;
+    if (t.startsWith("REFUND_")) return ROUTES.ADMIN.REFUNDS;
     if (t.startsWith("SCHOLARSHIP_")) return ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS;
     if (t.startsWith("COURSE_PROPOSAL_")) return ROUTES.ADMIN.COURSE_PROPOSALS;
     if (t.startsWith("CLASS_")) return ROUTES.ADMIN.CLASSES;
+    if (t.startsWith("TEACHER_VERIF")) return ROUTES.ADMIN.TEACHER_VERIFICATIONS;
     // Incidents, violations, discipline cases, refund reviews and reschedule requests are reviewed there
     if (
       t.startsWith("ADMIN_") ||
@@ -54,7 +71,7 @@ export function getNotificationRoute(type: string | undefined, role: Role): stri
     ) {
       return ROUTES.ADMIN.REPORTS;
     }
-    return ROUTES.NOTIFICATIONS;
+    return ROUTES.ADMIN.NOTIFICATIONS;
   }
 
   if (role === "TEACHER") {

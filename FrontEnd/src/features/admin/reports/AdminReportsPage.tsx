@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Card,
   Table,
   Tag,
   Button,
@@ -9,10 +8,8 @@ import {
   Modal,
   Form,
   Input,
-  Typography,
   Space,
   Avatar,
-  Alert,
   App as AntdApp,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -25,7 +22,6 @@ import {
   UserOutlined,
   BookOutlined,
   EyeOutlined,
-  SafetyCertificateOutlined,
   CalendarOutlined,
   DollarOutlined,
 } from "@ant-design/icons";
@@ -37,11 +33,24 @@ import {
   type ReportItem,
   type ReportStatus,
 } from "../../../types/communication";
+import AdminPageHeader from "../../../components/admin/AdminPageHeader";
+import AdminSectionCard from "../../../components/admin/AdminSectionCard";
 
-const { Title, Text } = Typography;
 const { TextArea } = Input;
 
-const STATUS_CONFIG: Record<
+// ==========================================
+// Vietnamese Localization Mappings
+// ==========================================
+
+const ROLE_LABELS: Record<string, string> = {
+  STUDENT: "Học viên",
+  TEACHER: "Giáo viên",
+  ADMIN: "Quản trị viên",
+  SPONSOR: "Nhà tài trợ",
+  USER: "Người dùng",
+};
+
+const COMPLAINT_STATUS_CONFIG: Record<
   ReportStatus,
   { label: string; color: string; icon: React.ReactNode }
 > = {
@@ -67,13 +76,68 @@ const STATUS_CONFIG: Record<
   },
 };
 
-const TYPE_LABELS: Record<string, string> = {
+const COMPLAINT_TYPE_LABELS: Record<string, string> = {
   TEACHER_ABSENT: "Giáo viên vắng mặt",
   TEACHING_QUALITY: "Chất lượng giảng dạy",
   PAYMENT_DISPUTE: "Học phí & Thanh toán",
   INAPPROPRIATE_BEHAVIOR: "Hành vi vi phạm",
   FRAUD: "Gian lận",
   OTHER: "Vấn đề khác",
+};
+
+const INCIDENT_TYPE_LABELS: Record<string, string> = {
+  INTERNET_FAILURE: "Sự cố kết nối Internet",
+  DEVICE_FAILURE: "Sự cố thiết bị",
+  POWER_OUTAGE: "Sự cố mất điện",
+  HEALTH_ISSUE: "Vấn đề sức khỏe",
+  PERSONAL_EMERGENCY: "Việc khẩn cấp cá nhân",
+  PLATFORM_FAILURE: "Sự cố nền tảng hệ thống",
+  OTHER: "Sự cố khác",
+};
+
+const INCIDENT_REQUESTED_ACTION_LABELS: Record<string, string> = {
+  EXCUSE_LATE: "Xin miễn trừ vào muộn",
+  CANCEL_SESSION: "Xin hủy buổi học",
+  RESCHEDULE_SESSION: "Xin dời lịch / dạy bù",
+  EXCUSE_INTERRUPTION: "Xin miễn trừ gián đoạn",
+};
+
+const INCIDENT_REVIEW_STATUS_CONFIG: Record<
+  string,
+  { label: string; color: string }
+> = {
+  PENDING: { label: "Chờ xét duyệt", color: "gold" },
+  APPROVED: { label: "Đã chấp thuận", color: "success" },
+  REJECTED: { label: "Đã từ chối", color: "error" },
+  NEEDS_MORE_EVIDENCE: { label: "Cần thêm minh chứng", color: "warning" },
+};
+
+const RESCHEDULE_STATUS_CONFIG: Record<
+  string,
+  { label: string; color: string }
+> = {
+  PENDING_ADMIN_APPROVAL: { label: "Chờ Admin duyệt", color: "gold" },
+  APPROVED: { label: "Đã chấp thuận", color: "success" },
+  REJECTED: { label: "Đã từ chối", color: "error" },
+  CANCELLED: { label: "Đã hủy", color: "default" },
+};
+
+const REFUND_REVIEW_REASON_LABELS: Record<string, string> = {
+  TEACHER_NO_SHOW: "Giáo viên vắng mặt",
+  UNEXCUSED_TEACHER_CANCELLATION: "Tự ý hủy buổi không phép",
+  INCIDENT_CANCELLED_NO_MAKEUP: "Hủy do sự cố, không học bù",
+  RESCHEDULE_DECLINED_BY_STUDENT: "Học viên từ chối lịch học bù",
+  TEACHER_LEFT_EARLY: "Giáo viên rời lớp sớm",
+};
+
+const REFUND_REVIEW_STATUS_CONFIG: Record<
+  string,
+  { label: string; color: string }
+> = {
+  NEEDS_FINANCIAL_REVIEW: { label: "Cần rà soát tài chính", color: "gold" },
+  APPROVED_FOR_PAYMENT_TEAM: { label: "Đã chuyển kiểm tra tài chính", color: "blue" },
+  RESCHEDULED_WAIVED: { label: "Đã học bù (Miễn hoàn)", color: "cyan" },
+  REJECTED: { label: "Đã từ chối", color: "error" },
 };
 
 export const AdminReportsPage: React.FC = () => {
@@ -118,7 +182,7 @@ export const AdminReportsPage: React.FC = () => {
       }),
   });
 
-  // Fetch Smart Classroom & Teacher Incident / Discipline / Reschedule / Refund Overview (TIN-05D/E)
+  // Fetch Smart Classroom & Teacher Incident / Discipline / Reschedule / Refund Overview
   const { data: smartOverview, isLoading: isLoadingSmart } = useQuery({
     queryKey: sessionKeys.adminSmartClassroom(),
     queryFn: () => sessionService.getAdminSmartClassroomOverview(),
@@ -156,7 +220,7 @@ export const AdminReportsPage: React.FC = () => {
       note: string;
     }) => sessionService.reviewRefundCase(id, { status, note }),
     onSuccess: () => {
-      message.success("Đã cập nhật hồ sơ rà soát hoàn phí buổi học!");
+      message.success("Đã cập nhật hồ sơ rà soát học phí buổi học!");
       queryClient.invalidateQueries({ queryKey: sessionKeys.all });
     },
     onError: (err: any) => message.error(err?.message || "Lỗi khi xử lý rà soát hoàn phí"),
@@ -177,7 +241,7 @@ export const AdminReportsPage: React.FC = () => {
       reviewNote?: string;
     }) => reportService.adminUpdateReport(reportId, { status, reviewNote }),
     onSuccess: (updated) => {
-      message.success(`Đã cập nhật trạng thái khiếu nại thành ${STATUS_CONFIG[updated.status]?.label || updated.status}`);
+      message.success(`Đã cập nhật trạng thái khiếu nại thành ${COMPLAINT_STATUS_CONFIG[updated.status]?.label || updated.status}`);
       queryClient.invalidateQueries({ queryKey: reportKeys.all });
       setActionModal({ open: false, report: null, targetStatus: "RESOLVED" });
       actionForm.resetFields();
@@ -255,7 +319,7 @@ export const AdminReportsPage: React.FC = () => {
               {record.reporter?.fullName || "Ẩn danh"}
             </div>
             <div className="text-[10px] text-slate-400 truncate">
-              {record.reporter?.role || "USER"}
+              {ROLE_LABELS[record.reporter?.role || ""] || record.reporter?.role || "Người dùng"}
             </div>
           </div>
         </div>
@@ -267,7 +331,7 @@ export const AdminReportsPage: React.FC = () => {
       render: (_, record) => (
         <div>
           <Tag className="text-xs font-semibold rounded-md border-0 bg-slate-100 text-slate-700">
-            {TYPE_LABELS[record.type] || record.type}
+            {COMPLAINT_TYPE_LABELS[record.type] || record.type}
           </Tag>
           {record.classSummary && (
             <div className="text-xs text-teal-700 mt-1 flex items-center gap-1 font-medium">
@@ -276,7 +340,7 @@ export const AdminReportsPage: React.FC = () => {
           )}
           {record.reportedUser && (
             <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-              <UserOutlined /> Bị báo cáo: {record.reportedUser.fullName} ({record.reportedUser.role})
+              <UserOutlined /> Bị báo cáo: {record.reportedUser.fullName} ({ROLE_LABELS[record.reportedUser.role] || record.reportedUser.role})
             </div>
           )}
         </div>
@@ -297,7 +361,7 @@ export const AdminReportsPage: React.FC = () => {
       key: "status",
       width: 140,
       render: (status: ReportStatus) => {
-        const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.OPEN;
+        const cfg = COMPLAINT_STATUS_CONFIG[status] || COMPLAINT_STATUS_CONFIG.OPEN;
         return (
           <Tag color={cfg.color} icon={cfg.icon} className="rounded-full px-2.5 py-0.5 text-xs font-semibold">
             {cfg.label}
@@ -312,7 +376,7 @@ export const AdminReportsPage: React.FC = () => {
       render: (_, record) => {
         const isFinal = record.status === "RESOLVED" || record.status === "REJECTED";
         return (
-          <Space orientation="horizontal" size="small" wrap>
+          <Space size="small" wrap>
             <Button
               size="small"
               icon={<EyeOutlined />}
@@ -337,7 +401,7 @@ export const AdminReportsPage: React.FC = () => {
                 <Button
                   size="small"
                   type="primary"
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  className="!bg-emerald-600 hover:!bg-emerald-700 text-xs"
                   onClick={() => handleOpenActionModal(record, "RESOLVED")}
                 >
                   Giải quyết
@@ -345,6 +409,7 @@ export const AdminReportsPage: React.FC = () => {
                 <Button
                   size="small"
                   danger
+                  className="text-xs"
                   onClick={() => handleOpenActionModal(record, "REJECTED")}
                 >
                   Từ chối
@@ -358,74 +423,75 @@ export const AdminReportsPage: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <Title level={2} className="!mb-1 flex items-center gap-2">
-            <AlertOutlined className="text-rose-600" />
-            Quản lý Khiếu nại, Sự cố Giảng dạy & Giám sát Lớp học
-          </Title>
-          <Text type="secondary">
-            Xử lý khiếu nại người dùng, duyệt báo cáo sự cố giáo viên, lịch dạy bù và rà soát hoàn phí (TIN-05D / TIN-05E).
-          </Text>
-        </div>
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+      {/* Page Header */}
+      <AdminPageHeader
+        eyebrow="VẬN HÀNH & KHIẾU NẠI"
+        eyebrowIcon={<AlertOutlined />}
+        title="Quản lý khiếu nại và sự cố lớp học"
+        description="Tiếp nhận phản ánh, xử lý sự cố giảng dạy và theo dõi các yêu cầu liên quan đến lớp học."
+      />
 
+      {/* Main Navigation Tabs */}
+      <div className="bg-white px-4 pt-2 rounded-2xl border border-[#D6E5E2] shadow-[0_2px_8px_rgba(15,118,110,0.04)]">
         <Tabs
           activeKey={mainSection}
           onChange={setMainSection}
           items={[
             { key: "REPORTS", label: "Khiếu nại người dùng" },
-            { key: "SMART_CLASSROOM", label: "Sự cố GV, Dạy bù & Kỷ luật (TIN-05D/E)" },
+            { key: "SMART_CLASSROOM", label: "Sự cố giảng dạy và kỷ luật" },
           ]}
+          className="admin-complaints-tabs mb-0"
         />
       </div>
 
       {mainSection === "SMART_CLASSROOM" ? (
         <div className="space-y-6">
-          <Alert
-            type="warning"
-            showIcon
-            icon={<SafetyCertificateOutlined />}
-            message="Cơ chế Bảo vệ Kỷ luật & Tài chính An toàn (Safe Review Workflow)"
-            description="Mọi hồ sơ đạt ngưỡng kỷ luật (3 Vàng / 1 Đỏ / 3 NO_SHOW) hoặc hủy buổi học được tập hợp tại đây để Admin xét duyệt. Hệ thống không tự ý trừ tiền lương hay tự động khóa hợp đồng khi chưa có quyết định của Admin & Payment Team."
-            className="rounded-2xl"
-          />
-
           {/* 1. Incident Reports */}
-          <Card
-            title={
-              <span className="font-bold flex items-center gap-2">
-                <AlertOutlined className="text-amber-600" />
-                Báo cáo sự cố từ Giáo viên ({smartOverview?.incidents?.items?.length || 0})
+          <AdminSectionCard
+            title="Báo cáo sự cố từ Giáo viên"
+            subtitle="Xem xét các sự cố kết nối, kỹ thuật và đơn xin miễn trừ của giáo viên."
+            icon={<AlertOutlined className="text-amber-600" />}
+            extra={
+              <span className="text-xs font-semibold text-slate-500">
+                Tổng: <strong className="text-teal-700">{smartOverview?.incidents?.items?.length || 0}</strong> sự cố
               </span>
             }
-            className="rounded-2xl border-slate-200 shadow-sm"
           >
             <Table
               loading={isLoadingSmart}
               dataSource={smartOverview?.incidents?.items || []}
               rowKey="_id"
-              pagination={{ pageSize: 5 }}
+              pagination={{ pageSize: 5, showSizeChanger: false }}
               columns={[
                 {
                   title: "Giáo viên",
                   key: "teacher",
                   render: (_, r: any) => (
                     <div>
-                      <div className="font-semibold text-xs">{r.teacherId?.teacherProfile?.fullName || "Giáo viên"}</div>
+                      <div className="font-semibold text-xs text-slate-800">
+                        {r.teacherId?.teacherProfile?.fullName || "Giáo viên"}
+                      </div>
                       <div className="text-[11px] text-slate-400">{r.teacherId?.email}</div>
                     </div>
                   ),
                 },
                 {
-                  title: "Buổi học / Sự cố",
+                  title: "Buổi học / Vấn đề",
                   key: "session",
                   render: (_, r: any) => (
-                    <div>
-                      <div className="font-semibold text-xs text-teal-700">{r.sessionId?.title || "Buổi học"}</div>
-                      <Tag color="orange" className="text-[10px] mt-1">{r.incidentType}</Tag>
-                      <Tag color="blue" className="text-[10px] mt-1">{r.requestedAction}</Tag>
+                    <div className="space-y-1">
+                      <div className="font-semibold text-xs text-teal-700">
+                        {r.sessionId?.title || "Buổi học"}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        <Tag color="orange" className="text-[10px] m-0">
+                          {INCIDENT_TYPE_LABELS[r.incidentType] || r.incidentType}
+                        </Tag>
+                        <Tag color="blue" className="text-[10px] m-0">
+                          {INCIDENT_REQUESTED_ACTION_LABELS[r.requestedAction] || r.requestedAction}
+                        </Tag>
+                      </div>
                     </div>
                   ),
                 },
@@ -433,13 +499,19 @@ export const AdminReportsPage: React.FC = () => {
                   title: "Mô tả & Minh chứng",
                   key: "desc",
                   render: (_, r: any) => (
-                    <div className="text-xs">
-                      <div>{r.description}</div>
+                    <div className="text-xs space-y-1">
+                      <div className="text-slate-700">{r.description}</div>
                       {Array.isArray(r.evidenceFiles) && r.evidenceFiles.length > 0 && (
-                        <div className="mt-1 space-x-2">
+                        <div className="space-x-2">
                           {r.evidenceFiles.map((f: any, idx: number) =>
                             f.url ? (
-                              <a key={idx} href={f.url} target="_blank" rel="noreferrer" className="text-teal-700 underline">
+                              <a
+                                key={idx}
+                                href={f.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-teal-700 hover:underline font-medium"
+                              >
                                 Minh chứng #{idx + 1}
                               </a>
                             ) : null
@@ -453,9 +525,14 @@ export const AdminReportsPage: React.FC = () => {
                   title: "Trạng thái",
                   dataIndex: "reviewStatus",
                   key: "reviewStatus",
-                  render: (st: string) => (
-                    <Tag color={st === "APPROVED" ? "success" : st === "REJECTED" ? "error" : "gold"}>{st}</Tag>
-                  ),
+                  render: (st: string) => {
+                    const cfg = INCIDENT_REVIEW_STATUS_CONFIG[st] || { label: st, color: "default" };
+                    return (
+                      <Tag color={cfg.color} className="font-semibold text-xs whitespace-nowrap">
+                        {cfg.label}
+                      </Tag>
+                    );
+                  },
                 },
                 {
                   title: "Xét duyệt",
@@ -466,7 +543,7 @@ export const AdminReportsPage: React.FC = () => {
                         <Button
                           size="small"
                           type="primary"
-                          className="bg-emerald-600"
+                          className="!bg-emerald-600 hover:!bg-emerald-700 text-xs"
                           loading={reviewIncidentMutation.isPending}
                           onClick={() =>
                             reviewIncidentMutation.mutate({
@@ -481,6 +558,7 @@ export const AdminReportsPage: React.FC = () => {
                         <Button
                           size="small"
                           danger
+                          className="text-xs"
                           loading={reviewIncidentMutation.isPending}
                           onClick={() =>
                             reviewIncidentMutation.mutate({
@@ -499,38 +577,43 @@ export const AdminReportsPage: React.FC = () => {
                 },
               ]}
             />
-          </Card>
+          </AdminSectionCard>
 
           {/* 2. Reschedule Requests */}
-          <Card
-            title={
-              <span className="font-bold flex items-center gap-2">
-                <CalendarOutlined className="text-teal-700" />
-                Yêu cầu xếp lịch dạy bù ({smartOverview?.rescheduleRequests?.length || 0})
+          <AdminSectionCard
+            title="Yêu cầu xếp lịch dạy bù"
+            subtitle="Phê duyệt thời gian tổ chức buổi học bù sau khi xảy ra sự cố."
+            icon={<CalendarOutlined className="text-teal-700" />}
+            extra={
+              <span className="text-xs font-semibold text-slate-500">
+                Tổng: <strong className="text-teal-700">{smartOverview?.rescheduleRequests?.length || 0}</strong> yêu cầu
               </span>
             }
-            className="rounded-2xl border-slate-200 shadow-sm"
           >
             <Table
               loading={isLoadingSmart}
               dataSource={smartOverview?.rescheduleRequests || []}
               rowKey="_id"
-              pagination={{ pageSize: 5 }}
+              pagination={{ pageSize: 5, showSizeChanger: false }}
               columns={[
                 {
                   title: "Buổi học gốc",
                   key: "orig",
                   render: (_, r: any) => (
-                    <div className="text-xs font-semibold">{r.originalSessionId?.title || "Buổi học gốc"}</div>
+                    <div className="text-xs font-semibold text-slate-800">
+                      {r.originalSessionId?.title || "Buổi học gốc"}
+                    </div>
                   ),
                 },
                 {
                   title: "Lịch dạy bù đề xuất",
                   key: "proposed",
                   render: (_, r: any) => (
-                    <div className="text-xs">
-                      <div>{new Date(r.proposedStartDatetime).toLocaleString("vi-VN")}</div>
-                      <div className="text-slate-400">Lý do: {r.reason}</div>
+                    <div className="text-xs space-y-0.5">
+                      <div className="font-semibold text-teal-700">
+                        {new Date(r.proposedStartDatetime).toLocaleString("vi-VN")}
+                      </div>
+                      <div className="text-slate-500">Lý do: {r.reason}</div>
                     </div>
                   ),
                 },
@@ -538,9 +621,14 @@ export const AdminReportsPage: React.FC = () => {
                   title: "Trạng thái",
                   dataIndex: "status",
                   key: "status",
-                  render: (st: string) => (
-                    <Tag color={st === "APPROVED" ? "success" : st === "REJECTED" ? "error" : "gold"}>{st}</Tag>
-                  ),
+                  render: (st: string) => {
+                    const cfg = RESCHEDULE_STATUS_CONFIG[st] || { label: st, color: "default" };
+                    return (
+                      <Tag color={cfg.color} className="font-semibold text-xs whitespace-nowrap">
+                        {cfg.label}
+                      </Tag>
+                    );
+                  },
                 },
                 {
                   title: "Thao tác",
@@ -551,7 +639,7 @@ export const AdminReportsPage: React.FC = () => {
                         <Button
                           size="small"
                           type="primary"
-                          className="bg-teal-600 hover:bg-teal-700"
+                          className="!bg-[#0D9488] hover:!bg-[#0F766E] text-xs"
                           loading={reviewRescheduleMutation.isPending}
                           onClick={() =>
                             reviewRescheduleMutation.mutate({
@@ -561,11 +649,12 @@ export const AdminReportsPage: React.FC = () => {
                             })
                           }
                         >
-                          Duyệt tạo buổi bù
+                          Phê duyệt lịch bù
                         </Button>
                         <Button
                           size="small"
                           danger
+                          className="text-xs"
                           loading={reviewRescheduleMutation.isPending}
                           onClick={() =>
                             reviewRescheduleMutation.mutate({
@@ -584,31 +673,36 @@ export const AdminReportsPage: React.FC = () => {
                 },
               ]}
             />
-          </Card>
+          </AdminSectionCard>
 
           {/* 3. Refund & Financial Review Cases */}
-          <Card
-            title={
-              <span className="font-bold flex items-center gap-2">
-                <DollarOutlined className="text-emerald-600" />
-                Hồ sơ phối hợp Rà soát Hoàn phí & Thù lao (Châu Payment Coordination) ({smartOverview?.refundReviews?.length || 0})
+          <AdminSectionCard
+            title="Rà soát học phí và thù lao"
+            subtitle="Phối hợp rà soát nghĩa vụ hoàn học phí cho học viên và đối soát thù lao giáo viên."
+            icon={<DollarOutlined className="text-emerald-600" />}
+            extra={
+              <span className="text-xs font-semibold text-slate-500">
+                Tổng: <strong className="text-teal-700">{smartOverview?.refundReviews?.length || 0}</strong> hồ sơ
               </span>
             }
-            className="rounded-2xl border-slate-200 shadow-sm"
           >
             <Table
               loading={isLoadingSmart}
               dataSource={smartOverview?.refundReviews || []}
               rowKey="_id"
-              pagination={{ pageSize: 5 }}
+              pagination={{ pageSize: 5, showSizeChanger: false }}
               columns={[
                 {
-                  title: "Buổi học / Lý do",
+                  title: "Buổi học / Vấn đề",
                   key: "reason",
                   render: (_, r: any) => (
-                    <div className="text-xs">
-                      <div className="font-semibold">{r.sessionId?.title || "Buổi học"}</div>
-                      <Tag color="volcano" className="mt-1 text-[10px]">{r.triggerReason}</Tag>
+                    <div className="text-xs space-y-1">
+                      <div className="font-semibold text-slate-800">
+                        {r.sessionId?.title || "Buổi học"}
+                      </div>
+                      <Tag color="volcano" className="m-0 text-[10px]">
+                        {REFUND_REVIEW_REASON_LABELS[r.triggerReason] || r.triggerReason}
+                      </Tag>
                     </div>
                   ),
                 },
@@ -616,17 +710,26 @@ export const AdminReportsPage: React.FC = () => {
                   title: "Học viên",
                   key: "stu",
                   render: (_, r: any) => (
-                    <div className="text-xs">{r.studentId?.studentProfile?.fullName || r.studentId?.email || "Học viên"}</div>
+                    <div className="text-xs font-medium text-slate-700">
+                      {r.studentId?.studentProfile?.fullName || r.studentId?.email || "Học viên"}
+                    </div>
                   ),
                 },
                 {
-                  title: "Trạng thái rà soát",
+                  title: "Tình trạng xử lý",
                   dataIndex: "status",
                   key: "status",
-                  render: (st: string) => <Tag color="gold">{st}</Tag>,
+                  render: (st: string) => {
+                    const cfg = REFUND_REVIEW_STATUS_CONFIG[st] || { label: st, color: "gold" };
+                    return (
+                      <Tag color={cfg.color} className="font-semibold text-xs whitespace-nowrap">
+                        {cfg.label}
+                      </Tag>
+                    );
+                  },
                 },
                 {
-                  title: "Xử lý phối hợp",
+                  title: "Thao tác",
                   key: "act",
                   render: (_, r: any) =>
                     r.status === "NEEDS_FINANCIAL_REVIEW" ? (
@@ -634,18 +737,20 @@ export const AdminReportsPage: React.FC = () => {
                         <Button
                           size="small"
                           type="primary"
+                          className="!bg-[#0D9488] hover:!bg-[#0F766E] text-xs"
                           onClick={() =>
                             reviewRefundMutation.mutate({
                               id: r._id,
                               status: "APPROVED_FOR_PAYMENT_TEAM",
-                              note: "Chuyển Payment Team xử lý hoàn phí / đối soát",
+                              note: "Chuyển bộ phận tài chính rà soát hoàn phí / đối soát",
                             })
                           }
                         >
-                          Chuyển Payment Team
+                          Chuyển kiểm tra tài chính
                         </Button>
                         <Button
                           size="small"
+                          className="text-xs border-[#D6E5E2] text-slate-700 hover:text-teal-700"
                           onClick={() =>
                             reviewRefundMutation.mutate({
                               id: r._id,
@@ -654,7 +759,7 @@ export const AdminReportsPage: React.FC = () => {
                             })
                           }
                         >
-                          Đã học bù
+                          Xác nhận đã học bù
                         </Button>
                       </Space>
                     ) : (
@@ -663,63 +768,63 @@ export const AdminReportsPage: React.FC = () => {
                 },
               ]}
             />
-          </Card>
+          </AdminSectionCard>
         </div>
       ) : (
-      <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
-        {/* Filters */}
-        <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <Tabs
-            activeKey={activeTab}
-            onChange={(k) => {
-              setActiveTab(k);
-              setPage(1);
-            }}
-            items={[
-              { key: "ALL", label: "Tất cả" },
-              { key: "OPEN", label: "Chờ tiếp nhận (OPEN)" },
-              { key: "IN_REVIEW", label: "Đang xem xét (IN_REVIEW)" },
-              { key: "RESOLVED", label: "Đã giải quyết (RESOLVED)" },
-              { key: "REJECTED", label: "Đã từ chối (REJECTED)" },
-            ]}
-            className="mb-0"
-          />
+        <div className="bg-white rounded-2xl border border-[#D6E5E2] shadow-[0_2px_8px_rgba(15,118,110,0.04)] overflow-hidden">
+          {/* Filters */}
+          <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <Tabs
+              activeKey={activeTab}
+              onChange={(k) => {
+                setActiveTab(k);
+                setPage(1);
+              }}
+              items={[
+                { key: "ALL", label: "Tất cả" },
+                { key: "OPEN", label: "Chờ tiếp nhận" },
+                { key: "IN_REVIEW", label: "Đang xem xét" },
+                { key: "RESOLVED", label: "Đã giải quyết" },
+                { key: "REJECTED", label: "Đã từ chối" },
+              ]}
+              className="mb-0"
+            />
 
-          <Select
-            allowClear
-            placeholder="Lọc theo loại khiếu nại"
-            value={selectedType}
-            onChange={(val) => {
-              setSelectedType(val);
-              setPage(1);
+            <Select
+              allowClear
+              placeholder="Lọc theo loại khiếu nại"
+              value={selectedType}
+              onChange={(val) => {
+                setSelectedType(val);
+                setPage(1);
+              }}
+              options={REPORT_TYPES.map((t) => ({
+                value: t,
+                label: COMPLAINT_TYPE_LABELS[t] || t,
+              }))}
+              className="w-full md:w-64"
+            />
+          </div>
+
+          {/* Table */}
+          <Table
+            columns={columns}
+            dataSource={items}
+            rowKey="id"
+            loading={isLoading}
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              onChange: (p, ps) => {
+                setPage(p);
+                setPageSize(ps);
+              },
+              showSizeChanger: true,
             }}
-            options={REPORT_TYPES.map((t) => ({
-              value: t,
-              label: TYPE_LABELS[t] || t,
-            }))}
-            className="w-full md:w-64"
+            className="admin-reports-table"
           />
         </div>
-
-        {/* Table */}
-        <Table
-          columns={columns}
-          dataSource={items}
-          rowKey="id"
-          loading={isLoading}
-          pagination={{
-            current: page,
-            pageSize,
-            total,
-            onChange: (p, ps) => {
-              setPage(p);
-              setPageSize(ps);
-            },
-            showSizeChanger: true,
-          }}
-          className="admin-reports-table"
-        />
-      </Card>
       )}
 
       {/* Detail Modal */}
@@ -745,14 +850,14 @@ export const AdminReportsPage: React.FC = () => {
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
               <div className="flex items-center gap-2">
                 <Tag
-                  color={STATUS_CONFIG[viewingReport.status]?.color}
-                  icon={STATUS_CONFIG[viewingReport.status]?.icon}
+                  color={COMPLAINT_STATUS_CONFIG[viewingReport.status]?.color}
+                  icon={COMPLAINT_STATUS_CONFIG[viewingReport.status]?.icon}
                   className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
                 >
-                  {STATUS_CONFIG[viewingReport.status]?.label}
+                  {COMPLAINT_STATUS_CONFIG[viewingReport.status]?.label}
                 </Tag>
                 <Tag className="rounded-md font-semibold text-xs border-0 bg-slate-200/70 text-slate-700">
-                  {TYPE_LABELS[viewingReport.type] || viewingReport.type}
+                  {COMPLAINT_TYPE_LABELS[viewingReport.type] || viewingReport.type}
                 </Tag>
               </div>
               <span className="text-xs text-slate-400">
@@ -771,7 +876,7 @@ export const AdminReportsPage: React.FC = () => {
                 </div>
                 <div className="text-slate-500">{viewingReport.reporter?.email}</div>
                 <Tag color="blue" className="mt-1 text-[10px]">
-                  {viewingReport.reporter?.role}
+                  {ROLE_LABELS[viewingReport.reporter?.role || ""] || viewingReport.reporter?.role}
                 </Tag>
               </div>
 
@@ -786,7 +891,7 @@ export const AdminReportsPage: React.FC = () => {
                     </div>
                     <div className="text-slate-500">{viewingReport.reportedUser.email}</div>
                     <Tag color="volcano" className="mt-1 text-[10px]">
-                      {viewingReport.reportedUser.role}
+                      {ROLE_LABELS[viewingReport.reportedUser.role] || viewingReport.reportedUser.role}
                     </Tag>
                   </>
                 ) : viewingReport.classSummary ? (
@@ -873,7 +978,7 @@ export const AdminReportsPage: React.FC = () => {
             danger={actionModal.targetStatus === "REJECTED"}
             className={
               actionModal.targetStatus === "RESOLVED"
-                ? "bg-emerald-600 hover:bg-emerald-700"
+                ? "!bg-emerald-600 hover:!bg-emerald-700"
                 : undefined
             }
             onClick={handleActionSubmit}

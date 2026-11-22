@@ -105,28 +105,28 @@ export default function SponsorRegisterPage() {
     <main className="site-container flex min-h-[calc(100vh-72px)] items-center py-14">
       <div className="grid w-full gap-16 lg:grid-cols-[minmax(0,1fr)_460px]">
         <section className="max-w-[570px] pb-4">
-          <p className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-indigo-600">Chung tay vì học sinh</p>
-          <h1 className="max-w-[520px] text-4xl font-black leading-tight tracking-tight text-slate-900 lg:text-[46px]">
+          <p className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-[#0D9488]">Chung tay vì học sinh</p>
+          <h1 className="max-w-[520px] text-4xl font-black leading-tight tracking-tight text-[#163B40] lg:text-[46px]">
             Trở thành nhà tài trợ của Edunity
           </h1>
-          <p className="mt-5 max-w-[510px] text-base leading-7 text-slate-600">
+          <p className="mt-5 max-w-[510px] text-base leading-7 text-[#64748B]">
             Mỗi khoản đóng góp giúp một học sinh có hoàn cảnh khó khăn tiếp tục được học cùng giáo viên phù hợp.
           </p>
 
           <ul className="mt-8 space-y-4">
             {benefits.map((benefit) => (
-              <li key={benefit} className="flex items-center gap-3 text-sm font-medium text-slate-700">
-                <CheckCircleFilled className="text-indigo-600" />
+              <li key={benefit} className="flex items-center gap-3 text-sm font-medium text-[#334155]">
+                <CheckCircleFilled className="text-[#0D9488]" />
                 {benefit}
               </li>
             ))}
           </ul>
         </section>
 
-        <section className="rounded-2xl border border-slate-100 bg-white p-7 shadow-[0_18px_50px_rgba(79,70,229,0.10)] lg:p-9">
+        <section className="rounded-2xl border border-[#D6E5E2] bg-white p-7 shadow-[0_18px_50px_rgba(13,148,136,0.08)] lg:p-9">
           <div className="mb-7">
-            <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Tạo tài khoản nhà tài trợ</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
+            <h2 className="text-2xl font-extrabold tracking-tight text-[#163B40]">Tạo tài khoản nhà tài trợ</h2>
+            <p className="mt-2 text-sm leading-6 text-[#64748B]">
               {redirectUrl
                 ? "Sau khi đăng ký, bạn sẽ được đưa trở lại trang đang xem để tiếp tục ủng hộ."
                 : "Đăng ký để ủng hộ các chiến dịch học bổng trên Edunity."}
@@ -227,23 +227,23 @@ export default function SponsorRegisterPage() {
               rules={[{ validator: (_, value) => (value ? Promise.resolve() : Promise.reject(new Error("Vui lòng đồng ý với điều khoản."))) }]}
             >
               <Checkbox>
-                <span className="text-xs leading-5 text-slate-600">
-                  Tôi đồng ý với <a href="#terms" className="font-semibold text-indigo-600 hover:text-indigo-700">Điều khoản sử dụng</a> và <a href="#privacy" className="font-semibold text-indigo-600 hover:text-indigo-700">Chính sách bảo mật</a> của Edunity.
+                <span className="text-xs leading-5 text-[#64748B]">
+                  Tôi đồng ý với <a href="#terms" className="font-semibold text-[#0D9488] hover:text-[#0F766E]">Điều khoản sử dụng</a> và <a href="#privacy" className="font-semibold text-[#0D9488] hover:text-[#0F766E]">Chính sách bảo mật</a> của Edunity.
                 </span>
               </Checkbox>
             </Form.Item>
 
-            <Button type="primary" htmlType="submit" loading={registerMutation.isPending} disabled={registerMutation.isPending || Boolean(signedInAsOtherRole)} block size="large" className="h-12 rounded-lg bg-indigo-600 font-bold shadow-sm shadow-indigo-200 hover:bg-indigo-700">
+            <Button type="primary" htmlType="submit" loading={registerMutation.isPending} disabled={registerMutation.isPending || Boolean(signedInAsOtherRole)} block size="large" className="h-12 rounded-lg bg-[#0D9488] font-bold shadow-sm shadow-teal-900/10 hover:bg-[#0B746C] border-none">
               Đăng ký nhà tài trợ
             </Button>
           </Form>
 
-          <div className="mt-6 text-center text-sm text-slate-500">
+          <div className="mt-6 text-center text-sm text-[#64748B]">
             <p>
-              Đã có tài khoản? <Link to={withRedirect(ROUTES.AUTH.LOGIN, redirectUrl)} className="font-bold text-indigo-600 hover:text-indigo-700">Đăng nhập</Link>
+              Đã có tài khoản? <Link to={withRedirect(ROUTES.AUTH.LOGIN, redirectUrl)} className="font-bold text-[#0D9488] hover:text-[#0F766E]">Đăng nhập</Link>
             </p>
             <p className="mt-3 text-xs text-slate-400">
-              Bạn là học viên? <Link to={ROUTES.AUTH.REGISTER} className="font-semibold text-indigo-600 hover:text-indigo-700">Đăng ký tài khoản học viên</Link>
+              Bạn là học viên? <Link to={ROUTES.AUTH.REGISTER} className="font-semibold text-[#0D9488] hover:text-[#0F766E]">Đăng ký tài khoản học viên</Link>
             </p>
           </div>
         </section>

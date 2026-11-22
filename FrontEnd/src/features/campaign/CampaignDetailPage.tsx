@@ -276,19 +276,19 @@ export default function PublicCampaignDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#F5FAF9] py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Breadcrumb */}
         <Breadcrumb
           items={[
-            { title: <Link to="/">Trang chủ</Link> },
-            { title: <Link to="/campaigns">Chiến dịch học bổng</Link> },
-            { title: campaign.title },
+            { title: <Link to="/" className="text-[#64748B] hover:text-[#0D9488]">Trang chủ</Link> },
+            { title: <Link to="/campaigns" className="text-[#64748B] hover:text-[#0D9488]">Chiến dịch học bổng</Link> },
+            { title: <span className="text-[#163B40] font-semibold">{campaign.title}</span> },
           ]}
         />
 
         {/* Top Header Card */}
-        <Card className="rounded-3xl border-slate-200/80 shadow-sm p-2 md:p-6">
+        <Card className="rounded-3xl border-[#D6E5E2] shadow-xs p-2 md:p-6">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
             <div className="space-y-3 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -300,8 +300,7 @@ export default function PublicCampaignDetailPage() {
                 </Tag>
                 {isAcceptingFunding && (
                   <Tag
-                    color="cyan"
-                    className="rounded-full px-3 py-1 font-semibold text-xs border-0"
+                    className="rounded-full px-3 py-1 font-semibold text-xs border-0 bg-[#CCFBF1] text-[#0F766E]"
                   >
                     Đang tiếp nhận đóng góp
                   </Tag>
@@ -310,7 +309,7 @@ export default function PublicCampaignDetailPage() {
 
               <Title
                 level={2}
-                className="!mb-2 !text-slate-900 font-black tracking-tight text-2xl md:text-4xl"
+                className="!mb-2 !text-[#163B40] font-black tracking-tight text-2xl md:text-4xl"
               >
                 {campaign.title}
               </Title>
@@ -318,14 +317,14 @@ export default function PublicCampaignDetailPage() {
               <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500 font-medium">
                 {campaign.fundingStart && campaign.fundingEnd && (
                   <span className="flex items-center gap-1.5">
-                    <CalendarOutlined className="text-indigo-500" />
+                    <CalendarOutlined className="text-[#0D9488]" />
                     Thời gian gây quỹ:{" "}
                     {new Date(campaign.fundingStart).toLocaleDateString("vi-VN")} -{" "}
                     {new Date(campaign.fundingEnd).toLocaleDateString("vi-VN")}
                   </span>
                 )}
                 {campaign.contributionCount > 0 && (
-                  <span className="flex items-center gap-1.5 text-indigo-600 font-semibold">
+                  <span className="flex items-center gap-1.5 text-[#0D9488] font-semibold">
                     <HeartOutlined /> {campaign.contributionCount} lượt tài trợ đã hoàn
                     thành
                   </span>
@@ -337,29 +336,29 @@ export default function PublicCampaignDetailPage() {
               <Button
                 icon={<ShareAltOutlined />}
                 onClick={() => setIsShareModalOpen(true)}
-                className="rounded-xl"
+                className="rounded-xl border-[#D6E5E2] text-[#334155] hover:text-[#0D9488] hover:border-[#0D9488]"
               >
                 Chia sẻ
               </Button>
               <Link to="/campaigns">
-                <Button icon={<ArrowLeftOutlined />} className="rounded-xl">
+                <Button icon={<ArrowLeftOutlined />} className="rounded-xl border-[#D6E5E2] text-[#334155] hover:text-[#0D9488] hover:border-[#0D9488]">
                   Tất cả chiến dịch
                 </Button>
               </Link>
             </Space>
           </div>
 
-          <Divider className="my-6" />
+          <Divider className="my-6 border-[#D6E5E2]/60" />
 
           {/* Funding Progress Banner */}
-          <div className="space-y-3 bg-gradient-to-r from-indigo-50/70 to-blue-50/70 p-6 rounded-2xl border border-indigo-100">
+          <div className="space-y-3 bg-gradient-to-r from-[#F0FDFA] to-[#CCFBF1]/40 p-6 rounded-2xl border border-[#99F6E4]">
             <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
               <div>
-                <span className="text-xs uppercase font-bold tracking-wider text-indigo-700">
+                <span className="text-xs uppercase font-bold tracking-wider text-[#0F766E]">
                   Tiến độ quyên góp quỹ (Chỉ cộng khi cổng thanh toán xác thực)
                 </span>
                 <div
-                  className="text-2xl sm:text-3xl font-black text-slate-900 mt-1"
+                  className="text-2xl sm:text-3xl font-black text-[#163B40] mt-1"
                   data-testid="campaign-funded-amount"
                 >
                   {formatVND(campaign.fundedAmount)}
@@ -369,7 +368,7 @@ export default function PublicCampaignDetailPage() {
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-3xl font-black text-indigo-600">
+                <span className="text-3xl font-black text-[#0D9488]">
                   {campaign.fundingProgress}%
                 </span>
               </div>
@@ -378,32 +377,32 @@ export default function PublicCampaignDetailPage() {
             <Progress
               percent={campaign.fundingProgress}
               showInfo={false}
-              strokeColor={{ "0%": "#6366f1", "100%": "#2563eb" }}
+              strokeColor={{ "0%": "#0D9488", "100%": "#14B8A6" }}
               size={["100%", 12]}
             />
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-indigo-100/60 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-[#99F6E4]/50 text-xs">
               <div>
                 <div className="text-slate-500">Đã cấp học bổng</div>
-                <div className="font-bold text-slate-800 text-sm mt-0.5">
+                <div className="font-bold text-[#163B40] text-sm mt-0.5">
                   {formatVND(campaign.allocatedAmount)}
                 </div>
               </div>
               <div>
                 <div className="text-slate-500">Đã giải ngân học phí</div>
-                <div className="font-bold text-slate-800 text-sm mt-0.5">
+                <div className="font-bold text-[#163B40] text-sm mt-0.5">
                   {formatVND(campaign.usedAmount)}
                 </div>
               </div>
               <div>
                 <div className="text-slate-500">Quỹ còn khả dụng</div>
-                <div className="font-bold text-emerald-600 text-sm mt-0.5">
+                <div className="font-bold text-[#0D9488] text-sm mt-0.5">
                   {formatVND(campaign.availableFund)}
                 </div>
               </div>
               <div>
                 <div className="text-slate-500">Tổng suất học bổng</div>
-                <div className="font-bold text-indigo-700 text-sm mt-0.5">
+                <div className="font-bold text-[#0F766E] text-sm mt-0.5">
                   {campaign.expectedSlots} suất
                 </div>
               </div>
@@ -499,11 +498,11 @@ export default function PublicCampaignDetailPage() {
             <Card className="rounded-3xl border-slate-200/80 shadow-md sticky top-6">
               <div className="space-y-5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 text-lg">
+                  <div className="w-10 h-10 rounded-xl bg-[#CCFBF1] flex items-center justify-center text-[#0D9488] text-lg">
                     <HeartOutlined />
                   </div>
                   <div>
-                    <Title level={4} className="!mb-0 !text-slate-900 font-bold">
+                    <Title level={4} className="!mb-0 !text-[#163B40] font-bold">
                       Đóng góp tài trợ (VietQR)
                     </Title>
                     <Text type="secondary" className="text-xs">
@@ -512,7 +511,7 @@ export default function PublicCampaignDetailPage() {
                   </div>
                 </div>
 
-                <Divider className="my-2" />
+                <Divider className="my-2 border-[#D6E5E2]/60" />
 
                 {/* Role / Auth Check */}
                 {!isAuthenticated ? (
@@ -526,7 +525,7 @@ export default function PublicCampaignDetailPage() {
                       <Button
                         type="primary"
                         block
-                        className="h-11 rounded-xl bg-indigo-600 font-semibold"
+                        className="h-11 rounded-xl bg-[#0D9488] hover:bg-[#0B746C] font-semibold border-none shadow-xs"
                       >
                         Đăng nhập để tài trợ
                       </Button>
@@ -534,18 +533,18 @@ export default function PublicCampaignDetailPage() {
                   </div>
                 ) : user?.role === "STUDENT" ? (
                   <div className="space-y-4">
-                    <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-3">
+                    <div className="p-4 rounded-2xl bg-[#F0FDFA] border border-[#99F6E4] space-y-3">
                       <div className="flex items-center gap-2">
-                        <Tag color="indigo" className="font-bold border-none">
+                        <Tag className="font-bold border-none bg-[#CCFBF1] text-[#0F766E]">
                           DÀNH CHO HỌC SINH
                         </Tag>
-                        <span className="text-xs text-indigo-700 font-semibold">
+                        <span className="text-xs text-[#0F766E] font-semibold">
                           Cơ hội nhận học bổng
                         </span>
                       </div>
                       <div className="text-xs text-slate-600">
                         Chiến dịch hỗ trợ suất học bổng trị giá{" "}
-                        <strong className="text-indigo-700 text-sm">
+                        <strong className="text-[#0F766E] text-sm">
                           {formatVND(campaign.awardAmountPerStudent)}
                         </strong>{" "}
                         để chi trả học phí các lớp học.
@@ -555,7 +554,7 @@ export default function PublicCampaignDetailPage() {
                           type="primary"
                           block
                           onClick={() => setIsApplyScholarshipModalOpen(true)}
-                          className="h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-bold text-sm shadow-xs"
+                          className="h-11 rounded-xl bg-[#0D9488] hover:bg-[#0B746C] font-bold text-sm shadow-xs border-none"
                         >
                           Nộp hồ sơ xin học bổng
                         </Button>
@@ -571,7 +570,7 @@ export default function PublicCampaignDetailPage() {
                       <div className="text-center pt-1">
                         <Link
                           to={ROUTES.STUDENT.HOME + "/scholarships/applications"}
-                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                          className="text-xs font-semibold text-[#0D9488] hover:text-[#0F766E]"
                         >
                           Xem các hồ sơ bạn đã nộp →
                         </Link>
@@ -674,7 +673,7 @@ export default function PublicCampaignDetailPage() {
                         <div className="flex items-start gap-2">
                           <Radio value="PUBLIC" className="text-xs">
                             <span className="font-semibold text-slate-800 inline-flex items-center gap-1">
-                              <GlobalOutlined className="text-indigo-600" />
+                              <GlobalOutlined className="text-[#0D9488]" />
                               Tài trợ công khai
                             </span>
                             <div className="text-[11px] text-slate-500">
@@ -717,7 +716,7 @@ export default function PublicCampaignDetailPage() {
                       loading={createContributionMutation.isPending}
                       onClick={() => createContributionMutation.mutate()}
                       disabled={!contributionAmount || contributionAmount <= 0}
-                      className="h-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm shadow-sm"
+                      className="h-12 rounded-xl bg-[#0D9488] hover:bg-[#0B746C] font-bold text-sm shadow-sm border-none"
                       data-testid="donation-create-qr-btn"
                     >
                       Tạo mã VietQR tài trợ ngay

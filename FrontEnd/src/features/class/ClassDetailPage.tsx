@@ -7,7 +7,6 @@ import ClassSessionsTab from "./components/ClassSessionsTab";
 import ClassTeacherTab from "./components/ClassTeacherTab";
 import ClassRegistrationCard from "./components/ClassRegistrationCard";
 import { ClassReviewsTab } from "./components/ClassReviewsTab";
-import ClassCurriculumTab from "./components/ClassCurriculumTab";
 
 export default function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -34,7 +33,7 @@ export default function ClassDetailPage() {
           description="Lớp học bạn tìm kiếm không tồn tại hoặc đã bị hủy."
           action={
             <Link to="/classes">
-              <Button type="primary" size="small">
+              <Button type="primary" size="small" className="bg-[#0D9488] hover:bg-[#0B746C] border-none">
                 Quay lại danh sách lớp học
               </Button>
             </Link>
@@ -54,21 +53,6 @@ export default function ClassDetailPage() {
       ),
       children: (
         <ClassSessionsTab sessions={sessions} isLoading={isSessionsLoading} />
-      ),
-    },
-    {
-      key: "curriculum",
-      label: (
-        <span className="text-sm font-semibold px-1">
-          Lộ trình & Mục tiêu
-        </span>
-      ),
-      children: (
-        <ClassCurriculumTab
-          item={item}
-          sessionCount={sessions.length}
-          isSessionsLoading={isSessionsLoading}
-        />
       ),
     },
     {
@@ -111,7 +95,7 @@ export default function ClassDetailPage() {
               onChange={setActiveTab}
               items={tabItems}
               size="large"
-              className="class-detail-tabs [&_.ant-tabs-nav]:mb-4 [&_.ant-tabs-ink-bar]:bg-indigo-600 [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:text-indigo-600 [&_.ant-tabs-tab]:text-slate-600 [&_.ant-tabs-tab:hover]:text-indigo-600 font-medium"
+              className="class-detail-tabs [&_.ant-tabs-nav]:mb-4 [&_.ant-tabs-ink-bar]:bg-[#0D9488] [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:text-[#0D9488] [&_.ant-tabs-tab]:text-[#334155] [&_.ant-tabs-tab:hover]:text-[#0D9488] font-medium"
             />
           </div>
         </div>

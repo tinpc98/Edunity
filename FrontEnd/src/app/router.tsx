@@ -1,4 +1,7 @@
+import type { ReactNode } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { ConfigProvider } from "antd";
+import { publicThemeConfig } from "../components/layout/publicTheme";
 import PublicLayout from "../components/layout/PublicLayout";
 import HomePage from "../features/home/HomePage";
 import ClassDiscoveryPage from "../features/class/ClassDiscoveryPage";
@@ -6,6 +9,12 @@ import CheckoutPage from "../features/enrollment/CheckoutPage";
 import PaymentSuccessPage from "../features/enrollment/PaymentSuccessPage";
 import EnrollmentPage from "../features/enrollment/EnrollmentPage";
 import StudentLayout from "../components/layout/StudentLayout";
+
+// Jade/teal Ant Design tokens (same as Admin/Public) for the Student learning + classroom screens.
+// Applied per page, not on StudentLayout, so Student payment screens keep their current look.
+const Jade = ({ children }: { children: ReactNode }) => (
+  <ConfigProvider theme={publicThemeConfig}>{children}</ConfigProvider>
+);
 import StudentHomePage from "../features/student/home/StudentHomePage";
 import StudentClassSessionsPage from "../features/student/classes/StudentClassSessionsPage";
 import StudentSchedulePage from "../features/student/schedule/StudentSchedulePage";
@@ -53,6 +62,9 @@ import AdminFinanceOverviewPage from "../features/admin/finance/AdminFinanceOver
 import AdminBankEventsPage from "../features/admin/finance/AdminBankEventsPage";
 import AdminReconciliationsPage from "../features/admin/finance/AdminReconciliationsPage";
 import { AdminReportsPage } from "../features/admin/reports/AdminReportsPage";
+import AdminReviewsPage from "../features/admin/reviews/AdminReviewsPage";
+import AdminTrashPage from "../features/admin/trash/AdminTrashPage";
+import AdminNotificationsPage from "../features/admin/notifications/AdminNotificationsPage";
 import SponsorLayout from "../components/layout/SponsorLayout";
 import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
 import SponsorProfilePage from "../features/sponsor/profile/SponsorProfilePage";
@@ -74,6 +86,8 @@ import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { MessagesPage } from "../features/messages/MessagesPage";
 import { MyReportsPage } from "../features/reports/MyReportsPage";
 import NotFoundPage from "../components/common/NotFoundPage";
+import AboutPage from "../features/about/AboutPage";
+import SupportPage from "../features/support/SupportPage";
 
 const router = createBrowserRouter([
   {
@@ -82,6 +96,14 @@ const router = createBrowserRouter([
       {
         path: ROUTES.HOME,
         element: <HomePage />,
+      },
+      {
+        path: ROUTES.ABOUT,
+        element: <AboutPage />,
+      },
+      {
+        path: ROUTES.SUPPORT,
+        element: <SupportPage />,
       },
       {
         path: ROUTES.CLASSES,
@@ -187,15 +209,15 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <StudentHomePage />,
+        element: <Jade><StudentHomePage /></Jade>,
       },
       {
         path: "classes/:classId",
-        element: <StudentClassSessionsPage />,
+        element: <Jade><StudentClassSessionsPage /></Jade>,
       },
       {
         path: "schedule",
-        element: <StudentSchedulePage />,
+        element: <Jade><StudentSchedulePage /></Jade>,
       },
       {
         path: "enrollments",
@@ -318,6 +340,22 @@ const router = createBrowserRouter([
         element: <AdminCatalogPage />,
       },
       {
+        path: "categories",
+        element: <AdminCatalogPage fixedTab="categories" />,
+      },
+      {
+        path: "subjects",
+        element: <AdminCatalogPage fixedTab="subjects" />,
+      },
+      {
+        path: "courses",
+        element: <AdminCatalogPage fixedTab="courses" />,
+      },
+      {
+        path: "syllabus",
+        element: <AdminCatalogPage fixedTab="syllabus" />,
+      },
+      {
         path: "course-proposals",
         element: <AdminCourseProposalsPage />,
       },
@@ -358,6 +396,10 @@ const router = createBrowserRouter([
         element: <AdminFinanceOverviewPage />,
       },
       {
+        path: "finance/overview",
+        element: <AdminFinanceOverviewPage />,
+      },
+      {
         path: "payments",
         element: <AdminPaymentsPage />,
       },
@@ -385,6 +427,18 @@ const router = createBrowserRouter([
         path: "reports",
         element: <AdminReportsPage />,
       },
+      {
+        path: "reviews",
+        element: <AdminReviewsPage />,
+      },
+      {
+        path: "trash",
+        element: <AdminTrashPage />,
+      },
+      {
+        path: "notifications",
+        element: <AdminNotificationsPage />,
+      },
     ],
   },
   {
@@ -407,7 +461,7 @@ const router = createBrowserRouter([
   },
   {
     path: ROUTES.CLASSROOM,
-    element: <ClassroomPage />,
+    element: <Jade><ClassroomPage /></Jade>,
   },
   {
     path: "*",

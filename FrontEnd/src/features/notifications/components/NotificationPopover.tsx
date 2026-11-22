@@ -17,6 +17,7 @@ import type { NotificationItem } from "../../../types/communication";
 import { useAuthStore } from "../../../stores/auth.store";
 import { getNotificationRoute } from "../notificationRoute";
 import { invalidateTeacherVerificationState } from "../../../hooks/useTeacherVerification";
+import { ROUTES } from "../../../routes/routePaths";
 
 const { Text } = Typography;
 
@@ -201,7 +202,7 @@ export const NotificationPopover: React.FC = () => {
           size="small"
           onClick={() => {
             setOpen(false);
-            navigate("/notifications");
+            navigate(user?.role === "ADMIN" ? ROUTES.ADMIN.NOTIFICATIONS : "/notifications");
           }}
           className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
         >

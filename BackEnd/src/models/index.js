@@ -49,4 +49,5 @@ module.exports = {
   BankProofRegistry: require("./BankProofRegistry"),
   TeacherContract: require("./TeacherContract"),
   GuardianConsent: require("./GuardianConsent"),
+  TokenRevocationTask: require("./TokenRevocationTask"),
 };

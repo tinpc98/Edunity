@@ -4,6 +4,9 @@ import type {
   ReviewItem,
   ReviewListResponse,
   CreateReviewPayload,
+  AdminReviewDetail,
+  AdminReviewFilterQuery,
+  AdminReviewListResponse,
 } from "../types/communication";
 import { adaptReview } from "../api/communicationAdapters";
 
@@ -13,6 +16,8 @@ export const reviewKeys = {
     ["reviews", "class", classId, params] as const,
   byTeacher: (teacherId: string, params?: { page?: number; pageSize?: number }) =>
     ["reviews", "teacher", teacherId, params] as const,
+  adminList: (params?: AdminReviewFilterQuery) => ["adminReviews", params] as const,
+  adminDetail: (id: string) => ["adminReviewDetail", id] as const,
 };
 
 interface BackendReviewPaged {
@@ -88,5 +93,68 @@ export const reviewService = {
       ratingAverage: typeof data.ratingAverage === "number" ? data.ratingAverage : 0,
       ratingCount: typeof data.ratingCount === "number" ? data.ratingCount : 0,
     };
+  },
+
+  /**
+   * GET /api/admin/reviews — List reviews for admin moderation
+   */
+  async adminListReviews(params: AdminReviewFilterQuery = {}): Promise<AdminReviewListResponse> {
+    const query = new URLSearchParams();
+    if (params.status && params.status !== "ALL") query.set("status", params.status);
+    if (params.search) query.set("search", params.search);
+    if (params.rating) query.set("rating", String(params.rating));
+    if (params.classId) query.set("classId", params.classId);
+    if (params.teacherId) query.set("teacherId", params.teacherId);
+    if (params.studentId) query.set("studentId", params.studentId);
+    if (params.page) query.set("page", String(params.page));
+    if (params.pageSize) query.set("pageSize", String(params.pageSize));
+
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    return apiClient<AdminReviewListResponse>(`/admin/reviews${qs}`);
+  },
+
+  /**
+   * GET /api/admin/reviews/:id — Get detailed review info including reports and audit log
+   */
+  async adminGetReviewDetail(id: string): Promise<AdminReviewDetail> {
+    return apiClient<AdminReviewDetail>(`/admin/reviews/${id}`);
+  },
+
+  /**
+   * POST /api/admin/reviews/:id/hide — Hide a review from public listing
+   */
+  async hideReview(id: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/admin/reviews/${id}/hide`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  /**
+   * POST /api/admin/reviews/:id/unhide — Restore visibility of a hidden review
+   */
+  async unhideReview(id: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/admin/reviews/${id}/unhide`, {
+      method: "POST",
+    });
+  },
+
+  /**
+   * DELETE /api/admin/reviews/:id — Soft-delete review to trash
+   */
+  async deleteReview(id: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/admin/reviews/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  /**
+   * POST /api/admin/reviews/:id/restore — Restore soft-deleted review
+   */
+  async restoreReview(id: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/admin/reviews/${id}/restore`, {
+      method: "POST",
+    });
   },
 };

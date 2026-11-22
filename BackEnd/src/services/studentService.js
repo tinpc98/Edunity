@@ -41,14 +41,10 @@ class StudentService {
     return sessions.map(s => {
       const start = new Date(s.startDatetime);
       const end = new Date(s.endDatetime);
-      const windowStart = new Date(start.getTime() - 10 * 60 * 1000); // 10 mins pre-open waiting room (TIN-05D)
-      // BUG-TIN03-02: only SCHEDULED, WAITING, IN_PROGRESS, and INTERRUPTED sessions are joinable during the time window.
-      // CANCELLED and COMPLETED sessions are not joinable.
-      const isJoinableStatus =
-        s.status === "SCHEDULED" ||
-        s.status === "WAITING" ||
-        s.status === "IN_PROGRESS" ||
-        s.status === "INTERRUPTED";
+      // Earliest moment a Teacher may press Start (startSession); the clock never opens the room by itself
+      const windowStart = new Date(start.getTime() - 10 * 60 * 1000);
+      // A Student can join only after the Teacher started teaching (same rule as POST /sessions/:id/join)
+      const isJoinableStatus = s.status === "IN_PROGRESS" && s.roomState === "LIVE";
       const canJoin = isJoinableStatus && currentNow >= windowStart && currentNow <= end;
       
       return {

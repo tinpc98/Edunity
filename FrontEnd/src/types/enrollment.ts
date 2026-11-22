@@ -3,6 +3,8 @@
  * and BackEnd/src/controllers/enrollmentController.js
  */
 
+import type { ScheduleEntry } from "./classDiscovery";
+
 export type EnrollmentStatus =
   | "PENDING_PAYMENT"
   | "CONFIRMED"
@@ -22,6 +24,7 @@ export interface PopulatedClassSummary {
   coverImage?: string;
   startDate?: string;
   endDate?: string;
+  schedule?: ScheduleEntry[];
   status?: string;
   classType?: "FREE" | "PAID";
   price?: number;

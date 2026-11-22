@@ -105,24 +105,6 @@ export default function ClassDiscoveryPage() {
       });
     });
 
-    // Statuses
-    filters.statuses.forEach((st) => {
-      const label =
-        st === "OPEN"
-          ? "Đang tuyển sinh"
-          : st === "IN_PROGRESS"
-          ? "Đang diễn ra"
-          : st;
-      tags.push({
-        key: `status-${st}`,
-        label,
-        onRemove: () =>
-          updateFilters({
-            statuses: filters.statuses.filter((s) => s !== st),
-          }),
-      });
-    });
-
     // Teacher
     if (filters.teacherId && metadata?.teachers) {
       const tea = metadata.teachers.find((t) => t.id === filters.teacherId);
@@ -164,14 +146,14 @@ export default function ClassDiscoveryPage() {
           items={[
             {
               title: (
-                <Link to="/" className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 text-xs">
+                <Link to="/" className="text-[#64748B] hover:text-[#0D9488] flex items-center gap-1 text-xs">
                   <HomeOutlined />
                   <span>Trang chủ</span>
                 </Link>
               ),
             },
             {
-              title: <span className="text-slate-800 font-semibold text-xs">Khám phá lớp học</span>,
+              title: <span className="text-[#163B40] font-semibold text-xs">Khám phá lớp học</span>,
             },
           ]}
         />

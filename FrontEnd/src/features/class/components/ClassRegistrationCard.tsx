@@ -1,21 +1,25 @@
 import { useState } from "react";
-import { useHoldCountdown } from "../../../hooks/useHoldCountdown";
 import { Link, useNavigate } from "react-router-dom";
-import { Button, Progress, Alert, Popconfirm, message } from "antd";
+import { Button, Progress, Alert, Popconfirm, Modal, message } from "antd";
 import {
   ClockCircleOutlined,
   CheckCircleOutlined,
-  LoginOutlined,
   ArrowRightOutlined,
+  LoginOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import EnrollmentConfirmModal from "./EnrollmentConfirmModal";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
+import type { CreatePaymentResponse } from "../../../types/payment";
+import { useAuthStore } from "../../../stores/auth.store";
 import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
 import { classKeys } from "../../../services/class.service";
-import { useAuthStore } from "../../../stores/auth.store";
+import { gatewayPaymentService } from "../../../services/gatewayPayment.service";
+import { useHoldCountdown } from "../../../hooks/useHoldCountdown";
 import { ROUTES } from "../../../routes/routePaths";
+import DirectTuitionPaymentModal from "./DirectTuitionPaymentModal";
 import { formatScheduleEntries } from "../../../api/classAdapters";
+import { checkScheduleConflicts, type ScheduleConflict } from "../../../utils/scheduleConflict";
 
 interface ClassRegistrationCardProps {
   item: ClassDiscoveryItem;
@@ -23,13 +27,18 @@ interface ClassRegistrationCardProps {
   sessionCount?: number;
 }
 
-
 export default function ClassRegistrationCard({ item, sessionCount }: ClassRegistrationCardProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuthStore();
 
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentIntent, setPaymentIntent] = useState<CreatePaymentResponse | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // Schedule conflict modal state
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [detectedConflicts, setDetectedConflicts] = useState<ScheduleConflict[]>([]);
 
   // 1. Fetch real class availability
   const { data: availability } = useQuery({
@@ -64,7 +73,7 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
     }
   );
 
-  // 6. Cancel Enrollment Mutation
+  // 4. Cancel Enrollment Mutation
   const cancelEnrollMutation = useMutation({
     mutationFn: (enrollmentId: string) => enrollmentService.cancelEnrollment(enrollmentId),
     onSuccess: () => {
@@ -101,23 +110,118 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
     activeEnrollment.enrollmentStatus === "PENDING_PAYMENT" &&
     !holdExpired;
 
+  const isExpiredState =
+    (activeEnrollment && activeEnrollment.enrollmentStatus === "EXPIRED") ||
+    (activeEnrollment?.enrollmentStatus === "PENDING_PAYMENT" && holdExpired);
+
+  const targetClassRoute = ROUTES.STUDENT.CLASS_SESSIONS.replace(":classId", item.id);
+
+  // Core execution: creates reservation & payment intent
+  const executeRegistration = async () => {
+    // FREE class -> enrolls immediately without payment
+    if (isFree) {
+      try {
+        setIsRegistering(true);
+        await enrollmentService.createEnrollment(item.id);
+        message.success("Đăng ký lớp học thành công! Bạn có thể vào học ngay.");
+        queryClient.invalidateQueries({ queryKey: enrollmentKeys.all });
+        queryClient.invalidateQueries({ queryKey: enrollmentKeys.availability(item.id) });
+        queryClient.invalidateQueries({ queryKey: ["classDetail", item.id] });
+        queryClient.invalidateQueries({ queryKey: ["classDiscovery"] });
+        navigate(targetClassRoute);
+      } catch (err: any) {
+        message.error(err?.message || "Không thể đăng ký lớp học.");
+      } finally {
+        setIsRegistering(false);
+      }
+      return;
+    }
+
+    // PAID class -> reserve seat + create tuition payment intent
+    try {
+      setIsRegistering(true);
+      let targetEnrollmentId = activeEnrollment && !holdExpired ? activeEnrollment.id : null;
+
+      if (!targetEnrollmentId) {
+        try {
+          const newEnrollment = await enrollmentService.createEnrollment(item.id);
+          targetEnrollmentId = newEnrollment.id;
+        } catch (enrollErr: any) {
+          if (enrollErr?.code === "DUPLICATE_ENROLLMENT" && enrollErr?.details?.existingEnrollmentId) {
+            targetEnrollmentId = enrollErr.details.existingEnrollmentId;
+          } else {
+            throw enrollErr;
+          }
+        }
+      }
+
+      if (!targetEnrollmentId) {
+        throw new Error("Không thể khởi tạo hoặc tìm thấy đơn đăng ký lớp học.");
+      }
+
+      // Automatically create payment intent for tuition
+      const intent = await gatewayPaymentService.createPayment(targetEnrollmentId);
+
+      // Invalidate queries to update reservation count & state
+      queryClient.invalidateQueries({ queryKey: enrollmentKeys.availability(item.id) });
+      queryClient.invalidateQueries({ queryKey: enrollmentKeys.myList(1, 100) });
+
+      // Open Direct VietQR Payment Modal
+      setPaymentIntent(intent);
+      setPaymentModalOpen(true);
+    } catch (err: any) {
+      if (err?.code === "PAYMENT_PROVIDER_DISABLED" || err?.status === 503) {
+        message.error(
+          "Cổng thanh toán thật payOS hiện chưa được kích hoạt hoặc đang bảo trì. Vui lòng liên hệ quản trị viên hoặc quay lại sau."
+        );
+      } else {
+        message.error(err?.message || "Không thể khởi tạo thanh toán.");
+      }
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  // Pre-check for schedule conflicts before creating reservation
+  const handleInitiateRegistration = () => {
+    // 1. Unauthenticated check -> redirect to login with return path
+    if (!isAuthenticated || !user) {
+      navigate(`/login?redirect=${encodeURIComponent(`/classes/${item.id}`)}`);
+      return;
+    }
+
+    // 2. Role check -> must be STUDENT
+    if (user.role !== "STUDENT") {
+      message.error("Chỉ tài khoản học viên (Student) mới có thể đăng ký lớp học.");
+      return;
+    }
+
+    // 3. Schedule conflict check if registering a new class
+    if (!isPending) {
+      const conflicts = checkScheduleConflicts(item, myEnrollments);
+      if (conflicts.length > 0) {
+        setDetectedConflicts(conflicts);
+        setConflictModalOpen(true);
+        return;
+      }
+    }
+
+    executeRegistration();
+  };
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm flex flex-col gap-5">
+    <div className="bg-white rounded-2xl border border-[#D6E5E2] p-6 shadow-xs flex flex-col gap-5">
       {/* Price Section */}
       <div>
         <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
           Học phí lớp học
         </div>
-        <div
-          className={`text-3xl font-black tracking-tight ${
-            isFree ? "text-emerald-600" : "text-indigo-600"
-          }`}
-        >
+        <div className="text-3xl font-black tracking-tight text-[#0D9488]">
           {item.formattedPrice}
         </div>
         {item.pricingPolicySnapshot && (
-          <div className="mt-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-            <div className="font-semibold text-slate-700">Khung chính sách lúc tạo lớp</div>
+          <div className="mt-2 rounded-lg bg-[#F5FAF9] border border-[#D6E5E2]/60 p-3 text-xs text-[#334155]">
+            <div className="font-semibold text-[#163B40]">Khung chính sách lúc tạo lớp</div>
             <div className="mt-1">
               {item.pricingPolicySnapshot.minPrice != null && item.pricingPolicySnapshot.maxPrice != null
                 ? `${Number(item.pricingPolicySnapshot.minPrice).toLocaleString("vi-VN")}đ – ${Number(item.pricingPolicySnapshot.maxPrice).toLocaleString("vi-VN")}đ`
@@ -152,8 +256,8 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
           percent={capacityPercent}
           showInfo={false}
           size={["100%", 5]}
-          strokeColor={isFree ? "#059669" : "#4f46e5"}
-          trailColor="#f1f5f9"
+          strokeColor="#0D9488"
+          trailColor="#CCFBF1"
           className="!m-0"
         />
       </div>
@@ -164,9 +268,9 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
           type="success"
           showIcon
           icon={<CheckCircleOutlined className="text-emerald-600" />}
-          message="Bạn đã đăng ký lớp học này"
-          description="Lớp học đã có trong mục Lớp học của tôi. Bạn có thể xem tài liệu và lịch học."
-          className="rounded-xl text-xs"
+          message="Bạn đã đăng ký thành công lớp học này"
+          description="Lớp học đã có trong mục Lớp học của tôi. Bạn có thể vào học và xem lịch học chi tiết."
+          className="rounded-xl text-xs bg-emerald-50/80 border-emerald-200"
         />
       )}
 
@@ -179,30 +283,29 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
           description={
             <div className="space-y-2 mt-1">
               <p className="text-xs text-amber-900">
-                Chỗ ngồi của bạn đang được hệ thống giữ tạm thời.
+                Chỗ ngồi của bạn đang được hệ thống giữ tạm thời. Vui lòng hoàn tất thanh toán trước khi hết hạn.
               </p>
-              <div className="flex items-center gap-2 pt-1">
-                <Link to={`/checkout/${activeEnrollment.id}`}>
-                  <Button size="small" type="primary" className="bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold">
-                    Thanh toán ngay
-                  </Button>
-                </Link>
-                <Link to={ROUTES.STUDENT.ENROLLMENTS}>
-                  <Button size="small" className="text-xs font-semibold">
-                    Xem đơn đăng ký
-                  </Button>
+              <div className="flex items-center justify-between pt-1 text-xs">
+                <Link
+                  to={ROUTES.STUDENT.ENROLLMENTS}
+                  className="font-semibold text-[#0D9488] hover:underline"
+                >
+                  Xem đơn đăng ký
                 </Link>
                 <Popconfirm
                   title="Hủy giữ chỗ?"
-                  description="Bạn có chắc muốn hủy đơn này và nhường chỗ cho người khác?"
+                  description="Bạn có chắc muốn hủy đơn này và nhường chỗ cho học viên khác?"
                   okText="Hủy chỗ"
                   cancelText="Không"
                   okButtonProps={{ danger: true, loading: cancelEnrollMutation.isPending }}
                   onConfirm={() => cancelEnrollMutation.mutate(activeEnrollment.id)}
                 >
-                  <Button size="small" danger className="text-xs">
+                  <button
+                    type="button"
+                    className="text-slate-400 hover:text-rose-600 transition-colors text-xs underline cursor-pointer bg-transparent border-none p-0"
+                  >
                     Hủy giữ chỗ
-                  </Button>
+                  </button>
                 </Popconfirm>
               </div>
             </div>
@@ -211,36 +314,38 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
         />
       )}
 
+      {isExpiredState && (
+        <Alert
+          type="info"
+          showIcon
+          message="Đơn đăng ký đã hết hạn"
+          description="Thời gian giữ chỗ trước đó đã kết thúc. Bạn có thể đăng ký lại nếu lớp học còn chỗ."
+          className="rounded-xl text-xs bg-slate-50 border-slate-200 text-slate-700"
+        />
+      )}
+
       {/* Primary Action Buttons */}
       {isConfirmed ? (
         <Button
           type="primary"
           size="large"
-          onClick={() => navigate(ROUTES.STUDENT.HOME)}
+          onClick={() => navigate(targetClassRoute)}
           icon={<ArrowRightOutlined />}
-          className="font-bold text-sm h-12 rounded-xl w-full bg-emerald-600 hover:bg-emerald-700 border-none shadow-xs"
+          className="font-bold text-sm h-12 rounded-xl w-full bg-[#0D9488] hover:bg-[#0B746C] border-none shadow-xs"
         >
           Vào lớp học của tôi
         </Button>
       ) : isPending ? (
         <div className="flex flex-col gap-2 w-full">
-          <Link to={`/checkout/${activeEnrollment.id}`} className="w-full">
-            <Button
-              type="primary"
-              size="large"
-              className="font-bold text-sm h-12 rounded-xl w-full bg-indigo-600 hover:bg-indigo-700 border-none shadow-xs"
-            >
-              Tiếp tục thanh toán học phí
-            </Button>
-          </Link>
-          <Link to={ROUTES.STUDENT.ENROLLMENTS} className="w-full">
-            <Button
-              size="small"
-              className="font-semibold text-xs h-9 rounded-xl w-full border-amber-300 text-amber-800 bg-amber-50/50 hover:bg-amber-100"
-            >
-              Quản lý danh sách đơn giữ chỗ
-            </Button>
-          </Link>
+          <Button
+            type="primary"
+            size="large"
+            loading={isRegistering}
+            onClick={executeRegistration}
+            className="font-bold text-sm h-12 rounded-xl w-full bg-[#0D9488] hover:bg-[#0B746C] border-none shadow-xs"
+          >
+            Tiếp tục thanh toán
+          </Button>
         </div>
       ) : !isAuthenticated ? (
         <Button
@@ -248,7 +353,7 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
           size="large"
           onClick={() => navigate(`/login?redirect=${encodeURIComponent(`/classes/${item.id}`)}`)}
           icon={<LoginOutlined />}
-          className="font-bold text-sm h-12 rounded-xl w-full bg-indigo-600 hover:bg-indigo-700 border-none shadow-xs"
+          className="font-bold text-sm h-12 rounded-xl w-full bg-[#0D9488] hover:bg-[#0B746C] border-none shadow-xs"
         >
           Đăng nhập để đăng ký
         </Button>
@@ -280,14 +385,11 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
         <Button
           type="primary"
           size="large"
-          onClick={() => setConfirmModalOpen(true)}
-          className={`font-bold text-sm h-12 rounded-xl w-full border-none shadow-xs ${
-            isFree
-              ? "bg-emerald-600 hover:bg-emerald-700"
-              : "bg-indigo-600 hover:bg-indigo-700"
-          }`}
+          loading={isRegistering}
+          onClick={handleInitiateRegistration}
+          className="font-bold text-sm h-12 rounded-xl w-full border-none shadow-xs bg-[#0D9488] hover:bg-[#0B746C]"
         >
-          {isFree ? "Đăng ký học ngay (Miễn phí)" : "Đăng ký giữ chỗ"}
+          {isFree ? "Đăng ký học ngay (Miễn phí)" : isExpiredState ? "Đăng ký lại" : "Đăng ký ngay"}
         </Button>
       )}
 
@@ -340,13 +442,85 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
       <div className="text-center pt-2 border-t border-slate-100">
         <Link
           to="/classes"
-          className="text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors"
+          className="text-xs font-semibold text-slate-500 hover:text-[#0D9488] transition-colors"
         >
           ← Quay lại danh sách lớp học
         </Link>
       </div>
 
-      <EnrollmentConfirmModal item={item} open={confirmModalOpen} onClose={() => setConfirmModalOpen(false)} />
+      {/* Schedule Conflict Warning Modal */}
+      <Modal
+        open={conflictModalOpen}
+        onCancel={() => setConflictModalOpen(false)}
+        footer={null}
+        centered
+        width={480}
+        title={
+          <div className="flex items-center gap-2 text-amber-600 font-bold text-base">
+            <WarningOutlined className="text-lg" />
+            <span>Lịch học bị trùng</span>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2">
+          <p className="text-xs text-slate-600 leading-relaxed m-0">
+            Lớp học này có thời gian học trùng với một lớp bạn đã đăng ký. Bạn vẫn có thể đăng ký, nhưng có thể không tham gia được đầy đủ các buổi học. Bạn có muốn tiếp tục đăng ký không?
+          </p>
+
+          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3.5 space-y-2 text-xs">
+            <div className="font-bold text-amber-900 text-xs uppercase tracking-wider">
+              Chi tiết lịch trùng:
+            </div>
+            {detectedConflicts.map((c, idx) => (
+              <div
+                key={idx}
+                className="bg-white/90 p-2.5 rounded-lg border border-amber-200/60 text-slate-800 space-y-0.5"
+              >
+                <div className="font-semibold text-slate-900">
+                  {c.conflictingClassName}
+                </div>
+                <div className="text-[11px] text-amber-800 font-medium">
+                  {c.dayLabel}: Lớp mới ({c.targetTime}) trùng với lớp đã đăng ký ({c.existingTime})
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <Button
+              size="middle"
+              onClick={() => setConflictModalOpen(false)}
+              className="rounded-xl text-xs font-semibold"
+            >
+              Hủy
+            </Button>
+            <Button
+              type="primary"
+              size="middle"
+              onClick={() => {
+                setConflictModalOpen(false);
+                executeRegistration();
+              }}
+              className="rounded-xl text-xs font-bold bg-[#0D9488] hover:bg-[#0B746C] border-none"
+            >
+              Vẫn đăng ký
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Direct Tuition VietQR Modal */}
+      <DirectTuitionPaymentModal
+        open={paymentModalOpen}
+        onClose={() => setPaymentModalOpen(false)}
+        item={item}
+        paymentIntent={paymentIntent}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: enrollmentKeys.all });
+          queryClient.invalidateQueries({ queryKey: enrollmentKeys.availability(item.id) });
+          queryClient.invalidateQueries({ queryKey: classKeys.all });
+        }}
+      />
     </div>
   );
 }

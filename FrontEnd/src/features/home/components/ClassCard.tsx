@@ -36,7 +36,7 @@ export default function ClassCard({
   const isFree = Number(price) === 0;
 
   return (
-    <Link to={`/classes/${id}`} className="group bg-white rounded-xl border border-slate-100 hover:border-indigo-200 hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col h-full">
+    <Link to={`/classes/${id}`} className="group bg-white rounded-xl border border-[#D6E5E2] hover:border-[#0D9488] hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col h-full">
       <div
         className={`relative ${
           compact ? "h-[102px]" : "h-[116px]"
@@ -48,7 +48,7 @@ export default function ClassCard({
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
 
-        <span className="absolute top-2 left-2 bg-white/95 backdrop-blur text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+        <span className="absolute top-2 left-2 bg-white/95 backdrop-blur text-[#0F766E] text-[10px] font-bold px-2 py-0.5 rounded shadow-xs">
           {tag}
         </span>
 
@@ -65,12 +65,12 @@ export default function ClassCard({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             {isFree && (
-              <span className="inline-flex items-center text-[9px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-1 rounded-full shrink-0">
+              <span className="inline-flex items-center text-[9px] font-extrabold text-[#0F766E] bg-[#CCFBF1] px-1.5 py-1 rounded-full shrink-0">
                 FREE
               </span>
             )}
 
-            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full truncate">
+            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[#0F766E] bg-[#F0FDFA] border border-[#99F6E4]/60 px-2 py-0.5 rounded-full truncate">
               Khai giảng {startDate}
             </span>
           </div>
@@ -81,23 +81,23 @@ export default function ClassCard({
           </div>
         </div>
 
-        <h3 className="text-[13.5px] font-extrabold text-slate-900 line-clamp-2 leading-5 group-hover:text-indigo-600 transition-colors min-h-[40px]">
+        <h3 className="text-[13.5px] font-extrabold text-[#163B40] line-clamp-2 leading-5 group-hover:text-[#0D9488] transition-colors min-h-[40px]">
           {title}
         </h3>
 
-        <div className="text-[10.5px] text-slate-500 truncate font-medium">
+        <div className="text-[10.5px] text-[#64748B] truncate font-medium">
           {teacher}
         </div>
 
-        <div className="rounded-lg bg-slate-50 px-2 py-1.5 space-y-1.5 text-[10.5px] text-slate-600">
+        <div className="rounded-lg bg-[#F5FAF9] border border-[#D6E5E2]/50 px-2 py-1.5 space-y-1.5 text-[10.5px] text-[#334155]">
           <div className="flex items-center gap-1.5">
-            <ClockCircleOutlined className="text-indigo-500" />
+            <ClockCircleOutlined className="text-[#0D9488]" />
             <span className="truncate font-medium">{schedule}</span>
           </div>
 
           <div
             className={`flex items-center gap-1.5 font-semibold ${
-              nearlyFull ? "text-rose-600" : "text-emerald-700"
+              nearlyFull ? "text-rose-600" : "text-[#0F766E]"
             }`}
           >
             <TeamOutlined />
@@ -108,28 +108,26 @@ export default function ClassCard({
           </div>
         </div>
 
-        <div className="mt-auto pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+        <div className="mt-auto pt-2 border-t border-[#D6E5E2]/70 flex items-center justify-between gap-2">
           <div>
-            {/* <div className="text-[9px] text-slate-400">Học phí</div> */}
-
             {isFree ? (
               <div className="flex items-center gap-1.5">
-                <span className="text-[13.5px] font-extrabold text-emerald-600">
+                <span className="text-[13.5px] font-extrabold text-[#0D9488]">
                   0đ
                 </span>
 
-                <span className="text-[8.5px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                <span className="text-[8.5px] font-extrabold text-[#0F766E] bg-[#CCFBF1] px-1.5 py-0.5 rounded">
                   MIỄN PHÍ
                 </span>
               </div>
             ) : (
-              <span className="text-[13.5px] font-extrabold text-indigo-600">
+              <span className="text-[13.5px] font-extrabold text-[#0D9488]">
                 {price.toLocaleString("vi-VN")}đ
               </span>
             )}
           </div>
 
-          <span className="inline-flex items-center border border-indigo-200 group-hover:bg-indigo-50 group-hover:border-indigo-500 text-[11px] font-semibold text-indigo-600 rounded-md px-2.5 h-[27px] transition-colors">
+          <span className="inline-flex items-center border border-[#99F6E4] bg-[#F0FDFA] group-hover:bg-[#0D9488] group-hover:text-white group-hover:border-[#0D9488] text-[11px] font-semibold text-[#0F766E] rounded-md px-2.5 h-[27px] transition-all">
             Xem lớp
           </span>
         </div>

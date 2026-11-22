@@ -25,6 +25,15 @@ interface LiveKitClassroomProps {
   onEndSession?: () => void;
   isEndingSession?: boolean;
   sessionControl?: SessionControl;
+  /**
+   * Asks the backend for a fresh token (it re-checks the Session is still running); the new token remounts the room.
+   * Undefined once the parent's retry limit is reached.
+   */
+  onReconnect?: () => void;
+  /** The media connection is up: the parent resets its retry counter */
+  onConnected?: () => void;
+  /** The room was closed server-side (Teacher ended the Session): refresh the live status */
+  onRoomClosed?: () => void;
 }
 
 function ClassroomInner({
@@ -37,7 +46,10 @@ function ClassroomInner({
   onEndSession,
   isEndingSession,
   sessionControl,
-}: Omit<LiveKitClassroomProps, "serverUrl" | "token" | "initialVideoEnabled" | "initialAudioEnabled">) {
+}: Omit<
+  LiveKitClassroomProps,
+  "serverUrl" | "token" | "initialVideoEnabled" | "initialAudioEnabled" | "onReconnect" | "onConnected" | "onRoomClosed"
+>) {
   const participants = useParticipants();
 
   return (
@@ -83,7 +95,7 @@ export default function LiveKitClassroom(props: LiveKitClassroomProps) {
   // A failed or dropped LiveKit connection used to call onLeaveRoom and silently send the user back to the schedule.
   // Only a disconnect the user asked for leaves; anything else shows the reason with a retry.
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const canRetry = Boolean(props.onReconnect);
 
   if (connectionError) {
     return (
@@ -91,17 +103,22 @@ export default function LiveKitClassroom(props: LiveKitClassroomProps) {
         <div className="max-w-md w-full rounded-2xl border border-rose-500/40 bg-slate-900 p-6 text-center space-y-4">
           <h2 className="text-lg font-bold text-white">Không thể kết nối phòng học</h2>
           <p className="text-sm text-slate-300 break-words">{connectionError}</p>
+          {!canRetry && (
+            <p className="text-xs text-slate-400">Đã thử kết nối lại nhiều lần. Vui lòng rời phòng và vào lại sau.</p>
+          )}
           <div className="flex gap-3 justify-center">
-            <button
-              type="button"
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-              onClick={() => {
-                setConnectionError(null);
-                setAttempt((n) => n + 1);
-              }}
-            >
-              Thử kết nối lại
-            </button>
+            {canRetry && (
+              <button
+                type="button"
+                className="rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-300"
+                onClick={() => {
+                  setConnectionError(null);
+                  props.onReconnect?.();
+                }}
+              >
+                Thử kết nối lại
+              </button>
+            )}
             <button
               type="button"
               className="rounded-xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
@@ -117,15 +134,17 @@ export default function LiveKitClassroom(props: LiveKitClassroomProps) {
 
   return (
     <LiveKitRoom
-      key={attempt}
+      key={props.token}
       serverUrl={props.serverUrl}
       token={props.token}
       connect={true}
       video={props.initialVideoEnabled}
       audio={props.initialAudioEnabled}
+      onConnected={props.onConnected}
       onDisconnected={(reason) => {
-        if (reason === DisconnectReason.CLIENT_INITIATED) props.onLeaveRoom();
-        else setConnectionError(describeConnectionError(reason));
+        if (reason === DisconnectReason.CLIENT_INITIATED) return props.onLeaveRoom();
+        if (reason === DisconnectReason.ROOM_DELETED || reason === DisconnectReason.ROOM_CLOSED) props.onRoomClosed?.();
+        setConnectionError(describeConnectionError(reason));
       }}
       onError={(error) => {
         console.error("[LiveKit] error:", error);

@@ -74,8 +74,21 @@ const createJoinToken = ({ roomId, sessionId, userId, displayName, role, expires
   };
 };
 
+// LiveKit (Twirp) answers 404 + code "not_found" for a room that does not exist. A 404 for a wrong URL is "bad_route",
+// and network/auth/server errors are something else: only "not_found" proves the room is gone.
+const isRoomNotFoundResponse = async (response) => {
+  if (response.status !== 404) return false;
+  try {
+    const data = await response.json();
+    return data?.code === "not_found";
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Closes the room when the Teacher ends the Session, disconnecting everyone still inside.
+ * Returns true when the room is closed or did not exist; false on a provider error (the caller retries later).
  * Best effort: the Session is already COMPLETED and tokens expire on their own, so a provider
  * outage must not fail the request.
  */
@@ -96,7 +109,10 @@ const closeRoom = async (roomId) => {
       body: JSON.stringify({ room: roomId }),
       signal: AbortSignal.timeout(5000),
     });
-    return response.ok;
+    if (response.ok) return true;
+    if (await isRoomNotFoundResponse(response)) return true;
+    console.error("Failed to close video room " + roomId + ": HTTP " + response.status);
+    return false;
   } catch (err) {
     console.error("Failed to close video room:", err.message);
     return false;
@@ -310,7 +326,8 @@ const listRoomParticipants = async (roomId) => {
       body: JSON.stringify({ room: roomId }),
       signal: AbortSignal.timeout(5000),
     });
-    if (!response.ok) return null;
+    // A room that no longer exists has no participants. Any other failure stays null = unknown, never "empty".
+    if (!response.ok) return (await isRoomNotFoundResponse(response)) ? [] : null;
     const data = await response.json();
     return Array.isArray(data?.participants) ? data.participants : [];
   } catch (err) {

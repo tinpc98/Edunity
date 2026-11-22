@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { Typography, Tabs, Table, Tag, Button, Input, Card, Badge, Space, Select } from 'antd';
+import { Typography, Tabs, Table, Tag, Button, Input, Card, Badge, Space, Select, Modal, Alert, message } from 'antd';
 import { 
   SearchOutlined, 
   EyeOutlined, 
   ClockCircleOutlined,
-  BookOutlined
+  BookOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ROUTES } from '../../../routes/routePaths';
 import { classService, classKeys } from '../../../services/class.service';
 import type { ClassModel, ClassStatus } from '../../../types/class';
@@ -22,6 +24,40 @@ export default function AdminClassesPage() {
   const [allPage, setAllPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const queryClient = useQueryClient();
+  const [deleteTargetClass, setDeleteTargetClass] = useState<ClassModel | null>(null);
+  const [deleteReason, setDeleteReason] = useState<string>('');
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const deleteClassMutation = useMutation({
+    mutationFn: ({ classId, reason }: { classId: string; reason?: string }) =>
+      classService.deleteClass(classId, reason),
+    onSuccess: () => {
+      message.success('Đã chuyển lớp học vào Thùng rác thành công!');
+      setIsDeleteModalOpen(false);
+      setDeleteTargetClass(null);
+      setDeleteReason('');
+      setDeleteError(null);
+      queryClient.invalidateQueries({ queryKey: classKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['adminTrash'] });
+    },
+    onError: (err: any) => {
+      const msg =
+        err?.message ||
+        err?.error ||
+        'Không thể xóa lớp học này do có học viên đã đăng ký hoặc lớp đang diễn ra.';
+      setDeleteError(msg);
+    },
+  });
+
+  const handleOpenDeleteModal = (record: ClassModel) => {
+    setDeleteTargetClass(record);
+    setDeleteReason('');
+    setDeleteError(null);
+    setIsDeleteModalOpen(true);
+  };
 
   // 1. Pending Classes Query (Backend endpoint: GET /api/admin/classes/pending)
   const { 
@@ -127,15 +163,25 @@ export default function AdminClassesPage() {
       title: 'Hành động',
       key: 'actions',
       render: (_: any, record: ClassModel) => (
-        <Button 
-          type="primary" 
-          size="small"
-          icon={<EyeOutlined />}
-          className="bg-teal-600 hover:bg-teal-700 rounded-lg font-medium text-xs text-white"
-          onClick={() => navigate(ROUTES.ADMIN.CLASS_DETAIL.replace(":classId", record.id))}
-        >
-          {record.status === 'PENDING_APPROVAL' ? 'Xét duyệt' : 'Chi tiết'}
-        </Button>
+        <Space size="small">
+          <Button 
+            type="primary" 
+            size="small"
+            icon={<EyeOutlined />}
+            className="bg-teal-600 hover:bg-teal-700 rounded-lg font-medium text-xs text-white"
+            onClick={() => navigate(ROUTES.ADMIN.CLASS_DETAIL.replace(":classId", record.id))}
+          >
+            {record.status === 'PENDING_APPROVAL' ? 'Xét duyệt' : 'Chi tiết'}
+          </Button>
+          <Button
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleOpenDeleteModal(record)}
+          >
+            Xóa
+          </Button>
+        </Space>
       ),
     },
   ];
@@ -244,6 +290,78 @@ export default function AdminClassesPage() {
           ]}
         />
       </Card>
+
+      {/* Soft Delete Confirmation Modal */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2 text-rose-600 font-bold">
+            <ExclamationCircleOutlined />
+            <span>Chuyển lớp học vào Thùng rác (Soft Delete)</span>
+          </div>
+        }
+        open={isDeleteModalOpen}
+        onCancel={() => {
+          setIsDeleteModalOpen(false);
+          setDeleteTargetClass(null);
+          setDeleteError(null);
+        }}
+        confirmLoading={deleteClassMutation.isPending}
+        okText="Chuyển vào Thùng rác"
+        cancelText="Hủy"
+        okButtonProps={{ danger: true }}
+        onOk={() => {
+          if (deleteTargetClass) {
+            deleteClassMutation.mutate({ classId: deleteTargetClass.id, reason: deleteReason });
+          }
+        }}
+      >
+        {deleteTargetClass && (
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-gray-700">
+              Bạn có chắc chắn muốn chuyển lớp học{" "}
+              <strong className="text-teal-700">&ldquo;{deleteTargetClass.className}&rdquo;</strong>{" "}
+              vào Thùng rác không?
+            </p>
+
+            {deleteTargetClass.enrolledCount > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                message="Cảnh báo ràng buộc học viên"
+                description={`Lớp học hiện đang có ${deleteTargetClass.enrolledCount} học viên đã ghi danh. Nếu học viên đã thanh toán, hệ thống sẽ từ chối xóa để bảo vệ quyền lợi học tập.`}
+                className="rounded-xl"
+              />
+            )}
+
+            {deleteError && (
+              <Alert
+                type="error"
+                showIcon
+                message="Không thể xóa lớp học"
+                description={deleteError}
+                className="rounded-xl border-red-200"
+              />
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Lý do xóa (ghi nhận nhật ký kiểm toán):
+              </label>
+              <Input.TextArea
+                rows={3}
+                placeholder="Nhập lý do xóa lớp học..."
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+
+            <p className="text-[11px] text-gray-500 italic">
+              * Lớp học sẽ được ẩn khỏi trang công khai và các buổi học chưa diễn ra sẽ được hủy lịch. Bạn có thể khôi phục lớp từ trang Thùng rác.
+            </p>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

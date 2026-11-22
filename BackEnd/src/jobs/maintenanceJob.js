@@ -18,6 +18,7 @@ const {
   runFinancialOutboxTick,
   resolveOutboxConfig,
 } = require("./financialOutboxWorker");
+const { runTokenRevocationSweep } = require("../services/tokenRevocationService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 
@@ -385,6 +386,7 @@ const runMaintenanceJob = async (now = new Date(), options = {}, lockContext = n
       staleRecordings: () => failStaleProcessingRecordings(now),
       teacherReverification: () => runReverificationSweep(now),
       notificationRetry: () => retryFailedNotifications(),
+      tokenRevocationSweep: () => runTokenRevocationSweep(now, { lockContext }),
     };
 
     if (resolveOutboxConfig().isEnabled) {
@@ -437,6 +439,7 @@ module.exports = {
   startMaintenanceJob,
   rejectExpiredPendingClasses,
   recoverMissingExpiredClassNotifications,
+  runTokenRevocationSweep,
   resolveTzOffsetMinutes,
   isClassStartDateReached,
   startFinancialOutboxWorker,

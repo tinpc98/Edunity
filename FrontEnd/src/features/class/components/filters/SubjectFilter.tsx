@@ -36,7 +36,7 @@ export default function SubjectFilter({
         }}
         className="flex flex-col gap-2 w-full"
       >
-        <Radio value="ALL" className="!flex items-center text-[13px] text-slate-700 hover:text-indigo-600">
+        <Radio value="ALL" className="!flex items-center text-[13px] text-[#334155] hover:text-[#0D9488]">
           <span className="flex-1 font-medium">Tất cả môn học</span>
         </Radio>
 
@@ -44,7 +44,7 @@ export default function SubjectFilter({
           <Radio
             key={sub.id}
             value={sub.id}
-            className="!flex items-center text-[13px] text-slate-700 hover:text-indigo-600"
+            className="!flex items-center text-[13px] text-[#334155] hover:text-[#0D9488]"
           >
             <span className="flex-1 font-medium">{sub.name}</span>
             {sub.count > 0 && (
@@ -60,7 +60,7 @@ export default function SubjectFilter({
         <button
           type="button"
           onClick={() => setShowAll((prev) => !prev)}
-          className="text-left text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:underline pt-1.5 cursor-pointer"
+          className="text-left text-xs font-semibold text-[#0D9488] hover:text-[#0F766E] hover:underline pt-1.5 cursor-pointer"
         >
           {showAll ? "Thu gọn ▲" : `Xem thêm (${subjects.length - INITIAL_VISIBLE_COUNT}) ▼`}
         </button>

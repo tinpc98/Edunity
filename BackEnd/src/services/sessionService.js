@@ -587,6 +587,11 @@ const joinSession = async (user, sessionId) => {
       409
     );
   }
+  // A Student gets a token only once the Teacher has pressed "Bắt đầu buổi học" (beginTeaching is the only writer of
+  // IN_PROGRESS + LIVE). SCHEDULED/WAITING — including legacy pre-opened WAITING rows — never grant access.
+  if (role === "PARTICIPANT" && (session.status !== "IN_PROGRESS" || session.roomState !== "LIVE")) {
+    throw new AppError("The teacher has not started this session yet", "SESSION_NOT_STARTED", 409);
+  }
 
   if (!session.meetingRoomId) session.meetingRoomId = `room_${session._id}`;
 
@@ -607,9 +612,9 @@ const joinSession = async (user, sessionId) => {
         preOpenedAt: session.preOpenedAt || now,
         "teacherPresence.lastConnectedAt": now,
       };
+      // Issuing a token is not presence: "connected" comes only from LiveKit-backed intervals
       if (isWaitingRoomWindow) {
         setFields["teacherPresence.firstPreOpenJoinAt"] = session.teacherPresence?.firstPreOpenJoinAt || now;
-        setFields["teacherPresence.isCurrentlyConnected"] = true;
       }
       await Session.updateOne({ _id: session._id, status: { $in: ["SCHEDULED", "WAITING"] } }, { $set: setFields });
       session.status = "WAITING";
@@ -687,10 +692,8 @@ const joinSession = async (user, sessionId) => {
         // Step 2: Atomic write-guard: mutate __v on Session document inside transaction
         // Ensures WiredTiger write-lock serialization against Teacher endSession
         const guardedSession = await Session.findOneAndUpdate(
-          {
-            _id: session._id,
-            status: { $in: ["SCHEDULED", "WAITING", "IN_PROGRESS", "INTERRUPTED"] },
-          },
+          // Only a running Session: closes the race with a Teacher end/interruption between the check above and here
+          { _id: session._id, status: "IN_PROGRESS", roomState: "LIVE" },
           {
             $inc: { __v: 1 },
           },
@@ -776,8 +779,9 @@ const joinSession = async (user, sessionId) => {
     role,
     expiresAt,
     firstJoinDeadlineAt,
-    roomState: isWaitingRoomWindow ? "WAITING" : session.roomState || "LIVE",
-    isWaitingRoom: isWaitingRoomWindow,
+    // Real state, never derived from the clock: only the Teacher's Start makes it LIVE
+    roomState: session.roomState || "NOT_OPEN",
+    isWaitingRoom: session.status === "WAITING",
     isReconnect: role === "PARTICIPANT" ? hasVerifiedPriorJoin : false,
   };
 };
@@ -936,8 +940,8 @@ const endSession = async (teacherId, sessionId) => {
   }
 
   // 8. Tac dung phu ngoai vi: Dong phong LiveKit SAU KHI DB transaction da commit thanh cong.
-  // Best effort: Loi mang LiveKit khong lam rollback DB va khong nem loi unhandled.
-  await videoProvider.closeRoom(sessionDoc.meetingRoomId);
+  // Loi mang LiveKit khong lam rollback DB: phong duoc danh dau cleanup pending va lifecycle job dong lai sau.
+  await presenceService.closeRoomOrMarkPending(sessionDoc);
 
   const finalSession = await Session.findById(sessionDoc._id).lean();
   return { ...finalSession, attendance: { present: attendedCount, absent: absentCount } };

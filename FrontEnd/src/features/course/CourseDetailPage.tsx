@@ -72,28 +72,28 @@ export default function CourseDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#F5FAF9]">
       {/* Header Band */}
-      <div className="bg-gradient-to-br from-indigo-700 to-violet-700 text-white py-12 px-4">
+      <div className="bg-gradient-to-r from-[#0F766E] via-[#0D9488] to-[#14B8A6] text-white py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <Breadcrumb
-            className="mb-4 text-indigo-300"
+            className="mb-4 text-teal-200"
             items={[
-              { title: <Link to={ROUTES.HOME} className="text-indigo-300 hover:text-white">Trang chủ</Link> },
-              { title: <Link to={ROUTES.COURSES.LIST} className="text-indigo-300 hover:text-white">Khóa học</Link> },
+              { title: <Link to={ROUTES.HOME} className="text-teal-200 hover:text-white">Trang chủ</Link> },
+              { title: <Link to={ROUTES.COURSES.LIST} className="text-teal-200 hover:text-white">Khóa học</Link> },
               { title: <span className="text-white font-medium">{course.title}</span> },
             ]}
           />
-          <p className="text-indigo-300 text-sm font-medium mb-2">
+          <p className="text-teal-100 text-sm font-medium mb-2">
             {course.categoryName} › {course.subjectName}
           </p>
           <h1 className="text-3xl font-bold mb-4">{course.title}</h1>
           <div className="flex flex-wrap gap-2">
             {course.level && (
-              <Tag color="blue" className="text-sm rounded-full">{COURSE_LEVEL_LABELS[course.level]}</Tag>
+              <Tag className="text-sm rounded-full bg-white/20 text-white border-none">{COURSE_LEVEL_LABELS[course.level]}</Tag>
             )}
             {course.gradeLevel && (
-              <Tag color="orange" className="text-sm rounded-full">{GRADE_LEVEL_LABELS[course.gradeLevel]}</Tag>
+              <Tag className="text-sm rounded-full bg-white/20 text-white border-none">{GRADE_LEVEL_LABELS[course.gradeLevel]}</Tag>
             )}
             {course.openClassCount !== undefined && (
               <span className="bg-white/20 text-white text-sm px-3 py-0.5 rounded-full font-medium">
@@ -110,43 +110,43 @@ export default function CourseDetailPage() {
         <div className="flex-1 space-y-6">
 
           {course.description && (
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-3">
-                <BookOutlined className="text-indigo-500" /> Mô tả khóa học
+            <div className="bg-white rounded-2xl p-6 border border-[#D6E5E2] shadow-xs">
+              <h2 className="text-lg font-bold text-[#163B40] flex items-center gap-2 mb-3">
+                <BookOutlined className="text-[#0D9488]" /> Mô tả khóa học
               </h2>
-              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{course.description}</p>
+              <p className="text-[#334155] whitespace-pre-wrap leading-relaxed">{course.description}</p>
             </div>
           )}
 
           {course.learningObjectives && (
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-3">
-                <TagsOutlined className="text-emerald-500" /> Mục tiêu học tập
+            <div className="bg-white rounded-2xl p-6 border border-[#D6E5E2] shadow-xs">
+              <h2 className="text-lg font-bold text-[#163B40] flex items-center gap-2 mb-3">
+                <TagsOutlined className="text-[#0F766E]" /> Mục tiêu học tập
               </h2>
-              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{course.learningObjectives}</p>
+              <p className="text-[#334155] whitespace-pre-wrap leading-relaxed">{course.learningObjectives}</p>
             </div>
           )}
 
           {course.syllabus && (
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-3">
+            <div className="bg-white rounded-2xl p-6 border border-[#D6E5E2] shadow-xs">
+              <h2 className="text-lg font-bold text-[#163B40] flex items-center gap-2 mb-3">
                 <SnippetsOutlined className="text-amber-500" /> Đề cương khóa học
               </h2>
-              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{course.syllabus}</p>
+              <p className="text-[#334155] whitespace-pre-wrap leading-relaxed">{course.syllabus}</p>
             </div>
           )}
 
           {course.prerequisites && (
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-3">
+            <div className="bg-white rounded-2xl p-6 border border-[#D6E5E2] shadow-xs">
+              <h2 className="text-lg font-bold text-[#163B40] flex items-center gap-2 mb-3">
                 <UnorderedListOutlined className="text-rose-500" /> Yêu cầu tiên quyết
               </h2>
-              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{course.prerequisites}</p>
+              <p className="text-[#334155] whitespace-pre-wrap leading-relaxed">{course.prerequisites}</p>
             </div>
           )}
 
           {!course.description && !course.learningObjectives && !course.syllabus && !course.prerequisites && (
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-gray-400 text-center">
+            <div className="bg-white rounded-2xl p-6 border border-[#D6E5E2] shadow-xs text-gray-400 text-center">
               Chưa có thông tin chi tiết cho khóa học này.
             </div>
           )}
@@ -154,45 +154,45 @@ export default function CourseDetailPage() {
 
         {/* Sidebar */}
         <div className="w-full lg:w-64 shrink-0">
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm sticky top-4 space-y-4">
+          <div className="bg-white rounded-2xl p-5 border border-[#D6E5E2] shadow-xs sticky top-4 space-y-4">
             <div>
-              <p className="text-xs text-gray-400 font-semibold uppercase mb-1">Danh mục</p>
-              <p className="font-semibold text-gray-800">{course.categoryName}</p>
+              <p className="text-xs text-slate-400 font-semibold uppercase mb-1">Danh mục</p>
+              <p className="font-semibold text-[#163B40]">{course.categoryName}</p>
             </div>
-            <Divider className="my-2" />
+            <Divider className="my-2 border-[#D6E5E2]/60" />
             <div>
-              <p className="text-xs text-gray-400 font-semibold uppercase mb-1">Môn học</p>
-              <p className="font-semibold text-gray-800">{course.subjectName}</p>
+              <p className="text-xs text-slate-400 font-semibold uppercase mb-1">Môn học</p>
+              <p className="font-semibold text-[#163B40]">{course.subjectName}</p>
             </div>
             {course.level && (
               <>
-                <Divider className="my-2" />
+                <Divider className="my-2 border-[#D6E5E2]/60" />
                 <div>
-                  <p className="text-xs text-gray-400 font-semibold uppercase mb-1">Cấp độ</p>
-                  <Tag color="blue">{COURSE_LEVEL_LABELS[course.level]}</Tag>
+                  <p className="text-xs text-slate-400 font-semibold uppercase mb-1">Cấp độ</p>
+                  <Tag className="bg-[#CCFBF1] text-[#0F766E] border-none font-medium">{COURSE_LEVEL_LABELS[course.level]}</Tag>
                 </div>
               </>
             )}
             {course.gradeLevel && (
               <>
-                <Divider className="my-2" />
+                <Divider className="my-2 border-[#D6E5E2]/60" />
                 <div>
-                  <p className="text-xs text-gray-400 font-semibold uppercase mb-1">Khối lớp</p>
-                  <Tag color="orange">{GRADE_LEVEL_LABELS[course.gradeLevel]}</Tag>
+                  <p className="text-xs text-slate-400 font-semibold uppercase mb-1">Khối lớp</p>
+                  <Tag className="bg-[#F0FDFA] text-[#0D9488] border border-[#99F6E4]/70 font-medium">{GRADE_LEVEL_LABELS[course.gradeLevel]}</Tag>
                 </div>
               </>
             )}
             {course.openClassCount !== undefined && (
               <>
-                <Divider className="my-2" />
+                <Divider className="my-2 border-[#D6E5E2]/60" />
                 <div>
-                  <p className="text-xs text-gray-400 font-semibold uppercase mb-1">Lớp đang mở</p>
-                  <p className="text-2xl font-bold text-emerald-600">{course.openClassCount}</p>
+                  <p className="text-xs text-slate-400 font-semibold uppercase mb-1">Lớp đang mở</p>
+                  <p className="text-2xl font-bold text-[#0D9488]">{course.openClassCount}</p>
                   {course.openClassCount > 0 && (
                     <Button 
                       type="primary" 
                       size="small" 
-                      className="mt-2 w-full bg-indigo-600 hover:bg-indigo-700"
+                      className="mt-2 w-full bg-[#0D9488] hover:bg-[#0B746C] border-none shadow-xs"
                       onClick={() => navigate(`/classes?courseId=${course.id}`)}
                     >
                       Xem tất cả lớp →

@@ -65,6 +65,8 @@ router.get("/admin/classes/:id", admin, controller.getClassForReview);
 router.post("/admin/classes/:id/approve", admin, controller.approveClass);
 router.post("/admin/classes/:id/reject", admin, controller.rejectClass);
 router.post("/admin/classes/:id/request-changes", admin, controller.requestChanges);
+router.delete("/admin/classes/:id", admin, controller.deleteClass);
+router.post("/admin/classes/:id/restore", admin, controller.restoreClass);
 
 router.get("/admin/smart-classroom/overview", admin, controller.listAdminSmartClassroomOverview);
 router.post("/admin/incident-reports/:id/review", admin, controller.reviewIncidentReport);
