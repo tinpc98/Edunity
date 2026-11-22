@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { 
   Typography, Steps, Button, Card, Form, Input, InputNumber, 
-  Select, DatePicker, Radio, message, Breadcrumb, Tag, Row, Col, Divider, Spin, TimePicker, Alert
+  DatePicker, Radio, message, Breadcrumb, Tag, Row, Col, Divider, Spin, Alert
 } from 'antd';
 import { 
   BookOutlined, 
@@ -9,25 +9,21 @@ import {
   CalendarOutlined, 
   CheckCircleOutlined, 
   SearchOutlined, 
-  PlusOutlined, 
-  DeleteOutlined, 
   ReloadOutlined,
 } from '@ant-design/icons';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
 import { courseService } from '../../../../services/course.service';
 import { classService, classKeys } from '../../../../services/class.service';
-import { teacherSubjectAuthorizationService } from '../../../../services/teacherSubjectAuthorization.service';
 import { TeacherVerificationGateCard } from '../../../../components/guards/RequireVerifiedTeacher';
 import { useTeacherVerification } from '../../../../hooks/useTeacherVerification';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
+import { hasInvalidSlot, INVALID_SLOT_MESSAGE, notBeforeField } from '../../../../utils/classForm';
 import type { Course } from '../../../../types/catalog';
-import type { TeacherSubjectAuthorization } from '../../../../types/teacherSubjectAuthorization';
+import { formatDayOfWeek } from '../../../../types/class';
 import type { ScheduleEntry, CreateClassPayload } from '../../../../types/class';
-import { isCourseAuthorizedForTeacher } from '../../../../utils/teacherCourseAuthorization';
-import { useAuthStore } from '../../../../stores/auth.store';
+import ScheduleEditor from '../components/ScheduleEditor';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -35,7 +31,6 @@ export default function CreateTeacherClassPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(0);
   const [form] = Form.useForm();
   
@@ -43,10 +38,10 @@ export default function CreateTeacherClassPage() {
   const [courseSearch, setCourseSearch] = useState<string>('');
 
   // Schedule list
-  const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([
-    { dayOfWeek: 2, startTime: "19:00", endTime: "20:30" },
-    { dayOfWeek: 4, startTime: "19:00", endTime: "20:30" },
-  ]);
+  const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
+  // A ref, not state: it must hold between two clicks of the same render and across validation's await
+  const isSavingRef = useRef(false);
+  const suggestedNameRef = useRef('');
 
   // 1. Fail-closed Teacher Verification Gate
   const {
@@ -58,25 +53,15 @@ export default function CreateTeacherClassPage() {
     refetch: refetchVerification,
   } = useTeacherVerification();
 
-  const authorizationsQuery = useQuery({
-    queryKey: ["teacher-subject-authorizations", user?.userId],
-    queryFn: () => teacherSubjectAuthorizationService.listAllMyAuthorizations(),
-    enabled: isVerified,
-    staleTime: 30_000,
-  });
-  const approvedAuthorizations = (authorizationsQuery.data ?? []).filter(
-    (authorization: TeacherSubjectAuthorization) => authorization.status === "APPROVED"
-  );
-
-  // 2. Courses are available only after exact subject/grade/level authorization is confirmed.
+  // 2. Every ACTIVE course can be drafted on; teaching authorization is checked when Admin approves.
   const {
     data: coursesData,
-    isLoading: isCoursesLoading,
+    isPending: isCoursesLoading, // not isLoading: a query paused offline would render as an empty catalog
     isError: isCoursesError,
     error: coursesError,
     refetch: refetchCourses,
   } = useQuery({
-    queryKey: ["courses", "active", courseSearch, "teacher-authorized"],
+    queryKey: ["courses", "active", courseSearch, "class-creation"],
     queryFn: async () => {
       const params = { search: courseSearch || undefined, pageSize: 100, page: 1 };
       const firstPage = await courseService.searchCourses(params);
@@ -91,19 +76,14 @@ export default function CreateTeacherClassPage() {
         items: [firstPage, ...remainingPages].flatMap((page) => page.items),
       };
     },
-    enabled: isVerified && authorizationsQuery.isSuccess,
+    enabled: isVerified,
     staleTime: 1000 * 60 * 2,
   });
 
-  // Only ACTIVE courses matching an approved Teacher authorization may be selected.
-  const courses: Course[] = (coursesData?.items || []).filter(
-    (course) =>
-      course.status === "ACTIVE" &&
-      isCourseAuthorizedForTeacher(course, approvedAuthorizations)
-  );
+  const courses: Course[] = (coursesData?.items || []).filter((course) => course.status === "ACTIVE");
   const matchedCourseInList = courses.find((c) => c.id === selectedCourseId);
 
-  // A URL-provided course must pass the same active status and authorization checks.
+  // A URL-provided course must pass the same active status check.
   const {
     data: fetchedSelectedCourse,
     isLoading: isVerifyingSelectedCourse,
@@ -113,7 +93,6 @@ export default function CreateTeacherClassPage() {
     queryFn: () => courseService.getCourse(selectedCourseId!),
     enabled:
       isVerified &&
-      authorizationsQuery.isSuccess &&
       Boolean(selectedCourseId) &&
       !isCoursesLoading &&
       !matchedCourseInList,
@@ -122,27 +101,17 @@ export default function CreateTeacherClassPage() {
   });
 
   const selectedCourse: Course | undefined =
-    matchedCourseInList ||
-    (fetchedSelectedCourse?.status === "ACTIVE" &&
-    isCourseAuthorizedForTeacher(fetchedSelectedCourse, approvedAuthorizations)
-      ? fetchedSelectedCourse
-      : undefined);
+    matchedCourseInList || (fetchedSelectedCourse?.status === "ACTIVE" ? fetchedSelectedCourse : undefined);
 
   const isCheckingSelectedCourse =
-    Boolean(selectedCourseId) &&
-    !matchedCourseInList &&
-    (authorizationsQuery.isLoading || isCoursesLoading || isVerifyingSelectedCourse);
+    Boolean(selectedCourseId) && !matchedCourseInList && (isCoursesLoading || isVerifyingSelectedCourse);
 
   const isInvalidSelectedCourse =
     Boolean(selectedCourseId) &&
     !matchedCourseInList &&
-    authorizationsQuery.isSuccess &&
     !isCoursesLoading &&
     !isVerifyingSelectedCourse &&
-    (isSelectedCourseError ||
-      !fetchedSelectedCourse ||
-    fetchedSelectedCourse.status !== "ACTIVE" ||
-    !isCourseAuthorizedForTeacher(fetchedSelectedCourse, approvedAuthorizations));
+    (isSelectedCourseError || fetchedSelectedCourse?.status !== "ACTIVE");
 
   // Form watches
   const classType = Form.useWatch('classType', form) || 'PAID';
@@ -152,36 +121,39 @@ export default function CreateTeacherClassPage() {
   const createClassMutation = useMutation({
     mutationFn: (payload: CreateClassPayload) => classService.createClass(payload),
     onSuccess: (created) => {
-      message.success("Khởi tạo lớp học thành công!");
+      message.success("Đã lưu bản nháp lớp học. Bạn có thể hoàn thiện rồi gửi duyệt.");
       queryClient.invalidateQueries({ queryKey: classKeys.teacherList() });
       navigate(ROUTES.TEACHER.CLASS_DETAIL.replace(":classId", created.id));
     },
     onError: (err: unknown) => {
+      isSavingRef.current = false;
       message.error(getFriendlyErrorMessage(err, "Không thể tạo lớp học. Vui lòng kiểm tra lại thông tin."));
     },
   });
 
+  const ensureCourseSelected = () => {
+    if (isCheckingSelectedCourse) {
+      message.info("Đang kiểm tra trạng thái khóa học đã chọn, vui lòng đợi...");
+      return false;
+    }
+    if (!selectedCourse) {
+      message.warning(
+        isInvalidSelectedCourse
+          ? "Khóa học đã chọn không còn hoạt động. Vui lòng chọn khóa học khác."
+          : "Vui lòng chọn một khóa học chuẩn."
+      );
+      return false;
+    }
+    if (!selectedCourse.level) {
+      message.warning("Khóa học này chưa có cấp độ nên chưa thể tạo lớp. Vui lòng chọn khóa khác hoặc liên hệ quản trị viên.");
+      return false;
+    }
+    return true;
+  };
+
   const handleNext = async () => {
     if (currentStep === 0) {
-      if (isCheckingSelectedCourse) {
-        message.info("Đang kiểm tra trạng thái khóa học đã chọn, vui lòng đợi...");
-        return;
-      }
-      if (authorizationsQuery.isError) {
-        message.error("Không xác định được quyền giảng dạy. Vui lòng tải lại trước khi chọn Course.");
-        return;
-      }
-      if (!selectedCourseId || !selectedCourse || selectedCourse.status !== "ACTIVE") {
-        message.warning(
-          isInvalidSelectedCourse
-            ? "Course không ACTIVE hoặc không thuộc phạm vi môn, khối và cấp độ đã được duyệt."
-            : approvedAuthorizations.length
-              ? "Vui lòng chọn Course ACTIVE thuộc phạm vi giảng dạy được duyệt."
-              : "Bạn chưa có quyền giảng dạy được duyệt. Hãy đăng ký môn ở mục Quyền giảng dạy trong Hồ sơ giáo viên."
-        );
-        return;
-      }
-      setCurrentStep(1);
+      if (ensureCourseSelected()) setCurrentStep(1);
       return;
     }
 
@@ -196,12 +168,9 @@ export default function CreateTeacherClassPage() {
     }
 
     if (currentStep === 2) {
-      // Validate schedule
-      for (const entry of scheduleList) {
-        if (!entry.startTime || !entry.endTime || entry.startTime >= entry.endTime) {
-          message.error("Giờ bắt đầu phải trước giờ kết thúc cho tất cả ca học.");
-          return;
-        }
+      if (hasInvalidSlot(scheduleList)) {
+        message.error(INVALID_SLOT_MESSAGE);
+        return;
       }
       setCurrentStep(3);
     }
@@ -209,27 +178,6 @@ export default function CreateTeacherClassPage() {
 
   const handlePrev = () => {
     setCurrentStep((prev) => Math.max(0, prev - 1));
-  };
-
-  const handleAddScheduleEntry = () => {
-    setScheduleList([
-      ...scheduleList,
-      { dayOfWeek: 1, startTime: "18:00", endTime: "19:30" },
-    ]);
-  };
-
-  const handleRemoveScheduleEntry = (index: number) => {
-    setScheduleList(scheduleList.filter((_, i) => i !== index));
-  };
-
-  const handleUpdateSchedule = (
-    index: number,
-    field: keyof ScheduleEntry,
-    value: ScheduleEntry[keyof ScheduleEntry]
-  ) => {
-    const updated = [...scheduleList];
-    updated[index] = { ...updated[index], [field]: value };
-    setScheduleList(updated);
   };
 
   const buildPayload = (): CreateClassPayload => {
@@ -249,9 +197,25 @@ export default function CreateTeacherClassPage() {
     };
   };
 
-  const handleSubmit = () => {
-    const payload = buildPayload();
-    createClassMutation.mutate(payload);
+  // Saves from any step: only what was typed has to be valid, the rest can be completed on the class page
+  const handleSaveDraft = async () => {
+    if (isSavingRef.current || !ensureCourseSelected()) return;
+    if (hasInvalidSlot(scheduleList)) {
+      setCurrentStep(2);
+      message.error(INVALID_SLOT_MESSAGE);
+      return;
+    }
+
+    isSavingRef.current = true;
+    try {
+      await form.validateFields();
+    } catch {
+      isSavingRef.current = false;
+      setCurrentStep(1);
+      message.error("Vui lòng kiểm tra lại các thông tin được đánh dấu.");
+      return;
+    }
+    createClassMutation.mutate(buildPayload());
   };
 
   // ---------------- Render Step 0: Chọn khóa chuẩn ----------------
@@ -268,33 +232,13 @@ export default function CreateTeacherClassPage() {
           </div>
         </div>
 
-        {authorizationsQuery.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            className="mb-6 rounded-xl"
-            message="Không thể kiểm tra quyền giảng dạy"
-            description="Không thể xác nhận môn, khối và cấp độ đã được duyệt. Không thể tiếp tục chọn Course cho đến khi tải được dữ liệu quyền."
-            action={<Button size="small" onClick={() => authorizationsQuery.refetch()}>Thử lại</Button>}
-          />
-        ) : !authorizationsQuery.isLoading && approvedAuthorizations.length === 0 ? (
-          <Alert
-            type="warning"
-            showIcon
-            className="mb-6 rounded-xl"
-            message="Chưa có quyền giảng dạy được duyệt"
-            description="Đăng ký môn và phạm vi giảng dạy ở mục Quyền giảng dạy trong Hồ sơ giáo viên. Chỉ Course thuộc phạm vi được Admin duyệt mới có thể dùng để tạo lớp."
-            action={<Button size="small" onClick={() => navigate(ROUTES.TEACHER.PROFILE)}>Đăng ký quyền dạy môn</Button>}
-          />
-        ) : null}
-
         {isInvalidSelectedCourse && (
           <Alert
             type="warning"
             showIcon
             className="mb-6 rounded-xl"
             message="Course từ đường dẫn không khả dụng"
-            description="Course không ACTIVE hoặc không thuộc chính xác môn, khối và cấp độ đã được duyệt. Hãy chọn Course hợp lệ trong danh sách."
+            description="Khóa học không tồn tại, đã tạm ngưng hoặc chưa tải được. Hãy chọn khóa học khác trong danh sách."
             action={
               <Button size="small" onClick={() => setSelectedCourseId(null)}>
                 Chọn lại
@@ -315,11 +259,11 @@ export default function CreateTeacherClassPage() {
           />
         </div>
 
-        {authorizationsQuery.isLoading || isCoursesLoading ? (
+        {isCoursesLoading ? (
           <div className="py-12 text-center">
             <Spin tip="Đang tải danh sách khóa học..." />
           </div>
-        ) : authorizationsQuery.isError ? null : isCoursesError ? (
+        ) : isCoursesError ? (
           <Alert
             type="error"
             showIcon
@@ -340,7 +284,7 @@ export default function CreateTeacherClassPage() {
               </Button>
             }
           />
-        ) : approvedAuthorizations.length === 0 ? null : courses.length === 0 ? (
+        ) : courses.length === 0 ? (
           <div className="p-8 text-center bg-gray-50 rounded-xl border border-gray-200">
             <Text className="text-gray-500">Không tìm thấy khóa học đang hoạt động nào phù hợp.</Text>
           </div>
@@ -353,8 +297,11 @@ export default function CreateTeacherClassPage() {
                   key={course.id}
                   onClick={() => {
                     setSelectedCourseId(course.id);
-                    if (!form.getFieldValue('className')) {
-                      form.setFieldsValue({ className: `Lớp ${course.title}` });
+                    // Follow the course only while the name is still the one suggested for the previous course
+                    const name = form.getFieldValue('className');
+                    if (!name || name === suggestedNameRef.current) {
+                      suggestedNameRef.current = `Lớp ${course.title}`;
+                      form.setFieldsValue({ className: suggestedNameRef.current });
                     }
                   }}
                   className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
@@ -494,7 +441,7 @@ export default function CreateTeacherClassPage() {
 
           <Row gutter={24}>
             {!isFree && (
-              <Col span={12}>
+              <Col xs={24} sm={12}>
                 <Form.Item 
                   label="Học phí trọn khóa (VNĐ)" 
                   name="price" 
@@ -513,7 +460,7 @@ export default function CreateTeacherClassPage() {
                 </Form.Item>
               </Col>
             )}
-            <Col span={isFree ? 24 : 12}>
+            <Col xs={24} sm={isFree ? 24 : 12}>
               <Form.Item 
                 label="Sĩ số tối đa (học viên)" 
                 name="capacity" 
@@ -528,23 +475,33 @@ export default function CreateTeacherClassPage() {
           </Row>
           
           <Row gutter={24}>
-            <Col span={6}>
+            <Col xs={24} sm={12} md={6}>
               <Form.Item label="Mở tuyển sinh từ" name="enrollmentStart">
                 <DatePicker size="large" className="w-full rounded-lg" format="DD/MM/YYYY" placeholder="Chọn ngày" />
               </Form.Item>
             </Col>
-            <Col span={6}>
-              <Form.Item label="Hạn chót tuyển sinh" name="enrollmentEnd">
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item
+                label="Hạn chót tuyển sinh"
+                name="enrollmentEnd"
+                dependencies={['enrollmentStart']}
+                rules={[notBeforeField('enrollmentStart', 'Không được trước ngày mở tuyển sinh')]}
+              >
                 <DatePicker size="large" className="w-full rounded-lg" format="DD/MM/YYYY" placeholder="Chọn ngày" />
               </Form.Item>
             </Col>
-            <Col span={6}>
-              <Form.Item label="Ngày khai giảng" name="startDate">
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item label="Ngày khai giảng" name="startDate" extra="Phải sau hôm nay khi gửi duyệt">
                 <DatePicker size="large" className="w-full rounded-lg" format="DD/MM/YYYY" placeholder="Chọn ngày" />
               </Form.Item>
             </Col>
-            <Col span={6}>
-              <Form.Item label="Ngày kết thúc" name="endDate">
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item
+                label="Ngày kết thúc"
+                name="endDate"
+                dependencies={['startDate']}
+                rules={[notBeforeField('startDate', 'Không được trước ngày khai giảng')]}
+              >
                 <DatePicker size="large" className="w-full rounded-lg" format="DD/MM/YYYY" placeholder="Chọn ngày" />
               </Form.Item>
             </Col>
@@ -559,16 +516,6 @@ export default function CreateTeacherClassPage() {
   );
 
   // ---------------- Render Step 2: Lịch giảng dạy ----------------
-  const dayOptions = [
-    { value: 1, label: "Thứ 2" },
-    { value: 2, label: "Thứ 3" },
-    { value: 3, label: "Thứ 4" },
-    { value: 4, label: "Thứ 5" },
-    { value: 5, label: "Thứ 6" },
-    { value: 6, label: "Thứ 7" },
-    { value: 0, label: "Chủ nhật" },
-  ];
-
   const renderStep2 = () => (
     <div className="mt-6 max-w-[800px] mx-auto">
       <Card className="rounded-2xl shadow-sm border-gray-100 p-6">
@@ -584,64 +531,7 @@ export default function CreateTeacherClassPage() {
           </Tag>
         </div>
 
-        <div className="flex flex-col gap-3.5 mb-6">
-          {scheduleList.map((entry, index) => (
-            <div 
-              key={index}
-              className="border border-gray-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 bg-white hover:border-indigo-200 transition-colors"
-            >
-              <div className="flex items-center gap-3 w-full md:w-auto">
-                <span className="font-semibold text-gray-700 text-sm whitespace-nowrap">Ca {index + 1}:</span>
-                <Select
-                  value={entry.dayOfWeek}
-                  onChange={(val) => handleUpdateSchedule(index, 'dayOfWeek', val)}
-                  options={dayOptions}
-                  className="w-[120px]"
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500">Từ</span>
-                <TimePicker
-                  value={entry.startTime ? dayjs(entry.startTime, "HH:mm") : null}
-                  format="HH:mm"
-                  minuteStep={5}
-                  onChange={(_, str) => handleUpdateSchedule(index, 'startTime', str || '')}
-                  className="w-[100px]"
-                />
-                <span className="text-xs text-gray-500">đến</span>
-                <TimePicker
-                  value={entry.endTime ? dayjs(entry.endTime, "HH:mm") : null}
-                  format="HH:mm"
-                  minuteStep={5}
-                  onChange={(_, str) => handleUpdateSchedule(index, 'endTime', str || '')}
-                  className="w-[100px]"
-                />
-              </div>
-
-              <Button 
-                type="text" 
-                danger 
-                icon={<DeleteOutlined />} 
-                onClick={() => handleRemoveScheduleEntry(index)}
-                disabled={scheduleList.length <= 1}
-              >
-                Xóa
-              </Button>
-            </div>
-          ))}
-        </div>
-
-        <Button 
-          type="dashed" 
-          block 
-          size="large" 
-          icon={<PlusOutlined />} 
-          onClick={handleAddScheduleEntry}
-          className="rounded-xl border-indigo-200 text-indigo-600 hover:bg-indigo-50 font-medium h-[46px]"
-        >
-          Thêm ca học trong tuần
-        </Button>
+        <ScheduleEditor value={scheduleList} onChange={setScheduleList} />
       </Card>
     </div>
   );
@@ -686,15 +576,24 @@ export default function CreateTeacherClassPage() {
             <Col span={24}>
               <div className="text-xs text-gray-400 font-medium mb-0.5">Lịch học hàng tuần ({scheduleList.length} ca)</div>
               <div className="text-sm text-gray-700">
+                {scheduleList.length === 0 && 'Chưa thiết lập'}
                 {scheduleList.map((s, idx) => (
                   <Tag key={idx} color="blue">
-                    {dayOptions.find(d => d.value === s.dayOfWeek)?.label}: {s.startTime} - {s.endTime}
+                    {formatDayOfWeek(s.dayOfWeek)}: {s.startTime} - {s.endTime}
                   </Tag>
                 ))}
               </div>
             </Col>
           </Row>
         </Card>
+
+        <Alert
+          type="info"
+          showIcon
+          className="mt-4 rounded-xl text-left"
+          message="Sau khi lưu nháp"
+          description="Để gửi duyệt, lớp cần đủ thông tin, lịch học và buổi học. Quyền giảng dạy, hợp đồng và chính sách giá không chặn việc gửi duyệt; Admin kiểm tra các điều kiện này trước khi mở lớp."
+        />
       </div>
     );
   };
@@ -773,32 +672,38 @@ export default function CreateTeacherClassPage() {
         >
           {currentStep === 0 ? 'Hủy & Quay lại' : 'Quay lại bước trước'}
         </Button>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap justify-end gap-3">
           {currentStep < stepItems.length - 1 ? (
-            <Button 
-              type="primary" 
-              onClick={handleNext} 
-              loading={currentStep === 0 && isCheckingSelectedCourse}
-              disabled={
-                currentStep === 0 &&
-                (isCheckingSelectedCourse ||
-                  isInvalidSelectedCourse ||
-                  authorizationsQuery.isLoading ||
-                  authorizationsQuery.isError ||
-                  (authorizationsQuery.isSuccess && approvedAuthorizations.length === 0))
-              }
-              className="h-[44px] px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-medium"
-            >
-              Tiếp tục
-            </Button>
+            <>
+              <Button
+                onClick={handleSaveDraft}
+                loading={createClassMutation.isPending}
+                disabled={!selectedCourse}
+                className="h-[44px] px-6 rounded-xl font-medium"
+              >
+                Lưu nháp
+              </Button>
+              <Button
+                type="primary"
+                onClick={handleNext}
+                loading={currentStep === 0 && isCheckingSelectedCourse}
+                disabled={
+                  createClassMutation.isPending ||
+                  (currentStep === 0 && (isCheckingSelectedCourse || isInvalidSelectedCourse))
+                }
+                className="h-[44px] px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-medium"
+              >
+                Tiếp tục
+              </Button>
+            </>
           ) : (
             <Button 
               type="primary" 
-              onClick={handleSubmit} 
+              onClick={handleSaveDraft}
               loading={createClassMutation.isPending}
               className="h-[44px] px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-medium"
             >
-              Xác nhận & Khởi tạo lớp học
+              Xác nhận & Lưu bản nháp
             </Button>
           )}
         </div>

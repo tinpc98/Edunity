@@ -141,14 +141,15 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     expect(reqAuth.body.data.status).toBe("PENDING");
     expect(reqAuth.body.data.createdBy).toBeUndefined();
 
-    // PENDING TEA-07 blocks createClass (403)
-    await expect(
-      teacherClassService.createClass(
-        teacher._id,
-        { courseId: course._id, className: "Blocked Pending", classType: "PAID", price: 500000, capacity: 20 },
-        { contractVerifier: async () => ({ status: "ACTIVE" }) }
-      )
-    ).rejects.toMatchObject({ code: "SUBJECT_AUTHORIZATION_PENDING", statusCode: 403 });
+    // PENDING TEA-07 does not block a DRAFT (TEACHER-CLASS-FLOW-02); approval enforces it in 4b
+    const pendingAuthDraft = await teacherClassService.createClass(teacher._id, {
+      courseId: course._id,
+      className: "Draft While Auth Pending",
+      classType: "PAID",
+      price: 500000,
+      capacity: 20,
+    });
+    expect(pendingAuthDraft.status).toBe("DRAFT");
 
     // Admin approves TEA-07
     await request(app)
@@ -164,23 +165,21 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
       .expect(200);
     expect(JSON.stringify(myAuthRes.body)).not.toContain(admin._id.toString());
 
-    // Step 2: With TEA-07 APPROVED + CUR-07 ACTIVE, a VERIFIED teacher with no signed contract is still refused (403)
-    const blockedHttp = await request(app)
+    // Step 2: a VERIFIED teacher with no signed contract can still draft; approval refuses in 4a
+    await request(app)
       .post("/api/teacher/classes")
       .set(as(teacher))
       .send({ courseId: course._id, className: "Missing TEA-12", classType: "PAID", price: 500000, capacity: 20 })
-      .expect(403);
-    expect(blockedHttp.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
+      .expect(201);
 
-    // Step 3: With explicit test contractVerifier ONLY in options, real CUR-07 validates price & captures CUR-09 snapshot
+    // Step 3: an out-of-policy price can be drafted but gets no CUR-09 policy snapshot; approval refuses it in 4a-bis
     const contractOk = { contractVerifier: async () => ({ id: "c-1", status: "ACTIVE" }) };
-    await expect(
-      teacherClassService.createClass(
-        teacher._id,
-        { courseId: course._id, className: "Too Cheap", classType: "PAID", price: 100000, capacity: 20 },
-        contractOk
-      )
-    ).rejects.toMatchObject({ code: "PRICE_OUT_OF_POLICY_RANGE", statusCode: 400 });
+    const tooCheap = await teacherClassService.createClass(
+      teacher._id,
+      { courseId: course._id, className: "Too Cheap", classType: "PAID", price: 100000, capacity: 20 },
+      contractOk
+    );
+    expect(tooCheap.pricingPolicyId).toBeNull();
 
     const created = await teacherClassService.createClass(
       teacher._id,
@@ -251,6 +250,13 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
       .expect(403);
     expect(adminHttpBlocked.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
     expect((await Class.findById(created._id).lean()).status).toBe("PENDING_APPROVAL");
+
+    // 4a-bis) CUR-07 price range is enforced by approval
+    await Class.updateOne({ _id: created._id }, { $set: { price: mongoose.Types.Decimal128.fromString("100000") } });
+    await expect(
+      adminClassService.approveClass(admin._id, created._id.toString(), {}, contractOk)
+    ).rejects.toMatchObject({ code: "PRICE_OUT_OF_POLICY_RANGE", statusCode: 400 });
+    await Class.updateOne({ _id: created._id }, { $set: { price: mongoose.Types.Decimal128.fromString("600000") } });
 
     // 4b) Suspend TEA-07 while PENDING_APPROVAL -> approveClass MUST reject with 403 even if TEA-12 OK!
     await request(app)
@@ -538,11 +544,10 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     }
 
     await expect(
-      classCreationGateService.validateClassGate({
+      classCreationGateService.assertPricingPolicyGate({
         teacher,
         course,
         body: { price: true, classType: "PAID" },
-        contractVerifier: contractOk.contractVerifier,
       })
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
 

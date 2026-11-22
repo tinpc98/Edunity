@@ -47,6 +47,9 @@ import {
   useTeacherVerification,
 } from '../../../../hooks/useTeacherVerification';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
+import { hasInvalidSlot, INVALID_SLOT_MESSAGE, notBeforeField } from '../../../../utils/classForm';
+import ClassReadinessCard from '../../../../components/common/ClassReadinessCard';
+import ScheduleEditor from '../components/ScheduleEditor';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -132,6 +135,14 @@ export default function TeacherClassDetailPage() {
     refetchOnWindowFocus: true,
   });
 
+  // Conditions still to meet, for a class that is not open yet
+  const showReadiness = ['DRAFT', 'NEED_CHANGES', 'PENDING_APPROVAL'].includes(cls?.status ?? '');
+  const readinessQuery = useQuery({
+    queryKey: classKeys.teacherReadiness(classId!),
+    queryFn: () => classService.getMyClassReadiness(classId!),
+    enabled: Boolean(classId && showReadiness),
+  });
+
   // 2. Mutation: Update Class
   const updateMutation = useMutation({
     mutationFn: (payload: UpdateClassPayload) => classService.updateClass(classId!, payload),
@@ -155,28 +166,7 @@ export default function TeacherClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: classKeys.teacherList() });
     },
     onError: (err: any) => {
-      if (err?.code === "CLASS_INCOMPLETE") {
-        const labels: Record<string, string> = {
-          description: "mô tả lớp",
-          enrollmentStart: "ngày mở đăng ký",
-          enrollmentEnd: "ngày đóng đăng ký",
-          startDate: "ngày khai giảng",
-          endDate: "ngày kết thúc",
-          schedule: "lịch học cố định",
-          sessions: "ít nhất 1 buổi học (tab Buổi học)",
-        };
-        const missing: string[] = Array.isArray(err?.details?.missing) ? err.details.missing : [];
-        message.error(
-          missing.length
-            ? `Lớp chưa đủ thông tin để gửi duyệt. Còn thiếu: ${missing.map((m) => labels[m] || m).join(", ")}.`
-            : "Lớp chưa đủ thông tin để gửi duyệt."
-        );
-        return;
-      }
-      if (err?.code === "SESSION_OUT_OF_CLASS_RANGE") {
-        message.error("Có buổi học nằm ngoài khoảng ngày khai giảng – kết thúc của lớp.");
-        return;
-      }
+      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
       message.error(getFriendlyErrorMessage(err, "Không thể gửi duyệt lớp học."));
     },
   });
@@ -303,11 +293,13 @@ export default function TeacherClassDetailPage() {
     );
   }
 
-  const isEditable = isVerified && (cls.status === 'DRAFT' || cls.status === 'REJECTED');
+  const isEditable = isVerified && (cls.status === 'DRAFT' || cls.status === 'NEED_CHANGES');
+  // The backend deletes sessions of a DRAFT; a class sent back for changes cancels them instead
+  const canDeleteSessions = isVerified && cls.status === 'DRAFT';
   const isClassClosed = cls.status === 'COMPLETED' || cls.status === 'CANCELLED';
-  const canManageSessions = isVerified && !isClassClosed && cls.status !== 'PENDING_APPROVAL';
+  const canManageSessions = isVerified && !isClassClosed && cls.status !== 'PENDING_APPROVAL' && cls.status !== 'REJECTED';
   const isClassActiveForLive = isVerified && (cls.status === 'OPEN' || cls.status === 'IN_PROGRESS');
-  const scheduleDisplay = deriveScheduleText(cls.schedule);
+  const scheduleDisplay = cls.schedule.length ? deriveScheduleText(cls.schedule) : 'Chưa thiết lập';
   const progressPercent = cls.capacity > 0 
     ? Math.min(100, Math.round((cls.enrolledCount / cls.capacity) * 100))
     : 0;
@@ -318,8 +310,11 @@ export default function TeacherClassDetailPage() {
       description: cls.description,
       capacity: cls.capacity,
       price: cls.price,
+      enrollmentStart: cls.enrollmentStart ? dayjs(cls.enrollmentStart) : null,
+      enrollmentEnd: cls.enrollmentEnd ? dayjs(cls.enrollmentEnd) : null,
       startDate: cls.startDate ? dayjs(cls.startDate) : null,
       endDate: cls.endDate ? dayjs(cls.endDate) : null,
+      schedule: cls.schedule,
     });
     setIsEditModalOpen(true);
   };
@@ -332,8 +327,11 @@ export default function TeacherClassDetailPage() {
         description: values.description,
         capacity: Number(values.capacity),
         price: cls.classType === 'FREE' ? 0 : Number(values.price || 0),
+        enrollmentStart: values.enrollmentStart ? values.enrollmentStart.toISOString() : null,
+        enrollmentEnd: values.enrollmentEnd ? values.enrollmentEnd.toISOString() : null,
         startDate: values.startDate ? values.startDate.toISOString() : null,
         endDate: values.endDate ? values.endDate.toISOString() : null,
+        schedule: values.schedule,
       };
       updateMutation.mutate(payload);
     } catch {
@@ -418,6 +416,16 @@ export default function TeacherClassDetailPage() {
   // ---------------- Tab 1: Overview ----------------
   const renderOverview = () => (
     <div className="flex flex-col gap-6 mt-6">
+      {showReadiness && (
+        <ClassReadinessCard
+          readiness={readinessQuery.data}
+          isFetching={readinessQuery.isFetching}
+          isError={readinessQuery.isError}
+          onRefresh={() => void readinessQuery.refetch()}
+          showSubmitHint
+        />
+      )}
+
       {/* Overview Stats */}
       <Row gutter={[16, 16]}>
         <Col xs={12} md={6}>
@@ -767,8 +775,8 @@ export default function TeacherClassDetailPage() {
                       </Popconfirm>
                     )}
 
-                    {/* Delete session if DRAFT or REJECTED */}
-                    {isScheduled && isEditable && (
+                    {/* Delete session if DRAFT */}
+                    {isScheduled && canDeleteSessions && (
                       <Popconfirm
                         title="Xóa buổi học"
                         description="Buổi học sẽ bị xóa hoàn toàn khỏi kế hoạch giảng dạy. Thao tác này không thể hoàn tác."
@@ -956,7 +964,23 @@ export default function TeacherClassDetailPage() {
           description={
             <div className="text-rose-800 text-sm mt-1">
               <div><strong>Lý do từ chối:</strong> {cls.reviewNote || "Cần bổ sung thêm thông tin theo yêu cầu của Quản trị viên."}</div>
-              <div className="mt-2">Bạn có thể chỉnh sửa lại thông tin và gửi duyệt lại cho Quản trị viên.</div>
+              <div className="mt-2">Lớp bị từ chối không thể chỉnh sửa hoặc gửi duyệt lại. Bạn có thể tạo một lớp mới.</div>
+            </div>
+          }
+        />
+      )}
+
+      {/* Top Banner Alert if NEED_CHANGES */}
+      {cls.status === 'NEED_CHANGES' && (
+        <Alert
+          type="warning"
+          showIcon
+          className="mb-6 rounded-xl border-amber-300 bg-amber-50"
+          message={<span className="font-bold text-amber-900">Quản trị viên yêu cầu chỉnh sửa lớp</span>}
+          description={
+            <div className="text-amber-800 text-sm mt-1">
+              <div className="whitespace-pre-line"><strong>Nội dung cần sửa:</strong> {cls.reviewNote}</div>
+              <div className="mt-2">Hãy chỉnh sửa rồi bấm gửi duyệt lại.</div>
             </div>
           }
         />
@@ -1007,11 +1031,11 @@ export default function TeacherClassDetailPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-3 shrink-0">
-          {/* Submit for approval if DRAFT or REJECTED */}
+          {/* Submit for approval if DRAFT or NEED_CHANGES */}
           {isEditable && (
             <Popconfirm
               title="Gửi duyệt lớp học"
-              description="Bạn có chắc chắn muốn gửi lớp học này để Quản trị viên phê duyệt không?"
+              description="Admin sẽ kiểm tra quyền giảng dạy, hợp đồng và chính sách giá trước khi mở lớp. Bạn không thể sửa lớp trong lúc chờ duyệt."
               onConfirm={() => submitMutation.mutate()}
               okText="Gửi duyệt"
               cancelText="Hủy"
@@ -1024,12 +1048,12 @@ export default function TeacherClassDetailPage() {
                 loading={submitMutation.isPending}
                 className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold px-6 shadow-sm border-none"
               >
-                Gửi duyệt lớp
+                {cls.status === 'NEED_CHANGES' ? 'Gửi duyệt lại' : 'Gửi duyệt lớp'}
               </Button>
             </Popconfirm>
           )}
 
-          {/* Edit class if DRAFT or REJECTED */}
+          {/* Edit class if DRAFT or NEED_CHANGES */}
           {isEditable && (
             <Button 
               size="large"
@@ -1065,7 +1089,7 @@ export default function TeacherClassDetailPage() {
         okText="Lưu thay đổi"
         cancelText="Hủy"
         okButtonProps={{ className: 'bg-teal-600' }}
-        width={600}
+        width={720}
       >
         <Form layout="vertical" form={editForm} className="mt-4">
           <Form.Item 
@@ -1112,16 +1136,52 @@ export default function TeacherClassDetailPage() {
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item label="Ngày khai giảng" name="startDate">
+              <Form.Item label="Mở tuyển sinh từ" name="enrollmentStart">
                 <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item label="Ngày kết thúc" name="endDate">
+              <Form.Item
+                label="Hạn chót tuyển sinh"
+                name="enrollmentEnd"
+                dependencies={['enrollmentStart']}
+                rules={[notBeforeField('enrollmentStart', 'Không được trước ngày mở tuyển sinh')]}
+              >
                 <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
               </Form.Item>
             </Col>
           </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="Ngày khai giảng" name="startDate" extra="Phải sau hôm nay khi gửi duyệt">
+                <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="Ngày kết thúc"
+                name="endDate"
+                dependencies={['startDate']}
+                rules={[notBeforeField('startDate', 'Không được trước ngày khai giảng')]}
+              >
+                <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            label="Lịch học hàng tuần"
+            name="schedule"
+            rules={[
+              {
+                validator: (_, value) =>
+                  hasInvalidSlot(value) ? Promise.reject(new Error(INVALID_SLOT_MESSAGE)) : Promise.resolve(),
+              },
+            ]}
+          >
+            <ScheduleEditor />
+          </Form.Item>
 
           <Form.Item label="Mô tả lớp học" name="description">
             <Input.TextArea rows={4} />

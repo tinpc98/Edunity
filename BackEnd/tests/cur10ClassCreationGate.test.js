@@ -7,6 +7,9 @@ const Session = require("../src/models/Session");
 const TeacherSubjectAuthorization = require("../src/models/TeacherSubjectAuthorization");
 const User = require("../src/models/User");
 const Notification = require("../src/models/Notification");
+const AuditLog = require("../src/models/AuditLog");
+const CoursePricingPolicy = require("../src/models/CoursePricingPolicy");
+const adminClassService = require("../src/services/adminClassService");
 const teacherClassService = require("../src/services/teacherClassService");
 const classCreationGateService = require("../src/services/classCreationGateService");
 
@@ -72,6 +75,48 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
       mockQuery({ _id: catId, name: "Toán THPT", slug: "toan-thpt", status: "ACTIVE" })
     );
     jest.spyOn(TeacherSubjectAuthorization, "findOne").mockReturnValue(mockQuery(auth));
+    jest.spyOn(CoursePricingPolicy, "find").mockReturnValue(mockQuery([]));
+  };
+
+  const DAY = 86400000;
+  const mockCompleteClass = (status) => {
+    const cls = Class.hydrate({
+      _id: new mongoose.Types.ObjectId(),
+      courseId,
+      courseTitle: baseCourse.title,
+      teacherId,
+      teacherName: "Teacher Verified",
+      categoryId: catId,
+      subjectId: subId,
+      gradeLevel: "GRADE_10",
+      level: "BEGINNER",
+      className: "Toán 10 - K1",
+      description: "Full syllabus desc",
+      classType: "PAID",
+      price: 500000,
+      capacity: 20,
+      enrollmentStart: new Date(Date.now() + 100000),
+      enrollmentEnd: new Date(Date.now() + DAY),
+      startDate: new Date(Date.now() + 2 * DAY),
+      endDate: new Date(Date.now() + 20 * DAY),
+      schedule: [{ dayOfWeek: 1, startTime: "19:00", endTime: "21:00" }],
+      status,
+    });
+    jest.spyOn(Class, "findOne").mockReturnValue(mockQuery(cls));
+    jest.spyOn(Session, "find").mockReturnValue(
+      mockQuery([
+        {
+          _id: new mongoose.Types.ObjectId(),
+          startDatetime: new Date(Date.now() + 3 * DAY),
+          endDatetime: new Date(Date.now() + 3 * DAY + 3600000),
+        },
+      ])
+    );
+    return cls;
+  };
+  const approve = (options) => {
+    const cls = mockCompleteClass("PENDING_APPROVAL");
+    return adminClassService.approveClass(new mongoose.Types.ObjectId(), cls._id.toString(), {}, options);
   };
 
   beforeEach(() => {
@@ -124,13 +169,13 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
   // =========================================================================
   // 2. Fail-Closed Proof: VERIFIED !== Contract ACTIVE & CUR-07 Port
   // =========================================================================
-  test("CUR-10.2: Fails closed (503) when CUR-07 or TEA-12 contract dependencies are missing, NEVER substituting VERIFIED for ACTIVE", async () => {
-    mockCatalogAndAuth();
-    const saveSpy = jest.spyOn(Class.prototype, "save");
+  test("CUR-10.2: Approval fails closed (503) when CUR-07 or TEA-12 contract dependencies are missing, NEVER substituting VERIFIED for ACTIVE", async () => {
+    const approveCAS = jest.spyOn(Class, "findOneAndUpdate").mockReturnValue(mockQuery(null));
 
     // Explicit missing CUR-07 verifier -> blocked at CUR-07 with 503
+    mockCatalogAndAuth();
     await expect(
-      teacherClassService.createClass(teacherId, validBody, { pricingPolicyVerifier: null })
+      approve({ pricingPolicyVerifier: null, contractVerifier: async () => ({ status: "ACTIVE" }) })
     ).rejects.toMatchObject({
       code: "PRICING_POLICY_DEPENDENCY_BLOCKED",
       statusCode: 503,
@@ -139,28 +184,20 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
     // Inject CUR-07 only, TEA-12 verifier missing -> still MUST fail closed even though verificationStatus === "VERIFIED"
     mockCatalogAndAuth();
     await expect(
-      teacherClassService.createClass(teacherId, validBody, {
-        pricingPolicyVerifier: async () => ({ valid: true }),
-        contractVerifier: null,
-      })
+      approve({ pricingPolicyVerifier: async () => ({ valid: true }), contractVerifier: null })
     ).rejects.toMatchObject({
       code: "CONTRACT_DEPENDENCY_BLOCKED",
       statusCode: 503,
     });
 
-    // Inject TEA-12 while CUR-07 disabled -> still fails closed on CUR-07
+    // Both disabled -> still fails closed on CUR-07
     mockCatalogAndAuth();
-    await expect(
-      teacherClassService.createClass(teacherId, validBody, {
-        pricingPolicyVerifier: null,
-        contractVerifier: async () => ({ status: "ACTIVE" }),
-      })
-    ).rejects.toMatchObject({
+    await expect(approve({ pricingPolicyVerifier: null, contractVerifier: null })).rejects.toMatchObject({
       code: "PRICING_POLICY_DEPENDENCY_BLOCKED",
       statusCode: 503,
     });
 
-    expect(saveSpy).not.toHaveBeenCalled();
+    expect(approveCAS).not.toHaveBeenCalled();
   });
 
   // =========================================================================
@@ -189,85 +226,76 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
       });
     }
 
-    // BASIC alias normalizes to BEGINNER and passes alignment & CUR-07 check cleanly (stops at fail-closed TEA-12)
+    // BASIC alias normalizes to BEGINNER and passes alignment; a DRAFT does not need TEA-12
     mockCatalogAndAuth();
-    await expect(
-      teacherClassService.createClass(
-        teacherId,
-        { ...validBody, level: "BASIC" },
-        { pricingPolicyVerifier: async () => ({ valid: true }), contractVerifier: null }
-      )
-    ).rejects.toMatchObject({
-      code: "CONTRACT_DEPENDENCY_BLOCKED",
-      statusCode: 503,
+    jest.spyOn(Class.prototype, "save").mockImplementation(async function () {
+      return this;
     });
+    const created = await teacherClassService.createClass(
+      teacherId,
+      { ...validBody, level: "BASIC" },
+      { pricingPolicyVerifier: async () => ({ valid: true }), contractVerifier: null }
+    );
+    expect(created.level).toBe("BEGINNER");
   });
 
   // =========================================================================
-  // 4. TEA-07 Enforced Across createClass, updateClass, AND submitClass (No Bypass)
+  // 4. TEA-07: advisory for create, update & submit; enforced at approval (TEACHER-CLASS-FLOW-02)
   // =========================================================================
-  test("CUR-10.4: TEA-07 blocks create, update, AND submit when missing (403), PENDING (403), or SUSPENDED (403)", async () => {
-    // Missing authorization -> createClass blocked
+  test("CUR-10.4: TEA-07 missing, PENDING or SUSPENDED lets create, update & submit through and blocks approval (403)", async () => {
+    const okOptions = {
+      pricingPolicyVerifier: async () => ({ valid: true }),
+      contractVerifier: async () => ({ status: "ACTIVE" }),
+    };
+    jest.spyOn(Class.prototype, "save").mockImplementation(async function () {
+      return this;
+    });
+
+    // Missing authorization -> createClass allowed
     mockCatalogAndAuth({ auth: null });
-    await expect(teacherClassService.createClass(teacherId, validBody)).rejects.toMatchObject({
-      code: "SUBJECT_AUTHORIZATION_REQUIRED",
-      statusCode: 403,
-    });
+    expect((await teacherClassService.createClass(teacherId, validBody)).status).toBe("DRAFT");
 
-    // PENDING authorization -> updateClass blocked
-    const draftClass = Class.hydrate({
-      _id: new mongoose.Types.ObjectId(),
-      courseId,
-      courseTitle: baseCourse.title,
-      teacherId,
-      teacherName: "T",
-      categoryId: catId,
-      subjectId: subId,
-      gradeLevel: "GRADE_10",
-      level: "BEGINNER",
-      className: "Draft",
-      classType: "PAID",
-      price: 500000,
-      capacity: 15,
-      status: "DRAFT",
-    });
-    draftClass.save = jest.fn();
-
+    // PENDING authorization -> updateClass allowed
     mockCatalogAndAuth({ auth: { _id: new mongoose.Types.ObjectId(), status: "PENDING" } });
-    jest.spyOn(Class, "findOne").mockReturnValue(mockQuery(draftClass));
+    const draftClass = mockCompleteClass("DRAFT");
+    draftClass.save = jest.fn();
+    jest.spyOn(Session, "updateMany").mockResolvedValue({});
+    await teacherClassService.updateClass(teacherId, draftClass._id.toString(), { className: "Edited" });
+    expect(draftClass.save).toHaveBeenCalled();
 
-    await expect(
-      teacherClassService.updateClass(teacherId, draftClass._id.toString(), { className: "Edited" })
-    ).rejects.toMatchObject({
-      code: "SUBJECT_AUTHORIZATION_PENDING",
-      statusCode: 403,
-    });
-    expect(draftClass.save).not.toHaveBeenCalled();
-
-    // SUSPENDED authorization -> submitClass blocked immediately
-    const updateCAS = jest.spyOn(Class, "findOneAndUpdate");
+    // SUSPENDED authorization -> submitClass allowed, with a warning
     mockCatalogAndAuth({ auth: { _id: new mongoose.Types.ObjectId(), status: "SUSPENDED" } });
-    jest.spyOn(Class, "findOne").mockReturnValue(mockQuery(draftClass));
+    const toSubmit = mockCompleteClass("DRAFT");
+    const updateCAS = jest
+      .spyOn(Class, "findOneAndUpdate")
+      .mockReturnValue(mockQuery({ ...toSubmit.toObject(), status: "PENDING_APPROVAL" }));
+    jest.spyOn(AuditLog, "create").mockResolvedValue([]);
+    const submitted = await teacherClassService.submitClass(teacherId, toSubmit._id.toString(), okOptions);
+    expect(submitted.approvalWarnings.map((warning) => warning.code)).toEqual(["SUBJECT_AUTHORIZATION_SUSPENDED"]);
 
-    await expect(
-      teacherClassService.submitClass(teacherId, draftClass._id.toString())
-    ).rejects.toMatchObject({
-      code: "SUBJECT_AUTHORIZATION_SUSPENDED",
-      statusCode: 403,
-    });
+    // Approval: no bypass
+    updateCAS.mockClear();
+    for (const [auth, code] of [
+      [null, "SUBJECT_AUTHORIZATION_REQUIRED"],
+      [{ status: "PENDING" }, "SUBJECT_AUTHORIZATION_PENDING"],
+      [{ status: "SUSPENDED" }, "SUBJECT_AUTHORIZATION_SUSPENDED"],
+    ]) {
+      mockCatalogAndAuth({ auth });
+      await expect(approve(okOptions)).rejects.toMatchObject({ code, statusCode: 403 });
+    }
     expect(updateCAS).not.toHaveBeenCalled();
   });
 
   // =========================================================================
   // 5. Injected CUR-07 & TEA-12 Gates + End-to-End Pass When Satisfied
   // =========================================================================
-  test("CUR-10.5: Enforces injected pricing policy & contract ACTIVE rules across create, update & submit", async () => {
+  test("CUR-10.5: Enforces injected pricing policy & contract ACTIVE rules at approval; create & submit pass", async () => {
     const classId = new mongoose.Types.ObjectId();
 
     // Pricing policy violation
     mockCatalogAndAuth();
     await expect(
-      teacherClassService.createClass(teacherId, validBody, {
+      approve({
         pricingPolicyVerifier: async ({ price }) =>
           price < 1000000
             ? { valid: false, code: "PRICE_OUT_OF_POLICY_RANGE", message: "Price below min", statusCode: 400 }
@@ -279,7 +307,7 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
     // Contract expired
     mockCatalogAndAuth();
     await expect(
-      teacherClassService.createClass(teacherId, validBody, {
+      approve({
         pricingPolicyVerifier: async () => ({ valid: true }),
         contractVerifier: async () => ({ status: "ACTIVE", expiresAt: new Date(Date.now() - 10000) }),
       })
@@ -288,7 +316,7 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
     // Contract terminated / suspended -> NOT_ACTIVE
     mockCatalogAndAuth();
     await expect(
-      teacherClassService.createClass(teacherId, validBody, {
+      approve({
         pricingPolicyVerifier: async () => ({ valid: true }),
         contractVerifier: async () => ({ status: "TERMINATED" }),
       })
@@ -328,8 +356,8 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
       capacity: 20,
       enrollmentStart: new Date(Date.now() + 100000),
       enrollmentEnd: new Date(Date.now() + 5000000),
-      startDate: new Date(Date.now() + 100000),
-      endDate: new Date(Date.now() + 20000000),
+      startDate: new Date(Date.now() + 2 * DAY),
+      endDate: new Date(Date.now() + 20 * DAY),
       schedule: [{ dayOfWeek: 1, startTime: "19:00", endTime: "21:00" }],
       status: "DRAFT",
     });
@@ -340,12 +368,13 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
       mockQuery([
         {
           _id: new mongoose.Types.ObjectId(),
-          startDatetime: new Date(Date.now() + 200000),
-          endDatetime: new Date(Date.now() + 300000),
+          startDatetime: new Date(Date.now() + 3 * DAY),
+          endDatetime: new Date(Date.now() + 3 * DAY + 100000),
         },
       ])
     );
     const seenCounts = [];
+    jest.spyOn(AuditLog, "create").mockResolvedValue([]);
     jest.spyOn(Class, "findOneAndUpdate").mockReturnValue(mockQuery({ ...fullDraft.toObject(), status: "PENDING_APPROVAL" }));
 
     const submitted = await teacherClassService.submitClass(teacherId, classId.toString(), {

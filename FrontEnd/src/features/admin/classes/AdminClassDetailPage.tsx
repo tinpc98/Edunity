@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   Typography, Breadcrumb, Tag, Button, Row, Col, Card, 
-  Modal, Input, Skeleton, Alert, message, List
+  Modal, Input, Skeleton, Alert, message, List, Tooltip
 } from 'antd';
 import { 
   CheckCircleOutlined, 
@@ -14,6 +14,8 @@ import { ROUTES } from '../../../routes/routePaths';
 import { classService, classKeys } from '../../../services/class.service';
 import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../types/class';
 import { deriveScheduleText } from '../../../api/classAdapters';
+import { getFriendlyErrorMessage } from '../../../utils/apiErrorMap';
+import ClassReadinessCard from '../../../components/common/ClassReadinessCard';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -41,6 +43,14 @@ export default function AdminClassDetailPage() {
     staleTime: 1000 * 30,
   });
 
+  const readinessQuery = useQuery({
+    queryKey: classKeys.adminReadiness(classId!),
+    queryFn: () => classService.getClassReadiness(classId!),
+    enabled: Boolean(classId) && cls?.status === 'PENDING_APPROVAL',
+    // Admin often fixes a condition in another tab and comes back
+    refetchOnWindowFocus: true,
+  });
+
   // 2. Approve Mutation (Backend: POST /api/admin/classes/:id/approve)
   const approveMutation = useMutation({
     mutationFn: (note?: string) => 
@@ -52,8 +62,10 @@ export default function AdminClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: classKeys.adminPending() });
       queryClient.invalidateQueries({ queryKey: classKeys.all });
     },
-    onError: (err: any) => {
-      message.error(err?.message || "Không thể phê duyệt lớp học.");
+    onError: (err: unknown) => {
+      message.error(getFriendlyErrorMessage(err, "Không thể phê duyệt lớp học."));
+      setIsApproveModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: classKeys.adminDetail(classId!) });
     },
   });
 
@@ -68,8 +80,9 @@ export default function AdminClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: classKeys.adminPending() });
       queryClient.invalidateQueries({ queryKey: classKeys.all });
     },
-    onError: (err: any) => {
-      message.error(err?.message || "Không thể từ chối lớp học.");
+    onError: (err: unknown) => {
+      message.error(getFriendlyErrorMessage(err, "Không thể từ chối lớp học."));
+      queryClient.invalidateQueries({ queryKey: classKeys.adminDetail(classId!) });
     },
   });
 
@@ -85,8 +98,9 @@ export default function AdminClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: classKeys.adminPending() });
       queryClient.invalidateQueries({ queryKey: classKeys.all });
     },
-    onError: (err: any) => {
-      message.error(err?.message || "Không thể gửi yêu cầu chỉnh sửa lớp học.");
+    onError: (err: unknown) => {
+      message.error(getFriendlyErrorMessage(err, "Không thể gửi yêu cầu chỉnh sửa lớp học."));
+      queryClient.invalidateQueries({ queryKey: classKeys.adminDetail(classId!) });
     },
   });
 
@@ -117,7 +131,8 @@ export default function AdminClassDetailPage() {
   }
 
   const isPending = cls.status === 'PENDING_APPROVAL';
-  const scheduleDisplay = deriveScheduleText(cls.schedule);
+  const scheduleDisplay = cls.schedule.length ? deriveScheduleText(cls.schedule) : 'Chưa thiết lập';
+  const canApprove = readinessQuery.data?.canApprove === true;
   const isAnySubmitting = approveMutation.isPending || rejectMutation.isPending || requestChangesMutation.isPending;
 
   const handleApprove = () => {
@@ -192,16 +207,18 @@ export default function AdminClassDetailPage() {
               >
                 Yêu cầu chỉnh sửa
               </Button>
-              <Button 
-                type="primary" 
-                size="large"
-                icon={<CheckCircleOutlined />}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-semibold border-none text-white"
-                disabled={isAnySubmitting}
-                onClick={() => setIsApproveModalOpen(true)}
-              >
-                Phê duyệt mở lớp
-              </Button>
+              <Tooltip title={canApprove ? undefined : 'Cần đạt đủ các điều kiện phê duyệt bên dưới.'}>
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<CheckCircleOutlined />}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-500 rounded-xl font-semibold border-none text-white"
+                  disabled={isAnySubmitting || !canApprove}
+                  onClick={() => setIsApproveModalOpen(true)}
+                >
+                  Phê duyệt mở lớp
+                </Button>
+              </Tooltip>
             </>
           ) : (
             <Tag className="py-1 px-3 text-sm font-medium">
@@ -228,6 +245,15 @@ export default function AdminClassDetailPage() {
               )}
             </div>
           }
+        />
+      )}
+
+      {isPending && (
+        <ClassReadinessCard
+          readiness={readinessQuery.data}
+          isFetching={readinessQuery.isFetching}
+          isError={readinessQuery.isError}
+          onRefresh={() => void readinessQuery.refetch()}
         />
       )}
 
@@ -354,8 +380,8 @@ export default function AdminClassDetailPage() {
                 )}
                 <div>
                   <Text className="text-gray-400 block mb-0.5">Xác minh giáo viên:</Text>
-                  <Tag color="success" className="font-bold">
-                    {cls.teacher?.verificationStatus || 'VERIFIED'}
+                  <Tag color={cls.teacher?.verificationStatus === 'VERIFIED' ? 'success' : 'error'} className="font-bold">
+                    {cls.teacher?.verificationStatus || 'Không xác định'}
                   </Tag>
                 </div>
                 {cls.teacher?.qualificationSummary && (

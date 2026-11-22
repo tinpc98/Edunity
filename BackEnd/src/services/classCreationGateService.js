@@ -6,7 +6,6 @@ const { toNum, toDec } = require("../utils/money");
 const { resolveGradeLevel } = require("../utils/gradeLevel");
 const catalog = require("./courseCatalogService");
 const pricingPolicyService = require("./coursePricingPolicyService");
-const { assertApprovedAuthorization } = require("./teacherSubjectAuthorizationService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 
@@ -219,45 +218,136 @@ const assertVerificationCurrent = ({ teacher, now = new Date() }) => {
 };
 
 /**
- * Full CUR-10 Gate executed on createClass, updateClass, and submitClass.
+ * A DRAFT is not held to CUR-07, but still records the policy it already satisfies (CUR-09).
+ * Approval re-evaluates the policy and overwrites this snapshot.
  */
-const validateClassGate = async ({
-  teacher,
-  course,
-  cls = null,
-  body = {},
-  mode = "CREATE",
-  totalSessions = null,
-  now = new Date(),
-  pricingPolicyVerifier,
-  contractVerifier,
-}) => {
-  assertVerificationCurrent({ teacher, now });
-  const alignment = await assertCourseAlignment({ course, cls, body });
+const findSatisfiedPricingPolicy = async (args) => {
+  try {
+    return await assertPricingPolicyGate(args);
+  } catch (err) {
+    if (err instanceof AppError) return null;
+    throw err;
+  }
+};
 
-  await assertApprovedAuthorization({
-    teacherId: teacher._id,
-    subjectId: course.subjectId,
-    gradeLevel: alignment.gradeLevel,
-    level: alignment.level,
-  });
+/** CUR-07 also defines how many sessions make a class complete; unlike its price range, that part blocks submission. */
+const assertSessionCountWithinPolicy = async ({ course, cls, totalSessions }) => {
+  if (!course) return;
+  const policy = await pricingPolicyService.resolveEffectivePolicy({ course, classType: cls.classType });
+  if (!policy || (totalSessions >= policy.minSessions && totalSessions <= policy.maxSessions)) return;
+  throw new AppError(
+    `Class session count ${totalSessions} violates active CoursePricingPolicy bounds [${policy.minSessions}, ${policy.maxSessions}]`,
+    "SESSION_COUNT_OUT_OF_POLICY_RANGE",
+    400,
+    { minSessions: policy.minSessions, maxSessions: policy.maxSessions, actualSessions: totalSessions }
+  );
+};
 
-  const pricingResult = await assertPricingPolicyGate({
-    teacher,
-    course,
-    cls,
-    body,
-    totalSessions,
-    pricingPolicyVerifier,
-  });
+const CHECK_LABELS = {
+  TEACHER_VERIFICATION: "Xác minh giáo viên",
+  COURSE: "Khóa học chuẩn",
+  CLASS_INFORMATION: "Thông tin và ngày học",
+  SCHEDULE_SESSIONS: "Lịch học và buổi học",
+  TEACHING_AUTHORIZATION: "Quyền giảng dạy",
+  TEACHER_CONTRACT: "Hợp đồng giảng dạy",
+  PRICING_POLICY: "Chính sách giá",
+};
 
-  const contractResult = await assertTeacherContractGate({
-    teacher,
-    now,
-    contractVerifier,
-  });
+const FIELD_LABELS = {
+  description: "mô tả lớp",
+  enrollmentStart: "ngày mở đăng ký",
+  enrollmentEnd: "ngày đóng đăng ký",
+  startDate: "ngày khai giảng",
+  endDate: "ngày kết thúc",
+  schedule: "lịch học cố định",
+  sessions: "buổi học",
+};
 
-  return { mode, alignment, pricingResult, contractResult };
+const CONTRACT_STATES = {
+  PENDING_SIGNATURE: "đang chờ giáo viên ký",
+  DECLINED: "đã bị giáo viên từ chối ký",
+  CANCELLED: "đã bị hủy",
+  TERMINATED: "đã chấm dứt",
+  NOT_YET_EFFECTIVE: "chưa tới ngày hiệu lực",
+};
+
+const formatVnd = (value) => Number(value).toLocaleString("vi-VN");
+
+const FAILURE_MESSAGES = {
+  ACCOUNT_NOT_ACTIVE: "Tài khoản giáo viên không hoạt động",
+  TEACHER_NOT_VERIFIED: "Hồ sơ giáo viên chưa được xác minh",
+  TEACHER_REVERIFICATION_REQUIRED: "Xác minh giáo viên đã hết hạn, cần tái xác minh",
+  COURSE_NOT_FOUND: "Khóa học chuẩn không còn hoạt động",
+  COURSE_NOT_ACTIVE: "Khóa học chuẩn không còn hoạt động",
+  COURSE_CATALOG_INACTIVE: "Môn học hoặc danh mục của khóa học không còn hoạt động",
+  COURSE_LEVEL_REQUIRED: "Khóa học chuẩn chưa có cấp độ hợp lệ",
+  COURSE_ATTRIBUTE_MISMATCH: "Thông tin lớp không còn khớp với khóa học chuẩn",
+  CLASS_INCOMPLETE: ({ missing = [] }) => `Còn thiếu: ${missing.map((field) => FIELD_LABELS[field] || field).join(", ")}`,
+  CLASS_DATES_INVALID: "Ngày bắt đầu phải trước ngày kết thúc",
+  CLASS_START_DATE_REACHED: "Ngày khai giảng phải sau hôm nay để kịp xét duyệt",
+  SCHEDULE_OVERLAP: "Các ca học trong tuần đang trùng giờ nhau",
+  SESSION_OUT_OF_CLASS_RANGE: "Có buổi học nằm ngoài khoảng ngày khai giảng – kết thúc",
+  SESSION_COUNT_OUT_OF_POLICY_RANGE: ({ minSessions, maxSessions, actualSessions }) =>
+    `Lớp có ${actualSessions} buổi, chính sách yêu cầu từ ${minSessions} đến ${maxSessions} buổi`,
+  SUBJECT_AUTHORIZATION_REQUIRED: "Giáo viên chưa có quyền giảng dạy được duyệt cho môn, khối và cấp độ này",
+  SUBJECT_AUTHORIZATION_PENDING: "Quyền giảng dạy đang chờ Admin duyệt",
+  SUBJECT_AUTHORIZATION_SUSPENDED: "Quyền giảng dạy đang bị đình chỉ",
+  TEACHER_CONTRACT_NOT_FOUND: "Giáo viên chưa có hợp đồng giảng dạy",
+  TEACHER_CONTRACT_NOT_ACTIVE: ({ contractStatus }) =>
+    `Hợp đồng giảng dạy ${CONTRACT_STATES[contractStatus] || "không ở trạng thái có hiệu lực"}`,
+  TEACHER_CONTRACT_EXPIRED: "Hợp đồng giảng dạy đã hết hạn",
+  CONTRACT_DEPENDENCY_BLOCKED: "Chưa kiểm tra được hợp đồng giảng dạy",
+  PRICING_POLICY_NOT_CONFIGURED: "Chưa có chính sách giá hiệu lực cho khóa học này",
+  PRICING_POLICY_FREE_NOT_ALLOWED: "Chính sách giá không cho phép mở lớp miễn phí",
+  PRICING_POLICY_DEPENDENCY_BLOCKED: "Chưa kiểm tra được chính sách giá",
+  PRICE_OUT_OF_POLICY_RANGE: ({ minPrice, maxPrice }) =>
+    minPrice === undefined
+      ? "Học phí nằm ngoài khung chính sách giá"
+      : `Học phí phải từ ${formatVnd(minPrice)} đến ${formatVnd(maxPrice)} VNĐ`,
+};
+
+const describeFailure = (key, err) => {
+  const message = FAILURE_MESSAGES[err.code];
+  if (!message) return `${CHECK_LABELS[key]} chưa hợp lệ (${err.code})`;
+  return typeof message === "function" ? message(err.details || {}) : message;
+};
+
+/** Runs every check instead of stopping at the first failure. Only business errors count as a failed check. */
+const runClassChecks = async (checks) => {
+  const results = [];
+  for (const [key, blocksSubmit, assertion] of checks) {
+    let error = null;
+    try {
+      await assertion();
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err;
+      error = err;
+    }
+    results.push({ key, blocksSubmit, error });
+  }
+  return results;
+};
+
+const presentCheck = ({ key, blocksSubmit, error }) => ({
+  key,
+  label: CHECK_LABELS[key],
+  code: error ? error.code : null,
+  status: error ? "PENDING" : "PASSED",
+  blocksSubmit,
+  message: error ? describeFailure(key, error) : "Đạt",
+});
+
+/** Rethrows the first failure with its own code and status, listing every failure in details.pendingChecks. */
+const throwFailedChecks = (results) => {
+  const failed = results.filter((result) => result.error);
+  if (!failed.length) return;
+  const { error } = failed[0];
+  const details = { ...error.details, pendingChecks: failed.map(presentCheck) };
+  if (error.code === "CLASS_INCOMPLETE") {
+    details.missing = failed.flatMap((result) => (result.error.code === "CLASS_INCOMPLETE" ? result.error.details.missing : []));
+  }
+  error.details = details;
+  throw error;
 };
 
 /**
@@ -325,7 +415,11 @@ module.exports = {
   assertCourseAlignment,
   assertPricingPolicyGate,
   assertTeacherContractGate,
-  validateClassGate,
+  findSatisfiedPricingPolicy,
+  assertSessionCountWithinPolicy,
+  runClassChecks,
+  presentCheck,
+  throwFailedChecks,
   captureClassSnapshots,
   buildEnrollmentSnapshotFromClass: pricingPolicyService.buildEnrollmentSnapshotFromClass,
 };

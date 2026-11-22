@@ -2,6 +2,7 @@ import { apiClient } from "../api/apiClient";
 import type {
   ApiClass,
   ClassModel,
+  ClassReadiness,
   ClassAvailability,
   CreateClassPayload,
   UpdateClassPayload,
@@ -28,6 +29,9 @@ export const classKeys = {
   teacherStudents: (id: string, status?: string) => ["classes", "teacher", "students", id, status] as const,
   adminPending: (filters?: Record<string, any>) => ["classes", "admin", "pending", filters] as const,
   adminDetail: (id: string) => ["classes", "admin", "detail", id] as const,
+  // Nested under each detail key, so invalidating the detail refreshes its readiness too
+  teacherReadiness: (id: string) => ["classes", "teacher", "detail", id, "readiness"] as const,
+  adminReadiness: (id: string) => ["classes", "admin", "detail", id, "readiness"] as const,
 };
 
 function buildQueryString(params: Record<string, any>): string {
@@ -123,6 +127,10 @@ export const classService = {
     return adaptClassFromApi(data);
   },
 
+  async getMyClassReadiness(classId: string): Promise<ClassReadiness> {
+    return apiClient<ClassReadiness>(`/teacher/classes/${classId}/readiness`);
+  },
+
   async getClassStudents(classId: string, status?: string): Promise<ClassStudentRosterItem[]> {
     const qs = status ? `?status=${encodeURIComponent(status)}` : "";
     return apiClient<ClassStudentRosterItem[]>(`/teacher/classes/${classId}/students${qs}`);
@@ -146,6 +154,10 @@ export const classService = {
   async getClassForReview(classId: string): Promise<ClassModel> {
     const data = await apiClient<ApiClass>(`/admin/classes/${classId}`);
     return adaptClassFromApi(data);
+  },
+
+  async getClassReadiness(classId: string): Promise<ClassReadiness> {
+    return apiClient<ClassReadiness>(`/admin/classes/${classId}/readiness`);
   },
 
   async approveClass(classId: string, payload: ReviewClassPayload = {}): Promise<ClassModel> {

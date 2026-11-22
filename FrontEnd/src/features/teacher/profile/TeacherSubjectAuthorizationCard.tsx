@@ -75,7 +75,7 @@ export default function TeacherSubjectAuthorizationCard() {
         <div>
           <h3 className="text-[17px] font-bold text-slate-800 m-0">Quyền giảng dạy theo môn</h3>
           <p className="mb-0 mt-1 text-xs text-slate-500">
-            Chỉ môn, khối và cấp độ đã được Admin duyệt mới dùng được để tạo lớp. Yêu cầu đang chờ hoặc bị đình chỉ không cấp quyền tạo lớp.
+            Bạn vẫn có thể tạo và gửi duyệt lớp khi chưa có quyền. Lớp chỉ được mở tuyển sinh khi môn, khối và cấp độ đã được Admin duyệt.
           </p>
         </div>
         <Button icon={<PlusOutlined />} onClick={() => setRequestModalOpen(true)} disabled={!isTeacher}>
