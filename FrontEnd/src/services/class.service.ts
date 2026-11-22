@@ -164,6 +164,14 @@ export const classService = {
     return adaptClassFromApi(data);
   },
 
+  async requestChanges(classId: string, payload: { reviewNote: string }): Promise<ClassModel> {
+    const data = await apiClient<ApiClass>(`/admin/classes/${classId}/request-changes`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return adaptClassFromApi(data);
+  },
+
   async deleteClass(classId: string, reason?: string): Promise<{ success: boolean; message: string }> {
     return apiClient<{ success: boolean; message: string }>(`/admin/classes/${classId}`, {
       method: "DELETE",

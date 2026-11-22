@@ -22,6 +22,10 @@ function buildCourseQuery(params: CourseSearchParams): string {
   if (params.subjectId) qs.set("subjectId", params.subjectId);
   if (params.gradeLevel) qs.set("gradeLevel", params.gradeLevel);
   if (params.level) qs.set("level", params.level);
+  if (params.status && params.status !== "ALL") qs.set("status", params.status);
+  if (params.curriculumReference) qs.set("curriculumReference", params.curriculumReference);
+  if (params.sortBy) qs.set("sortBy", params.sortBy);
+  if (params.sortOrder) qs.set("sortOrder", params.sortOrder);
   if (params.page) qs.set("page", String(params.page));
   if (params.pageSize) qs.set("pageSize", String(params.pageSize));
   const str = qs.toString();
@@ -51,6 +55,25 @@ class CourseService {
   }
 
   // ─── ADMIN ─────────────────────────────────────────────────
+
+  /** GET /admin/courses — includes both ACTIVE and INACTIVE courses, supports status filter */
+  async adminListCourses(params: CourseSearchParams = {}): Promise<PagedResult<Course>> {
+    const qs = buildCourseQuery(params);
+    const raw = await apiClient<{
+      items: ApiCourse[];
+      total: number;
+      page: number;
+      pageSize: number;
+      totalPages: number;
+    }>(`/admin/courses${qs}`);
+    return adaptPaged(raw, adaptCourse);
+  }
+
+  /** GET /admin/courses/:id — returns course regardless of status (ACTIVE/INACTIVE) with class counts */
+  async adminGetCourse(id: string): Promise<Course> {
+    const raw = await apiClient<ApiCourse>(`/admin/courses/${id}`);
+    return adaptCourse(raw);
+  }
 
   /** POST /admin/courses — requires subjectId (category derived from subject) */
   async createCourse(payload: CreateCoursePayload): Promise<Course> {

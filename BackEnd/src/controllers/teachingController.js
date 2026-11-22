@@ -101,6 +101,7 @@ exports.listPendingClasses = handle((req) => adminClasses.listPendingClasses(par
 exports.getClassForReview = handle((req) => adminClasses.getClassForReview(req.params.id));
 exports.approveClass = handle((req) => adminClasses.approveClass(req.user.id, req.params.id, body(req)));
 exports.rejectClass = handle((req) => adminClasses.rejectClass(req.user.id, req.params.id, body(req)));
+exports.requestChanges = handle((req) => adminClasses.requestChanges(req.user.id, req.params.id, body(req)));
 exports.deleteClass = handle((req) => adminClasses.deleteClass(req.user.id, req.params.id, body(req).reason));
 exports.restoreClass = handle((req) => adminClasses.restoreClass(req.user.id, req.params.id));
 

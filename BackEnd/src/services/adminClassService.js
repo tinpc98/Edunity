@@ -2,8 +2,10 @@ const mongoose = require("mongoose");
 const { Class, Course, Session, User } = require("../models");
 const { AppError, CLASS_NOT_FOUND } = require("../utils/errors");
 const { paged } = require("../utils/http");
-const { audit } = require("./auditService");
-const { notify } = require("./notificationService");
+const auditService = require("./auditService");
+const notificationService = require("./notificationService");
+const audit = (...args) => auditService.audit(...args);
+const notify = (...args) => notificationService.notify(...args);
 const {
   getVerifiedTeacher,
   validateClassCompletenessAndSessions,
@@ -178,6 +180,114 @@ const rejectClass = async (adminId, classId, body = {}) => {
   return updated;
 };
 
+const isBlank = (val) => val === undefined || val === null || (typeof val === "string" && val.trim() === "");
+const validationError = (msg) => new AppError(msg, "VALIDATION_ERROR", 400);
+
+// BE-01.2: Admin requests changes on pending class with mandatory reviewNote and transactional consistency
+const requestChanges = async (adminId, classId, body = {}) => {
+  if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
+
+  if (isBlank(body.reviewNote)) {
+    throw validationError("reviewNote is required when requesting changes");
+  }
+
+  const reviewNote = body.reviewNote.trim();
+
+  if (typeof mongoose.startSession !== "function") {
+    throw new AppError(
+      "Database session is unavailable; request-changes requires transaction support",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503
+    );
+  }
+
+  let session;
+  try {
+    session = await mongoose.startSession();
+  } catch (sessionErr) {
+    throw new AppError(
+      "Failed to start database transaction session for request-changes",
+      "DATABASE_TRANSACTION_UNAVAILABLE",
+      503,
+      { originalError: sessionErr.message }
+    );
+  }
+
+  let updated;
+  try {
+    if (!session || typeof session.withTransaction !== "function") {
+      throw new AppError(
+        "Database session is unavailable; request-changes requires transaction support",
+        "DATABASE_TRANSACTION_UNAVAILABLE",
+        503
+      );
+    }
+
+    await session.withTransaction(async () => {
+      // 1. Conditional atomic update inside transaction for concurrency safety
+      const doc = await Class.findOneAndUpdate(
+        { _id: classId, status: "PENDING_APPROVAL", ...NOT_DELETED },
+        {
+          $set: {
+            status: "NEED_CHANGES",
+            reviewedBy: adminId,
+            reviewedAt: new Date(),
+            reviewNote,
+            updatedBy: adminId,
+          },
+        },
+        { session, returnDocument: "after" }
+      ).lean();
+
+      if (!doc) {
+        const exists = await Class.exists({ _id: classId, ...NOT_DELETED }).session(session);
+        if (!exists) throw CLASS_NOT_FOUND();
+        throw new AppError("Class is not pending approval", "CLASS_NOT_PENDING_APPROVAL", 409);
+      }
+
+      // 2. AuditLog recorded within the exact same transaction session (no partial writes!)
+      await audit(
+        {
+          actorAdminId: adminId,
+          action: "CLASS_CHANGES_REQUESTED",
+          targetType: "Class",
+          targetId: doc._id,
+          beforeState: { status: "PENDING_APPROVAL" },
+          afterState: { status: "NEED_CHANGES", reviewNote: doc.reviewNote },
+        },
+        session
+      );
+
+      updated = doc;
+    });
+  } finally {
+    if (session && typeof session.endSession === "function") {
+      await session.endSession();
+    }
+  }
+
+  // 3. Post-commit side-effect: Notification is sent strictly AFTER transaction commits
+  try {
+    await notify(
+      updated.teacherId,
+      "Lớp học cần chỉnh sửa",
+      updated.reviewNote,
+      "CLASS_CHANGES_REQUESTED",
+      {
+        dedupeKey: `CLASS_CHANGES_REQUESTED:${updated._id.toString()}:${updated.reviewedAt ? new Date(updated.reviewedAt).getTime() : Date.now()}`,
+      }
+    );
+  } catch (notifyErr) {
+    // Notification failure must NOT invalidate a successfully committed transaction
+    console.error(
+      `[adminClassService] Failed to send notification for class ${updated._id}:`,
+      notifyErr.message
+    );
+  }
+
+  return updated;
+};
+
 const deleteClass = async (adminId, classId, reason = null) => {
   if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
   const cls = await Class.findOne({ _id: classId, ...NOT_DELETED });
@@ -306,6 +416,8 @@ module.exports = {
   getClassForReview,
   approveClass,
   rejectClass,
+  requestChanges,
+  requestClassChanges: requestChanges,
   deleteClass,
   restoreClass,
 };

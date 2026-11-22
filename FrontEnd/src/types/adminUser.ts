@@ -4,6 +4,12 @@ export type UserStatus = "ACTIVE" | "PENDING" | "SUSPENDED" | "BANNED";
 
 export type SettableUserStatus = "ACTIVE" | "SUSPENDED" | "BANNED";
 
+export interface StatusChangedByInfo {
+  id: string;
+  email?: string | null;
+  fullName?: string | null;
+}
+
 export interface AdminUserListItem {
   id: string;
   email: string;
@@ -14,6 +20,9 @@ export interface AdminUserListItem {
   verificationStatus?: string;
   createdAt: string;
   updatedAt: string;
+  statusReason?: string | null;
+  statusChangedAt?: string | null;
+  statusChangedBy?: StatusChangedByInfo | null;
 }
 
 export interface AdminUserActivity {
@@ -28,6 +37,29 @@ export interface AdminUserActivity {
 export interface AdminUserDetail extends AdminUserListItem {
   profile: Record<string, any> | null;
   activity: AdminUserActivity;
+}
+
+export interface UserStatusHistoryItem {
+  id: string;
+  action: string;
+  fromStatus: UserStatus | null;
+  toStatus: UserStatus;
+  reason: string | null;
+  performedBy: StatusChangedByInfo | null;
+  performedAt: string;
+}
+
+export interface UserStatusHistoryResponse {
+  items: UserStatusHistoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface UserStatusHistoryParams {
+  page?: number;
+  pageSize?: number;
 }
 
 export interface AdminUserListParams {

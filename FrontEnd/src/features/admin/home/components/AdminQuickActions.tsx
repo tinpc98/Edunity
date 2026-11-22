@@ -1,9 +1,7 @@
 import {
   UserAddOutlined,
   SafetyCertificateOutlined,
-  PlusCircleOutlined,
   BookOutlined,
-  WalletOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { AdminDashboardPending } from "../../../../types/adminDashboard";
@@ -33,28 +31,12 @@ export default function AdminQuickActions({ pending }: AdminQuickActionsProps) {
       path: "/admin/scholarship-applications",
     },
     {
-      icon: PlusCircleOutlined,
-      label: "Tạo Campaign mới",
-      iconColor: "text-[#15803D]",
-      count: 0,
-      badgeStyle: "",
-      path: "/admin/campaigns/create",
-    },
-    {
       icon: BookOutlined,
       label: "Quản lý khóa học",
       iconColor: "text-[#7E22CE]",
       count: pending?.courseProposals || 0,
       badgeStyle: "bg-[#F3E8FF] text-[#7E22CE] border border-[#E9D5FF]",
-      path: "/admin/course-proposals",
-    },
-    {
-      icon: WalletOutlined,
-      label: "Kiểm tra thanh toán",
-      iconColor: "text-[#DC2626]",
-      count: pending?.refundsRequired || 0,
-      badgeStyle: "bg-[#FEE2E2] text-[#DC2626] border border-[#FECACA]",
-      path: "/admin/payments",
+      path: "/admin/courses",
     },
   ];
 

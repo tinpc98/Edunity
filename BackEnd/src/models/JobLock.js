@@ -10,6 +10,7 @@ const jobLockSchema = new Schema(
     name: { type: String, required: true, unique: true },
     owner: { type: String, required: true },
     lockedUntil: { type: Date, required: true },
+    fencingToken: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );

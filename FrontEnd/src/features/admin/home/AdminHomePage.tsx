@@ -2,10 +2,7 @@ import { Row, Col, Skeleton, Alert, Button } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import AdminWelcomeHero from "./components/AdminWelcomeHero";
 import AdminQuickActions from "./components/AdminQuickActions";
-import PendingTasks from "./components/PendingTasks";
-import PendingTeachers from "./components/PendingTeachers";
 import ScholarshipOverview from "./components/ScholarshipOverview";
-import TrainingOverview from "./components/TrainingOverview";
 import RecentActivities from "./components/RecentActivities";
 import AdminFinanceOverview from "./components/AdminFinanceOverview";
 import AdminKpiCard from "../../../components/admin/AdminKpiCard";
@@ -141,19 +138,16 @@ export default function AdminHomePage() {
       {/* Quick Action Shortcuts */}
       <AdminQuickActions pending={pending} />
 
-      {/* Main 2-Column Dashboard Grid */}
+      {/* Main 2-Column Dashboard Grid: Finance Overview on Left, Scholarship & Activities on Right */}
       <Row gutter={[20, 20]}>
-        {/* Left Column: Urgent Tasks, Teacher Verifications, Finance Chart */}
-        <Col xs={24} xl={16} className="flex flex-col gap-6">
-          <PendingTasks pending={pending} />
-          <PendingTeachers />
+        {/* Left Column: Live Filtered Financial Overview */}
+        <Col xs={24} xl={15} className="flex flex-col gap-6">
           <AdminFinanceOverview finance={finance} />
         </Col>
 
-        {/* Right Column: Scholarship, Training, Recent Activities */}
-        <Col xs={24} xl={8} className="flex flex-col gap-6">
+        {/* Right Column: Scholarship & Recent Activities */}
+        <Col xs={24} xl={9} className="flex flex-col gap-6">
           <ScholarshipOverview scholarship={scholarship} />
-          <TrainingOverview training={training} />
           <RecentActivities activities={recentActivities} />
         </Col>
       </Row>

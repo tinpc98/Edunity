@@ -5,12 +5,15 @@ import type {
   AdminUserDetail,
   UpdateUserStatusPayload,
   AdminUserListItem,
+  UserStatusHistoryResponse,
+  UserStatusHistoryParams,
 } from "../types/adminUser";
 
 export const adminUserKeys = {
   all: ["admin", "users"] as const,
   list: (params?: AdminUserListParams) => ["admin", "users", "list", params] as const,
   detail: (id: string) => ["admin", "users", "detail", id] as const,
+  history: (id: string, params?: UserStatusHistoryParams) => ["admin", "users", "history", id, params] as const,
 };
 
 export class AdminUserService {
@@ -36,6 +39,16 @@ export class AdminUserService {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
+  }
+
+  async getUserStatusHistory(id: string, params: UserStatusHistoryParams = {}): Promise<UserStatusHistoryResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set("page", String(params.page));
+    if (params.pageSize) searchParams.set("pageSize", String(params.pageSize));
+
+    const query = searchParams.toString();
+    const endpoint = `/admin/users/${id}/status-history${query ? `?${query}` : ""}`;
+    return apiClient<UserStatusHistoryResponse>(endpoint, { method: "GET" });
   }
 }
 

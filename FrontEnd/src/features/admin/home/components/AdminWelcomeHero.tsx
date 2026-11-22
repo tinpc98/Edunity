@@ -71,7 +71,7 @@ export default function AdminWelcomeHero({
               </>
             ) : (
               <>
-                Chào mừng trở lại với <span className="font-bold text-[#0F766E]">Trung tâm Điều hành Edunity V3</span>. Hệ thống đang vận hành hoàn toàn ổn định, không có tác vụ khẩn cấp tồn đọng.
+                Chào mừng trở lại với <span className="font-bold text-[#0F766E]">Trung tâm Điều hành Edunity V3</span>. Hệ thống đang vận hành hoàn toàn ổn định, không có tác vụ tồn đọng.
               </>
             )}
           </p>
@@ -141,7 +141,7 @@ export default function AdminWelcomeHero({
             {totalTasks === 0 && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#DCFCE7] text-[#15803D] border border-[#BBF7D0] text-xs font-bold">
                 <CheckCircleOutlined className="text-[#16A34A]" />
-                <span>Tất cả hàng đợi đã được giải quyết</span>
+                <span>Tất cả tác vụ đã được hoàn tất</span>
               </span>
             )}
           </div>

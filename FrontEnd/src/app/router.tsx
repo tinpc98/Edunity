@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import { ConfigProvider } from "antd";
 import { publicThemeConfig } from "../components/layout/publicTheme";
 import PublicLayout from "../components/layout/PublicLayout";
@@ -51,7 +51,10 @@ import ScholarshipApplicationReviewPage from "../features/admin/scholarships/Sch
 import PaperDossierIntakePage from "../features/admin/scholarships/PaperDossierIntakePage";
 import AdminClassesPage from "../features/admin/classes/AdminClassesPage";
 import AdminClassDetailPage from "../features/admin/classes/AdminClassDetailPage";
-import AdminCatalogPage from "../features/admin/catalog/AdminCatalogPage";
+import AdminCategoriesPage from "../features/admin/catalog/AdminCategoriesPage";
+import AdminSubjectsPage from "../features/admin/catalog/AdminSubjectsPage";
+import AdminCoursesPage from "../features/admin/catalog/AdminCoursesPage";
+import AdminSyllabusPage from "../features/admin/catalog/AdminSyllabusPage";
 import AdminCourseProposalsPage from "../features/admin/catalog/AdminCourseProposalsPage";
 import AdminPaymentsPage from "../features/admin/finance/AdminPaymentsPage";
 import AdminTransactionsPage from "../features/admin/finance/AdminTransactionsPage";
@@ -332,7 +335,23 @@ const router = createBrowserRouter([
       },
       {
         path: "catalog",
-        element: <AdminCatalogPage />,
+        element: <Navigate to="/admin/categories" replace />,
+      },
+      {
+        path: "categories",
+        element: <AdminCategoriesPage />,
+      },
+      {
+        path: "subjects",
+        element: <AdminSubjectsPage />,
+      },
+      {
+        path: "courses",
+        element: <AdminCoursesPage />,
+      },
+      {
+        path: "syllabus",
+        element: <AdminSyllabusPage />,
       },
       {
         path: "course-proposals",

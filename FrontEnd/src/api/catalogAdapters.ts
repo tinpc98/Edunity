@@ -70,6 +70,7 @@ export function adaptCourse(raw: ApiCourse): Course {
     level: raw.level,
     gradeLevel: raw.gradeLevel,
     prerequisites: raw.prerequisites,
+    curriculumReference: raw.curriculumReference || undefined,
     status: raw.status,
     sourceProposalId: raw.sourceProposalId,
     openClassCount: raw.openClassCount,

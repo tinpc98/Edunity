@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edunity V3 - 4 Trang Đào Tạo Độc Lập Sau Tách Trang</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-800 min-h-screen flex flex-col items-center justify-start p-3 sm:p-5">
+
+  <!-- TOP HEADER -->
+  <header class="w-full max-w-7xl mb-4 bg-slate-800/95 backdrop-blur-md rounded-2xl p-3.5 sm:p-4 shadow-xl border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 sticky top-2 z-50">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-400 font-bold text-lg shadow-inner">
+        🎓
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-white text-base sm:text-lg font-bold">Edunity V3 — Phân Tách 4 Trang Đào Tạo Độc Lập</h1>
+          <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold uppercase">
+            TASK ADMIN-CATALOG-FIX-01
+          </span>
+        </div>
+        <p class="text-xs text-slate-400">Điều hướng bằng Sidebar riêng biệt • Không còn Tab ngang • Xóa sạch Banner kỹ thuật</p>
+      </div>
+    </div>
+
+    <!-- Quick Status Badges -->
+    <div class="flex items-center gap-2 text-xs">
+      <span class="px-2.5 py-1 rounded-lg bg-teal-900/60 text-teal-300 border border-teal-700/60 font-semibold">
+        ✓ 4 Route độc lập
+      </span>
+      <span class="px-2.5 py-1 rounded-lg bg-teal-900/60 text-teal-300 border border-teal-700/60 font-semibold">
+        ✓ Lọc ACTIVE / INACTIVE
+      </span>
+      <span class="px-2.5 py-1 rounded-lg bg-emerald-900/60 text-emerald-300 border border-emerald-700/60 font-semibold">
+        ✓ 100% Clean UI
+      </span>
+    </div>
+  </header>
+
+  <!-- MAIN APP CONTAINER (MOCKING REAL ADMIN LAYOUT WITH SIDEBAR + CONTENT) -->
+  <div class="w-full max-w-7xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col md:flex-row min-h-[760px] relative mb-8">
+
+    <!-- REAL ADMIN SIDEBAR MOCKUP -->
+    <aside class="w-full md:w-64 bg-[#F0F8F6] border-r border-[#D6E5E2] p-4 flex flex-col justify-between shrink-0">
+      <div class="space-y-4">
+        <!-- Brand -->
+        <div class="flex items-center gap-2.5 px-2 py-1">
+          <div class="w-8 h-8 rounded-xl bg-[#0F766E] flex items-center justify-center text-white font-bold text-base shadow-sm">
+            E
+          </div>
+          <div>
+            <div class="font-bold text-sm text-[#163B40] leading-tight">Edunity</div>
+            <div class="text-[10px] text-[#64748B]">Management V3</div>
+          </div>
+          <span class="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#CCFBF1] text-[#0F766E] border border-[#99F6E4]">
+            Admin
+          </span>
+        </div>
+
+        <div class="border-t border-[#D6E5E2]/80 my-2"></div>
+
+        <!-- General Navigation -->
+        <div class="space-y-1">
+          <span class="px-2 text-[10px] font-bold uppercase tracking-wider text-[#64748B] block mb-1">
+            Tổng quan
+          </span>
+          <div class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#64748B] hover:bg-[#E5F5F1] cursor-pointer">
+            <span>📊</span> Tổng quan điều hành
+          </div>
+          <div class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#64748B] hover:bg-[#E5F5F1] cursor-pointer">
+            <span>👥</span> Quản lý người dùng
+          </div>
+        </div>
+
+        <!-- 4 DEDICATED CATALOG ROUTES (KEY REQUIREMENT) -->
+        <div class="space-y-1 pt-2">
+          <div class="flex items-center justify-between px-2 mb-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] block">
+              Quản trị đào tạo (4 Trang)
+            </span>
+            <span class="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">Tách riêng</span>
+          </div>
+
+          <!-- Nav 1: Categories -->
+          <button onclick="navigatePage('categories')" id="side-categories" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-[#334155] hover:bg-[#E5F5F1] hover:text-[#0F766E]">
+            <span class="text-sm">📁</span>
+            <div class="text-left flex-1">
+              <div>Danh mục đào tạo</div>
+              <div class="text-[10px] text-slate-400 font-normal">/admin/categories</div>
+            </div>
+          </button>
+
+          <!-- Nav 2: Subjects -->
+          <button onclick="navigatePage('subjects')" id="side-subjects" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-[#334155] hover:bg-[#E5F5F1] hover:text-[#0F766E]">
+            <span class="text-sm">📚</span>
+            <div class="text-left flex-1">
+              <div>Quản lý môn học</div>
+              <div class="text-[10px] text-slate-400 font-normal">/admin/subjects</div>
+            </div>
+          </button>
+
+          <!-- Nav 3: Courses -->
+          <button onclick="navigatePage('courses')" id="side-courses" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-[#334155] hover:bg-[#E5F5F1] hover:text-[#0F766E]">
+            <span class="text-sm">🎓</span>
+            <div class="text-left flex-1">
+              <div>Khóa học chuẩn</div>
+              <div class="text-[10px] text-slate-400 font-normal">/admin/courses</div>
+            </div>
+          </button>
+
+          <!-- Nav 4: Syllabus -->
+          <button onclick="navigatePage('syllabus')" id="side-syllabus" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-[#334155] hover:bg-[#E5F5F1] hover:text-[#0F766E]">
+            <span class="text-sm">📑</span>
+            <div class="text-left flex-1">
+              <div>Giáo trình / Phiên bản</div>
+              <div class="text-[10px] text-slate-400 font-normal">/admin/syllabus</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Verified Rules Info Box -->
+      <div class="p-3 bg-white/80 rounded-2xl border border-[#D6E5E2] text-[11px] text-[#163B40] space-y-1.5 shadow-xs">
+        <div class="font-bold text-[#0F766E] flex items-center gap-1">
+          <span>✓</span> Đã dọn dẹp triệt để:
+        </div>
+        <ul class="text-[10px] text-slate-600 space-y-1 list-disc pl-3">
+          <li>Không còn thanh tab ngang</li>
+          <li>Xóa các banner API/backend</li>
+          <li>Không redirect loop</li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- MAIN RIGHT CONTENT: DYNAMIC INDEPENDENT PAGES -->
+    <main class="flex-1 bg-[#F8FAFC] flex flex-col overflow-y-auto">
+
+      <!-- ======================================================== -->
+      <!-- PAGE 1: ADMIN CATEGORIES PAGE (/admin/categories) -->
+      <!-- ======================================================== -->
+      <section id="page-categories" class="page-view p-6 space-y-5 hidden">
+        <!-- Page Header Card -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+              <span>Admin</span> <span>›</span> <span class="font-semibold text-teal-700">Danh mục đào tạo</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center text-lg">
+                📁
+              </div>
+              <h2 class="text-xl font-bold text-[#163B40]">Quản lý Danh mục đào tạo</h2>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Phân loại cấp bậc học và các nhóm chương trình đào tạo trên toàn hệ thống.</p>
+          </div>
+          <button class="px-4 py-2 rounded-xl bg-[#0F766E] hover:bg-[#0D9488] text-white font-bold text-xs shadow-xs flex items-center gap-2 self-start sm:self-auto transition">
+            <span>➕</span> Thêm danh mục
+          </button>
+        </div>
+
+        <!-- Table Card -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+              <tr>
+                <th class="py-3.5 px-4">Tên danh mục / Slug</th>
+                <th class="py-3.5 px-4">Mô tả</th>
+                <th class="py-3.5 px-4">Khối lớp áp dụng</th>
+                <th class="py-3.5 px-4">Trạng thái</th>
+                <th class="py-3.5 px-4">Ngày tạo</th>
+                <th class="py-3.5 px-4 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr class="hover:bg-slate-50 transition">
+                <td class="py-3.5 px-4">
+                  <div class="font-bold text-slate-900">Khoa học Tự nhiên & Toán học</div>
+                  <div class="font-mono text-[11px] text-slate-400">natural-sciences-math</div>
+                </td>
+                <td class="py-3.5 px-4 text-slate-600">Toán, Vật lý, Hóa học, Sinh học các cấp</td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">Lớp 1 - Lớp 12</span>
+                </td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">Hoạt động</span>
+                </td>
+                <td class="py-3.5 px-4 font-mono text-slate-500 text-[11px]">10/09/2026</td>
+                <td class="py-3.5 px-4 text-right space-x-1">
+                  <button class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Xem</button>
+                  <button class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Sửa</button>
+                  <button class="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold">Xóa</button>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-50 transition">
+                <td class="py-3.5 px-4">
+                  <div class="font-bold text-slate-900">Ngoại ngữ & Kỹ năng Giao tiếp</div>
+                  <div class="font-mono text-[11px] text-slate-400">foreign-languages</div>
+                </td>
+                <td class="py-3.5 px-4 text-slate-600">Tiếng Anh, Tiếng Nhật, Tiếng Trung Quốc tế</td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">Tất cả các cấp</span>
+                </td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">Hoạt động</span>
+                </td>
+                <td class="py-3.5 px-4 font-mono text-slate-500 text-[11px]">15/09/2026</td>
+                <td class="py-3.5 px-4 text-right space-x-1">
+                  <button class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Xem</button>
+                  <button class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Sửa</button>
+                  <button class="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold">Xóa</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- PAGE 2: ADMIN SUBJECTS PAGE (/admin/subjects) -->
+      <!-- ======================================================== -->
+      <section id="page-subjects" class="page-view p-6 space-y-5 hidden">
+        <!-- Page Header Card -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+              <span>Admin</span> <span>›</span> <span class="font-semibold text-teal-700">Môn học</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center text-lg">
+                📚
+              </div>
+              <h2 class="text-xl font-bold text-[#163B40]">Quản lý Môn học</h2>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Thiết lập danh mục các môn học trực thuộc từng chuyên ngành đào tạo.</p>
+          </div>
+          <button class="px-4 py-2 rounded-xl bg-[#0F766E] hover:bg-[#0D9488] text-white font-bold text-xs shadow-xs flex items-center gap-2 self-start sm:self-auto transition">
+            <span>➕</span> Thêm môn học
+          </button>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm flex items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-2 font-bold text-slate-700">
+            <span>🔍 Lọc theo Danh mục đào tạo:</span>
+            <select class="p-2 border border-slate-300 rounded-xl outline-none text-xs">
+              <option>Khoa học Tự nhiên & Toán học (12 môn)</option>
+              <option>Ngoại ngữ & Kỹ năng Giao tiếp (8 môn)</option>
+              <option>Công nghệ Thông tin (15 môn)</option>
+            </select>
+          </div>
+          <span class="text-slate-400 text-[11px]">Đang hiển thị 3 môn tiêu biểu</span>
+        </div>
+
+        <!-- Table Card -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+              <tr>
+                <th class="py-3.5 px-4">Tên môn học / Slug</th>
+                <th class="py-3.5 px-4">Danh mục cha</th>
+                <th class="py-3.5 px-4">Mô tả</th>
+                <th class="py-3.5 px-4">Trạng thái</th>
+                <th class="py-3.5 px-4">Ngày tạo</th>
+                <th class="py-3.5 px-4 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr class="hover:bg-slate-50 transition">
+                <td class="py-3.5 px-4">
+                  <div class="font-bold text-slate-900">Toán Đại Số & Giải Tích</div>
+                  <div class="font-mono text-[11px] text-slate-400">toan-dai-so-giai-tich</div>
+                </td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-semibold text-[10px]">Khoa học Tự nhiên</span>
+                </td>
+                <td class="py-3.5 px-4 text-slate-600">Đại số tuyến tính, giải tích và phương trình</td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">Hoạt động</span>
+                </td>
+                <td class="py-3.5 px-4 font-mono text-slate-500 text-[11px]">11/09/2026</td>
+                <td class="py-3.5 px-4 text-right space-x-1">
+                  <button class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Chi tiết</button>
+                  <button class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Sửa</button>
+                  <button class="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold">Xóa</button>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-50 transition">
+                <td class="py-3.5 px-4">
+                  <div class="font-bold text-slate-900">Vật Lý Cơ & Nhiệt</div>
+                  <div class="font-mono text-[11px] text-slate-400">vat-ly-co-nhiet</div>
+                </td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-semibold text-[10px]">Khoa học Tự nhiên</span>
+                </td>
+                <td class="py-3.5 px-4 text-slate-600">Chuyển động cơ học và nhiệt động lực học</td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">Hoạt động</span>
+                </td>
+                <td class="py-3.5 px-4 font-mono text-slate-500 text-[11px]">12/09/2026</td>
+                <td class="py-3.5 px-4 text-right space-x-1">
+                  <button class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Chi tiết</button>
+                  <button class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Sửa</button>
+                  <button class="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold">Xóa</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- PAGE 3: ADMIN COURSES PAGE (/admin/courses) - FULL STATUS -->
+      <!-- ======================================================== -->
+      <section id="page-courses" class="page-view p-6 space-y-5">
+        <!-- Page Header Card -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+              <span>Admin</span> <span>›</span> <span class="font-semibold text-teal-700">Khóa học chuẩn</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center text-lg">
+                🎓
+              </div>
+              <h2 class="text-xl font-bold text-[#163B40]">Quản lý Khóa học chuẩn</h2>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Kiểm soát nội dung, tiêu chuẩn đầu ra và thời lượng của từng khóa học chuẩn trên toàn nền tảng.</p>
+          </div>
+          <button class="px-4 py-2 rounded-xl bg-[#0F766E] hover:bg-[#0D9488] text-white font-bold text-xs shadow-xs flex items-center gap-2 self-start sm:self-auto transition">
+            <span>➕</span> Thêm khóa học
+          </button>
+        </div>
+
+        <!-- NEW MULTI-DIMENSIONAL FILTER BAR WITH ACTIVE / INACTIVE SUPPORT -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3 text-xs">
+            <!-- Search -->
+            <div class="md:col-span-2">
+              <input type="text" placeholder="🔍 Tìm theo tên khóa học, slug, sách..." class="w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-teal-600">
+            </div>
+
+            <!-- Category -->
+            <div>
+              <select class="w-full p-2.5 border border-slate-300 rounded-xl outline-none text-xs">
+                <option>Tất cả danh mục</option>
+                <option>Khoa học Tự nhiên</option>
+                <option>Ngoại ngữ</option>
+              </select>
+            </div>
+
+            <!-- Subject -->
+            <div>
+              <select class="w-full p-2.5 border border-slate-300 rounded-xl outline-none text-xs">
+                <option>Tất cả môn học</option>
+                <option>Toán học</option>
+                <option>Vật lý</option>
+              </select>
+            </div>
+
+            <!-- Grade -->
+            <div>
+              <select class="w-full p-2.5 border border-slate-300 rounded-xl outline-none text-xs">
+                <option>Khối lớp (Tất cả)</option>
+                <option>Lớp 10</option>
+                <option>Lớp 11</option>
+                <option>Lớp 12</option>
+              </select>
+            </div>
+
+            <!-- NEW: STATUS FILTER (ACTIVE / INACTIVE / ALL) -->
+            <div>
+              <select id="course-status-filter" onchange="filterCourseStatus(this.value)" class="w-full p-2.5 border-2 border-teal-500 bg-teal-50/40 text-teal-900 font-bold rounded-xl outline-none text-xs">
+                <option value="ALL">Tất cả trạng thái</option>
+                <option value="ACTIVE">Hoạt động (ACTIVE)</option>
+                <option value="INACTIVE">Tạm ngưng (INACTIVE)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-500">
+            <span class="flex items-center gap-1.5 text-teal-800 font-medium">
+              <span class="w-2 h-2 rounded-full bg-teal-600"></span>
+              API chuẩn <strong>GET /api/admin/courses</strong>: Nạp cả khóa học ACTIVE và INACTIVE (Đã xóa bỏ hoàn toàn banner kỹ thuật).
+            </span>
+            <button class="text-xs text-slate-500 hover:text-slate-800 font-semibold underline">Xóa bộ lọc</button>
+          </div>
+        </div>
+
+        <!-- Table Card -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+              <tr>
+                <th class="py-3.5 px-4">Khóa học & Mã giáo trình</th>
+                <th class="py-3.5 px-4">Danh mục & Môn</th>
+                <th class="py-3.5 px-4">Khối lớp & Cấp độ</th>
+                <th class="py-3.5 px-4">Trạng thái</th>
+                <th class="py-3.5 px-4">Ngày tạo</th>
+                <th class="py-3.5 px-4 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="course-table-body" class="divide-y divide-slate-100">
+              <!-- Row 1: ACTIVE Course -->
+              <tr class="course-row course-active hover:bg-slate-50 transition">
+                <td class="py-3.5 px-4">
+                  <div class="font-bold text-slate-900">Toán 10 Nâng Cao - Ôn Thi THPT Quốc Gia</div>
+                  <div class="font-mono text-[11px] text-slate-400">toan-10-nang-cao-on-thi-thpt</div>
+                  <div class="text-[11px] text-teal-700 font-medium mt-0.5">📖 Sách: Cánh Diều</div>
+                </td>
+                <td class="py-3.5 px-4 space-y-1">
+                  <span class="px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 block w-fit text-[10px]">Khoa học Tự nhiên</span>
+                  <span class="px-2 py-0.5 rounded bg-cyan-50 text-cyan-800 border border-cyan-200 block w-fit text-[10px]">Toán học</span>
+                </td>
+                <td class="py-3.5 px-4 space-y-1">
+                  <span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 block w-fit text-[10px]">Lớp 10</span>
+                  <span class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 block w-fit text-[10px]">Nâng cao</span>
+                </td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">Hoạt động</span>
+                </td>
+                <td class="py-3.5 px-4 font-mono text-slate-500 text-[11px]">20/11/2026</td>
+                <td class="py-3.5 px-4 text-right space-x-1">
+                  <button onclick="alert('Xem chi tiết: Toán 10 Nâng Cao (Trạng thái: ACTIVE, Số lớp đang mở: 3 lớp)')" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Chi tiết</button>
+                  <button class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Sửa</button>
+                  <button class="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold">Xóa</button>
+                </td>
+              </tr>
+
+              <!-- Row 2: INACTIVE Course (NOW FULLY SUPPORTED & MANAGED BY ADMIN) -->
+              <tr class="course-row course-inactive hover:bg-slate-50 transition">
+                <td class="py-3.5 px-4">
+                  <div class="font-bold text-slate-900">Vật Lý 11 Cơ Bản (Thử nghiệm năm học trước)</div>
+                  <div class="font-mono text-[11px] text-slate-400">vat-ly-11-co-ban-thu-nghiem</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">📖 Sách: Kết Nối Tri Thức</div>
+                </td>
+                <td class="py-3.5 px-4 space-y-1">
+                  <span class="px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 block w-fit text-[10px]">Khoa học Tự nhiên</span>
+                  <span class="px-2 py-0.5 rounded bg-cyan-50 text-cyan-800 border border-cyan-200 block w-fit text-[10px]">Vật lý</span>
+                </td>
+                <td class="py-3.5 px-4 space-y-1">
+                  <span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 block w-fit text-[10px]">Lớp 11</span>
+                  <span class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 block w-fit text-[10px]">Cơ bản</span>
+                </td>
+                <td class="py-3.5 px-4">
+                  <span class="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px]">Tạm ngưng</span>
+                </td>
+                <td class="py-3.5 px-4 font-mono text-slate-500 text-[11px]">18/11/2026</td>
+                <td class="py-3.5 px-4 text-right space-x-1">
+                  <button onclick="alert('Xem chi tiết: Vật Lý 11 Cơ Bản (Trạng thái: INACTIVE, Khóa học tạm ngưng, Admin có thể kích hoạt lại bất kỳ lúc nào)')" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Chi tiết</button>
+                  <button class="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold">Kích hoạt</button>
+                  <button class="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold">Xóa</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- PAGE 4: ADMIN SYLLABUS PAGE (/admin/syllabus) -->
+      <!-- ======================================================== -->
+      <section id="page-syllabus" class="page-view p-6 space-y-5 hidden">
+        <!-- Page Header Card -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+              <span>Admin</span> <span>›</span> <span class="font-semibold text-teal-700">Giáo trình & Phiên bản</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center text-lg">
+                📑
+              </div>
+              <h2 class="text-xl font-bold text-[#163B40]">Quản lý Giáo trình & Phiên bản</h2>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Quản lý nội dung học thuật, đề cương bài giảng và các phiên bản syllabus theo từng khóa học.</p>
+          </div>
+        </div>
+
+        <!-- Course Selector Bar (Loaded with ALL courses via adminListCourses) -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div class="flex-1">
+              <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                Chọn khóa học để cấu hình giáo trình:
+              </label>
+              <select class="w-full p-2.5 border border-slate-300 rounded-xl outline-none text-xs font-medium">
+                <option>Toán 10 Nâng Cao - Ôn Thi THPT Quốc Gia · Khoa học Tự nhiên / Toán học</option>
+                <option>Vật Lý 11 Cơ Bản (Thử nghiệm) · Khoa học Tự nhiên / Vật lý (Tạm ngưng)</option>
+                <option>IELTS Intensive 6.5+ · Ngoại ngữ / Tiếng Anh Quốc tế</option>
+              </select>
+            </div>
+            <button class="px-4 py-2.5 rounded-xl bg-[#0F766E] hover:bg-[#0D9488] text-white font-bold text-xs shadow-xs flex items-center gap-2 transition self-start sm:self-auto">
+              <span>➕</span> Tạo bản nháp mới
+            </button>
+          </div>
+
+          <!-- Versions List & Units Breakdown -->
+          <div class="pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <!-- Versions list -->
+            <div class="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
+              <span class="font-bold text-slate-700 block">Lịch sử các phiên bản:</span>
+              <div class="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold flex items-center justify-between">
+                <span>v2.0 (Đã công bố)</span>
+                <span class="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded">Hiện tại</span>
+              </div>
+              <div class="p-2.5 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-between">
+                <span>v1.0 (Đã lưu trữ)</span>
+                <span class="text-[10px] text-slate-400">10/2026</span>
+              </div>
+            </div>
+
+            <!-- Curriculum Units table -->
+            <div class="md:col-span-2 border border-slate-200 rounded-xl p-4 bg-white space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-800">Các bài học chuẩn (Units) trong phiên bản v2.0:</span>
+                <span class="text-[11px] text-slate-500 font-mono">Tổng: 3 bài học</span>
+              </div>
+              <div class="divide-y divide-slate-100 text-xs">
+                <div class="py-2.5 flex items-center justify-between">
+                  <div>
+                    <span class="font-bold text-slate-800">Bài 1: Mệnh đề và Tập hợp toán học</span>
+                    <div class="text-[11px] text-slate-500 mt-0.5">Thời lượng: 2 buổi • Bài tập rèn luyện tư duy logic</div>
+                  </div>
+                  <span class="font-mono text-slate-400 text-[11px]">#UNIT-01</span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between">
+                  <div>
+                    <span class="font-bold text-slate-800">Bài 2: Bất phương trình và Hệ bất phương trình bậc nhất hai ẩn</span>
+                    <div class="text-[11px] text-slate-500 mt-0.5">Thời lượng: 3 buổi • Ứng dụng thực tế bài toán tối ưu</div>
+                  </div>
+                  <span class="font-mono text-slate-400 text-[11px]">#UNIT-02</span>
+                </div>
+                <div class="py-2.5 flex items-center justify-between">
+                  <div>
+                    <span class="font-bold text-slate-800">Bài 3: Hệ thức lượng trong tam giác và Vector không gian</span>
+                    <div class="text-[11px] text-slate-500 mt-0.5">Thời lượng: 4 buổi • Ôn tập nâng cao</div>
+                  </div>
+                  <span class="font-mono text-slate-400 text-[11px]">#UNIT-03</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    function navigatePage(pageKey) {
+      document.querySelectorAll('.page-view').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.classList.remove('bg-[#CCFBF1]', 'text-[#0F766E]', 'font-bold', 'shadow-xs');
+        el.classList.add('text-[#334155]');
+      });
+
+      const activePage = document.getElementById('page-' + pageKey);
+      const activeNav = document.getElementById('side-' + pageKey);
+
+      if (activePage && activeNav) {
+        activePage.classList.remove('hidden');
+        activeNav.classList.add('bg-[#CCFBF1]', 'text-[#0F766E]', 'font-bold', 'shadow-xs');
+        activeNav.classList.remove('text-[#334155]');
+      }
+    }
+
+    function filterCourseStatus(status) {
+      const rows = document.querySelectorAll('.course-row');
+      rows.forEach(row => {
+        if (status === 'ALL') {
+          row.style.display = '';
+        } else if (status === 'ACTIVE') {
+          row.style.display = row.classList.contains('course-active') ? '' : 'none';
+        } else if (status === 'INACTIVE') {
+          row.style.display = row.classList.contains('course-inactive') ? '' : 'none';
+        }
+      });
+    }
+
+    // Default Page
+    window.addEventListener('DOMContentLoaded', () => {
+      navigatePage('courses');
+    });
+  </script>
+</body>
+</html>

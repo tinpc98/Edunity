@@ -9,7 +9,7 @@ import {
   Avatar,
   Alert,
   message,
-  Tooltip,
+  Pagination,
 } from "antd";
 import {
   SearchOutlined,
@@ -19,7 +19,6 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   SyncOutlined,
-  CopyOutlined,
   CloseOutlined,
   BookOutlined,
   SafetyCertificateOutlined,
@@ -65,6 +64,15 @@ export default function AdminUsersPage() {
 
   // Detail Modal state (Replaced Drawer with Centered Modal)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+  // Status History pagination state
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyPageSize = 5;
+
+  const handleOpenUserDetail = (userId: string) => {
+    setSelectedUserId(userId);
+    setHistoryPage(1);
+  };
 
   // Status Change Modal state
   const [statusModalUser, setStatusModalUser] = useState<AdminUserListItem | AdminUserDetail | null>(null);
@@ -115,6 +123,22 @@ export default function AdminUsersPage() {
     enabled: Boolean(selectedUserId),
   });
 
+  // Fetch status history
+  const {
+    data: statusHistoryData,
+    isLoading: isHistoryLoading,
+    isError: isHistoryError,
+    refetch: refetchStatusHistory,
+  } = useQuery({
+    queryKey: adminUserKeys.history(selectedUserId!, { page: historyPage, pageSize: historyPageSize }),
+    queryFn: () =>
+      adminUserService.getUserStatusHistory(selectedUserId!, {
+        page: historyPage,
+        pageSize: historyPageSize,
+      }),
+    enabled: Boolean(selectedUserId),
+  });
+
   // Mutation: Update status
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: { status: SettableUserStatus; reason?: string } }) =>
@@ -124,6 +148,10 @@ export default function AdminUsersPage() {
       setStatusModalUser(null);
       statusForm.resetFields();
       queryClient.invalidateQueries({ queryKey: adminUserKeys.all });
+      if (selectedUserId) {
+        refetchUserDetail();
+        refetchStatusHistory();
+      }
     },
     onError: (err: any) => {
       message.error(err?.message || "Không thể cập nhật trạng thái người dùng");
@@ -157,17 +185,12 @@ export default function AdminUsersPage() {
         id: statusModalUser.id,
         payload: {
           status: values.status,
-          reason: values.status === "ACTIVE" ? undefined : values.reason,
+          reason: values.status === "ACTIVE" ? undefined : values.reason?.trim(),
         },
       });
     } catch {
       // Form validation error
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    message.success("Đã sao chép mã người dùng!");
   };
 
   const columns = [
@@ -189,17 +212,6 @@ export default function AdminUsersPage() {
             <div className="text-xs text-[#64748B] truncate">{record.email}</div>
           </div>
         </div>
-      ),
-    },
-    {
-      title: "Mã người dùng",
-      dataIndex: "id",
-      key: "id",
-      width: 140,
-      render: (id: string) => (
-        <span className="font-mono text-xs font-semibold text-[#0F766E] bg-[#F0F8F6] px-2 py-0.5 rounded border border-[#D6E5E2]">
-          {id.slice(-8).toUpperCase()}
-        </span>
       ),
     },
     {
@@ -281,7 +293,7 @@ export default function AdminUsersPage() {
         return (
           <div className="flex items-center justify-end gap-1.5">
             <button
-              onClick={() => setSelectedUserId(record.id)}
+              onClick={() => handleOpenUserDetail(record.id)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-[#0F766E] bg-[#CCFBF1] hover:bg-teal-200 transition-colors cursor-pointer"
             >
               <EyeOutlined className="text-[11px]" />
@@ -639,27 +651,7 @@ export default function AdminUsersPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* Mã người dùng */}
-                  <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
-                    <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
-                      Mã người dùng
-                    </span>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs font-mono font-bold text-[#0F766E] truncate mr-2">
-                        {userDetail.id}
-                      </span>
-                      <Tooltip title="Sao chép mã">
-                        <button
-                          onClick={() => copyToClipboard(userDetail.id)}
-                          className="p-1 rounded text-[#64748B] hover:text-[#0F766E] hover:bg-[#E5F5F1] transition-colors cursor-pointer"
-                        >
-                          <CopyOutlined className="text-xs" />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </div>
-
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {/* Vai trò */}
                   <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-between">
                     <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
@@ -686,7 +678,15 @@ export default function AdminUsersPage() {
                     </span>
                     <div className="mt-2">
                       <AdminStatusBadge
-                        label={userDetail.status}
+                        label={
+                          userDetail.status === "ACTIVE"
+                            ? "Đang hoạt động"
+                            : userDetail.status === "BANNED"
+                            ? "Đã khóa"
+                            : userDetail.status === "SUSPENDED"
+                            ? "Tạm ngưng"
+                            : userDetail.status
+                        }
                         type={
                           userDetail.status === "ACTIVE"
                             ? "success"
@@ -730,6 +730,58 @@ export default function AdminUsersPage() {
                       {dayjs(userDetail.updatedAt).format("DD/MM/YYYY HH:mm")}
                     </p>
                   </div>
+
+                  {/* Status Reason & Lock Metadata Alert (when SUSPENDED or BANNED) */}
+                  {(userDetail.status === "SUSPENDED" || userDetail.status === "BANNED") && (
+                    <div
+                      className={`p-4 rounded-xl border flex flex-col gap-2.5 col-span-1 md:col-span-3 ${
+                        userDetail.status === "BANNED"
+                          ? "bg-rose-50/90 border-rose-200 text-rose-900"
+                          : "bg-amber-50/90 border-amber-200 text-amber-900"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          {userDetail.status === "BANNED" ? (
+                            <CloseCircleOutlined className="text-rose-600 text-base" />
+                          ) : (
+                            <StopOutlined className="text-amber-600 text-base" />
+                          )}
+                          <span className="font-bold text-xs uppercase tracking-wide">
+                            {userDetail.status === "BANNED"
+                              ? "Tài khoản đang bị khóa (BANNED)"
+                              : "Tài khoản đang tạm ngưng (SUSPENDED)"}
+                          </span>
+                        </div>
+                        {userDetail.statusChangedAt && (
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            Thời gian xử lý: {dayjs(userDetail.statusChangedAt).format("HH:mm DD/MM/YYYY")}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="bg-white/90 rounded-lg p-3 border border-dashed border-slate-200 text-xs">
+                        <div className="font-semibold text-slate-700 mb-1">Lý do khóa / tạm ngưng:</div>
+                        <div className="text-slate-900 font-medium whitespace-pre-wrap">
+                          {userDetail.statusReason || "Chưa có thông tin lý do"}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-0.5">
+                        <span>
+                          Admin thực hiện:{" "}
+                          <strong className="text-slate-800">
+                            {userDetail.statusChangedBy?.fullName ||
+                              userDetail.statusChangedBy?.email ||
+                              (userDetail.statusChangedBy?.id ? `ID: ${userDetail.statusChangedBy.id}` : "Quản trị viên")}
+                          </strong>
+                        </span>
+                        {userDetail.statusChangedBy?.email && (
+                          <span className="text-slate-400">({userDetail.statusChangedBy.email})</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1000,6 +1052,134 @@ export default function AdminUsersPage() {
                   </div>
                 </div>
               )}
+
+              {/* 5. SECTION: LỊCH SỬ THAY ĐỔI TRẠNG THÁI */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AuditOutlined className="text-[#0F766E] text-base" />
+                    <h4 className="text-sm font-bold text-[#163B40]">
+                      Lịch sử thay đổi trạng thái
+                    </h4>
+                  </div>
+                  {statusHistoryData && (
+                    <span className="text-[11px] text-[#64748B] font-medium">
+                      Tổng cộng {statusHistoryData.total} lần cập nhật
+                    </span>
+                  )}
+                </div>
+
+                <div className="p-4 rounded-2xl bg-[#F0F8F6] border border-[#D6E5E2] space-y-3">
+                  {isHistoryLoading ? (
+                    <div className="py-6 text-center text-slate-400">
+                      <SyncOutlined spin className="text-xl text-teal-600 mb-1" />
+                      <p className="text-xs">Đang tải lịch sử trạng thái...</p>
+                    </div>
+                  ) : isHistoryError ? (
+                    <Alert
+                      type="error"
+                      showIcon
+                      message="Không thể tải lịch sử thay đổi trạng thái"
+                      action={
+                        <Button size="small" onClick={() => refetchStatusHistory()}>
+                          Thử lại
+                        </Button>
+                      }
+                    />
+                  ) : !statusHistoryData || statusHistoryData.items.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-slate-400 bg-white rounded-xl border border-dashed border-[#D6E5E2]">
+                      Chưa có lịch sử thay đổi trạng thái cho tài khoản này.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        {statusHistoryData.items.map((item) => (
+                          <div
+                            key={item.id}
+                            className="p-3 bg-white rounded-xl border border-[#D6E5E2] shadow-2xs space-y-1.5"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <AdminStatusBadge
+                                  label={
+                                    item.fromStatus === "ACTIVE"
+                                      ? "Hoạt động"
+                                      : item.fromStatus === "BANNED"
+                                      ? "Đã khóa"
+                                      : item.fromStatus === "SUSPENDED"
+                                      ? "Tạm ngưng"
+                                      : item.fromStatus || "Khởi tạo"
+                                  }
+                                  type={
+                                    item.fromStatus === "ACTIVE"
+                                      ? "success"
+                                      : item.fromStatus === "BANNED"
+                                      ? "error"
+                                      : "warning"
+                                  }
+                                />
+                                <span className="text-xs text-slate-400 font-bold">→</span>
+                                <AdminStatusBadge
+                                  label={
+                                    item.toStatus === "ACTIVE"
+                                      ? "Hoạt động"
+                                      : item.toStatus === "BANNED"
+                                      ? "Đã khóa"
+                                      : item.toStatus === "SUSPENDED"
+                                      ? "Tạm ngưng"
+                                      : item.toStatus
+                                  }
+                                  type={
+                                    item.toStatus === "ACTIVE"
+                                      ? "success"
+                                      : item.toStatus === "BANNED"
+                                      ? "error"
+                                      : "warning"
+                                  }
+                                />
+                              </div>
+                              <span className="text-[11px] text-slate-400">
+                                {dayjs(item.performedAt).format("HH:mm DD/MM/YYYY")}
+                              </span>
+                            </div>
+
+                            {item.reason && (
+                              <div className="text-xs text-slate-700 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                                <span className="font-semibold text-slate-500">Lý do: </span>
+                                <span>{item.reason}</span>
+                              </div>
+                            )}
+
+                            <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                              <span>
+                                Người thực hiện:{" "}
+                                <span className="font-medium text-slate-600">
+                                  {item.performedBy?.fullName ||
+                                    item.performedBy?.email ||
+                                    (item.performedBy?.id ? `ID: ${item.performedBy.id}` : "Hệ thống / Admin")}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {statusHistoryData.total > historyPageSize && (
+                        <div className="flex justify-end pt-2">
+                          <Pagination
+                            size="small"
+                            current={historyPage}
+                            pageSize={historyPageSize}
+                            total={statusHistoryData.total}
+                            onChange={(p) => setHistoryPage(p)}
+                            showSizeChanger={false}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </>
           )}
         </div>
@@ -1101,8 +1281,19 @@ export default function AdminUsersPage() {
                   }`}
                   rules={[
                     {
-                      required: isReasonRequired,
-                      message: "Vui lòng nhập lý do khi tạm ngưng hoặc khóa tài khoản",
+                      validator: (_, value) => {
+                        if (isReasonRequired && (!value || !value.trim())) {
+                          return Promise.reject(
+                            new Error("Vui lòng nhập lý do khi tạm ngưng hoặc khóa tài khoản")
+                          );
+                        }
+                        if (value && value.trim().length > 500) {
+                          return Promise.reject(
+                            new Error("Lý do không được vượt quá 500 ký tự")
+                          );
+                        }
+                        return Promise.resolve();
+                      },
                     },
                   ]}
                 >

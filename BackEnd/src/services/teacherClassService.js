@@ -28,7 +28,7 @@ const { notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
-const EDITABLE_STATUSES = ["DRAFT", "REJECTED"]; // BR-47, BR-51
+const EDITABLE_STATUSES = ["DRAFT", "NEED_CHANGES"]; // BE-01: REJECTED is final terminal status
 const DATE_FIELDS = ["enrollmentStart", "enrollmentEnd", "startDate", "endDate"];
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -247,7 +247,7 @@ const updateClass = async (teacherId, classId, body = {}, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (!EDITABLE_STATUSES.includes(cls.status)) {
-    throw new AppError("Only DRAFT or REJECTED classes can be edited", "CLASS_NOT_EDITABLE", 409);
+    throw new AppError("Only DRAFT or NEED_CHANGES classes can be edited", "CLASS_NOT_EDITABLE", 409);
   }
 
   const switchingCourse = body.courseId !== undefined && String(body.courseId) !== String(cls.courseId);
@@ -325,7 +325,7 @@ const submitClass = async (teacherId, classId, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
   if (!EDITABLE_STATUSES.includes(cls.status)) {
-    throw new AppError("Only DRAFT or REJECTED classes can be submitted", "CLASS_NOT_SUBMITTABLE", 409);
+    throw new AppError("Only DRAFT or NEED_CHANGES classes can be submitted", "CLASS_NOT_SUBMITTABLE", 409);
   }
 
   const course = await getActiveCourse(cls.courseId);
@@ -358,7 +358,7 @@ const submitClass = async (teacherId, classId, options = {}) => {
     { $set: { status: "PENDING_APPROVAL", level: alignment.level, updatedBy: teacherId, ...snapshots } },
     { returnDocument: "after" }
   ).lean();
-  if (!updated) throw new AppError("Only DRAFT or REJECTED classes can be submitted", "CLASS_NOT_SUBMITTABLE", 409);
+  if (!updated) throw new AppError("Only DRAFT or NEED_CHANGES classes can be submitted", "CLASS_NOT_SUBMITTABLE", 409);
 
   await notifyAdmins("Lớp học chờ duyệt", `Lớp "${updated.className}" của ${updated.teacherName} đang chờ duyệt.`, "CLASS_SUBMITTED");
   return updated;

@@ -263,11 +263,11 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
       adminClassService.approveClass(admin._id, created._id.toString(), {}, contractOk)
     ).rejects.toMatchObject({ code: "SUBJECT_AUTHORIZATION_SUSPENDED", statusCode: 403 });
 
-    // 4c) RejectClass still works while TEA-07 suspended
-    const rejected = await adminClassService.rejectClass(admin._id, created._id.toString(), {
+    // 4c) Request changes still works while TEA-07 suspended
+    const needChanges = await adminClassService.requestChanges(admin._id, created._id.toString(), {
       reviewNote: "Bổ sung chứng chỉ rồi nộp lại",
     });
-    expect(rejected.status).toBe("REJECTED");
+    expect(needChanges.status).toBe("NEED_CHANGES");
 
     // 4d) Reinstate TEA-07 -> resubmit -> approveClass succeeds cleanly
     await request(app)

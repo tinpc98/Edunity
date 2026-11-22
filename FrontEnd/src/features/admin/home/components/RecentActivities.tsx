@@ -102,7 +102,7 @@ export default function RecentActivities({ activities = [] }: RecentActivitiesPr
           Chưa có nhật ký hoạt động nào gần đây.
         </div>
       ) : (
-        <div className="pt-2">
+        <div className="pt-2 max-h-[380px] overflow-y-auto pr-2">
           <Timeline
             items={activities.map((act) => {
               const cfg = getActionConfig(act.action);

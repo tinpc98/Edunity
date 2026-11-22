@@ -5,7 +5,8 @@ import {
 } from 'antd';
 import { 
   CheckCircleOutlined, 
-  CloseCircleOutlined
+  CloseCircleOutlined,
+  EditOutlined
 } from '@ant-design/icons';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -22,8 +23,10 @@ export default function AdminClassDetailPage() {
 
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [isRequestChangesModalOpen, setIsRequestChangesModalOpen] = useState(false);
   const [approveNote, setApproveNote] = useState('');
   const [rejectNote, setRejectNote] = useState('');
+  const [requestChangesNote, setRequestChangesNote] = useState('');
 
   // 1. Fetch Class Detail for Review (Backend: GET /api/admin/classes/:id)
   const { 
@@ -70,6 +73,23 @@ export default function AdminClassDetailPage() {
     },
   });
 
+  // 4. Request Changes Mutation (Backend: POST /api/admin/classes/:id/request-changes)
+  const requestChangesMutation = useMutation({
+    mutationFn: (note: string) =>
+      classService.requestChanges(classId!, { reviewNote: note }),
+    onSuccess: () => {
+      message.success("Đã gửi yêu cầu chỉnh sửa lớp học! Trạng thái lớp chuyển sang NEED_CHANGES.");
+      setIsRequestChangesModalOpen(false);
+      setRequestChangesNote('');
+      queryClient.invalidateQueries({ queryKey: classKeys.adminDetail(classId!) });
+      queryClient.invalidateQueries({ queryKey: classKeys.adminPending() });
+      queryClient.invalidateQueries({ queryKey: classKeys.all });
+    },
+    onError: (err: any) => {
+      message.error(err?.message || "Không thể gửi yêu cầu chỉnh sửa lớp học.");
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="site-container py-10 min-h-screen">
@@ -98,6 +118,7 @@ export default function AdminClassDetailPage() {
 
   const isPending = cls.status === 'PENDING_APPROVAL';
   const scheduleDisplay = deriveScheduleText(cls.schedule);
+  const isAnySubmitting = approveMutation.isPending || rejectMutation.isPending || requestChangesMutation.isPending;
 
   const handleApprove = () => {
     approveMutation.mutate(approveNote);
@@ -108,7 +129,15 @@ export default function AdminClassDetailPage() {
       message.warning("Vui lòng nhập lý do từ chối để giáo viên có thể chỉnh sửa.");
       return;
     }
-    rejectMutation.mutate(rejectNote);
+    rejectMutation.mutate(rejectNote.trim());
+  };
+
+  const handleRequestChanges = () => {
+    if (!requestChangesNote.trim()) {
+      message.warning("Vui lòng nhập nội dung yêu cầu chỉnh sửa bắt buộc.");
+      return;
+    }
+    requestChangesMutation.mutate(requestChangesNote.trim());
   };
 
   return (
@@ -140,8 +169,8 @@ export default function AdminClassDetailPage() {
           </Text>
         </div>
 
-        {/* Review Actions */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Review Actions: Từ chối lớp | Yêu cầu chỉnh sửa | Phê duyệt mở lớp */}
+        <div className="flex items-center gap-2.5 shrink-0">
           {isPending ? (
             <>
               <Button 
@@ -149,15 +178,26 @@ export default function AdminClassDetailPage() {
                 size="large"
                 icon={<CloseCircleOutlined />}
                 className="rounded-xl font-semibold"
+                disabled={isAnySubmitting}
                 onClick={() => setIsRejectModalOpen(true)}
               >
                 Từ chối lớp
               </Button>
               <Button 
+                size="large"
+                icon={<EditOutlined />}
+                className="rounded-xl font-semibold border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 hover:text-amber-800 hover:border-amber-400"
+                disabled={isAnySubmitting}
+                onClick={() => setIsRequestChangesModalOpen(true)}
+              >
+                Yêu cầu chỉnh sửa
+              </Button>
+              <Button 
                 type="primary" 
                 size="large"
                 icon={<CheckCircleOutlined />}
-                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-semibold border-none"
+                className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-semibold border-none text-white"
+                disabled={isAnySubmitting}
                 onClick={() => setIsApproveModalOpen(true)}
               >
                 Phê duyệt mở lớp
@@ -377,6 +417,41 @@ export default function AdminClassDetailPage() {
             value={rejectNote}
             onChange={(e) => setRejectNote(e.target.value)}
           />
+        </div>
+      </Modal>
+
+      {/* Modal: Yêu cầu chỉnh sửa */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2 text-amber-600 font-bold">
+            <EditOutlined />
+            <span>Yêu cầu Giáo viên Chỉnh sửa Lớp học (NEED_CHANGES)</span>
+          </div>
+        }
+        open={isRequestChangesModalOpen}
+        onCancel={() => !requestChangesMutation.isPending && setIsRequestChangesModalOpen(false)}
+        confirmLoading={requestChangesMutation.isPending}
+        okText="Gửi yêu cầu chỉnh sửa"
+        cancelText="Hủy"
+        okButtonProps={{ className: "bg-amber-600 hover:bg-amber-700 font-semibold text-white border-none" }}
+        onOk={handleRequestChanges}
+      >
+        <div className="py-3 space-y-3">
+          <p className="text-sm text-gray-600">
+            Trạng thái lớp sẽ chuyển thành <strong className="text-amber-600">NEED_CHANGES</strong>. Giáo viên sẽ nhận được thông báo phản hồi kèm nội dung hướng dẫn bên dưới để hoàn thiện và gửi duyệt lại.
+          </p>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">
+              Nội dung yêu cầu chỉnh sửa (bắt buộc) <span className="text-rose-500">*</span>:
+            </label>
+            <Input.TextArea
+              rows={4}
+              placeholder="VD: Cần bổ sung đề cương chi tiết các buổi học, điều chỉnh lại mức học phí hoặc cập nhật giáo trình..."
+              value={requestChangesNote}
+              onChange={(e) => setRequestChangesNote(e.target.value)}
+              className="rounded-xl"
+            />
+          </div>
         </div>
       </Modal>
     </div>

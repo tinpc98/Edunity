@@ -64,6 +64,7 @@ router.get("/admin/classes/pending", admin, controller.listPendingClasses);
 router.get("/admin/classes/:id", admin, controller.getClassForReview);
 router.post("/admin/classes/:id/approve", admin, controller.approveClass);
 router.post("/admin/classes/:id/reject", admin, controller.rejectClass);
+router.post("/admin/classes/:id/request-changes", admin, controller.requestChanges);
 router.delete("/admin/classes/:id", admin, controller.deleteClass);
 router.post("/admin/classes/:id/restore", admin, controller.restoreClass);
 

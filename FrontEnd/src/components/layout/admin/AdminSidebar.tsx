@@ -5,7 +5,8 @@ import {
   DashboardOutlined,
   TeamOutlined,
   IdcardOutlined,
-  AppstoreOutlined,
+  FolderOutlined,
+  ReadOutlined,
   FileDoneOutlined,
   BookOutlined,
   SafetyCertificateOutlined,
@@ -75,10 +76,28 @@ const navGroups: NavGroup[] = [
         path: ROUTES.ADMIN.TEACHER_VERIFICATIONS,
       },
       {
-        key: ROUTES.ADMIN.CATALOG,
-        label: "Danh mục & Khóa học",
-        icon: <AppstoreOutlined className="text-[17px]" />,
-        path: ROUTES.ADMIN.CATALOG,
+        key: ROUTES.ADMIN.CATEGORIES,
+        label: "Danh mục",
+        icon: <FolderOutlined className="text-[17px]" />,
+        path: ROUTES.ADMIN.CATEGORIES,
+      },
+      {
+        key: ROUTES.ADMIN.SUBJECTS,
+        label: "Môn học",
+        icon: <ReadOutlined className="text-[17px]" />,
+        path: ROUTES.ADMIN.SUBJECTS,
+      },
+      {
+        key: ROUTES.ADMIN.COURSES,
+        label: "Khóa học",
+        icon: <BookOutlined className="text-[17px]" />,
+        path: ROUTES.ADMIN.COURSES,
+      },
+      {
+        key: ROUTES.ADMIN.SYLLABUS,
+        label: "Giáo trình / Phiên bản",
+        icon: <FileTextOutlined className="text-[17px]" />,
+        path: ROUTES.ADMIN.SYLLABUS,
       },
       {
         key: ROUTES.ADMIN.COURSE_PROPOSALS,
@@ -208,7 +227,7 @@ export default function AdminSidebar({
     if (path === ROUTES.ADMIN.HOME) {
       return location.pathname === ROUTES.ADMIN.HOME;
     }
-    return location.pathname.startsWith(path);
+    return location.pathname === path || location.pathname.startsWith(path + "/");
   };
 
   return (

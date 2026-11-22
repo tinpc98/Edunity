@@ -109,6 +109,7 @@ export interface ApiCourse {
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
+  curriculumReference?: string | null;
   status: CourseStatus;
   sourceProposalId?: string | null;
   /** Only present in GET /courses/:id */
@@ -226,6 +227,7 @@ export interface Course {
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
+  curriculumReference?: string | null;
   status: CourseStatus;
   sourceProposalId?: string | null;
   openClassCount?: number;
@@ -313,6 +315,7 @@ export interface CreateCoursePayload {
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
+  curriculumReference?: string;
 }
 
 export interface UpdateCoursePayload {
@@ -323,6 +326,7 @@ export interface UpdateCoursePayload {
   level?: CourseLevel;
   gradeLevel?: GradeLevel | null;
   prerequisites?: string;
+  curriculumReference?: string;
   status?: CourseStatus;
 }
 
@@ -366,6 +370,10 @@ export interface CourseSearchParams {
   subjectId?: string;
   gradeLevel?: GradeLevel;
   level?: CourseLevel;
+  status?: CourseStatus | "ALL";
+  curriculumReference?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 }

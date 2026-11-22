@@ -773,8 +773,8 @@ const getClassSyllabus = async (classId, user = null) => {
     user && classDoc.teacherId && user.id === classDoc.teacherId.toString()
   );
 
-  // Unified RBAC policy: DRAFT, PENDING_APPROVAL, REJECTED strictly restricted to Teacher Owner and Admin
-  if (["DRAFT", "PENDING_APPROVAL", "REJECTED"].includes(classDoc.status)) {
+  // Unified RBAC policy: DRAFT, PENDING_APPROVAL, NEED_CHANGES, REJECTED strictly restricted to Teacher Owner and Admin
+  if (["DRAFT", "PENDING_APPROVAL", "NEED_CHANGES", "REJECTED"].includes(classDoc.status)) {
     if (!isAdmin && !isTeacherOwner) {
       if (!user) {
         throw new AppError("Authentication required to view non-public class syllabus", "UNAUTHORIZED", 401);

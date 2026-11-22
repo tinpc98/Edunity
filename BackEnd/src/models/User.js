@@ -100,6 +100,9 @@ const userSchema = new Schema(
     tokenVersion: { type: Number, default: 0 }, // bumped to invalidate every access token already issued
     role: { type: String, enum: ["STUDENT", "TEACHER", "SPONSOR", "ADMIN"], required: true },
     status: { type: String, enum: ["ACTIVE", "PENDING", "SUSPENDED", "BANNED"], default: "ACTIVE" },
+    statusReason: { type: String, default: null },
+    statusChangedAt: { type: Date, default: null },
+    statusChangedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
 
     studentProfile: studentProfileSchema,
     teacherProfile: teacherProfileSchema,
@@ -112,6 +115,7 @@ const userSchema = new Schema(
 userSchema.plugin(softDeletePlugin); // Admin gỡ tài khoản gian lận nhưng vẫn giữ lịch sử Enrollment/Review liên quan
 
 userSchema.index({ role: 1, status: 1 });
+userSchema.index({ status: 1, statusChangedAt: -1 });
 userSchema.index({ "teacherProfile.verificationStatus": 1 });
 userSchema.index({ "teacherProfile.verificationStatus": 1, "teacherProfile.verifiedUntil": 1 });
 userSchema.index({ "teacherProfile.bankAccount.status": 1 });
