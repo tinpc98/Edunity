@@ -22,6 +22,7 @@ router.post("/teacher/classes", teacher, controller.createClass);
 router.get("/teacher/classes/:id", teacher, controller.getMyClass);
 router.patch("/teacher/classes/:id", teacher, controller.updateClass);
 router.post("/teacher/classes/:id/submit", teacher, controller.submitClass);
+router.get("/teacher/classes/:id/readiness", teacher, controller.getMyClassReadiness);
 router.get("/teacher/classes/:id/students", teacher, controller.getClassStudents);
 router.get("/teacher/classes/:id/planned-sessions", teacher, controller.getPlannedSessions);
 
@@ -62,6 +63,7 @@ router.post("/admin/subject-authorizations/:id/suspend", admin, controller.suspe
 // Admin — class approval & Smart Classroom / Incident / Discipline / Reschedule / Refund review (TIN-05E)
 router.get("/admin/classes/pending", admin, controller.listPendingClasses);
 router.get("/admin/classes/:id", admin, controller.getClassForReview);
+router.get("/admin/classes/:id/readiness", admin, controller.getClassReadiness);
 router.post("/admin/classes/:id/approve", admin, controller.approveClass);
 router.post("/admin/classes/:id/reject", admin, controller.rejectClass);
 router.post("/admin/classes/:id/request-changes", admin, controller.requestChanges);

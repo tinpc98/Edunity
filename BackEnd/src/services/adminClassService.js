@@ -6,14 +6,8 @@ const auditService = require("./auditService");
 const notificationService = require("./notificationService");
 const audit = (...args) => auditService.audit(...args);
 const notify = (...args) => notificationService.notify(...args);
-const {
-  getVerifiedTeacher,
-  validateClassCompletenessAndSessions,
-} = require("./teacherClassService");
-const {
-  validateClassGate,
-  captureClassSnapshots,
-} = require("./classCreationGateService");
+const { evaluateClass, getReadiness, runInTransaction } = require("./teacherClassService");
+const { captureClassSnapshots, throwFailedChecks } = require("./classCreationGateService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 
@@ -71,6 +65,13 @@ const getClassForReview = async (classId) => {
   };
 };
 
+const getClassReadiness = async (classId) => {
+  if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
+  const cls = await Class.findOne({ _id: classId, ...NOT_DELETED }).lean();
+  if (!cls) throw CLASS_NOT_FOUND();
+  return getReadiness(cls);
+};
+
 // BR-50 + CUR-09 + CUR-10 + TEA-07 + TEA-12: Admin cannot approve/open a class bypassing governance gates
 const approveClass = async (adminId, classId, body = {}, options = {}) => {
   if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
@@ -81,57 +82,53 @@ const approveClass = async (adminId, classId, body = {}, options = {}) => {
     throw new AppError("Class is not pending approval", "CLASS_NOT_PENDING_APPROVAL", 409);
   }
 
-  const teacher = await getVerifiedTeacher(cls.teacherId);
-  const course = await Course.findOne({ _id: cls.courseId, status: "ACTIVE", ...NOT_DELETED }).lean();
-  const sessions = await validateClassCompletenessAndSessions(cls, "Class is not complete enough to be approved");
-
-  const gateResult = await validateClassGate({
-    teacher,
-    course,
-    cls,
-    mode: "APPROVE",
-    totalSessions: sessions.length,
+  const { checks, course, level, pricingResult } = await evaluateClass(cls, {
     pricingPolicyVerifier: options.pricingPolicyVerifier,
     contractVerifier: options.contractVerifier,
   });
+  throwFailedChecks(checks);
 
-  const snapshots = await captureClassSnapshots({
-    course,
-    pricingResult: gateResult.pricingResult,
-  });
+  const snapshots = await captureClassSnapshots({ course, pricingResult });
 
-  const updated = await Class.findOneAndUpdate(
-    { _id: classId, status: "PENDING_APPROVAL", ...NOT_DELETED },
-    {
-      $set: {
-        status: "OPEN",
-        level: gateResult.alignment.level,
-        ...snapshots,
-        reviewedBy: adminId,
-        reviewedAt: new Date(),
-        reviewNote: body.reviewNote || null,
-        updatedBy: adminId,
+  const updated = await runInTransaction(async (session) => {
+    const doc = await Class.findOneAndUpdate(
+      // updatedAt: a class sent back, edited and resubmitted during the checks must be checked again
+      { _id: classId, status: "PENDING_APPROVAL", updatedAt: cls.updatedAt, ...NOT_DELETED },
+      {
+        $set: {
+          status: "OPEN",
+          level,
+          ...snapshots,
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          reviewNote: body.reviewNote || null,
+          updatedBy: adminId,
+        },
       },
-    },
-    { returnDocument: "after" }
-  ).lean();
+      { session, returnDocument: "after" }
+    ).lean();
 
-  if (!updated) {
-    throw new AppError("Class is not pending approval", "CLASS_NOT_PENDING_APPROVAL", 409);
-  }
+    if (!doc) {
+      throw new AppError("Class is not pending approval", "CLASS_NOT_PENDING_APPROVAL", 409);
+    }
 
-  await audit({
-    actorAdminId: adminId,
-    action: "CLASS_APPROVED",
-    targetType: "Class",
-    targetId: updated._id,
-    beforeState: { status: "PENDING_APPROVAL" },
-    afterState: {
-      status: "OPEN",
-      reviewNote: updated.reviewNote,
-      syllabusVersionId: updated.syllabusVersionId ? String(updated.syllabusVersionId) : null,
-      pricingPolicyVersion: updated.pricingPolicyVersion || null,
-    },
+    await audit(
+      {
+        actorAdminId: adminId,
+        action: "CLASS_APPROVED",
+        targetType: "Class",
+        targetId: doc._id,
+        beforeState: { status: "PENDING_APPROVAL" },
+        afterState: {
+          status: "OPEN",
+          reviewNote: doc.reviewNote,
+          syllabusVersionId: doc.syllabusVersionId ? String(doc.syllabusVersionId) : null,
+          pricingPolicyVersion: doc.pricingPolicyVersion || null,
+        },
+      },
+      session
+    );
+    return doc;
   });
 
   await notify(updated.teacherId, "Lớp học đã được duyệt", `Lớp "${updated.className}" đã được mở tuyển sinh.`, "CLASS_APPROVED");
@@ -142,39 +139,45 @@ const approveClass = async (adminId, classId, body = {}, options = {}) => {
 const rejectClass = async (adminId, classId, body = {}) => {
   if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
 
-  const updated = await Class.findOneAndUpdate(
-    { _id: classId, status: "PENDING_APPROVAL", ...NOT_DELETED },
-    {
-      $set: {
-        status: "REJECTED",
-        reviewedBy: adminId,
-        reviewedAt: new Date(),
-        reviewNote: body.reviewNote || null,
-        updatedBy: adminId,
+  const updated = await runInTransaction(async (session) => {
+    const doc = await Class.findOneAndUpdate(
+      { _id: classId, status: "PENDING_APPROVAL", ...NOT_DELETED },
+      {
+        $set: {
+          status: "REJECTED",
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          reviewNote: body.reviewNote || null,
+          updatedBy: adminId,
+        },
       },
-    },
-    { returnDocument: "after" }
-  ).lean();
+      { session, returnDocument: "after" }
+    ).lean();
 
-  if (!updated) {
-    const exists = await Class.exists({ _id: classId, ...NOT_DELETED });
-    if (!exists) throw CLASS_NOT_FOUND();
-    throw new AppError("Class is not pending approval", "CLASS_NOT_PENDING_APPROVAL", 409);
-  }
+    if (!doc) {
+      const exists = await Class.exists({ _id: classId, ...NOT_DELETED }).session(session);
+      if (!exists) throw CLASS_NOT_FOUND();
+      throw new AppError("Class is not pending approval", "CLASS_NOT_PENDING_APPROVAL", 409);
+    }
 
-  await audit({
-    actorAdminId: adminId,
-    action: "CLASS_REJECTED",
-    targetType: "Class",
-    targetId: updated._id,
-    beforeState: { status: "PENDING_APPROVAL" },
-    afterState: { status: "REJECTED", reviewNote: updated.reviewNote },
+    await audit(
+      {
+        actorAdminId: adminId,
+        action: "CLASS_REJECTED",
+        targetType: "Class",
+        targetId: doc._id,
+        beforeState: { status: "PENDING_APPROVAL" },
+        afterState: { status: "REJECTED", reviewNote: doc.reviewNote },
+      },
+      session
+    );
+    return doc;
   });
 
   await notify(
     updated.teacherId,
     "Lớp học bị từ chối",
-    updated.reviewNote || `Lớp "${updated.className}" cần chỉnh sửa và gửi duyệt lại.`,
+    updated.reviewNote || `Lớp "${updated.className}" đã bị từ chối.`,
     "CLASS_REJECTED"
   );
   return updated;
@@ -414,6 +417,7 @@ const restoreClass = async (adminId, classId) => {
 module.exports = {
   listPendingClasses,
   getClassForReview,
+  getClassReadiness,
   approveClass,
   rejectClass,
   requestChanges,

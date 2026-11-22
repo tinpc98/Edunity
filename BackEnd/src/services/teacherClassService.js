@@ -6,24 +6,20 @@ const { toNum, toDec, parseAmount } = require("../utils/money");
 const { computePlannedOccurrences, parseDateTimeInZone, validateTimeZone } = require("../utils/timezone");
 const catalog = require("./courseCatalogService");
 const {
-  validateClassGate,
+  assertVerificationCurrent,
   assertCourseAlignment,
-  assertApprovedAuthorization,
   assertPricingPolicyGate,
   assertTeacherContractGate,
+  assertSessionCountWithinPolicy,
+  findSatisfiedPricingPolicy,
+  runClassChecks,
+  presentCheck,
+  throwFailedChecks,
   captureClassSnapshots,
-} = (() => {
-  const gate = require("./classCreationGateService");
-  const tea07 = require("./teacherSubjectAuthorizationService");
-  return {
-    validateClassGate: gate.validateClassGate,
-    assertCourseAlignment: gate.assertCourseAlignment,
-    assertPricingPolicyGate: gate.assertPricingPolicyGate,
-    assertTeacherContractGate: gate.assertTeacherContractGate,
-    captureClassSnapshots: gate.captureClassSnapshots,
-    assertApprovedAuthorization: tea07.assertApprovedAuthorization,
-  };
-})();
+} = require("./classCreationGateService");
+const { assertApprovedAuthorization } = require("./teacherSubjectAuthorizationService");
+const { resolveTzOffsetMinutes, isClassStartDateReached } = require("../utils/approvalDeadline");
+const auditService = require("./auditService");
 const { notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
 
@@ -55,11 +51,32 @@ const getOwnClass = async (teacherId, classId) => {
   return cls;
 };
 
+const classNotEditable = () =>
+  new AppError("Only DRAFT or NEED_CHANGES classes can be edited", "CLASS_NOT_EDITABLE", 409);
+
 const getActiveCourse = async (courseId) => {
   if (!mongoose.isValidObjectId(courseId)) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
   const course = await Course.findOne({ _id: courseId, status: "ACTIVE", ...NOT_DELETED });
   if (!course) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
   return course;
+};
+
+const runInTransaction = async (work) => {
+  let session;
+  try {
+    session = await mongoose.startSession();
+  } catch {
+    throw new AppError("Failed to start database transaction session", "DATABASE_TRANSACTION_UNAVAILABLE", 503);
+  }
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      result = await work(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
 };
 
 const parseStrictInteger = (value) => {
@@ -164,7 +181,10 @@ const applyCourse = (cls, course) => {
 
 const createClass = async (teacherId, body = {}, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
+  assertVerificationCurrent({ teacher });
   if (!body.courseId) throw validationError("courseId is required");
+  // An operator object such as { $ne: null } would otherwise reach the query and pick any ACTIVE course
+  if (!mongoose.isObjectIdOrHexString(body.courseId)) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
 
   if (typeof mongoose.startSession !== "function") {
     throw new AppError(
@@ -216,20 +236,16 @@ const createClass = async (teacherId, body = {}, options = {}) => {
       applyCourse(cls, course);
       applyClassInput(cls, body);
 
-      const gateResult = await validateClassGate({
+      await assertCourseAlignment({ course, cls, body });
+      const pricingResult = await findSatisfiedPricingPolicy({
         teacher,
         course,
         cls,
         body,
-        mode: "CREATE",
         pricingPolicyVerifier: options.pricingPolicyVerifier,
-        contractVerifier: options.contractVerifier,
       });
 
-      const snapshots = await captureClassSnapshots({
-        course,
-        pricingResult: gateResult.pricingResult,
-      });
+      const snapshots = await captureClassSnapshots({ course, pricingResult });
       Object.assign(cls, snapshots);
 
       await cls.save({ session });
@@ -246,9 +262,8 @@ const createClass = async (teacherId, body = {}, options = {}) => {
 const updateClass = async (teacherId, classId, body = {}, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
-  if (!EDITABLE_STATUSES.includes(cls.status)) {
-    throw new AppError("Only DRAFT or NEED_CHANGES classes can be edited", "CLASS_NOT_EDITABLE", 409);
-  }
+  if (!EDITABLE_STATUSES.includes(cls.status)) throw classNotEditable();
+  assertVerificationCurrent({ teacher });
 
   const switchingCourse = body.courseId !== undefined && String(body.courseId) !== String(cls.courseId);
   const course = await getActiveCourse(switchingCourse ? body.courseId : cls.courseId);
@@ -259,27 +274,30 @@ const updateClass = async (teacherId, classId, body = {}, options = {}) => {
   }
   applyClassInput(cls, body);
 
-  const gateResult = await validateClassGate({
+  await assertCourseAlignment({ course, cls, body });
+  const pricingResult = await findSatisfiedPricingPolicy({
     teacher,
     course,
     cls,
     body,
-    mode: "UPDATE",
     pricingPolicyVerifier: options.pricingPolicyVerifier,
-    contractVerifier: options.contractVerifier,
   });
 
-  const snapshots = await captureClassSnapshots({
-    course,
-    pricingResult: gateResult.pricingResult,
-  });
+  const snapshots = await captureClassSnapshots({ course, pricingResult });
   Object.assign(cls, snapshots);
 
   if (!cls.level && course.level) {
     cls.level = catalog.resolveLevel(course.level);
   }
   cls.updatedBy = teacherId;
-  await cls.save();
+  // The status is part of the write, so an edit still in flight cannot land on a class submitted or opened meanwhile
+  cls.$where = { status: { $in: EDITABLE_STATUSES } };
+  try {
+    await cls.save();
+  } catch (err) {
+    if (err.name === "DocumentNotFoundError") throw classNotEditable();
+    throw err;
+  }
 
   if (renamed) {
     await Session.updateMany({ classId: cls._id }, { $set: { className: cls.className } }); // denormalized
@@ -294,33 +312,138 @@ const isSessionWithinClass = (cls, startDatetime, endDatetime) => {
   return true;
 };
 
-const validateClassCompletenessAndSessions = async (cls, incompleteMessage = "Class is not complete enough to be submitted") => {
+const incomplete = (missing) => new AppError("Class is not complete", "CLASS_INCOMPLETE", 400, { missing });
+
+const assertClassInformation = (cls, now) => {
   const missing = [];
   if (isBlank(cls.description)) missing.push("description");
   for (const field of DATE_FIELDS) {
     if (!cls[field]) missing.push(field);
   }
-  if (!cls.schedule || cls.schedule.length === 0) missing.push("schedule");
+  if (missing.length) throw incomplete(missing);
 
-  const sessions = await Session.find({ classId: cls._id, status: { $ne: "CANCELLED" } }).lean();
-  if (sessions.length === 0) missing.push("sessions");
-  if (missing.length) {
-    throw Object.assign(new AppError(incompleteMessage, "CLASS_INCOMPLETE", 400), {
-      details: { missing },
-    });
+  if (cls.startDate > cls.endDate || cls.enrollmentStart > cls.enrollmentEnd) {
+    throw new AppError("Class start dates must be before their end dates", "CLASS_DATES_INVALID", 400);
   }
+  if (isClassStartDateReached(cls.startDate, now, resolveTzOffsetMinutes())) {
+    throw new AppError("The class start date has been reached; approval is no longer possible", "CLASS_START_DATE_REACHED", 400);
+  }
+};
+
+const assertScheduleAndSessions = async ({ cls, course, sessions }) => {
+  const missing = [];
+  if (!cls.schedule || cls.schedule.length === 0) missing.push("schedule");
+  if (sessions.length === 0) missing.push("sessions");
+  if (missing.length) throw incomplete(missing);
+
+  const slots = parseSchedule(cls.schedule);
+  const overlaps = slots.some((a, i) =>
+    slots.slice(i + 1).some((b) => a.dayOfWeek === b.dayOfWeek && a.startTime < b.endTime && b.startTime < a.endTime)
+  );
+  if (overlaps) throw new AppError("Weekly schedule slots overlap", "SCHEDULE_OVERLAP", 400);
 
   const outOfRange = sessions.filter((s) => !isSessionWithinClass(cls, s.startDatetime, s.endDatetime));
   if (outOfRange.length) {
-    throw Object.assign(new AppError("Some sessions are outside the class start/end date", "SESSION_OUT_OF_CLASS_RANGE", 400), {
-      details: { sessionIds: outOfRange.map((s) => s._id.toString()) },
+    throw new AppError("Some sessions are outside the class start/end date", "SESSION_OUT_OF_CLASS_RANGE", 400, {
+      sessionIds: outOfRange.map((s) => s._id.toString()),
     });
   }
 
-  return sessions;
+  await assertSessionCountWithinPolicy({ course, cls, totalSessions: sessions.length });
 };
 
-// BR-48 / BR-49 / CUR-10: submit a completed Class for Admin approval
+/**
+ * The one rule set behind readiness, submit and approve.
+ * Submit is stopped only by checks flagged blocksSubmit; approval requires all of them.
+ */
+const evaluateClass = async (cls, options = {}) => {
+  const now = new Date();
+  const { teacher = null } = options;
+  const course =
+    options.course || (await Course.findOne({ _id: cls.courseId, status: "ACTIVE", ...NOT_DELETED }).lean());
+  const sessions = await Session.find({ classId: cls._id, status: { $ne: "CANCELLED" } }).lean();
+  const teacherRef = teacher || { _id: cls.teacherId };
+  const scope = course || cls;
+
+  let level = null;
+  let pricingResult = null;
+  let checkedSessionCount = null;
+  const checks = await runClassChecks([
+    [
+      "TEACHER_VERIFICATION",
+      true,
+      async () => assertVerificationCurrent({ teacher: teacher || (await getVerifiedTeacher(cls.teacherId)), now }),
+    ],
+    [
+      "COURSE",
+      true,
+      async () => {
+        ({ level } = await assertCourseAlignment({ course, cls }));
+      },
+    ],
+    ["CLASS_INFORMATION", true, async () => assertClassInformation(cls, now)],
+    [
+      "SCHEDULE_SESSIONS",
+      true,
+      async () => {
+        await assertScheduleAndSessions({ cls, course, sessions });
+        checkedSessionCount = sessions.length;
+      },
+    ],
+    [
+      "TEACHING_AUTHORIZATION",
+      false,
+      () =>
+        assertApprovedAuthorization({
+          teacherId: cls.teacherId,
+          subjectId: scope.subjectId,
+          gradeLevel: scope.gradeLevel || null,
+          level: scope.level,
+        }),
+    ],
+    [
+      "PRICING_POLICY",
+      false,
+      async () => {
+        // Without its course a policy cannot be resolved; "not configured" would send Admin to fix the wrong thing
+        if (!course) throw new AppError("Selected course is not active", "COURSE_NOT_ACTIVE", 400);
+        pricingResult = await assertPricingPolicyGate({
+          teacher: teacherRef,
+          course,
+          cls,
+          // A bad count is the schedule's failure (it blocks submit); repeating it here would show it as optional
+          totalSessions: checkedSessionCount,
+          pricingPolicyVerifier: options.pricingPolicyVerifier,
+        });
+      },
+    ],
+    [
+      "TEACHER_CONTRACT",
+      false,
+      () => assertTeacherContractGate({ teacher: teacherRef, now, contractVerifier: options.contractVerifier }),
+    ],
+  ]);
+
+  return { checks, course, level, pricingResult };
+};
+
+const getReadiness = async (cls) => {
+  const { checks } = await evaluateClass(cls);
+  const passes = (required) => checks.every((check) => !check.error || !required(check));
+  const editable = EDITABLE_STATUSES.includes(cls.status);
+  return {
+    classId: cls._id,
+    status: cls.status,
+    canSaveDraft: editable && passes((check) => ["TEACHER_VERIFICATION", "COURSE"].includes(check.key)),
+    canSubmit: editable && passes((check) => check.blocksSubmit),
+    canApprove: cls.status === "PENDING_APPROVAL" && passes(() => true),
+    checks: checks.map(presentCheck),
+  };
+};
+
+const getMyClassReadiness = async (teacherId, classId) => getReadiness(await getOwnClass(teacherId, classId));
+
+// BR-48 / BR-49 / CUR-10: submit a completed Class. Authorization, contract and price range are left to Admin approval
 const submitClass = async (teacherId, classId, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);
@@ -329,39 +452,49 @@ const submitClass = async (teacherId, classId, options = {}) => {
   }
 
   const course = await getActiveCourse(cls.courseId);
-  const alignment = await assertCourseAlignment({ course, cls });
-  await assertApprovedAuthorization({
-    teacherId: teacher._id,
-    subjectId: course.subjectId,
-    gradeLevel: alignment.gradeLevel,
-    level: alignment.level,
-  });
+  const { checks, level, pricingResult } = await evaluateClass(cls, { ...options, teacher, course });
+  throwFailedChecks(checks.filter((check) => check.blocksSubmit));
 
-  const sessions = await validateClassCompletenessAndSessions(cls);
-
-  const pricingResult = await assertPricingPolicyGate({
-    teacher,
-    course,
-    cls,
-    totalSessions: sessions.length,
-    pricingPolicyVerifier: options.pricingPolicyVerifier,
-  });
-  await assertTeacherContractGate({
-    teacher,
-    contractVerifier: options.contractVerifier,
-  });
-
+  const approvalWarnings = checks.filter((check) => check.error).map(presentCheck);
   const snapshots = await captureClassSnapshots({ course, pricingResult });
 
-  const updated = await Class.findOneAndUpdate(
-    { _id: cls._id, status: { $in: EDITABLE_STATUSES } },
-    { $set: { status: "PENDING_APPROVAL", level: alignment.level, updatedBy: teacherId, ...snapshots } },
-    { returnDocument: "after" }
-  ).lean();
-  if (!updated) throw new AppError("Only DRAFT or NEED_CHANGES classes can be submitted", "CLASS_NOT_SUBMITTABLE", 409);
+  const updated = await runInTransaction(async (session) => {
+    const doc = await Class.findOneAndUpdate(
+      // updatedAt: what was validated above is exactly what gets submitted
+      { _id: cls._id, status: { $in: EDITABLE_STATUSES }, updatedAt: cls.updatedAt },
+      { $set: { status: "PENDING_APPROVAL", level, updatedBy: teacherId, ...snapshots } },
+      { session, returnDocument: "after" }
+    ).lean();
+    if (!doc) throw new AppError("Only DRAFT or NEED_CHANGES classes can be submitted", "CLASS_NOT_SUBMITTABLE", 409);
 
-  await notifyAdmins("Lớp học chờ duyệt", `Lớp "${updated.className}" của ${updated.teacherName} đang chờ duyệt.`, "CLASS_SUBMITTED");
-  return updated;
+    // AuditLog only knows ADMIN and SYSTEM actors, so the teacher is recorded in the state instead of as an admin
+    await auditService.audit(
+      {
+        actorType: "SYSTEM",
+        action: "CLASS_SUBMITTED",
+        targetType: "Class",
+        targetId: doc._id,
+        beforeState: { status: cls.status },
+        afterState: {
+          status: "PENDING_APPROVAL",
+          submittedBy: String(teacherId),
+          pendingConditions: approvalWarnings.map((warning) => warning.code),
+        },
+      },
+      session
+    );
+    return doc;
+  });
+
+  const toCheck = approvalWarnings.length
+    ? ` Cần kiểm tra: ${approvalWarnings.map((warning) => warning.label).join(", ")}.`
+    : "";
+  await notifyAdmins(
+    "Lớp học chờ duyệt",
+    `Lớp "${updated.className}" của ${updated.teacherName} đang chờ duyệt.${toCheck}`,
+    "CLASS_SUBMITTED"
+  );
+  return { ...withoutReviewer(updated), approvalWarnings };
 };
 
 const listMyClasses = async (teacherId, query, paging) => {
@@ -427,7 +560,10 @@ module.exports = {
   getVerifiedTeacher,
   getOwnClass,
   isSessionWithinClass,
-  validateClassCompletenessAndSessions,
+  runInTransaction,
+  evaluateClass,
+  getReadiness,
+  getMyClassReadiness,
   createClass,
   updateClass,
   submitClass,

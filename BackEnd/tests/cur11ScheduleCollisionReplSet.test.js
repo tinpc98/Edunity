@@ -283,8 +283,8 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
     expect(dupErr).not.toBeNull();
     expect(dupErr.code).toBe(11000);
 
-    // Without an active CoursePricingPolicy, CUR-07 gate rejects with 400 PRICING_POLICY_NOT_CONFIGURED
-    const noPolicyRes = await request(app)
+    // A DRAFT needs neither policy nor contract (TEACHER-CLASS-FLOW-02); approval must still refuse it
+    const draftRes = await request(app)
       .post("/api/teacher/classes")
       .set(as(teacher))
       .send({
@@ -294,11 +294,41 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
         price: 500000,
         capacity: 15,
       });
+    expect(draftRes.statusCode).toBe(201);
+    expect(draftRes.body.data.status).toBe("DRAFT");
+
+    const blockedId = draftRes.body.data.id;
+    const DAY = 86400000;
+    await Class.updateOne(
+      { _id: blockedId },
+      {
+        $set: {
+          status: "PENDING_APPROVAL",
+          description: "IELTS 6.5",
+          enrollmentStart: new Date(),
+          enrollmentEnd: new Date(Date.now() + DAY),
+          startDate: new Date(Date.now() + 2 * DAY),
+          endDate: new Date(Date.now() + 20 * DAY),
+          schedule: [{ dayOfWeek: 1, startTime: "19:00", endTime: "21:00" }],
+        },
+      }
+    );
+    await Session.create({
+      classId: blockedId,
+      className: "IELTS Blocked",
+      teacherId: teacher._id,
+      title: "Buổi 1",
+      startDatetime: new Date(Date.now() + 3 * DAY),
+      endDatetime: new Date(Date.now() + 3 * DAY + 7200000),
+    });
+    const approve = () => request(app).post(`/api/admin/classes/${blockedId}/approve`).set(as(admin)).send({});
+
+    // Without an active CoursePricingPolicy, approval rejects with 400 PRICING_POLICY_NOT_CONFIGURED
+    const noPolicyRes = await approve();
     expect(noPolicyRes.statusCode).toBe(400);
     expect(noPolicyRes.body.error).toBe("PRICING_POLICY_NOT_CONFIGURED");
-    expect(await Class.countDocuments({ className: "IELTS Blocked" })).toBe(0);
 
-    // Seed an active CoursePricingPolicy (CUR-07 satisfied): POST /api/teacher/classes MUST still fail closed (503) because TEA-12 contract is absent
+    // Seed an active CoursePricingPolicy (CUR-07 satisfied): approval MUST still refuse because TEA-12 contract is absent
     await CoursePricingPolicy.create({
       policyKey: "GLOBAL:PAID:ALL:ALL",
       version: 1,
@@ -315,18 +345,9 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
       createdBy: admin._id,
     });
 
-    const res = await request(app)
-      .post("/api/teacher/classes")
-      .set(as(teacher))
-      .send({
-        courseId: langCourse._id,
-        className: "IELTS Blocked",
-        classType: "PAID",
-        price: 500000,
-        capacity: 15,
-      });
+    const res = await approve();
     expect(res.statusCode).toBe(403);
     expect(res.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
-    expect(await Class.countDocuments({ className: "IELTS Blocked" })).toBe(0);
+    expect(await Class.countDocuments({ status: "OPEN", _id: blockedId })).toBe(0);
   });
 });

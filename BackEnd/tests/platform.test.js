@@ -443,7 +443,8 @@ describe("Teacher verification, class approval and classroom", () => {
       approvedAt: new Date(),
     });
     const noContract = await request(app).post("/api/teacher/classes").set(as(newTeacher)).send(classBody);
-    expect(noContract.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
+    expect(noContract.statusCode).toBe(201); // a DRAFT does not need a contract; approval does
+    expect(noContract.body.data.status).toBe("DRAFT");
     const contract = await request(app).post(`/api/admin/teachers/${newTeacher._id}/contracts`).set(as(admin)).send({});
     expect(contract.statusCode).toBe(201);
     const signed = await request(app).post(`/api/teacher/contracts/${contract.body.data.id}/sandbox-sign`).set(as(newTeacher)).send({ decision: "SIGN" });
@@ -479,7 +480,7 @@ describe("Teacher verification, class approval and classroom", () => {
         description: "Lớp ôn tập Toán 6",
         enrollmentStart: new Date(Date.now() - DAY),
         enrollmentEnd: new Date(Date.now() + 7 * DAY),
-        startDate: new Date(Date.now() - DAY),
+        startDate: new Date(Date.now() + DAY), // BE-02: a class whose start day has come cannot be approved
         endDate: new Date(Date.now() + 30 * DAY),
         schedule: [{ dayOfWeek: 1, startTime: "19:00", endTime: "21:00" }],
       });
@@ -552,7 +553,8 @@ describe("Teacher verification, class approval and classroom", () => {
     expect(approved.body.data.status).toBe("OPEN");
     const twice = await request(app).post(`/api/admin/classes/${classId}/approve`).set(as(admin)).send({});
     expect(twice.body.error).toBe("CLASS_NOT_PENDING_APPROVAL");
-    expect(await AuditLog.countDocuments({ targetType: "Class" })).toBe(2);
+    const classAudits = (await AuditLog.find({ targetType: "Class" }).lean()).map((log) => log.action).sort();
+    expect(classAudits).toEqual(["CLASS_APPROVED", "CLASS_CHANGES_REQUESTED", "CLASS_SUBMITTED", "CLASS_SUBMITTED"]);
     expect(await Notification.countDocuments({ userId: newTeacher._id, type: "CLASS_APPROVED" })).toBe(1);
 
     const mine = await request(app).get("/api/teacher/classes?status=OPEN").set(as(newTeacher));

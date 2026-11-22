@@ -4,6 +4,7 @@ export type ClassStatus =
   | "DRAFT"
   | "PENDING_APPROVAL"
   | "OPEN"
+  | "NEED_CHANGES"
   | "REJECTED"
   | "IN_PROGRESS"
   | "COMPLETED"
@@ -159,6 +160,33 @@ export interface UpdateClassPayload {
   schedule?: ScheduleEntry[];
 }
 
+export type ReadinessCheckKey =
+  | "TEACHER_VERIFICATION"
+  | "COURSE"
+  | "CLASS_INFORMATION"
+  | "SCHEDULE_SESSIONS"
+  | "TEACHING_AUTHORIZATION"
+  | "PRICING_POLICY"
+  | "TEACHER_CONTRACT";
+
+export interface ReadinessCheck {
+  key: ReadinessCheckKey;
+  label: string;
+  code: string | null;
+  status: "PASSED" | "PENDING";
+  blocksSubmit: boolean;
+  message: string;
+}
+
+export interface ClassReadiness {
+  classId: string;
+  status: ClassStatus;
+  canSaveDraft: boolean;
+  canSubmit: boolean;
+  canApprove: boolean;
+  checks: ReadinessCheck[];
+}
+
 export interface ReviewClassPayload {
   reviewNote?: string;
 }
@@ -189,6 +217,7 @@ export const CLASS_STATUS_LABELS: Record<ClassStatus, string> = {
   DRAFT: "Bản nháp",
   PENDING_APPROVAL: "Chờ duyệt",
   OPEN: "Đang mở đăng ký",
+  NEED_CHANGES: "Cần chỉnh sửa",
   REJECTED: "Bị từ chối",
   IN_PROGRESS: "Đang diễn ra",
   COMPLETED: "Hoàn thành",
@@ -199,6 +228,7 @@ export const CLASS_STATUS_COLORS: Record<ClassStatus, string> = {
   DRAFT: "default",
   PENDING_APPROVAL: "warning",
   OPEN: "processing",
+  NEED_CHANGES: "gold",
   REJECTED: "error",
   IN_PROGRESS: "success",
   COMPLETED: "purple",

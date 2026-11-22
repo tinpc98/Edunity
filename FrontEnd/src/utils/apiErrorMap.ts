@@ -2,8 +2,12 @@ import { FetchError } from "../api/apiClient";
 
 export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có lỗi xảy ra. Vui lòng thử lại."): string {
   if (error instanceof FetchError || (typeof error === "object" && error !== null && ("code" in error || "status" in error))) {
-    const err = error as { code?: string; status?: number; message?: string };
+    const err = error as { code?: string; status?: number; message?: string; details?: { pendingChecks?: { message: string }[] } };
     
+    // Submit/approve list every unmet condition, already worded for the user
+    const pendingChecks = err.details?.pendingChecks;
+    if (pendingChecks?.length) return `${[...new Set(pendingChecks.map((check) => check.message))].join(". ")}.`;
+
     // Auth errors
     if (err.code === "RATE_LIMITED" || err.status === 429) {
       return "Bạn đã thử quá nhiều lần. Vui lòng đợi ít phút rồi thử lại.";
@@ -92,6 +96,15 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
     }
     if (err.code === "CLASS_NOT_ACTIVE") {
       return "Lớp học chưa được phê duyệt hoặc hiện không trong trạng thái hoạt động để mở phòng học.";
+    }
+    if (err.code === "CLASS_NOT_PENDING_APPROVAL" || err.code === "CLASS_NOT_SUBMITTABLE") {
+      return "Lớp vừa được thay đổi hoặc không còn ở trạng thái phù hợp. Vui lòng tải lại trang và kiểm tra lại.";
+    }
+    if (err.code === "COURSE_LEVEL_REQUIRED") {
+      return "Khóa học chuẩn chưa có cấp độ nên chưa thể dùng để tạo lớp. Vui lòng liên hệ quản trị viên.";
+    }
+    if (err.code === "COURSE_CATALOG_INACTIVE") {
+      return "Môn học hoặc danh mục của khóa học này đã tạm ngưng. Vui lòng chọn khóa học khác.";
     }
     if (err.code === "CLASS_NOT_EDITABLE") {
       return "Lớp học hiện không thể chỉnh sửa ở trạng thái này.";

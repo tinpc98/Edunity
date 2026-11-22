@@ -213,6 +213,7 @@ export default function TeacherClassesPage() {
           { key: 'OPEN', label: `Đang mở (${allClasses.filter(c => c.status === 'OPEN').length})` },
           { key: 'PENDING_APPROVAL', label: `Chờ duyệt (${allClasses.filter(c => c.status === 'PENDING_APPROVAL').length})` },
           { key: 'DRAFT', label: `Bản nháp (${allClasses.filter(c => c.status === 'DRAFT').length})` },
+          { key: 'NEED_CHANGES', label: `Cần chỉnh sửa (${allClasses.filter(c => c.status === 'NEED_CHANGES').length})` },
           { key: 'IN_PROGRESS', label: `Đang học (${allClasses.filter(c => c.status === 'IN_PROGRESS').length})` },
           { key: 'REJECTED', label: `Bị từ chối (${allClasses.filter(c => c.status === 'REJECTED').length})` },
           { key: 'COMPLETED', label: `Hoàn thành (${allClasses.filter(c => c.status === 'COMPLETED').length})` },
@@ -275,7 +276,7 @@ export default function TeacherClassesPage() {
             const progressPercent = cls.capacity > 0 
               ? Math.min(100, Math.round((cls.enrolledCount / cls.capacity) * 100))
               : 0;
-            const scheduleDisplay = deriveScheduleText(cls.schedule);
+            const scheduleDisplay = cls.schedule.length ? deriveScheduleText(cls.schedule) : 'Chưa thiết lập lịch';
             const formattedStartDate = cls.startDate
               ? new Date(cls.startDate).toLocaleDateString('vi-VN')
               : 'Chưa đặt';
@@ -320,6 +321,13 @@ export default function TeacherClassesPage() {
                           </span>
                         </div>
                       </div>
+
+                      {cls.status === 'NEED_CHANGES' && cls.reviewNote && (
+                        <div className="mt-2.5 bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-800">
+                          <span className="font-semibold">Admin yêu cầu chỉnh sửa: </span>
+                          {cls.reviewNote}
+                        </div>
+                      )}
 
                       {/* Rejection notice if REJECTED */}
                       {cls.status === 'REJECTED' && cls.reviewNote && (

@@ -237,15 +237,17 @@ Mọi yêu cầu có xác thực phải gửi kèm header:
 | **LMS** | `GET` | `/api/classes/:id` | Public | Chi tiết lớp học + hồ sơ giảng viên |
 | **LMS** | `GET` | `/api/classes/:id/sessions` | Public | Danh sách buổi học công khai |
 | **LMS** | `GET` | `/api/teacher/classes` | `TEACHER` | Lớp của giảng viên đăng nhập |
-| **LMS** | `POST` | `/api/teacher/classes` | `TEACHER` | Yêu cầu `VERIFIED` + `TEA-07 APPROVED` + `Course` khớp + `CUR-07` + `TEA-12 ACTIVE` (`CUR-10`) |
+| **LMS** | `POST` | `/api/teacher/classes` | `TEACHER` | Tạo `DRAFT`: yêu cầu `VERIFIED` còn hạn + `Course ACTIVE` khớp. Không yêu cầu `TEA-07`/`CUR-07`/`TEA-12` |
 | **LMS** | `GET` | `/api/teacher/classes/:id` | `TEACHER` | Chi tiết lớp của tôi + sessions |
-| **LMS** | `PATCH` | `/api/teacher/classes/:id` | `TEACHER` | Chỉ sửa khi `DRAFT` hoặc `REJECTED` + cổng `CUR-10` |
-| **LMS** | `POST` | `/api/teacher/classes/:id/submit` | `TEACHER` | Kiểm tra đầy đủ thông tin + cổng `CUR-10` |
+| **LMS** | `PATCH` | `/api/teacher/classes/:id` | `TEACHER` | Chỉ sửa khi `DRAFT` hoặc `NEED_CHANGES`; cùng điều kiện với tạo `DRAFT` |
+| **LMS** | `POST` | `/api/teacher/classes/:id/submit` | `TEACHER` | Bắt buộc đủ thông tin, ngày, lịch, buổi học. `TEA-07`/`CUR-07` (khung giá)/`TEA-12` chỉ trả `approvalWarnings` |
+| **LMS** | `GET` | `/api/teacher/classes/:id/readiness` | `TEACHER` | `canSaveDraft`, `canSubmit`, `canApprove`, `checks` của lớp mình |
 | **LMS** | `GET` | `/api/teacher/classes/:id/students` | `TEACHER` | Xem học viên lớp của mình |
 | **LMS** | `GET` | `/api/teacher/classes/:id/planned-sessions`| `TEACHER`| Dự kiến lịch từ schedule theo múi giờ `Asia/Ho_Chi_Minh` $\rightarrow$ UTC |
 | **LMS** | `GET` | `/api/admin/classes/pending` | `ADMIN` | Danh sách lớp chờ phê duyệt |
 | **LMS** | `GET` | `/api/admin/classes/:id` | `ADMIN` | Xem chi tiết lớp để duyệt |
-| **LMS** | `POST` | `/api/admin/classes/:id/approve` | `ADMIN` | Phê duyệt mở lớp (`OPEN`) |
+| **LMS** | `GET` | `/api/admin/classes/:id/readiness` | `ADMIN` | Các điều kiện phê duyệt của lớp |
+| **LMS** | `POST` | `/api/admin/classes/:id/approve` | `ADMIN` | Mở lớp (`OPEN`) khi đạt mọi điều kiện `CUR-10` và chưa tới ngày khai giảng; lỗi kèm `details.pendingChecks` |
 | **LMS** | `POST` | `/api/admin/classes/:id/reject` | `ADMIN` | Từ chối mở lớp |
 | **LMS** | `POST` | `/api/teacher/classes/:classId/sessions/generate` | `TEACHER` | Sinh & lưu hàng loạt buổi học từ `Class.schedule` trong transaction + khóa giáo viên (`Idempotency-Key`, `Asia/Ho_Chi_Minh` $\rightarrow$ UTC) (`CUR-11`) |
 | **LMS** | `POST` | `/api/teacher/classes/:classId/sessions` | `TEACHER` | Thêm buổi học vào kế hoạch lớp trong transaction + khóa giáo viên (`Idempotency-Key`) |
