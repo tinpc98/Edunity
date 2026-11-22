@@ -16,7 +16,6 @@ import {
   StarOutlined,
   WalletOutlined,
   IdcardOutlined,
-  AppstoreOutlined,
   FileTextOutlined,
   LockOutlined,
 } from "@ant-design/icons";
@@ -56,11 +55,6 @@ export default function TeacherLayout() {
             icon: <BookOutlined className="text-[18px]" />,
             disabled: !isVerified,
             label: renderVerifiedMenuItem(ROUTES.TEACHER.CLASSES, "Lớp của tôi"),
-          },
-          {
-            key: ROUTES.TEACHER.COURSES,
-            icon: <AppstoreOutlined className="text-[18px]" />,
-            label: <Link to={ROUTES.TEACHER.COURSES}>Danh mục khóa học</Link>,
           },
           {
             key: ROUTES.TEACHER.COURSE_PROPOSALS,

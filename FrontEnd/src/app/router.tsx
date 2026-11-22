@@ -33,7 +33,6 @@ import TeacherHomePage from "../features/teacher/home/TeacherHomePage";
 import TeacherClassesPage from "../features/teacher/classes/TeacherClassesPage";
 import CreateTeacherClassPage from "../features/teacher/classes/create/CreateTeacherClassPage";
 import TeacherClassDetailPage from "../features/teacher/classes/detail/TeacherClassDetailPage";
-import TeacherCourseCatalogPage from "../features/teacher/courses/TeacherCourseCatalogPage";
 import TeacherCourseProposalsPage from "../features/teacher/courses/TeacherCourseProposalsPage";
 import TeacherSchedulePage from "../features/teacher/schedule/TeacherSchedulePage";
 import TeacherProfilePage from "../features/teacher/profile/TeacherProfilePage";
@@ -280,10 +279,6 @@ const router = createBrowserRouter([
             <TeacherClassDetailPage />
           </RequireVerifiedTeacher>
         ),
-      },
-      {
-        path: "courses",
-        element: <TeacherCourseCatalogPage />,
       },
       {
         path: "course-proposals",
