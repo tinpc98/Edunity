@@ -106,8 +106,8 @@ describe("TASK G0-02: Mongoose Schema Inventory & Validation", () => {
       }
     });
 
-    test("G0-02.1.2: constants.js exports GRADE_LEVELS (15 levels) and COURSE_LEVELS (3 levels)", () => {
-      expect(GRADE_LEVELS).toHaveLength(15);
+    test("G0-02.1.2: constants.js exports GRADE_LEVELS (16 levels) and COURSE_LEVELS (3 levels)", () => {
+      expect(GRADE_LEVELS).toHaveLength(16);
       expect(GRADE_LEVELS).toContain("GRADE_1");
       expect(GRADE_LEVELS).toContain("GRADE_12");
       expect(GRADE_LEVELS).toContain("UNIVERSITY");

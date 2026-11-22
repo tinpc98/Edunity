@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const request = require("supertest");
 const app = require("../src/app");
-const { User, Category, Subject, Course, Class, Session, TeacherScheduleLock, TeacherSubjectAuthorization, CoursePricingPolicy } = require("../src/models");
+const { User, Category, Subject, Course, Class, Session, TeacherScheduleLock, TeacherSubjectAuthorization } = require("../src/models");
 const { hashPassword } = require("../src/utils/password");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
 
@@ -283,7 +283,20 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
     expect(dupErr).not.toBeNull();
     expect(dupErr.code).toBe(11000);
 
-    // A DRAFT needs neither policy nor contract (TEACHER-CLASS-FLOW-02); approval must still refuse it
+    // A null grade is only an older record now: the class itself needs an offered grade
+    const gradeLevel = "UNIVERSITY_EXAM_PREP";
+    await Course.updateOne({ _id: langCourse._id }, { $set: { gradeLevel } });
+    await TeacherSubjectAuthorization.create({
+      teacherId: teacher._id,
+      subjectId: ieltsSub._id,
+      categoryId: langCat._id,
+      gradeLevel,
+      level: "INTERMEDIATE",
+      status: "APPROVED",
+      createdBy: admin._id,
+    });
+
+    // A DRAFT needs no contract (TEACHER-CLASS-FLOW-02); approval must still refuse it
     const draftRes = await request(app)
       .post("/api/teacher/classes")
       .set(as(teacher))
@@ -323,28 +336,7 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
     });
     const approve = () => request(app).post(`/api/admin/classes/${blockedId}/approve`).set(as(admin)).send({});
 
-    // Without an active CoursePricingPolicy, approval rejects with 400 PRICING_POLICY_NOT_CONFIGURED
-    const noPolicyRes = await approve();
-    expect(noPolicyRes.statusCode).toBe(400);
-    expect(noPolicyRes.body.error).toBe("PRICING_POLICY_NOT_CONFIGURED");
-
-    // Seed an active CoursePricingPolicy (CUR-07 satisfied): approval MUST still refuse because TEA-12 contract is absent
-    await CoursePricingPolicy.create({
-      policyKey: "GLOBAL:PAID:ALL:ALL",
-      version: 1,
-      name: "Global Paid Policy",
-      scopeType: "GLOBAL",
-      classType: "PAID",
-      allowFree: false,
-      minPrice: 100000,
-      maxPrice: 2000000,
-      minSessions: 1,
-      maxSessions: 50,
-      effectiveFrom: new Date(Date.now() - 60000),
-      status: "ACTIVE",
-      createdBy: admin._id,
-    });
-
+    // No CoursePricingPolicy is needed any more: the missing TEA-12 contract is what refuses approval
     const res = await approve();
     expect(res.statusCode).toBe(403);
     expect(res.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");

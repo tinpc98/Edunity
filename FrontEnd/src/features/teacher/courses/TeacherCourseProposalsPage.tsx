@@ -34,7 +34,8 @@ import type {
   GradeLevel,
 } from "../../../types/catalog";
 import {
-  GRADE_LEVELS,
+  SUPPORTED_GRADE_LEVELS,
+  offeredGradeLevels,
   GRADE_LEVEL_LABELS,
   COURSE_LEVELS,
   COURSE_LEVEL_LABELS,
@@ -154,7 +155,7 @@ export default function TeacherCourseProposalsPage() {
       learningObjectives: proposal.learningObjectives,
       syllabus: proposal.syllabus,
       level: proposal.level,
-      gradeLevel: proposal.gradeLevel,
+      gradeLevel: SUPPORTED_GRADE_LEVELS.find((grade) => grade === proposal.gradeLevel), // an older one is chosen again
       prerequisites: proposal.prerequisites,
     });
     setIsModalOpen(true);
@@ -255,8 +256,7 @@ export default function TeacherCourseProposalsPage() {
   ];
 
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
-  // Same rule as the Admin course form: null = every grade level, [] = the category has none
-  const allowedGradeLevels = selectedCategory?.allowedGradeLevels ?? GRADE_LEVELS;
+  const allowedGradeLevels = offeredGradeLevels(selectedCategory);
 
   return (
     <div className="max-w-[1200px] mx-auto space-y-5 sm:space-y-6">
@@ -293,7 +293,7 @@ export default function TeacherCourseProposalsPage() {
             <li>Đề xuất cần đợi Admin xem xét (thường 1-3 ngày làm việc).</li>
             <li>Phản hồi và ghi chú của Admin sẽ hiển thị trong trạng thái đề xuất.</li>
             <li>Bạn có thể chỉnh sửa khi ở trạng thái <strong>Chờ duyệt</strong> hoặc <strong>Cần chỉnh sửa</strong>.</li>
-            <li>Quy tắc trạng thái Course khi duyệt đang chờ BA/PO xác nhận.</li>
+            <li>Khi được duyệt, khóa học được thêm vào danh mục và có thể dùng để tạo lớp khi đã có cấp độ.</li>
           </ul>
         }
         className="rounded-xl"
@@ -358,7 +358,9 @@ export default function TeacherCourseProposalsPage() {
             <Form.Item label="Danh mục" name="categoryId" rules={[{ required: true, message: "Vui lòng chọn danh mục" }]}>
               <Select
                 placeholder="Chọn danh mục"
-                options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                options={categories
+                  .filter((c) => offeredGradeLevels(c).length > 0 || c.id === selectedCategoryId)
+                  .map((c) => ({ value: c.id, label: c.name }))}
                 onChange={(val) => {
                   setSelectedCategoryId(val);
                   form.setFieldValue("subjectId", undefined);
@@ -385,11 +387,16 @@ export default function TeacherCourseProposalsPage() {
           </Form.Item>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-            <Form.Item name="gradeLevel" label="Khối lớp (tùy chọn)">
+            <Form.Item name="gradeLevel" label="Khối lớp" rules={[{ required: true, message: "Vui lòng chọn khối lớp" }]}>
               <Select
-                allowClear
-                disabled={allowedGradeLevels.length === 0}
-                placeholder={allowedGradeLevels.length === 0 ? "Danh mục này không áp dụng khối lớp" : "Chọn khối lớp"}
+                disabled={!selectedCategoryId || allowedGradeLevels.length === 0}
+                placeholder={
+                  !selectedCategoryId
+                    ? "Chọn danh mục trước"
+                    : allowedGradeLevels.length === 0
+                      ? "Danh mục ngoài phạm vi Lớp 6–12 và Ôn thi đại học"
+                      : "Chọn khối lớp"
+                }
                 options={allowedGradeLevels.map((g) => ({ value: g, label: GRADE_LEVEL_LABELS[g as GradeLevel] }))}
               />
             </Form.Item>

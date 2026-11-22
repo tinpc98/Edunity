@@ -29,6 +29,19 @@ export interface TeacherSubjectAuthorization {
   decisionHistory: TeacherSubjectAuthorizationDecision[];
 }
 
+/** GET /admin/subject-authorizations */
+export interface AdminSubjectAuthorization extends Omit<TeacherSubjectAuthorization, "id"> {
+  _id: string;
+  suspensionReason?: string | null;
+  teacher: {
+    id: string;
+    email: string;
+    status: string;
+    fullName: string | null;
+    verificationStatus: string | null;
+  } | null;
+}
+
 export interface CreateTeacherSubjectAuthorizationPayload {
   subjectId: string;
   categoryId?: string;

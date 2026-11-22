@@ -1,4 +1,4 @@
-const { GRADE_LEVELS } = require("../models/constants");
+const { GRADE_LEVELS, SUPPORTED_GRADE_LEVELS } = require("../models/constants");
 const { AppError } = require("./errors");
 
 const range = (from, to) => {
@@ -26,6 +26,8 @@ const allowedGradeLevelsForCategory = (category) => {
   if (!category) return null;
   let text = ` ${normalize(category.name)} ${normalize(category.slug)} `;
   const levels = [];
+  const examPrep = / (on|luyen) thi (vao )?dai hoc /.test(text);
+  if (examPrep) text = text.replace(/(on|luyen) thi (vao )?dai hoc/g, " "); // not a university category
 
   if (/ (tien tieu hoc|mam non|pre primary) /.test(text)) {
     levels.push("PRE_PRIMARY");
@@ -33,7 +35,9 @@ const allowedGradeLevelsForCategory = (category) => {
   }
   if (/ tieu hoc /.test(text)) levels.push(...range(1, 5));
   if (/ (trung hoc co so|thcs) /.test(text)) levels.push(...range(6, 9));
-  if (/ (trung hoc pho thong|thpt) /.test(text)) levels.push(...range(10, 12));
+  const highSchool = / (trung hoc pho thong|thpt) /.test(text);
+  if (highSchool) levels.push(...range(10, 12));
+  if (highSchool || examPrep) levels.push("UNIVERSITY_EXAM_PREP");
   if (/ (dai hoc|university) /.test(text)) levels.push("UNIVERSITY");
   if (/ (cao dang|college) /.test(text)) levels.push("COLLEGE");
 
@@ -58,4 +62,24 @@ const resolveGradeLevel = (category, gradeLevel) => {
   return gradeLevel;
 };
 
-module.exports = { allowedGradeLevelsForCategory, resolveGradeLevel };
+const assertSupportedGradeLevel = (gradeLevel) => {
+  if (SUPPORTED_GRADE_LEVELS.includes(gradeLevel)) return;
+  throw new AppError("Only grades 6-12 and university exam preparation are offered", "GRADE_LEVEL_NOT_SUPPORTED", 400, {
+    supportedGradeLevels: SUPPORTED_GRADE_LEVELS,
+  });
+};
+
+/** For new writes: a grade is required, must fit the Category and must be one that is offered. */
+const requireGradeLevel = (category, gradeLevel) => {
+  if (gradeLevel === undefined || gradeLevel === null || gradeLevel === "") {
+    const allowed = allowedGradeLevelsForCategory(category);
+    throw new AppError("gradeLevel is required", "GRADE_LEVEL_REQUIRED", 400, {
+      allowedGradeLevels: SUPPORTED_GRADE_LEVELS.filter((level) => !allowed || allowed.includes(level)),
+    });
+  }
+  const resolved = resolveGradeLevel(category, gradeLevel);
+  assertSupportedGradeLevel(resolved);
+  return resolved;
+};
+
+module.exports = { allowedGradeLevelsForCategory, resolveGradeLevel, requireGradeLevel, assertSupportedGradeLevel };

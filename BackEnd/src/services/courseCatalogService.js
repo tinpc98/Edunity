@@ -5,7 +5,7 @@ const { AppError } = require("../utils/errors");
 const { toPublic } = require("../utils/publicView");
 const { assertId, paged, validationError, escapeRegex, isBlank } = require("../utils/http");
 const { slugify, uniqueSlug } = require("../utils/slug");
-const { allowedGradeLevelsForCategory, resolveGradeLevel } = require("../utils/gradeLevel");
+const { allowedGradeLevelsForCategory, requireGradeLevel } = require("../utils/gradeLevel");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const STATUSES = ["ACTIVE", "INACTIVE"];
@@ -633,7 +633,7 @@ const insertCourse = async ({ adminId, subject, category, data, sourceProposalId
     title: data.title,
     slug: await uniqueSlug(Course, data.title),
     level: resolveLevel(data.level),
-    gradeLevel: resolveGradeLevel(category, data.gradeLevel),
+    gradeLevel: requireGradeLevel(category, data.gradeLevel),
     status: "ACTIVE",
     sourceProposalId,
     createdBy: adminId,
@@ -684,7 +684,10 @@ const updateCourse = async (adminId, courseId, body) => {
   }
   const levelUpdated = body.level !== undefined;
   if (levelUpdated) course.level = resolveLevel(body.level);
-  if (body.gradeLevel !== undefined) course.gradeLevel = resolveGradeLevel(category, body.gradeLevel); // FR-ADM-22
+  // FR-ADM-22. An older grade may stay, only a new one has to be offered
+  if (body.gradeLevel !== undefined && (body.gradeLevel || null) !== (course.gradeLevel || null)) {
+    course.gradeLevel = requireGradeLevel(category, body.gradeLevel);
+  }
 
   if (body.status !== undefined) {
     const nextStatus = resolveStatus(body.status);

@@ -3,7 +3,7 @@ const { CourseProposal, Category, Subject, User, SyllabusVersion, CurriculumUnit
 const { COURSE_LEVELS } = require("../models/constants");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { assertId, paged, validationError, isBlank } = require("../utils/http");
-const { resolveGradeLevel } = require("../utils/gradeLevel");
+const { requireGradeLevel } = require("../utils/gradeLevel");
 const catalog = require("./courseCatalogService");
 const { audit } = require("./auditService");
 const { notify, notifyAdmins } = require("./notificationService");
@@ -12,6 +12,21 @@ const { getVerifiedTeacher } = require("./teacherClassService");
 
 const TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "estimatedDuration", "curriculumReference"];
 const STATUSES = ["PENDING_REVIEW", "NEED_CHANGES", "APPROVED", "REJECTED"];
+
+const proposalNotEditable = () =>
+  new AppError("Course proposal can no longer be edited", "COURSE_PROPOSAL_NOT_EDITABLE", 409);
+const proposalChanged = () =>
+  new AppError("Course proposal changed after it was loaded; review it again", "COURSE_PROPOSAL_CHANGED", 409);
+
+// Checked on submission and again on approval: the catalog can change in between
+const assertCatalogScope = (category, subject) => {
+  if (category.status !== "ACTIVE" || subject.status !== "ACTIVE") {
+    throw new AppError("Category or Subject is not active", "PROPOSAL_CATALOG_INACTIVE", 400);
+  }
+  if (subject.categoryId.toString() !== category._id.toString()) {
+    throw new AppError("Subject does not belong to the selected category", "SUBJECT_CATEGORY_MISMATCH", 400);
+  }
+};
 
 const redactTeacherProposalView = (doc) => {
   const view = withoutReviewer(doc);
@@ -151,12 +166,7 @@ const buildProposalData = async (data) => {
 
   const category = await catalog.getCategoryOrThrow(data.categoryId);
   const subject = await catalog.getSubjectOrThrow(data.subjectId);
-  if (category.status !== "ACTIVE" || subject.status !== "ACTIVE") {
-    throw validationError("Category or Subject is not active");
-  }
-  if (subject.categoryId.toString() !== category._id.toString()) {
-    throw new AppError("Subject does not belong to the selected category", "SUBJECT_CATEGORY_MISMATCH", 400);
-  }
+  assertCatalogScope(category, subject);
   const level = catalog.resolveLevel(data.level);
 
   const proposal = {
@@ -164,7 +174,7 @@ const buildProposalData = async (data) => {
     subjectId: subject._id,
     title: data.title,
     level,
-    gradeLevel: resolveGradeLevel(category, data.gradeLevel),
+    gradeLevel: requireGradeLevel(category, data.gradeLevel),
   };
   for (const field of TEXT_FIELDS) proposal[field] = data[field];
 
@@ -227,9 +237,8 @@ const updateMyProposal = async (teacherId, proposalId, body = {}) => {
   assertId(proposalId, "Course proposal not found", "COURSE_PROPOSAL_NOT_FOUND");
   const proposal = await CourseProposal.findOne({ _id: proposalId, teacherId });
   if (!proposal) throw new AppError("Course proposal not found", "COURSE_PROPOSAL_NOT_FOUND", 404);
-  if (!["PENDING_REVIEW", "NEED_CHANGES"].includes(proposal.status)) {
-    throw new AppError("Course proposal can no longer be edited", "COURSE_PROPOSAL_NOT_EDITABLE", 409);
-  }
+  if (!["PENDING_REVIEW", "NEED_CHANGES"].includes(proposal.status)) throw proposalNotEditable();
+  const statusRead = proposal.status;
 
   const data = await buildProposalData({ ...proposal.toObject(), ...body });
   const nextRevision = (proposal.revisionNumber || 1) + 1;
@@ -249,7 +258,14 @@ const updateMyProposal = async (teacherId, proposalId, body = {}) => {
     note: body.revisionNote ? String(body.revisionNote).trim() : null,
     at: now,
   });
-  await proposal.save();
+  // The status is part of the write, so an edit still in flight cannot land on a proposal reviewed meanwhile
+  proposal.$where = { status: statusRead };
+  try {
+    await proposal.save();
+  } catch (err) {
+    if (["DocumentNotFoundError", "VersionError"].includes(err.name)) throw proposalNotEditable();
+    throw err;
+  }
   return redactTeacherProposalView(proposal.toObject());
 };
 
@@ -312,9 +328,11 @@ const assertPendingReview = (proposal) => {
 const approveProposal = async (adminId, proposalId, body = {}) => {
   const proposal = await getProposalOrThrow(proposalId);
   assertPendingReview(proposal);
+  if (body.revisionNumber !== undefined && body.revisionNumber !== proposal.revisionNumber) throw proposalChanged();
 
   const category = await catalog.getCategoryOrThrow(proposal.categoryId);
   const subject = await catalog.getSubjectOrThrow(proposal.subjectId);
+  assertCatalogScope(category, subject);
   const data = proposal.toObject();
   if (body.gradeLevel !== undefined) data.gradeLevel = body.gradeLevel;
   if (body.curriculumReference !== undefined) data.curriculumReference = body.curriculumReference;
@@ -331,6 +349,29 @@ const approveProposal = async (adminId, proposalId, body = {}) => {
   let initialSyllabusVersion = null;
   try {
     await session.withTransaction(async () => {
+      // Claimed before anything is created: a second Admin, or an edit since the read above, stops here
+      const claimed = await CourseProposal.updateOne(
+        { _id: proposal._id, status: "PENDING_REVIEW", updatedAt: proposal.updatedAt },
+        {
+          $set: { status: "APPROVED", reviewedBy: adminId, reviewedAt: now, reviewNote: body.reviewNote || null },
+          $push: {
+            revisionHistory: {
+              revisionNumber: proposal.revisionNumber || 1,
+              action: "APPROVED",
+              actorId: adminId,
+              actorRole: "ADMIN",
+              note: body.reviewNote || null,
+              at: now,
+            },
+          },
+        },
+        { session }
+      );
+      if (claimed.modifiedCount !== 1) {
+        assertPendingReview(await CourseProposal.findById(proposal._id).session(session));
+        throw proposalChanged();
+      }
+
       course = await catalog.insertCourse({ adminId, subject, category, data, sourceProposalId: proposal._id, session });
 
       if (hasUnitsForSyllabus) {
@@ -381,32 +422,7 @@ const approveProposal = async (adminId, proposalId, body = {}) => {
         course.syllabus = syllabusSummaryText;
       }
 
-      const updated = await CourseProposal.updateOne(
-        { _id: proposal._id, status: "PENDING_REVIEW" },
-        {
-          $set: {
-            status: "APPROVED",
-            approvedCourseId: course._id,
-            reviewedBy: adminId,
-            reviewedAt: now,
-            reviewNote: body.reviewNote || null,
-          },
-          $push: {
-            revisionHistory: {
-              revisionNumber: proposal.revisionNumber || 1,
-              action: "APPROVED",
-              actorId: adminId,
-              actorRole: "ADMIN",
-              note: body.reviewNote || null,
-              at: now,
-            },
-          },
-        },
-        { session }
-      );
-      if (updated.modifiedCount !== 1) {
-        throw new AppError("Course proposal is not pending review", "COURSE_PROPOSAL_NOT_PENDING", 409);
-      }
+      await CourseProposal.updateOne({ _id: proposal._id }, { $set: { approvedCourseId: course._id } }, { session });
 
       await audit(
         {

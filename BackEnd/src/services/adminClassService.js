@@ -82,13 +82,10 @@ const approveClass = async (adminId, classId, body = {}, options = {}) => {
     throw new AppError("Class is not pending approval", "CLASS_NOT_PENDING_APPROVAL", 409);
   }
 
-  const { checks, course, level, pricingResult } = await evaluateClass(cls, {
-    pricingPolicyVerifier: options.pricingPolicyVerifier,
-    contractVerifier: options.contractVerifier,
-  });
+  const { checks, course, level } = await evaluateClass(cls, { contractVerifier: options.contractVerifier });
   throwFailedChecks(checks);
 
-  const snapshots = await captureClassSnapshots({ course, pricingResult });
+  const snapshots = await captureClassSnapshots({ course });
 
   const updated = await runInTransaction(async (session) => {
     const doc = await Class.findOneAndUpdate(
@@ -123,7 +120,6 @@ const approveClass = async (adminId, classId, body = {}, options = {}) => {
           status: "OPEN",
           reviewNote: doc.reviewNote,
           syllabusVersionId: doc.syllabusVersionId ? String(doc.syllabusVersionId) : null,
-          pricingPolicyVersion: doc.pricingPolicyVersion || null,
         },
       },
       session

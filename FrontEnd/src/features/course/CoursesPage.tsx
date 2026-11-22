@@ -24,7 +24,7 @@ import type { CourseSearchParams, GradeLevel, CourseLevel } from "../../types/ca
 import {
   GRADE_LEVEL_LABELS,
   COURSE_LEVEL_LABELS,
-  GRADE_LEVELS,
+  SUPPORTED_GRADE_LEVELS,
   COURSE_LEVELS,
 } from "../../types/catalog";
 import { ROUTES } from "../../routes/routePaths";
@@ -171,7 +171,7 @@ export default function CoursesPage() {
                 placeholder="Tất cả khối lớp"
                 allowClear
                 className="w-full"
-                options={GRADE_LEVELS.map((g) => ({ value: g, label: GRADE_LEVEL_LABELS[g] }))}
+                options={SUPPORTED_GRADE_LEVELS.map((g) => ({ value: g, label: GRADE_LEVEL_LABELS[g] }))}
               />
             </div>
 

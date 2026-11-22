@@ -47,11 +47,11 @@ describe("TASK CUR-01: Course Grade Level, Curriculum Reference & Hierarchy Suit
       expect(COURSE_LEVELS).not.toContain("BASIC"); // Schema enum must never contain BASIC
     });
 
-    test("CUR-01.SCH.4: Course schema maintains GRADE_LEVELS enum with 15 standardized grades", () => {
+    test("CUR-01.SCH.4: Course schema maintains GRADE_LEVELS enum with 16 standardized grades", () => {
       const gradeField = Course.schema.paths.gradeLevel;
       expect(gradeField).toBeDefined();
       expect(gradeField.options.enum).toEqual(GRADE_LEVELS);
-      expect(GRADE_LEVELS).toHaveLength(15);
+      expect(GRADE_LEVELS).toHaveLength(16);
       expect(GRADE_LEVELS).toContain("PRE_PRIMARY");
       expect(GRADE_LEVELS).toContain("GRADE_1");
       expect(GRADE_LEVELS).toContain("GRADE_12");

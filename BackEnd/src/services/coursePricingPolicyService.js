@@ -669,7 +669,7 @@ const resolveEffectivePolicy = async ({
 };
 
 /**
- * Official CUR-07 verifier compatible with classCreationGateService (`assertPricingPolicyGate`).
+ * CUR-07 verifier behind the preview endpoints only: classes follow the fixed range in classCreationGateService.
  */
 const verifyClassPricingPolicy = async ({
   course,

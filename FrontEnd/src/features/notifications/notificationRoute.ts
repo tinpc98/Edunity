@@ -61,10 +61,16 @@ export function getNotificationRoute(type: string | undefined, role: Role): stri
     if (t.startsWith("COURSE_PROPOSAL_")) return ROUTES.ADMIN.COURSE_PROPOSALS;
     if (t.startsWith("CLASS_")) return ROUTES.ADMIN.CLASSES;
     if (t.startsWith("TEACHER_VERIF")) return ROUTES.ADMIN.TEACHER_VERIFICATIONS;
-    // Incidents, violations, discipline cases, refund reviews and reschedule requests are reviewed there
+    if (t.startsWith("TEACHER_SUBJECT_AUTH_")) return ROUTES.ADMIN.SUBJECT_AUTHORIZATIONS;
+    // Only a verified teacher is sent a contract, and that list opens on the pending ones
+    if (t.startsWith("TEACHER_CONTRACT_")) return `${ROUTES.ADMIN.TEACHER_VERIFICATIONS}?status=VERIFIED`;
+    if (t.startsWith("TEACHER_BANK_ACCOUNT_")) return `${ROUTES.ADMIN.PAYOUTS}?tab=bank-accounts`;
+    if (t.startsWith("GUARDIAN_CONSENT_")) return ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS;
+    // Incidents, violations, discipline cases, refund reviews and reschedule requests are reviewed there.
+    // Not every TEACHER_ event: an unknown type must fall back to the notifications page.
     if (
       t.startsWith("ADMIN_") ||
-      t.startsWith("TEACHER_") ||
+      t.startsWith("TEACHER_INCIDENT_") ||
       t.startsWith("SESSION_") ||
       t.startsWith("INCIDENT_") ||
       t.startsWith("RESCHEDULE_")
@@ -77,6 +83,14 @@ export function getNotificationRoute(type: string | undefined, role: Role): stri
   if (role === "TEACHER") {
     if (t.startsWith("CLASS_")) return ROUTES.TEACHER.CLASSES;
     if (t.startsWith("COURSE_PROPOSAL_")) return ROUTES.TEACHER.COURSE_PROPOSALS;
+    if (
+      t.startsWith("TEACHER_SUBJECT_AUTH_") ||
+      t.startsWith("TEACHER_CONTRACT_") ||
+      t.startsWith("TEACHER_REVERIFICATION_")
+    ) {
+      return ROUTES.TEACHER.PROFILE;
+    }
+    if (t.startsWith("TEACHER_BANK_ACCOUNT_")) return ROUTES.TEACHER.REVENUE;
     // Session lifecycle, lateness/absence warnings, incident reports and reschedules live on the schedule page
     if (
       t.startsWith("SESSION_") ||

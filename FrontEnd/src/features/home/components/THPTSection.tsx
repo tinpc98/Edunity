@@ -3,7 +3,7 @@ import HomeClassSection, { type HomeClassFilter } from "./HomeClassSection";
 import { useHomeOpenClasses } from "../hooks/useHomeData";
 import type { BackendGradeLevel } from "../../../types/classDiscovery";
 
-const THPT_GRADES: BackendGradeLevel[] = ["GRADE_10", "GRADE_11", "GRADE_12"];
+const THPT_GRADES: BackendGradeLevel[] = ["GRADE_10", "GRADE_11", "GRADE_12", "UNIVERSITY_EXAM_PREP"];
 
 export default function THPTSection() {
   const { data = [], isLoading } = useHomeOpenClasses();
@@ -26,7 +26,7 @@ export default function THPTSection() {
     <HomeClassSection
       categoryTag="Lớp THPT Sắp Khai Giảng"
       title="Lớp THPT Sắp Khai Giảng"
-      viewAllLink="/classes?grades=GRADE_10,GRADE_11,GRADE_12"
+      viewAllLink="/classes?grades=GRADE_10,GRADE_11,GRADE_12,UNIVERSITY_EXAM_PREP"
       viewAllText="Xem tất cả"
       featuredBadge="Khai giảng gần nhất"
       emptyText="Hiện chưa có lớp THPT nào đang mở đăng ký."

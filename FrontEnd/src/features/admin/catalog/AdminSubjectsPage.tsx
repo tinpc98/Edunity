@@ -33,6 +33,7 @@ import type {
   CreateSubjectPayload,
   UpdateSubjectPayload,
 } from "../../../types/catalog";
+import { GRADE_LEVEL_LABELS } from "../../../types/catalog";
 
 const { TextArea } = Input;
 
@@ -497,7 +498,7 @@ export default function AdminSubjectsPage() {
                       </div>
                       <div className="flex items-center gap-1">
                         {c.level && <Tag color="purple" className="text-[10px]">{c.level}</Tag>}
-                        {c.gradeLevel && <Tag color="blue" className="text-[10px]">{c.gradeLevel}</Tag>}
+                        {c.gradeLevel && <Tag color="blue" className="text-[10px]">{GRADE_LEVEL_LABELS[c.gradeLevel]}</Tag>}
                       </div>
                     </div>
                   ))}

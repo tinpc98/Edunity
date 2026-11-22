@@ -9,10 +9,22 @@ export const GRADE_LEVELS = [
   "GRADE_1", "GRADE_2", "GRADE_3", "GRADE_4", "GRADE_5",
   "GRADE_6", "GRADE_7", "GRADE_8", "GRADE_9",
   "GRADE_10", "GRADE_11", "GRADE_12",
+  "UNIVERSITY_EXAM_PREP",
   "UNIVERSITY",
   "COLLEGE",
 ] as const;
 export type GradeLevel = (typeof GRADE_LEVELS)[number];
+
+/** Offered for anything new (Backend SUPPORTED_GRADE_LEVELS). GRADE_LEVELS also keeps the values of older records. */
+export const SUPPORTED_GRADE_LEVELS: readonly GradeLevel[] = [
+  "GRADE_6", "GRADE_7", "GRADE_8", "GRADE_9",
+  "GRADE_10", "GRADE_11", "GRADE_12",
+  "UNIVERSITY_EXAM_PREP",
+];
+
+/** The offered grades a category accepts; empty when the whole category is out of scope. */
+export const offeredGradeLevels = (category?: { allowedGradeLevels: GradeLevel[] | null }): readonly GradeLevel[] =>
+  SUPPORTED_GRADE_LEVELS.filter((grade) => category?.allowedGradeLevels?.includes(grade) ?? true);
 
 export const COURSE_LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED"] as const;
 export type CourseLevel = (typeof COURSE_LEVELS)[number];
@@ -46,6 +58,7 @@ export const GRADE_LEVEL_LABELS: Record<GradeLevel, string> = {
   GRADE_10: "Lớp 10",
   GRADE_11: "Lớp 11",
   GRADE_12: "Lớp 12",
+  UNIVERSITY_EXAM_PREP: "Ôn thi đại học",
   UNIVERSITY: "Đại học",
   COLLEGE: "Cao đẳng",
 };
@@ -352,6 +365,8 @@ export interface UpdateProposalPayload extends Partial<CreateProposalPayload> {}
 
 export interface ApproveProposalPayload {
   gradeLevel?: GradeLevel | null;
+  /** The revision on screen; a newer one is refused with COURSE_PROPOSAL_CHANGED */
+  revisionNumber?: number;
   reviewNote?: string;
   syllabusDraft?: {
     summary?: string;

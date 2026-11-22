@@ -1,3 +1,4 @@
+import type { GradeLevel } from "./catalog";
 import type { PricingPolicySnapshot } from "./courseGovernance";
 
 /**
@@ -5,22 +6,7 @@ import type { PricingPolicySnapshot } from "./courseGovernance";
  * Aligned with Backend MongoDB schema (Class, Course, Subject, User/Teacher)
  */
 
-export type BackendGradeLevel =
-  | "PRE_PRIMARY"
-  | "GRADE_1"
-  | "GRADE_2"
-  | "GRADE_3"
-  | "GRADE_4"
-  | "GRADE_5"
-  | "GRADE_6"
-  | "GRADE_7"
-  | "GRADE_8"
-  | "GRADE_9"
-  | "GRADE_10"
-  | "GRADE_11"
-  | "GRADE_12"
-  | "UNIVERSITY"
-  | "COLLEGE";
+export type BackendGradeLevel = GradeLevel;
 
 export type BackendClassType = "FREE" | "PAID";
 
