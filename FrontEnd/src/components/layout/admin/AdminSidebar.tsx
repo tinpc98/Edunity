@@ -227,7 +227,7 @@ export default function AdminSidebar({
     if (path === ROUTES.ADMIN.HOME) {
       return location.pathname === ROUTES.ADMIN.HOME;
     }
-    return location.pathname.startsWith(path);
+    return location.pathname === path || location.pathname.startsWith(path + "/");
   };
 
   return (

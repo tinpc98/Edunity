@@ -66,7 +66,7 @@ export default function AdminSyllabusManagementPage() {
 
   const coursesQuery = useQuery({
     queryKey: ["admin-syllabus-courses"],
-    queryFn: () => courseService.searchCourses({ page: 1, pageSize: 100 }),
+    queryFn: () => courseService.adminListCourses({ page: 1, pageSize: 100, status: "ALL" }),
   });
   const courses = coursesQuery.data?.items ?? [];
   const selectedCourse = courses.find((course) => course.id === courseId);
@@ -334,13 +334,6 @@ export default function AdminSyllabusManagementPage() {
 
   return (
     <div className="space-y-5">
-      <Alert
-        type="info"
-        showIcon
-        message="Quản lý syllabus có version thật từ Backend"
-        description="Chỉ bản nháp có thể sửa. Công bố sẽ lưu trữ phiên bản đã công bố trước đó; lịch sử không bị ghi đè. Danh sách khóa học hiện dùng API công khai nên chỉ trả khóa ACTIVE."
-      />
-
       {coursesQuery.isError && (
         <Alert
           type="error"
@@ -365,9 +358,11 @@ export default function AdminSyllabusManagementPage() {
             }}
             options={courses.map((course: Course) => ({
               value: course.id,
-              label: `${course.title} · ${course.categoryName} / ${course.subjectName}`,
+              label: `${course.title} · ${course.categoryName} / ${course.subjectName}${
+                course.status === "INACTIVE" ? " (Tạm ngưng)" : ""
+              }`,
             }))}
-            placeholder="Chọn khóa học ACTIVE"
+            placeholder="Chọn khóa học để quản lý giáo trình"
             className="w-full"
           />
         </div>
