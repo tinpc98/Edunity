@@ -313,9 +313,10 @@ export default function AdminCoursesPage() {
       queryClient.invalidateQueries({ queryKey: ["public-courses"] });
       queryClient.invalidateQueries({ queryKey: ["adminTrash"] });
     },
-    onError: (err: any) => {
-      const msg = err?.message || err?.error || "Không thể xóa khóa học này do có lớp học hoặc ràng buộc liên quan.";
-      setDeleteErrorMsg(msg);
+    onError: (err: unknown) => {
+      setDeleteErrorMsg(
+        getFriendlyErrorMessage(err, "Không thể xóa khóa học này do có lớp học hoặc ràng buộc liên quan.")
+      );
     },
   });
 

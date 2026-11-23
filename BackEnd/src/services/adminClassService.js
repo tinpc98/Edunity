@@ -131,6 +131,14 @@ const approveClass = async (adminId, classId, body = {}, options = {}) => {
   return updated;
 };
 
+// A rejected class never runs: its planned sessions must leave schedules, reminders and the no-show job
+const cancelUnstartedSessions = (classId, session) =>
+  Session.updateMany(
+    { classId, status: { $in: ["SCHEDULED", "WAITING"] } },
+    { $set: { status: "CANCELLED", roomState: "CANCELLED", lifecycleState: "CANCELLED" } },
+    { session }
+  );
+
 // BR-50: Admin can reject an invalid/incomplete pending class without being blocked by gates
 const rejectClass = async (adminId, classId, body = {}) => {
   if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
@@ -167,6 +175,7 @@ const rejectClass = async (adminId, classId, body = {}) => {
       },
       session
     );
+    await cancelUnstartedSessions(doc._id, session);
     return doc;
   });
 
@@ -416,6 +425,7 @@ module.exports = {
   getClassReadiness,
   approveClass,
   rejectClass,
+  cancelUnstartedSessions,
   requestChanges,
   requestClassChanges: requestChanges,
   deleteClass,

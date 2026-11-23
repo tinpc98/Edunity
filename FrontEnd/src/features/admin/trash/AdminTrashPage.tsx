@@ -6,7 +6,7 @@ import {
   Tag,
   Button,
   Input,
-  Select,
+  Tabs,
   Modal,
   Alert,
   Descriptions,
@@ -31,6 +31,7 @@ import dayjs from "dayjs";
 import AdminPageHeader from "../../../components/admin/AdminPageHeader";
 import { trashService } from "../../../services/trash.service";
 import type { TrashItem, TrashType } from "../../../types/trash";
+import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 
 const TYPE_CONFIG: Record<
   string,
@@ -96,8 +97,8 @@ export default function AdminTrashPage() {
       queryClient.invalidateQueries({ queryKey: ["courses"] });
       queryClient.invalidateQueries({ queryKey: ["adminPendingClasses"] });
     },
-    onError: (err: any) => {
-      const msg = err?.message || err?.error || "Không thể khôi phục bản ghi này";
+    onError: (err: unknown) => {
+      const msg = getFriendlyErrorMessage(err, "Không thể khôi phục bản ghi này");
       message.error(msg);
     },
   });
@@ -126,8 +127,8 @@ export default function AdminTrashPage() {
       queryClient.invalidateQueries({ queryKey: ["courses"] });
       queryClient.invalidateQueries({ queryKey: ["adminPendingClasses"] });
     },
-    onError: (err: any) => {
-      const msg = err?.message || err?.error || "Không thể xóa vĩnh viễn bản ghi này";
+    onError: (err: unknown) => {
+      const msg = getFriendlyErrorMessage(err, "Không thể xóa vĩnh viễn bản ghi này");
       message.error(msg);
     },
   });
@@ -176,33 +177,19 @@ export default function AdminTrashPage() {
 
   const columns = [
     {
-      title: "Loại dữ liệu",
-      dataIndex: "type",
-      key: "type",
-      width: 130,
-      render: (type: string) => {
-        const config = TYPE_CONFIG[type] || {
-          label: type,
-          color: "default",
-          icon: <DeleteOutlined />,
-        };
-        return (
-          <Tag
-            color={config.color}
-            icon={config.icon}
-            className="font-bold text-xs uppercase px-2 py-0.5 rounded-md"
-          >
-            {config.label}
-          </Tag>
-        );
-      },
-    },
-    {
       title: "Tên bản ghi",
       key: "title",
       render: (_: any, record: TrashItem) => (
         <div className="space-y-0.5 max-w-md">
-          <div className="font-bold text-sm text-[#163B40] leading-snug">{record.title}</div>
+          <div className="font-bold text-sm text-[#163B40] leading-snug">
+            {/* The type tab already says it; "Tất cả" still needs to tell rows apart */}
+            {selectedType === "ALL" && (
+              <Tag color={TYPE_CONFIG[record.type]?.color} className="mr-2 text-[11px] font-semibold">
+                {TYPE_CONFIG[record.type]?.label || record.type}
+              </Tag>
+            )}
+            {record.title}
+          </div>
           <div className="text-xs text-slate-500 font-mono">
             {record.codeOrSlug}
             {record.parentInfo && (
@@ -323,25 +310,26 @@ export default function AdminTrashPage() {
 
       {/* Main Filter & Table Card */}
       <Card className="rounded-2xl shadow-xs border-[#D6E5E2] p-2 bg-white">
+        <Tabs
+          activeKey={selectedType}
+          onChange={(key) => {
+            setSelectedType(key as TrashType);
+            setCurrentPage(1);
+          }}
+          className="font-medium"
+          items={[
+            { key: "ALL", label: "Tất cả", icon: <DeleteOutlined /> },
+            ...Object.entries(TYPE_CONFIG).map(([key, config]) => ({
+              key,
+              label: config.label,
+              icon: config.icon,
+            })),
+          ]}
+        />
+
         {/* Filter Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-5 pb-4 border-b border-[#F0FDFA]">
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-            <Select
-              value={selectedType}
-              onChange={(val) => {
-                setSelectedType(val);
-                setCurrentPage(1);
-              }}
-              className="w-full sm:w-[190px] h-10 font-semibold"
-              options={[
-                { value: "ALL", label: "Tất cả loại dữ liệu" },
-                { value: "CATEGORY", label: "📁 Danh mục" },
-                { value: "SUBJECT", label: "📖 Môn học" },
-                { value: "COURSE", label: "📚 Khóa học" },
-                { value: "CLASS", label: "🎓 Lớp học" },
-                { value: "REVIEW", label: "💬 Đánh giá" },
-              ]}
-            />
             <Input
               placeholder="Tìm theo tên bản ghi, slug, mã..."
               prefix={<SearchOutlined className="text-[#0D9488] mr-1" />}
@@ -356,7 +344,7 @@ export default function AdminTrashPage() {
           </div>
 
           <div className="text-xs text-slate-500 font-medium">
-            Tổng số bản ghi trong thùng rác:{" "}
+            Số bản ghi:{" "}
             <strong className="text-[#0D9488] text-sm font-bold">{data?.total ?? 0}</strong>
           </div>
         </div>

@@ -135,7 +135,7 @@ const checkPermanentDeleteEligibility = async (type, id) => {
             canPermanentDelete = false;
             permanentDeleteBlockReason = `Không thể xóa vĩnh viễn vì khóa học có ${refundReviewCount} hồ sơ rà soát tài chính liên quan.`;
           } else {
-            const campaignCount = await ScholarshipCampaign.countDocuments({ courseIds: id });
+            const campaignCount = await ScholarshipCampaign.countDocuments({ "scope.courseIds": id });
             if (campaignCount > 0) {
               canPermanentDelete = false;
               permanentDeleteBlockReason = `Không thể xóa vĩnh viễn vì khóa học đang thuộc ${campaignCount} chiến dịch học bổng.`;

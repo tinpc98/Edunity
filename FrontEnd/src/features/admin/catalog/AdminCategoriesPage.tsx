@@ -100,8 +100,8 @@ export default function AdminCategoriesPage() {
       queryClient.invalidateQueries({ queryKey: ["public-categories"] });
       queryClient.invalidateQueries({ queryKey: ["adminTrash"] });
     },
-    onError: (err: any) => {
-      const msg = err?.message || err?.error || "Không thể xóa danh mục này do có ràng buộc dữ liệu.";
+    onError: (err: unknown) => {
+      const msg = getFriendlyErrorMessage(err, "Không thể xóa danh mục này do có ràng buộc dữ liệu.");
       setDeleteErrorMsg(msg);
     },
   });

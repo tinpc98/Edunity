@@ -1487,6 +1487,10 @@ const evaluateSessionLifecycleAt = async (sessionId, now = new Date()) => {
   if (session.status === "INTERRUPTED" && session.roomState === "ENDED") {
     return session.toObject();
   }
+  // A class that was never opened has nobody to teach, and its teacher is not allowed to start the session (B-1)
+  if (await mongoose.model("Class").exists({ _id: session.classId, status: { $in: ["DRAFT", "PENDING_APPROVAL", "NEED_CHANGES", "REJECTED"] } })) {
+    return session.toObject();
+  }
 
   // Reconcile with trusted LiveKit room state if LiveKit is configured/mocked, then close connections nobody has
   // confirmed for PRESENCE_HEARTBEAT_TIMEOUT_MS. Both write the Session through their own copy: reload it.

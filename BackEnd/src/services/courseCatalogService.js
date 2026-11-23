@@ -878,14 +878,16 @@ const deleteCourse = async (adminId, courseId, reason = null) => {
       const { ScholarshipCampaign } = require("../models");
       const scholarshipCount = await ScholarshipCampaign.countDocuments(
         {
-          courseIds: course._id,
+          "scope.courseIds": course._id,
+          // A CLOSED campaign takes no new students; a DRAFT can still be published with this scope
+          status: { $ne: "CLOSED" },
           ...NOT_DELETED,
         },
         { session }
       );
       if (scholarshipCount > 0) {
         throw new AppError(
-          `Cannot delete course: referenced in ${scholarshipCount} active scholarship campaign(s). Deactivate the course by setting status to INACTIVE instead.`,
+          `Cannot delete course: referenced in ${scholarshipCount} draft or open scholarship campaign(s). Deactivate the course by setting status to INACTIVE instead.`,
           "COURSE_IN_SCHOLARSHIP_CAMPAIGN",
           409,
           { scholarshipCount, recommendedAction: "SET_INACTIVE" }
