@@ -1,10 +1,50 @@
 import { FetchError } from "../api/apiClient";
 import { CLASS_PRICE_HINT } from "./classForm";
 
+const INACTIVE_INSTEAD = (what: string) => `Hãy chuyển ${what} sang Tạm ngưng thay vì xóa.`;
+// Catalog soft-delete refusals: [count field in details, message with {n} for the count]
+const DELETE_BLOCKS: Record<string, [string, string]> = {
+  COURSE_HAS_CLASSES: ["classCount", `Không thể xóa: khóa học còn {n}lớp học. ${INACTIVE_INSTEAD("khóa học")}`],
+  COURSE_HAS_ENROLLMENTS: ["enrollmentCount", `Không thể xóa: khóa học đã có {n}lượt ghi danh. ${INACTIVE_INSTEAD("khóa học")}`],
+  COURSE_HAS_REFUND_REVIEWS: ["refundReviewCount", `Không thể xóa: khóa học có {n}hồ sơ rà soát hoàn tiền. ${INACTIVE_INSTEAD("khóa học")}`],
+  COURSE_IN_SCHOLARSHIP_CAMPAIGN: ["scholarshipCount", `Không thể xóa: khóa học thuộc {n}chiến dịch học bổng đang nháp hoặc đang mở. ${INACTIVE_INSTEAD("khóa học")}`],
+  COURSE_IN_LEARNING_PATH: ["learningPathCount", `Không thể xóa: khóa học nằm trong {n}lộ trình học tập. ${INACTIVE_INSTEAD("khóa học")}`],
+  COURSE_HAS_ACTIVE_PRICING_POLICY: ["activePolicyCount", `Không thể xóa: khóa học còn {n}chính sách giá đang áp dụng. ${INACTIVE_INSTEAD("khóa học")}`],
+  CATEGORY_HAS_SUBJECTS: ["subjectCount", `Không thể xóa: danh mục còn {n}môn học. ${INACTIVE_INSTEAD("danh mục")}`],
+  CATEGORY_HAS_COURSES: ["courseCount", `Không thể xóa: danh mục còn {n}khóa học. ${INACTIVE_INSTEAD("danh mục")}`],
+  CATEGORY_HAS_CLASSES: ["classCount", `Không thể xóa: danh mục còn {n}lớp học. ${INACTIVE_INSTEAD("danh mục")}`],
+  CATEGORY_IN_LEARNING_PATH: ["learningPathCount", `Không thể xóa: danh mục nằm trong {n}lộ trình học tập. ${INACTIVE_INSTEAD("danh mục")}`],
+  SUBJECT_HAS_COURSES: ["activeCourseCount", "Không thể xóa: môn học còn {n}khóa học. Hãy xóa hoặc chuyển các khóa học này sang môn khác trước."],
+  SUBJECT_HAS_CLASSES: ["activeClassCount", "Không thể xóa: môn học còn {n}lớp học. Hãy hủy hoặc xóa các lớp học này trước."],
+  SUBJECT_HAS_TEACHER_AUTHORIZATIONS: ["authCount", `Không thể xóa: môn học có {n}quyền giảng dạy của giáo viên (kể cả quyền đã đình chỉ). ${INACTIVE_INSTEAD("môn học")}`],
+};
+
+// Restore refusals: the detail field tells which parent or slug is in the way
+const restoreConflictMessage = (details: Record<string, unknown> = {}) => {
+  if (details.slug) return `Không thể khôi phục: slug '${details.slug}' đang trùng với một bản ghi đang hoạt động. Hãy đổi slug của bản ghi đó trước.`;
+  if (details.categoryId) return "Không thể khôi phục: danh mục cha đã bị xóa hoặc tạm ngưng. Hãy khôi phục danh mục trước.";
+  if (details.subjectId) return "Không thể khôi phục: môn học cha đã bị xóa hoặc tạm ngưng. Hãy khôi phục môn học trước.";
+  if (details.courseId) return "Không thể khôi phục: khóa học của lớp này đã bị xóa. Hãy khôi phục khóa học trước.";
+  if (details.teacherId) return "Không thể khôi phục: tài khoản giáo viên phụ trách lớp đã bị khóa hoặc xóa.";
+  return "Không thể khôi phục do dữ liệu liên quan đã thay đổi. Bấm Làm mới để xem lý do.";
+};
+
 export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có lỗi xảy ra. Vui lòng thử lại."): string {
   if (error instanceof FetchError || (typeof error === "object" && error !== null && ("code" in error || "status" in error))) {
-    const err = error as { code?: string; status?: number; message?: string; details?: { pendingChecks?: { message: string }[] } };
-    
+    const err = error as {
+      code?: string;
+      status?: number;
+      message?: string;
+      details?: { pendingChecks?: { message: string }[] } & Record<string, unknown>;
+    };
+
+    const deleteBlock = err.code ? DELETE_BLOCKS[err.code] : undefined;
+    if (deleteBlock) {
+      const [key, text] = deleteBlock;
+      return text.replace("{n}", typeof err.details?.[key] === "number" ? `${err.details[key]} ` : "");
+    }
+    if (err.code === "RESTORE_CONFLICT") return restoreConflictMessage(err.details);
+
     // Submit/approve list every unmet condition, already worded for the user
     const pendingChecks = err.details?.pendingChecks;
     if (pendingChecks?.length) return `${[...new Set(pendingChecks.map((check) => check.message))].join(". ")}.`;

@@ -124,8 +124,8 @@ export default function AdminSubjectsPage() {
       queryClient.invalidateQueries({ queryKey: ["public-subjects"] });
       queryClient.invalidateQueries({ queryKey: ["adminTrash"] });
     },
-    onError: (err: any) => {
-      const msg = err?.message || err?.error || "Không thể xóa môn học này do có ràng buộc dữ liệu.";
+    onError: (err: unknown) => {
+      const msg = getFriendlyErrorMessage(err, "Không thể xóa môn học này do có ràng buộc dữ liệu.");
       setDeleteErrorMsg(msg);
     },
   });

@@ -150,6 +150,8 @@ const rejectExpiredPendingClasses = async (now = new Date(), options = {}) => {
           session
         );
 
+        await require("../services/adminClassService").cancelUnstartedSessions(doc._id, session);
+
         // FIX-01 (BE-02-FIX-03): Atomic Notification Persistence inside the exact same transaction!
         const dedupeKey = `CLASS_EXPIRED_REJECTED:${doc._id.toString()}`;
         await notify(
