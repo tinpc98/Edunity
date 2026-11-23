@@ -335,10 +335,10 @@ export default function TeacherClassDetailPage() {
         description: values.description,
         capacity: Number(values.capacity),
         price: cls.classType === 'FREE' ? 0 : parsePrice(values.price),
-        enrollmentStart: values.enrollmentStart ? values.enrollmentStart.toISOString() : null,
-        enrollmentEnd: values.enrollmentEnd ? values.enrollmentEnd.toISOString() : null,
-        startDate: values.startDate ? values.startDate.toISOString() : null,
-        endDate: values.endDate ? values.endDate.toISOString() : null,
+        enrollmentStart: values.enrollmentStart ? values.enrollmentStart.startOf('day').toISOString() : null,
+        enrollmentEnd: values.enrollmentEnd ? values.enrollmentEnd.endOf('day').toISOString() : null,
+        startDate: values.startDate ? values.startDate.startOf('day').toISOString() : null,
+        endDate: values.endDate ? values.endDate.endOf('day').toISOString() : null,
         schedule: values.schedule,
       };
       updateMutation.mutate(payload);
@@ -350,10 +350,17 @@ export default function TeacherClassDetailPage() {
   // Handle open create session
   const handleOpenCreateSession = () => {
     createSessionForm.resetFields();
-    // Pre-fill default times if class has startDate
+    // Pre-fill default times: if class starts today (or startDate is already reached), default to now + 5 minutes so live demo can enter waiting room immediately!
     if (cls.startDate) {
-      const defaultStart = dayjs(cls.startDate).hour(19).minute(0);
-      const defaultEnd = dayjs(cls.startDate).hour(20).minute(30);
+      const now = dayjs();
+      const startDay = dayjs(cls.startDate);
+      const isSameOrBeforeToday = startDay.isSame(now, 'day') || startDay.isBefore(now);
+      const defaultStart = isSameOrBeforeToday
+        ? now.add(5, 'minute').second(0).millisecond(0)
+        : startDay.hour(19).minute(0).second(0).millisecond(0);
+      const defaultEnd = isSameOrBeforeToday
+        ? defaultStart.add(90, 'minute')
+        : startDay.hour(20).minute(30).second(0).millisecond(0);
       createSessionForm.setFieldsValue({
         title: `Buổi ${((cls.sessions || []).length) + 1}`,
         startDatetime: defaultStart,
@@ -1156,7 +1163,7 @@ export default function TeacherClassDetailPage() {
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item label="Ngày khai giảng" name="startDate" extra="Phải sau hôm nay khi gửi duyệt">
+              <Form.Item label="Ngày khai giảng" name="startDate" extra="Từ hôm nay trở đi khi gửi duyệt">
                 <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
               </Form.Item>
             </Col>

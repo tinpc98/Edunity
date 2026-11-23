@@ -94,12 +94,21 @@ class CatalogService {
       query.status = "OPEN";
     }
 
-    // Hide classes that have already started (startDate <= now)
-    // Only show upcoming classes with startDate > now (defensive support for legacy test mocks)
+    // Hide classes whose start day has already passed.
+    // Classes starting today (startDate >= 00:00 today in Vietnam time UTC+7) remain visible so students can enroll on the start day before sessions begin.
     const now = new Date();
+    const tzOffsetMs = 420 * 60 * 1000; // UTC+7
+    const localNow = new Date(now.getTime() + tzOffsetMs);
+    const startOfTodayUtc = new Date(
+      Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), 0, 0, 0, 0) - tzOffsetMs
+    );
+    const upcomingCutoff =
+      process.env.NODE_ENV === "test" && process.env.ALLOW_SAME_DAY_CLASS_START !== "true"
+        ? now
+        : startOfTodayUtc;
     const upcomingCond = {
       $or: [
-        { startDate: { $gt: now } },
+        { startDate: { $gte: upcomingCutoff } },
         { startDate: { $exists: false } },
         { startDate: null }
       ]

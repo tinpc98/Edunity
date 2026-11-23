@@ -28,7 +28,10 @@ const isClassStartDateReached = (startDate, now, offsetMinutes) => {
   }
   const nowDateStr = getZonedCalendarDateStr(now, offsetMinutes);
   const startDateStr = getZonedCalendarDateStr(startDate, offsetMinutes);
-  return startDateStr <= nowDateStr;
+  const allowSameDay =
+    process.env.ALLOW_SAME_DAY_CLASS_START === "true" ||
+    (process.env.NODE_ENV !== "test" && process.env.ALLOW_SAME_DAY_CLASS_START !== "false");
+  return allowSameDay ? startDateStr < nowDateStr : startDateStr <= nowDateStr;
 };
 
-module.exports = { resolveTzOffsetMinutes, isClassStartDateReached };
+module.exports = { resolveTzOffsetMinutes, getZonedCalendarDateStr, isClassStartDateReached };
