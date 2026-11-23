@@ -232,10 +232,10 @@ export default function CreateTeacherClassPage() {
       classType: values.classType || 'PAID',
       price: values.classType === 'FREE' ? 0 : parsePrice(values.price),
       capacity: Number(values.capacity || 20),
-      enrollmentStart: values.enrollmentStart ? values.enrollmentStart.toISOString() : null,
-      enrollmentEnd: values.enrollmentEnd ? values.enrollmentEnd.toISOString() : null,
-      startDate: values.startDate ? values.startDate.toISOString() : null,
-      endDate: values.endDate ? values.endDate.toISOString() : null,
+      enrollmentStart: values.enrollmentStart ? values.enrollmentStart.startOf('day').toISOString() : null,
+      enrollmentEnd: values.enrollmentEnd ? values.enrollmentEnd.endOf('day').toISOString() : null,
+      startDate: values.startDate ? values.startDate.startOf('day').toISOString() : null,
+      endDate: values.endDate ? values.endDate.endOf('day').toISOString() : null,
       schedule: scheduleList.length ? scheduleList : undefined,
     };
   };
@@ -556,7 +556,7 @@ export default function CreateTeacherClassPage() {
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Form.Item label="Ngày khai giảng" name="startDate" extra="Phải sau hôm nay khi gửi duyệt">
+              <Form.Item label="Ngày khai giảng" name="startDate" extra="Từ hôm nay trở đi khi gửi duyệt">
                 <DatePicker size="large" className="w-full rounded-lg" format="DD/MM/YYYY" placeholder="Chọn ngày" />
               </Form.Item>
             </Col>

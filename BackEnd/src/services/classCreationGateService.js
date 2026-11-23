@@ -176,6 +176,11 @@ const assertTeacherContractGate = async ({ teacher, now = new Date(), contractVe
  * No verifiedUntil yet (verified before BAO-10) passes: the maintenance job gives those teachers a deadline.
  */
 const assertVerificationCurrent = ({ teacher, now = new Date() }) => {
+  const reverificationEnabled =
+    process.env.ENABLE_TEACHER_REVERIFICATION === "true" ||
+    (process.env.NODE_ENV === "test" && process.env.ENABLE_TEACHER_REVERIFICATION !== "false");
+  if (!reverificationEnabled) return;
+
   const verifiedUntil = teacher && teacher.teacherProfile && teacher.teacherProfile.verifiedUntil;
   if (verifiedUntil && new Date(verifiedUntil) <= now) {
     throw new AppError("Teacher verification has expired: re-verify to open classes", "TEACHER_REVERIFICATION_REQUIRED", 403);

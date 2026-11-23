@@ -26,8 +26,13 @@ const computeVerifiedUntil = (now, identity) => {
   return identity && identity.expiryDate && new Date(identity.expiryDate) < until ? new Date(identity.expiryDate) : until;
 };
 
+const isReverificationEnabled = () =>
+  process.env.ENABLE_TEACHER_REVERIFICATION === "true" ||
+  (process.env.NODE_ENV === "test" && process.env.ENABLE_TEACHER_REVERIFICATION !== "false");
+
 // A verified teacher may re-submit once the window opens, or at any time when verified before identities existed
 const isReverificationOpen = (profile, now = new Date()) =>
+  isReverificationEnabled() &&
   Boolean(profile) &&
   profile.verificationStatus === "VERIFIED" &&
   profile.reverificationStatus !== "PENDING" &&
@@ -194,8 +199,8 @@ const presentStatus = async (teacher) => {
     qualificationSummary: profile.qualificationSummary,
     identity: presentIdentity(profile.identity),
     verificationStatus: profile.verificationStatus,
-    verifiedUntil: profile.verifiedUntil || null,
-    reverificationStatus: profile.reverificationStatus || null,
+    verifiedUntil: isReverificationEnabled() ? profile.verifiedUntil || null : null,
+    reverificationStatus: isReverificationEnabled() ? profile.reverificationStatus || null : null,
     reverificationOpen: isReverificationOpen(profile),
     reviewedBy: profile.reviewedBy,
     reviewedAt: profile.reviewedAt,
@@ -438,6 +443,9 @@ const reviewVerification = async (adminId, teacherId, body, status) => {
  *  - teachers within the window are reminded; expired ones are told they can no longer open new classes
  */
 const runReverificationSweep = async (now = new Date()) => {
+  if (!isReverificationEnabled()) {
+    return { legacyGraceGranted: 0, reminded: 0, disabled: true };
+  }
   const verified = { role: "TEACHER", "teacherProfile.verificationStatus": "VERIFIED", ...NOT_DELETED };
   const legacy = await User.updateMany(
     { ...verified, "teacherProfile.verifiedUntil": null },

@@ -150,16 +150,6 @@ export default function TeacherVerificationDetailPage() {
                 type={status === 'VERIFIED' ? 'success' : status === 'PENDING' ? 'warning' : 'error'}
                 pulse={status === 'PENDING'}
               />
-              {isReverification && (
-                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold">
-                  Tái xác minh
-                </span>
-              )}
-              {teacher.verifiedUntil && (
-                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
-                  Hiệu lực đến {dayjs(teacher.verifiedUntil).format('DD/MM/YYYY')}
-                </span>
-              )}
             </div>
             <div className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
               <span className="flex items-center gap-1.5 text-slate-700 font-semibold">
