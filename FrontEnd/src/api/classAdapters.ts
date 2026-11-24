@@ -24,6 +24,9 @@ const DAY_NAMES = [
 
 export function deriveScheduleText(schedule?: { dayOfWeek: number; startTime: string; endTime: string }[]): string {
   if (!schedule || schedule.length === 0) return "Lịch học linh hoạt";
+  const sameTime = schedule.every((s) => s.startTime === schedule[0].startTime && s.endTime === schedule[0].endTime);
+  // Slots at different hours: list each day with its own time, so the header matches the generated sessions
+  if (!sameTime) return formatScheduleEntries(schedule).join(", ");
   const days = schedule.map((s) => DAY_NAMES[s.dayOfWeek] || `Thứ ${s.dayOfWeek}`).join(" & ");
   const time = `${schedule[0].startTime} - ${schedule[0].endTime}`;
   return `${days} • ${time}`;

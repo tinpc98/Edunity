@@ -50,6 +50,7 @@ exports.listMyClasses = handle((req) => teacherClasses.listMyClasses(req.user.id
 exports.getMyClass = handle((req) => teacherClasses.getMyClass(req.user.id, req.params.id));
 exports.getMyClassReadiness = handle((req) => teacherClasses.getMyClassReadiness(req.user.id, req.params.id));
 exports.getClassStudents = handle((req) => teacherClasses.getClassStudents(req.user.id, req.params.id, req.query));
+exports.listBusySessions = handle((req) => sessions.listBusySessions(req.user.id, req.query));
 exports.getPlannedSessions = handle((req) => teacherClasses.getPlannedSessions(req.user.id, req.params.id, req.query));
 
 // Teacher — sessions (CUR-11 transactional schedule & generation)

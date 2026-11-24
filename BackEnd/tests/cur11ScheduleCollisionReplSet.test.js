@@ -1,9 +1,10 @@
 const mongoose = require("mongoose");
 const request = require("supertest");
 const app = require("../src/app");
-const { User, Category, Subject, Course, Class, Session, TeacherScheduleLock, TeacherSubjectAuthorization } = require("../src/models");
+const { User, Category, Subject, Course, Class, Session, TeacherScheduleLock, TeacherSubjectAuthorization, TeacherContract } = require("../src/models");
 const { hashPassword } = require("../src/utils/password");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
+const { signContract } = require("./helpers/contract");
 
 const as = (user) => ({ "x-user-id": user._id.toString() });
 
@@ -296,7 +297,8 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
       createdBy: admin._id,
     });
 
-    // A DRAFT needs no contract (TEACHER-CLASS-FLOW-02); approval must still refuse it
+    // A class can only be created under a signed contract; once it ends, approval must still refuse the class
+    await signContract(teacher._id, admin._id);
     const draftRes = await request(app)
       .post("/api/teacher/classes")
       .set(as(teacher))
@@ -335,6 +337,7 @@ describe("TASK CUR-11 (Real MongoMemoryReplSet): Concurrent Schedule Collision &
       endDatetime: new Date(Date.now() + 3 * DAY + 7200000),
     });
     const approve = () => request(app).post(`/api/admin/classes/${blockedId}/approve`).set(as(admin)).send({});
+    await TeacherContract.deleteMany({ teacherId: teacher._id });
 
     // No CoursePricingPolicy is needed any more: the missing TEA-12 contract is what refuses approval
     const res = await approve();

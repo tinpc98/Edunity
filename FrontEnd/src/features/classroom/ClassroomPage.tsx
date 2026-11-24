@@ -312,15 +312,25 @@ export default function ClassroomPage() {
           actionText: "Thử lại",
           actionRoute: null,
         };
-      case "SESSION_NOT_JOINABLE":
+      case "SESSION_NOT_JOINABLE": {
+        const joinWindow = joinError?.details as { startDatetime?: string; opensAt?: string; closesAt?: string } | undefined;
+        const at = (value?: string) =>
+          value ? new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }) : "";
+        const tooEarly = Boolean(joinWindow?.opensAt && Date.now() < new Date(joinWindow.opensAt).getTime());
+        const when = joinWindow?.opensAt
+          ? tooEarly
+            ? ` Buổi học bắt đầu lúc ${at(joinWindow.startDatetime)}; phòng mở từ ${at(joinWindow.opensAt)} (10 phút trước giờ học).`
+            : ` Buổi học đã kết thúc lúc ${at(joinWindow.closesAt)}.`
+          : "";
         return {
-          title: isTeacher ? "Ngoài khung giờ của buổi học" : "Chưa thể vào phòng học",
+          title: isTeacher ? (tooEarly ? "Chưa đến giờ vào lớp" : "Ngoài khung giờ của buổi học") : "Chưa thể vào phòng học",
           desc: isTeacher
-            ? "Bạn chỉ có thể mở phòng và bắt đầu buổi học trong khung giờ đã lên lịch."
+            ? `Bạn chỉ có thể mở phòng và bắt đầu buổi học trong khung giờ đã lên lịch.${when}`
             : "Phòng học chỉ mở khi giáo viên nhấn Bắt đầu buổi học.",
           actionText: isTeacher ? "Quay lại lịch dạy" : "Về Lớp học của tôi",
           actionRoute: isTeacher ? ROUTES.TEACHER.SCHEDULE : studentBackRoute,
         };
+      }
       case "TEACHER_NOT_VERIFIED":
         return {
           title: "Chưa xác minh hồ sơ giảng viên",

@@ -102,7 +102,7 @@ export default function EnrollmentConfirmModal({ item, open, onClose }: Enrollme
 
       // Direct payment
       onClose();
-      message.success("Giữ chỗ thành công! Chỗ ngồi được giữ trong 15 phút.");
+      message.success("Giữ chỗ thành công! Hãy thanh toán trước khi hết thời gian giữ chỗ.");
       navigate(`/checkout/${newEnrollment.id}`);
     } catch (err: any) {
       onClose();
@@ -254,7 +254,7 @@ export default function EnrollmentConfirmModal({ item, open, onClose }: Enrollme
             type="info"
             showIcon
             message="Chính sách giữ chỗ (Seat Hold)"
-            description="Sau khi xác nhận, hệ thống sẽ tạm giữ chỗ cho bạn trong 15 phút để bạn tiến hành thanh toán học phí."
+            description="Sau khi xác nhận, hệ thống sẽ tạm giữ chỗ cho bạn trong thời gian giữ chỗ để bạn tiến hành thanh toán học phí."
             className="text-xs rounded-xl"
           />
         )}
@@ -312,7 +312,7 @@ export default function EnrollmentConfirmModal({ item, open, onClose }: Enrollme
           <p className="text-xs text-slate-500 max-w-xs mx-auto">
             {successModalData?.enrollmentStatus === "CONFIRMED"
               ? "Bạn đã chính thức trở thành học viên của lớp học. Lớp đã được thêm vào Học tập của tôi."
-              : "Hệ thống đã giữ chỗ thành công cho bạn trong vòng 15 phút. Bạn có thể kiểm tra trong mục Đơn đăng ký."}
+              : "Hệ thống đã giữ chỗ thành công cho bạn. Bạn có thể kiểm tra thời hạn giữ chỗ trong mục Đơn đăng ký."}
           </p>
         </div>
 

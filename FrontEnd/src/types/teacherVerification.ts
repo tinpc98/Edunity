@@ -1,4 +1,6 @@
-export type VerificationStatus = "UNVERIFIED" | "PENDING" | "VERIFIED" | "REJECTED";
+import type { GradeLevel } from "./catalog";
+
+export type VerificationStatus ="UNVERIFIED" | "PENDING" | "VERIFIED" | "REJECTED";
 export type DocumentType = "IDENTITY" | "QUALIFICATION";
 export type FileSide = "FRONT" | "BACK" | "SINGLE";
 
@@ -56,7 +58,33 @@ export interface SubmitIdentity {
   expiryDate?: string;
 }
 
+export const TEACHER_DEGREE_LABELS = {
+  STUDENT: "Sinh viên",
+  COLLEGE: "Cao đẳng",
+  BACHELOR: "Cử nhân",
+  ENGINEER: "Kỹ sư",
+  MASTER: "Thạc sĩ",
+  DOCTOR: "Tiến sĩ",
+  OTHER: "Khác",
+} as const;
+export type TeacherDegree = keyof typeof TEACHER_DEGREE_LABELS;
+
+/** Registration step 2: background and what the teacher takes on (Backend teacherProfile.teachingProfile). */
+export interface TeachingProfile {
+  degree: TeacherDegree;
+  major?: string | null;
+  school?: string | null;
+  certificates: { name: string; year?: number | null }[];
+  achievements?: string | null;
+  subjects: string[];
+  gradeLevels: GradeLevel[];
+  studentNote?: string | null;
+  yearsOfExperience: number;
+}
+
 export interface TeacherVerificationStatus {
+  avatarUrl?: string | null;
+  teachingProfile?: TeachingProfile | null;
   teacherId: string;
   email: string;
   accountStatus: string;
@@ -87,6 +115,7 @@ export interface SubmitVerificationDocument {
 export interface SubmitVerificationRequest {
   documents: SubmitVerificationDocument[];
   identity: SubmitIdentity;
+  teachingProfile?: TeachingProfile;
   qualificationSummary?: string;
   biography?: string;
 }

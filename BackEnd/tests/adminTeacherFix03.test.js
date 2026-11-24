@@ -15,7 +15,6 @@ const {
   AuditLog,
   Notification,
   TeacherSubjectAuthorization,
-  TeacherContract,
   CoursePricingPolicy,
 } = require("../src/models");
 const { toDec, toNum } = require("../src/utils/money");
@@ -23,6 +22,7 @@ const catalog = require("../src/services/courseCatalogService");
 const teacherClassService = require("../src/services/teacherClassService");
 const gate = require("../src/services/classCreationGateService");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
+const { signContract } = require("./helpers/contract");
 
 const DAY = 24 * 60 * 60 * 1000;
 const inDays = (days, extra = 0) => new Date(Date.now() + days * DAY + extra);
@@ -45,7 +45,9 @@ beforeEach(async () => {
   admin = await user("admin", "ADMIN");
   admin2 = await user("admin2", "ADMIN");
   teacher = await user("teacher", "TEACHER", verified("Giáo viên Fix03"));
+  await signContract(teacher._id, admin._id);
   otherTeacher = await user("other", "TEACHER", verified("Giáo viên Khác"));
+  await signContract(otherTeacher._id, admin._id);
   student = await user("student", "STUDENT", { studentProfile: { fullName: "Học viên" } });
 
   category = await Category.create({ name: "THPT", slug: "thpt-fix03", createdBy: admin._id });
@@ -67,6 +69,18 @@ beforeEach(async () => {
     level: "ADVANCED",
     createdBy: admin._id,
   });
+  // Both teachers may teach the subject at this grade: a class is only opened for what one is authorized to teach
+  for (const who of [teacher, otherTeacher]) {
+    await TeacherSubjectAuthorization.create({
+      teacherId: who._id,
+      subjectId: subject._id,
+      categoryId: category._id,
+      gradeLevel: "GRADE_12",
+      level: "ADVANCED",
+      status: "APPROVED",
+      createdBy: admin._id,
+    });
+  }
 });
 
 const call = (user, method, url, body) => {
@@ -97,36 +111,10 @@ describe("Class price limits", () => {
     });
     expect(created.statusCode).toBe(201);
     const id = created.body.data.id;
-    const sessions = await call(teacher, "post", `/teacher/classes/${id}/sessions`, {
-      sessions: [{ title: "Buổi 1", startDatetime: inDays(4), endDatetime: inDays(4, 60 * 60 * 1000) }],
-    });
-    expect(sessions.statusCode).toBe(201);
+    expect(created.body.data.sessionPlan.generatedCount).toBeGreaterThan(0); // planned from the weekly schedule
     return id;
   };
 
-  const allowTeaching = () =>
-    Promise.all([
-      TeacherSubjectAuthorization.create({
-        teacherId: teacher._id,
-        subjectId: subject._id,
-        categoryId: category._id,
-        gradeLevel: "GRADE_12",
-        level: "ADVANCED",
-        status: "APPROVED",
-        createdBy: admin._id,
-      }),
-      TeacherContract.create({
-        contractCode: "HD-FIX03",
-        teacherId: teacher._id,
-        status: "ACTIVE",
-        effectiveFrom: inDays(-1),
-        expiresAt: inDays(365),
-        provider: { name: "SANDBOX", envelopeId: "SBX-FIX03" },
-        createdBy: admin._id,
-        sentAt: new Date(),
-        signedAt: new Date(),
-      }),
-    ]);
 
   const submit = (id) => call(teacher, "post", `/teacher/classes/${id}/submit`);
   const approve = (id) => call(admin, "post", `/admin/classes/${id}/approve`, {});
@@ -138,7 +126,6 @@ describe("Class price limits", () => {
     ["PAID", 5000000],
     ["FREE", 0],
   ])("%s = %p passes create, submit and approval without any pricing policy", async (classType, price) => {
-    await allowTeaching();
     const id = await completeDraft({ classType, price });
 
     expect((await submit(id)).statusCode).toBe(200);
@@ -202,7 +189,6 @@ describe("Class price limits", () => {
     ["PAID", "NaN"],
     ["FREE", "1000"],
   ])("a stored %s price of %s blocks submission and approval", async (classType, price) => {
-    await allowTeaching();
     const id = await completeDraft();
     await Class.updateOne({ _id: id }, { $set: { classType, price: toDec(price) } });
 
@@ -215,7 +201,6 @@ describe("Class price limits", () => {
   });
 
   test("an old policy neither blocks a class nor loses its stored data", async () => {
-    await allowTeaching();
     const policy = await CoursePricingPolicy.create({
       policyKey: "GLOBAL:ALL:FIX03",
       version: 1,

@@ -55,9 +55,6 @@ export interface TeacherRegisterRequest {
   fullName: string;
   email: string;
   password: string;
-  /** Not stored by /auth/register: kept client-side and sent with the verification request (step 2). */
-  qualificationSummary: string;
-  biography?: string;
 }
 
 /** Step 1 data carried over to step 2 (verification documents). */

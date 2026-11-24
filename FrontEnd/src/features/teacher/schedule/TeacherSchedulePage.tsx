@@ -20,7 +20,14 @@ import { ROUTES } from '../../../routes/routePaths';
 import { classService, classKeys } from '../../../services/class.service';
 import type { Session, ScheduleItem } from '../../../types/session';
 import { SESSION_STATUS_LABELS, SESSION_STATUS_COLORS } from '../../../types/session';
-import { deriveScheduleItemsFromSessions, formatSessionTimeRange } from '../../../api/sessionAdapters';
+import {
+  deriveScheduleItemsFromSessions,
+  formatOpensAt,
+  formatSessionTimeRange,
+  JOIN_EARLY_MINUTES,
+  roomOpensLater,
+} from '../../../api/sessionAdapters';
+import { useNow } from '../../../hooks/useNow';
 import TeacherIncidentModal from '../../classroom/components/TeacherIncidentModal';
 import {
   getVerificationGuidanceMessage,
@@ -39,6 +46,7 @@ export default function TeacherSchedulePage() {
   const lockTooltip = getVerificationGuidanceMessage(verificationStatus);
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('ALL');
+  const now = useNow(30_000);
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [incidentTargetSession, setIncidentTargetSession] = useState<{ id: string; title: string } | null>(null);
@@ -328,8 +336,9 @@ export default function TeacherSchedulePage() {
                   <div className="self-end md:self-center shrink-0 flex items-center gap-2 flex-wrap">
                     {(item.status === 'SCHEDULED' || item.status === 'WAITING' || item.status === 'IN_PROGRESS' || item.status === 'INTERRUPTED') && (() => {
                       const clsStatus = classStatusMap.get(item.classId);
-                      const canJoinRoom = isVerified && (clsStatus === 'OPEN' || clsStatus === 'IN_PROGRESS');
-                      return canJoinRoom ? (
+                      const isClassLive = isVerified && (clsStatus === 'OPEN' || clsStatus === 'IN_PROGRESS');
+                      const opensAt = roomOpensLater(item, now);
+                      return isClassLive && !opensAt ? (
                         <Link to={`/classroom/${item.sessionId}`}>
                           <Button
                             type="primary"
@@ -344,7 +353,9 @@ export default function TeacherSchedulePage() {
                           title={
                             !isVerified
                               ? lockTooltip
-                              : "Lớp học cần được Quản trị viên phê duyệt và mở hoạt động trước khi vào phòng học trực tuyến."
+                              : !isClassLive
+                              ? "Lớp học cần được Quản trị viên phê duyệt và mở hoạt động trước khi vào phòng học trực tuyến."
+                              : `Phòng học mở ${JOIN_EARLY_MINUTES} phút trước giờ học.`
                           }
                         >
                           <Button
@@ -353,7 +364,7 @@ export default function TeacherSchedulePage() {
                             className="rounded-xl font-medium text-xs flex items-center gap-1.5"
                           >
                             <VideoCameraOutlined />
-                            <span>{item.status === 'IN_PROGRESS' ? 'Vào lớp (LIVE)' : 'Vào lớp'}</span>
+                            <span>{item.status === 'IN_PROGRESS' ? 'Vào lớp (LIVE)' : isClassLive && opensAt ? `Mở lúc ${formatOpensAt(opensAt)}` : 'Vào lớp'}</span>
                           </Button>
                         </Tooltip>
                       );

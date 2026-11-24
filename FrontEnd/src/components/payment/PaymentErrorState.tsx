@@ -69,7 +69,7 @@ const DEFAULT_CONTENT: Record<
     type: "warning",
     title: "Mã QR đã hết hạn thanh toán",
     description:
-      "Thời gian hiệu lực 15 phút của mã QR đã kết thúc. Vui lòng không quét mã QR đã hết hạn và tạo yêu cầu mới nếu vẫn muốn tiếp tục.",
+      "Thời gian hiệu lực của mã QR đã kết thúc. Vui lòng không quét mã QR đã hết hạn và tạo yêu cầu mới nếu vẫn muốn tiếp tục.",
   },
   CAMPAIGN_CLOSED: {
     type: "warning",
@@ -93,7 +93,7 @@ const DEFAULT_CONTENT: Record<
     type: "warning",
     title: "Đã nhận tiền — đang đối soát (Khoản tiền đến sau hạn)",
     description:
-      "Hệ thống ghi nhận ngân hàng đã báo có nhưng thời gian giữ chỗ 15 phút của đơn đăng ký đã hết hạn trước đó. Giao dịch đã được chuyển sang trạng thái chờ đối soát/hoàn tiền an toàn — vui lòng không chuyển khoản thêm.",
+      "Hệ thống ghi nhận ngân hàng đã báo có nhưng thời gian giữ chỗ của đơn đăng ký đã hết hạn trước đó. Giao dịch đã được chuyển sang trạng thái chờ đối soát/hoàn tiền an toàn — vui lòng không chuyển khoản thêm.",
   },
   RECONCILIATION_REQUIRED: {
     type: "warning",

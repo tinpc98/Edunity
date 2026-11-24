@@ -11,11 +11,11 @@ const {
   Class,
   CourseProposal,
   TeacherSubjectAuthorization,
-  TeacherContract,
 } = require("../src/models");
 const { GRADE_LEVELS } = require("../src/models/constants");
 const { allowedGradeLevelsForCategory } = require("../src/utils/gradeLevel");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
+const { signContract } = require("./helpers/contract");
 
 const EXAM = "UNIVERSITY_EXAM_PREP";
 const OFFERED = ["GRADE_6", "GRADE_7", "GRADE_8", "GRADE_9", "GRADE_10", "GRADE_11", "GRADE_12", EXAM];
@@ -42,6 +42,7 @@ beforeEach(async () => {
     status: "ACTIVE",
     teacherProfile: { fullName: "Giáo viên", verificationStatus: "VERIFIED" },
   });
+  await signContract(teacher._id, admin._id);
   // No grade group of its own, so only the platform rule limits the grade
   category = await Category.create({ name: "Ngoại ngữ", slug: "ngoai-ngu", createdBy: admin._id });
   subject = await Subject.create({
@@ -88,6 +89,15 @@ const propose = (gradeLevel) =>
 // A class with everything approval needs
 const completeClass = async (gradeLevel) => {
   const course = await addCourse(gradeLevel);
+  await TeacherSubjectAuthorization.create({
+    teacherId: teacher._id,
+    subjectId: subject._id,
+    categoryId: category._id,
+    gradeLevel,
+    level: "BEGINNER",
+    status: "APPROVED",
+    createdBy: admin._id,
+  });
   const created = await newClass(course._id, {
     description: "Mô tả",
     enrollmentStart: inDays(-1),
@@ -98,30 +108,7 @@ const completeClass = async (gradeLevel) => {
   });
   expect(created.statusCode).toBe(201);
   const id = created.body.data.id;
-  const sessions = await call(teacher, "post", `/teacher/classes/${id}/sessions`, {
-    sessions: [{ title: "Buổi 1", startDatetime: inDays(4), endDatetime: inDays(4, 60 * 60 * 1000) }],
-  });
-  expect(sessions.statusCode).toBe(201);
-  await TeacherContract.create({
-    contractCode: "HD-GRADE04",
-    teacherId: teacher._id,
-    status: "ACTIVE",
-    effectiveFrom: inDays(-1),
-    expiresAt: inDays(365),
-    provider: { name: "SANDBOX", envelopeId: "SBX-GRADE04" },
-    createdBy: admin._id,
-    sentAt: new Date(),
-    signedAt: new Date(),
-  });
-  await TeacherSubjectAuthorization.create({
-    teacherId: teacher._id,
-    subjectId: subject._id,
-    categoryId: category._id,
-    gradeLevel,
-    level: "BEGINNER",
-    status: "APPROVED",
-    createdBy: admin._id,
-  });
+  expect(created.body.data.sessionPlan.generatedCount).toBeGreaterThan(0); // planned from the weekly schedule
   return { id, course };
 };
 
@@ -134,7 +121,10 @@ const makeOlder = async ({ id, course }, gradeLevel) => {
 
 describe("The offered grades", () => {
   test.each(OFFERED)("%s works for registration, course, proposal and class", async (grade) => {
-    expect((await register(grade)).statusCode).toBe(201);
+    const registered = await register(grade);
+    expect(registered.statusCode).toBe(201);
+    const authId = registered.body.data.id || registered.body.data._id;
+    expect((await call(admin, "post", `/admin/subject-authorizations/${authId}/approve`, {})).statusCode).toBe(200);
 
     const course = await call(admin, "post", "/admin/courses", {
       subjectId: subject._id,

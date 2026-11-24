@@ -76,10 +76,10 @@ export function PaymentResult({
     ? "Cảm ơn tấm lòng vàng của bạn! Khoản đóng góp đã được cộng vào Quỹ học bổng sau khi xác thực từ cổng thanh toán."
     : isReconciliationOrLate
     ? isTuition
-      ? "Ngân hàng đã báo có nhưng thời hạn giữ chỗ 15 phút của đơn đăng ký đã kết thúc hoặc cần kiểm tra đối soát. Hệ thống đã tự động ghi nhận hồ sơ đối soát/hoàn tiền — tuyệt đối không cấp quyền vào lớp tự động khi đơn đã hết hạn."
+      ? "Ngân hàng đã báo có nhưng thời hạn giữ chỗ của đơn đăng ký đã kết thúc hoặc cần kiểm tra đối soát. Hệ thống đã tự động ghi nhận hồ sơ đối soát/hoàn tiền — tuyệt đối không cấp quyền vào lớp tự động khi đơn đã hết hạn."
       : "Giao dịch chuyển khoản của bạn đến sau khi chiến dịch đóng hoặc cần đối soát thủ công. Bộ phận tài chính Edunity đã ghi nhận để kiểm tra."
     : uiState === "EXPIRED"
-    ? "Đơn thanh toán đã hết thời gian hiệu lực 15 phút."
+    ? "Đơn thanh toán đã hết thời gian hiệu lực."
     : "Giao dịch chưa được xác nhận hoàn tất từ cổng thanh toán.";
 
   const showClassroomButton = isConfirmedTuition;

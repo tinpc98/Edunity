@@ -45,6 +45,14 @@ const IS_DEV_OR_TEST =
   typeof import.meta !== "undefined" &&
   Boolean(import.meta.env?.DEV || import.meta.env?.MODE === "test");
 
+
+// The seat hold set by the platform (SEAT_HOLD_MINUTES): the time between reserving the seat and its expiry
+const holdDurationText = (enrollment: { createdAt: string; holdExpiresAt: string | null }) => {
+  if (!enrollment.holdExpiresAt) return "thời gian giữ chỗ";
+  const minutes = Math.round((new Date(enrollment.holdExpiresAt).getTime() - new Date(enrollment.createdAt).getTime()) / 60000);
+  return minutes > 0 ? `${minutes} phút` : "thời gian giữ chỗ";
+};
+
 export default function CheckoutPage() {
   const { enrollmentId } = useParams<{ enrollmentId: string }>();
   const navigate = useNavigate();
@@ -358,7 +366,7 @@ export default function CheckoutPage() {
           message={
             enrollment.enrollmentStatus === "CANCELLED"
               ? "Đơn giữ chỗ đã được hủy"
-              : "Đơn giữ chỗ đã hết thời hạn 15 phút"
+              : `Đơn giữ chỗ đã hết thời hạn ${holdDurationText(enrollment)}`
           }
           description="Chỗ ngồi tạm giữ của bạn đã được giải phóng. Nếu lớp vẫn còn chỗ trống, bạn có thể quay lại trang chi tiết lớp để đăng ký lại."
           onBack={() => navigate(`/classes/${enrollment.classId}`)}
@@ -572,7 +580,7 @@ export default function CheckoutPage() {
                 subtitle={
                   scholarshipDeduction > 0
                     ? "Đơn đồng chi trả (MIXED) — Học bổng đã được tạm giữ cho chỗ ngồi của bạn"
-                    : "Chỗ ngồi của bạn đang được giữ tạm thời trong 15 phút"
+                    : `Chỗ ngồi của bạn đang được giữ tạm thời trong ${holdDurationText(enrollment)}; mã QR hết hiệu lực cùng lúc`
                 }
                 isPolling={isPolling}
                 isRefreshing={isPollingFetching}

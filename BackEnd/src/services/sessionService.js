@@ -433,6 +433,78 @@ const generateSessionsFromSchedule = async (teacherId, classId, body = {}, optio
   });
 };
 
+const PLANNABLE_CLASS_STATUSES = ["DRAFT", "NEED_CHANGES"];
+
+/**
+ * While a class is being prepared its sessions are derived from the weekly schedule and the class dates:
+ * the planned ones are rebuilt as a whole, one per future slot. Nothing runs yet, so nothing else refers to them.
+ * Without dates or schedule the class simply has no sessions.
+ */
+const replanSessions = async (teacherId, classId) => {
+  const preCls = await getOwnClass(teacherId, classId);
+  return runInTeacherScheduleTx(preCls.teacherId, async (dbSession) => {
+    const cls = await Class.findOne({ _id: preCls._id, ...NOT_DELETED }).session(dbSession);
+    if (!cls) throw CLASS_NOT_FOUND();
+    if (!PLANNABLE_CLASS_STATUSES.includes(cls.status)) {
+      throw new AppError("Sessions are only planned while the class is a draft or needs changes", "CLASS_NOT_EDITABLE", 409);
+    }
+
+    await Session.deleteMany({ classId: cls._id, status: "SCHEDULED" }, { session: dbSession });
+    if (!cls.startDate || !cls.endDate || !Array.isArray(cls.schedule) || cls.schedule.length === 0) {
+      return { generatedCount: 0, sessions: [] };
+    }
+
+    const now = new Date();
+    const occurrences = computePlannedOccurrences(cls, { maxOccurrences: 366 }).filter((occ) => occ.startDatetime > now);
+    let nextNumber = await getNextSessionNumber(cls._id, dbSession);
+    const docs = occurrences.map((occ, index) => {
+      assertSessionTimes(cls, occ.startDatetime, occ.endDatetime, `planned[${index}]`, now);
+      const sessionNumber = nextNumber++;
+      return {
+        classId: cls._id,
+        className: cls.className,
+        teacherId: cls.teacherId,
+        title: `Buổi ${sessionNumber}`,
+        sessionNumber,
+        scheduleSource: "SCHEDULE_GENERATED",
+        startDatetime: occ.startDatetime,
+        endDatetime: occ.endDatetime,
+        status: "SCHEDULED",
+      };
+    });
+    if (docs.length) {
+      await assertNoTeacherOverlap(cls.teacherId, docs.map((doc, index) => ({ ...doc, label: `Buổi ${doc.sessionNumber || index + 1}` })), null, dbSession);
+    }
+    const created = docs.length ? await Session.insertMany(docs, { session: dbSession }) : [];
+    return { generatedCount: created.length, sessions: created.map((doc) => doc.toObject()) };
+  });
+};
+
+const BUSY_RANGE_MAX_MS = 400 * 24 * 60 * 60 * 1000;
+
+/** The teacher's own sessions in [from, to), so a schedule being drafted can be checked against them before saving. */
+const listBusySessions = async (teacherId, query = {}) => {
+  const from = new Date(query.from);
+  const to = new Date(query.to);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) {
+    throw validationError("from and to must be valid dates, from before to");
+  }
+  if (to - from > BUSY_RANGE_MAX_MS) throw validationError("The range must not exceed 400 days");
+  // Same rule as assertNoTeacherOverlap: these are the sessions a new one may not overlap
+  const filter = {
+    teacherId,
+    status: { $ne: "CANCELLED" },
+    lifecycleState: { $ne: "RESCHEDULED" },
+    startDatetime: { $lt: to },
+    endDatetime: { $gt: from },
+  };
+  if (query.excludeClassId !== undefined && query.excludeClassId !== "") {
+    if (!mongoose.isValidObjectId(query.excludeClassId)) throw validationError("excludeClassId is invalid");
+    filter.classId = { $ne: new mongoose.Types.ObjectId(String(query.excludeClassId)) };
+  }
+  return Session.find(filter).select("classId className title startDatetime endDatetime").sort({ startDatetime: 1 }).limit(1000).lean();
+};
+
 const updateSession = async (teacherId, sessionId, body = {}) => {
   await getVerifiedTeacher(teacherId);
   const preSession = await getOwnSession(teacherId, sessionId);
@@ -584,7 +656,9 @@ const joinSession = async (user, sessionId) => {
     throw new AppError(
       `Session is not joinable now. Starts at ${session.startDatetime.toISOString()}`,
       "SESSION_NOT_JOINABLE",
-      409
+      409,
+      // So the page can say when the room opens and closes
+      { startDatetime: session.startDatetime, opensAt: windowStart, closesAt: joinWindowEnd }
     );
   }
   // A Student gets a token only once the Teacher has pressed "Bắt đầu buổi học" (beginTeaching is the only writer of
@@ -978,6 +1052,8 @@ const handleLiveKitWebhook = async (event) => {
 module.exports = {
   createSessions,
   generateSessionsFromSchedule,
+  replanSessions,
+  listBusySessions,
   updateSession,
   deleteSession,
   joinSession,

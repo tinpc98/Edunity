@@ -3,7 +3,7 @@ const { TeacherSubjectAuthorization, Category, Subject, User } = require("../mod
 const { TEACHER_SUBJECT_AUTH_STATUSES, GRADE_LEVELS } = require("../models/constants");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { assertId, paged, validationError, isBlank } = require("../utils/http");
-const { requireGradeLevel } = require("../utils/gradeLevel");
+const { requireGradeLevel, allowedGradeLevelsForCategory } = require("../utils/gradeLevel");
 const { withoutReviewer } = require("../utils/publicView");
 const catalog = require("./courseCatalogService");
 const { audit } = require("./auditService");
@@ -511,45 +511,100 @@ const suspendAuthorization = async (adminId, authId, body = {}) => {
  * Used by CUR-10 class creation/update/submit gates.
  * Checks exact APPROVED match on (teacherId, subjectId, gradeLevel, level) and rejects with explicit 403 error codes.
  */
-const assertApprovedAuthorization = async ({ teacherId, subjectId, gradeLevel, level }) => {
-  const normalizedLevel = catalog.resolveLevel(level);
-  if (!normalizedLevel) {
-    throw validationError("Course level is required to check teaching authorization");
+const sameName = (a, b) => String(a || "").trim().toLocaleLowerCase("vi") === String(b || "").trim().toLocaleLowerCase("vi");
+
+// The approved teaching profile is the authorization: a subject (by name) and a grade the Admin saw and verified
+const profileCovers = (teacher, subject, gradeLevel) => {
+  const profile = teacher && teacher.teacherProfile;
+  const teaching = profile && profile.teachingProfile;
+  return Boolean(
+    gradeLevel &&
+      profile.verificationStatus === "VERIFIED" &&
+      teaching &&
+      (teaching.gradeLevels || []).includes(gradeLevel) &&
+      (teaching.subjects || []).some((name) => sameName(name, subject.name))
+  );
+};
+
+const PROFILE_GRANT_NOTE = "Tự động theo hồ sơ giảng dạy đã được duyệt";
+
+// Idempotent: a (teacher, subject, grade) that already has any authorization keeps it, so a suspension stands
+const grantFromProfile = async ({ teacher, subject, gradeLevel, actorId }) => {
+  const now = new Date();
+  try {
+    return await TeacherSubjectAuthorization.findOneAndUpdate(
+      { teacherId: teacher._id, subjectId: subject._id, gradeLevel, level: null },
+      {
+        $setOnInsert: {
+          categoryId: subject.categoryId,
+          status: "APPROVED",
+          requestNote: PROFILE_GRANT_NOTE,
+          requestedAt: now,
+          approvedBy: actorId,
+          approvedAt: now,
+          createdBy: actorId,
+          decisionHistory: [{ actorId, action: "CREATED_APPROVED", previousStatus: null, newStatus: "APPROVED", reason: PROFILE_GRANT_NOTE, decidedAt: now }],
+        },
+      },
+      { upsert: true, new: true }
+    ).lean();
+  } catch (err) {
+    if (err && err.code === 11000) return TeacherSubjectAuthorization.findOne({ teacherId: teacher._id, subjectId: subject._id, gradeLevel, level: null }).lean();
+    throw err;
   }
+};
+
+/** Grants every (subject, grade) of an approved teaching profile, within each subject category's grades. */
+const grantAllFromProfile = async (teacher, actorId) => {
+  const teaching = teacher.teacherProfile && teacher.teacherProfile.teachingProfile;
+  if (!teaching || !(teaching.subjects || []).length) return 0;
+  const subjects = (await Subject.find({ status: "ACTIVE", isDeleted: { $ne: true } }).lean()).filter((subject) =>
+    teaching.subjects.some((name) => sameName(name, subject.name))
+  );
+  const categories = new Map(
+    (await Category.find({ _id: { $in: subjects.map((s) => s.categoryId) } }).lean()).map((c) => [String(c._id), c])
+  );
+  let granted = 0;
+  for (const subject of subjects) {
+    const category = categories.get(String(subject.categoryId));
+    const allowed = category ? allowedGradeLevelsForCategory(category) : null;
+    for (const gradeLevel of teaching.gradeLevels || []) {
+      if (allowed && !allowed.includes(gradeLevel)) continue;
+      if (await TeacherSubjectAuthorization.exists({ teacherId: teacher._id, subjectId: subject._id, gradeLevel })) continue;
+      await grantFromProfile({ teacher, subject, gradeLevel, actorId });
+      granted++;
+    }
+  }
+  return granted;
+};
+
+/**
+ * Used by CUR-10 class gates. Authorization is per (teacher, subject, grade); the course level no longer matters.
+ * A suspension always blocks. Without an approved record, the verified teaching profile grants one.
+ */
+const assertApprovedAuthorization = async ({ teacherId, subjectId, gradeLevel }) => {
   const normalizedGrade = gradeLevel === undefined || gradeLevel === "" ? null : gradeLevel;
+  const auths = await TeacherSubjectAuthorization.find({ teacherId, subjectId, gradeLevel: normalizedGrade }).lean();
 
-  const auth = await TeacherSubjectAuthorization.findOne({
-    teacherId,
-    subjectId,
-    gradeLevel: normalizedGrade,
-    level: normalizedLevel,
-  }).lean();
+  if (auths.some((auth) => auth.status === "SUSPENDED")) {
+    throw new AppError("Teacher subject authorization has been suspended", "SUBJECT_AUTHORIZATION_SUSPENDED", 403);
+  }
+  const approved = auths.find((auth) => auth.status === "APPROVED");
+  if (approved) return approved;
 
-  if (!auth) {
-    throw new AppError(
-      "Teacher does not have an approved authorization for this subject, grade level, and level",
-      "SUBJECT_AUTHORIZATION_REQUIRED",
-      403
-    );
+  const [teacher, subject] = await Promise.all([User.findById(teacherId).lean(), Subject.findById(subjectId).lean()]);
+  if (subject && profileCovers(teacher, subject, normalizedGrade)) {
+    return grantFromProfile({ teacher, subject, gradeLevel: normalizedGrade, actorId: teacher.teacherProfile.reviewedBy || teacher._id });
   }
-  if (auth.status === "PENDING") {
-    throw new AppError(
-      "Teacher subject authorization is still pending admin approval",
-      "SUBJECT_AUTHORIZATION_PENDING",
-      403
-    );
+
+  if (auths.some((auth) => auth.status === "PENDING")) {
+    throw new AppError("Teacher subject authorization is still pending admin approval", "SUBJECT_AUTHORIZATION_PENDING", 403);
   }
-  if (auth.status === "SUSPENDED") {
-    throw new AppError(
-      "Teacher subject authorization has been suspended",
-      "SUBJECT_AUTHORIZATION_SUSPENDED",
-      403
-    );
-  }
-  if (auth.status !== "APPROVED") {
-    throw FORBIDDEN("Teacher subject authorization is not approved");
-  }
-  return auth;
+  throw new AppError(
+    "Teacher does not have an approved authorization for this subject and grade level",
+    "SUBJECT_AUTHORIZATION_REQUIRED",
+    403
+  );
 };
 
 module.exports = {
@@ -562,6 +617,7 @@ module.exports = {
   approveAuthorization,
   suspendAuthorization,
   assertApprovedAuthorization,
+  grantAllFromProfile,
   toTeacherAuthView,
 };
 

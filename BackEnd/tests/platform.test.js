@@ -444,12 +444,13 @@ describe("Teacher verification, class approval and classroom", () => {
       approvedBy: admin._id,
       approvedAt: new Date(),
     });
+    // Approving the dossier sent the teaching contract; no class can be created before it is signed
     const noContract = await request(app).post("/api/teacher/classes").set(as(newTeacher)).send(classBody);
-    expect(noContract.statusCode).toBe(201); // a DRAFT does not need a contract; approval does
-    expect(noContract.body.data.status).toBe("DRAFT");
-    const contract = await request(app).post(`/api/admin/teachers/${newTeacher._id}/contracts`).set(as(admin)).send({});
-    expect(contract.statusCode).toBe(201);
-    const signed = await request(app).post(`/api/teacher/contracts/${contract.body.data.id}/sandbox-sign`).set(as(newTeacher)).send({ decision: "SIGN" });
+    expect(noContract.statusCode).toBe(403);
+    expect(noContract.body.error).toBe("TEACHER_CONTRACT_NOT_ACTIVE");
+    const myContracts = await request(app).get("/api/teacher/contracts").set(as(newTeacher));
+    expect(myContracts.body.data.map((c) => c.status)).toEqual(["PENDING_SIGNATURE"]);
+    const signed = await request(app).post(`/api/teacher/contracts/${myContracts.body.data[0].id}/sandbox-sign`).set(as(newTeacher)).send({ decision: "SIGN" });
     expect(signed.body.data.status).toBe("ACTIVE");
     expect(await TeacherContract.countDocuments({ teacherId: newTeacher._id, status: "ACTIVE" })).toBe(1);
 
@@ -487,6 +488,9 @@ describe("Teacher verification, class approval and classroom", () => {
         schedule: [{ dayOfWeek: 1, startTime: "19:00", endTime: "21:00" }],
       });
     expect(updated.statusCode).toBe(200);
+    expect(updated.body.data.sessionPlan.generatedCount).toBeGreaterThanOrEqual(4); // one per Monday slot
+    // This lifecycle scenario runs its own sessions at chosen times, so the planned ones make way
+    await Session.deleteMany({ classId });
 
     const planned = await request(app).get(`/api/teacher/classes/${classId}/planned-sessions`).set(as(newTeacher));
     expect(planned.body.data.length).toBeGreaterThanOrEqual(4);
@@ -517,7 +521,8 @@ describe("Teacher verification, class approval and classroom", () => {
       });
     expect(sessions.statusCode).toBe(201);
     expect(sessions.body.data).toHaveLength(2);
-    const sessionId = sessions.body.data[0].id;
+    let sessionId = sessions.body.data[0].id;
+    let laterSessionId = sessions.body.data[1].id;
 
     const edited = await request(app).patch(`/api/teacher/sessions/${sessions.body.data[1].id}`).set(as(newTeacher)).send({ title: "Buổi 2 - Phân số (tt)" });
     expect(edited.body.data.title).toBe("Buổi 2 - Phân số (tt)");
@@ -549,6 +554,11 @@ describe("Teacher verification, class approval and classroom", () => {
     const fixed = await request(app).patch(`/api/teacher/classes/${classId}`).set(as(newTeacher)).send({ description: "Mô tả đầy đủ hơn" });
     expect(fixed.statusCode).toBe(200);
     expect(fixed.body.data.status).toBe("NEED_CHANGES");
+    // Editing only the description keeps the sessions planned from the schedule
+    expect(fixed.body.data.sessionPlan).toBeUndefined();
+    const kept = await Session.find({ classId }).sort({ startDatetime: 1 }).lean();
+    expect(kept.length).toBeGreaterThanOrEqual(2);
+    [sessionId, laterSessionId] = kept.map((session) => session._id.toString());
     await request(app).post(`/api/teacher/classes/${classId}/submit`).set(as(newTeacher));
 
     const approved = await request(app).post(`/api/admin/classes/${classId}/approve`).set(as(admin)).send({});
@@ -589,8 +599,15 @@ describe("Teacher verification, class approval and classroom", () => {
     expect(stranger.body.error).toBe("NOT_ENROLLED");
     const wrongTeacher = await request(app).post(`/api/sessions/${sessionId}/join`).set(as(teacher));
     expect(wrongTeacher.statusCode).toBe(403);
-    const tooEarly = await request(app).post(`/api/sessions/${sessions.body.data[1].id}/join`).set(as(student));
+    const tooEarly = await request(app).post(`/api/sessions/${laterSessionId}/join`).set(as(student));
     expect(tooEarly.body.error).toBe("SESSION_NOT_JOINABLE");
+    // The page tells when the room opens: 10 minutes before the start
+    const later = await Session.findById(laterSessionId).lean();
+    expect(tooEarly.body.details).toMatchObject({
+      startDatetime: later.startDatetime.toISOString(),
+      opensAt: new Date(later.startDatetime.getTime() - 10 * 60 * 1000).toISOString(),
+      closesAt: later.endDatetime.toISOString(),
+    });
 
     const host = await request(app).post(`/api/sessions/${sessionId}/join`).set(as(newTeacher));
     expect(host.statusCode).toBe(200);

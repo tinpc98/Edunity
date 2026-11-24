@@ -1,4 +1,4 @@
-// TEACHER-CLASS-FLOW-02: drafting is free of governance, submission warns, approval enforces.
+// TEACHER-CLASS-FLOW-02: drafting needs a signed contract and a teaching authorization, approval enforces both again.
 const request = require("supertest");
 const mongoose = require("mongoose");
 const app = require("../src/app");
@@ -8,6 +8,7 @@ const {
   Subject,
   Course,
   Class,
+  Session,
   AuditLog,
   Notification,
   TeacherSubjectAuthorization,
@@ -20,7 +21,6 @@ const { rejectExpiredPendingClasses } = require("../src/jobs/maintenanceJob");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
 
 const DAY = 24 * 60 * 60 * 1000;
-const HOUR = 60 * 60 * 1000;
 const inDays = (days, extra = 0) => new Date(Date.now() + days * DAY + extra);
 const as = (user) => ({ "x-user-id": user._id.toString() });
 const codes = (checks) => checks.map((check) => check.code);
@@ -54,6 +54,8 @@ beforeEach(async () => {
     categoryName: category.name,
     createdBy: admin._id,
   });
+  await signContract();
+  await grant.authorization();
   course = await Course.create({
     title: "Toán 12",
     slug: "toan-12-flow02",
@@ -67,20 +69,22 @@ beforeEach(async () => {
   });
 });
 
+// The teacher starts authorized for the course's subject and grade; a test changes or withdraws that one record
 const grant = {
   authorization: (overrides = {}) =>
-    TeacherSubjectAuthorization.create({
-      teacherId: teacher._id,
-      subjectId: subject._id,
-      categoryId: category._id,
-      gradeLevel: "GRADE_12",
-      level: "ADVANCED",
-      status: "APPROVED",
-      createdBy: admin._id,
-      ...overrides,
-    }),
+    TeacherSubjectAuthorization.findOneAndUpdate(
+      { teacherId: teacher._id, subjectId: subject._id },
+      {
+        $set: { categoryId: category._id, gradeLevel: "GRADE_12", level: "ADVANCED", status: "APPROVED", ...overrides },
+        $setOnInsert: { createdBy: admin._id },
+      },
+      { upsert: true }
+    ),
   contract: (overrides = {}) =>
-    TeacherContract.create({
+    TeacherContract.updateOne({ teacherId: teacher._id }, { $set: { status: "ACTIVE", ...overrides } }),
+};
+const signContract = () =>
+  TeacherContract.create({
       contractCode: "HD-FLOW02",
       teacherId: teacher._id,
       status: "ACTIVE",
@@ -90,9 +94,10 @@ const grant = {
       createdBy: admin._id,
       sentAt: new Date(),
       signedAt: new Date(),
-      ...overrides,
-    }),
-};
+    });
+const revokeContract = () => TeacherContract.deleteMany({ teacherId: teacher._id });
+const revokeAuthorization = () => TeacherSubjectAuthorization.deleteMany({ teacherId: teacher._id });
+const revoke = { authorization: revokeAuthorization, contract: revokeContract };
 const grantAllExcept = async (...skipped) => {
   for (const [name, create] of Object.entries(grant)) if (!skipped.includes(name)) await create();
 };
@@ -121,12 +126,8 @@ const completeFields = () => ({
 const completeDraft = async (fields = {}) => {
   const created = await create({ ...completeFields(), ...fields });
   expect(created.statusCode).toBe(201);
-  const id = created.body.data.id;
-  const sessions = await call(teacher, "post", `/teacher/classes/${id}/sessions`, {
-    sessions: [4, 5].map((day) => ({ title: `Buổi ${day}`, startDatetime: inDays(day), endDatetime: inDays(day, HOUR) })),
-  });
-  expect(sessions.statusCode).toBe(201);
-  return id;
+  expect(created.body.data.sessionPlan.generatedCount).toBeGreaterThan(0); // planned from the weekly schedule
+  return created.body.data.id;
 };
 const submit = (id) => call(teacher, "post", `/teacher/classes/${id}/submit`);
 const approve = (id, user = admin) => call(user, "post", `/admin/classes/${id}/approve`, {});
@@ -139,19 +140,118 @@ const statusOf = async (id) => (await Class.findById(id).lean()).status;
 const auditsOf = (id, action) => AuditLog.countDocuments({ targetId: id, action });
 
 describe("Creating and saving a DRAFT", () => {
-  test.each([
-    ["1. without an APPROVED authorization", ["authorization"]],
-    ["2. without a contract", ["contract"]],
-    ["3. without a pricing policy", []],
-    ["1-3. without any of the three", ["authorization", "contract"]],
-  ])("%s", async (_name, skipped) => {
-    await grantAllExcept(...skipped);
-
+  test("3. without a pricing policy", async () => {
     const res = await create();
 
     expect(res.statusCode).toBe(201);
     expect(res.body.data.status).toBe("DRAFT");
     expect(res.body.data.pricingPolicyId).toBeNull();
+  });
+
+  test.each([
+    ["no authorization", () => revokeAuthorization(), "SUBJECT_AUTHORIZATION_REQUIRED"],
+    ["an authorization for another grade", () => grant.authorization({ gradeLevel: "GRADE_11" }), "SUBJECT_AUTHORIZATION_REQUIRED"],
+    ["an authorization awaiting Admin", () => grant.authorization({ status: "PENDING" }), "SUBJECT_AUTHORIZATION_PENDING"],
+    ["a suspended authorization", () => grant.authorization({ status: "SUSPENDED" }), "SUBJECT_AUTHORIZATION_SUSPENDED"],
+  ])("1. a teacher with %s cannot create a class", async (_name, setAuthorization, code) => {
+    await setAuthorization();
+    const res = await create();
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe(code);
+    expect(await Class.countDocuments()).toBe(0);
+  });
+
+  test("1b. a class cannot be moved to a course the teacher is not authorized for", async () => {
+    const id = (await create()).body.data.id;
+    const other = await Course.create({
+      title: "Toán 11",
+      slug: "toan-11-flow02",
+      categoryId: category._id,
+      categoryName: category.name,
+      subjectId: subject._id,
+      subjectName: subject.name,
+      gradeLevel: "GRADE_11",
+      createdBy: admin._id,
+    });
+    const res = await call(teacher, "patch", `/teacher/classes/${id}`, { courseId: other._id });
+    expect(res.body.error).toBe("SUBJECT_AUTHORIZATION_REQUIRED");
+    expect(String((await Class.findById(id).lean()).courseId)).toBe(String(course._id));
+  });
+
+  test.each([
+    ["no contract", () => revokeContract(), "TEACHER_CONTRACT_NOT_FOUND"],
+    ["a contract awaiting signature", () => grant.contract({ status: "PENDING_SIGNATURE", signedAt: null }), "TEACHER_CONTRACT_NOT_ACTIVE"],
+    ["an expired contract", () => grant.contract({ effectiveFrom: inDays(-9), expiresAt: inDays(-1) }), "TEACHER_CONTRACT_EXPIRED"],
+  ])("2. a teacher with %s cannot create a class", async (_name, setContract, code) => {
+    await setContract();
+    const res = await create();
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe(code);
+    expect(await Class.countDocuments()).toBe(0);
+  });
+
+  test("a saved DRAFT gets one session per weekly slot, rebuilt when the schedule changes", async () => {
+    const id = (await create(completeFields())).body.data.id;
+    const planned = await Session.find({ classId: id }).sort({ startDatetime: 1 }).lean();
+    expect(planned.length).toBeGreaterThan(0);
+    expect(planned.map((p) => p.sessionNumber)).toEqual(planned.map((_, i) => i + 1));
+    expect(planned.every((p) => p.scheduleSource === "SCHEDULE_GENERATED" && p.status === "SCHEDULED")).toBe(true);
+
+    const twice = await call(teacher, "patch", `/teacher/classes/${id}`, {
+      schedule: [
+        { dayOfWeek: 1, startTime: "19:00", endTime: "21:00" },
+        { dayOfWeek: 3, startTime: "19:00", endTime: "21:00" },
+      ],
+    });
+    expect(twice.body.data.sessionPlan.generatedCount).toBeGreaterThan(planned.length);
+    expect(await Session.countDocuments({ classId: id })).toBe(twice.body.data.sessionPlan.generatedCount);
+
+    const none = await call(teacher, "patch", `/teacher/classes/${id}`, { schedule: [] });
+    expect(none.body.data.sessionPlan.generatedCount).toBe(0);
+    expect(await Session.countDocuments({ classId: id })).toBe(0);
+  });
+
+  test("a renamed session keeps its name when the class is edited without touching its schedule", async () => {
+    const id = await completeDraft();
+    const first = await Session.findOne({ classId: id }).sort({ startDatetime: 1 }).lean();
+    const renamed = await call(teacher, "patch", `/teacher/sessions/${first._id}`, { title: "Buổi mở đầu: Đa thức" });
+    expect(renamed.statusCode).toBe(200);
+
+    const edited = await call(teacher, "patch", `/teacher/classes/${id}`, { description: "Mô tả mới", capacity: 25 });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.body.data.sessionPlan).toBeUndefined();
+    expect((await Session.findById(first._id).lean()).title).toBe("Buổi mở đầu: Đa thức");
+
+    // the same schedule sent again is not a change either
+    await call(teacher, "patch", `/teacher/classes/${id}`, { schedule: completeFields().schedule });
+    expect((await Session.findById(first._id).lean()).title).toBe("Buổi mở đầu: Đa thức");
+  });
+
+  test("the teacher's busy sessions are listed for checking a schedule before saving", async () => {
+    const id = await completeDraft();
+    const own = await Session.find({ classId: id }).lean();
+    const range = { from: inDays(0).toISOString(), to: inDays(40).toISOString() };
+    const busy = (query) => call(teacher, "get", `/teacher/sessions/busy?${new URLSearchParams(query)}`);
+
+    const all = await busy(range);
+    expect(all.statusCode).toBe(200);
+    expect(all.body.data).toHaveLength(own.length);
+    expect(Object.keys(all.body.data[0]).sort()).toEqual(["_id", "classId", "className", "endDatetime", "id", "startDatetime", "title"]);
+    expect((await busy({ ...range, excludeClassId: id })).body.data).toHaveLength(0);
+    expect((await call(otherTeacher, "get", `/teacher/sessions/busy?${new URLSearchParams(range)}`)).body.data).toHaveLength(0);
+
+    for (const bad of [{}, { from: "x", to: range.to }, { from: range.to, to: range.from }, { ...range, excludeClassId: "nope" }, { from: inDays(0).toISOString(), to: inDays(500).toISOString() }]) {
+      expect((await busy(bad)).statusCode).toBe(400);
+    }
+    expect((await call(student, "get", `/teacher/sessions/busy?${new URLSearchParams(range)}`)).statusCode).toBe(403);
+  });
+
+  test("a schedule clashing with another class saves the class and reports why no session was planned", async () => {
+    await completeDraft();
+    const res = await create(completeFields());
+    expect(res.statusCode).toBe(201);
+    expect(res.body.data.sessionPlan).toMatchObject({ generatedCount: 0, error: { code: "SESSION_TIME_CONFLICT" } });
+    expect(await Session.countDocuments({ classId: res.body.data.id })).toBe(0);
   });
 
   test("4. a DRAFT without schedule, dates or sessions is saved and can be saved again", async () => {
@@ -270,15 +370,26 @@ describe("Submitting", () => {
     await call(teacher, "patch", `/teacher/classes/${id}`, { schedule: [] });
     const res = await submit(id);
     expect(res.body.error).toBe("CLASS_INCOMPLETE");
-    expect(res.body.details.missing).toEqual(["schedule"]);
+    expect(res.body.details.missing).toEqual(["schedule", "sessions"]);
+  });
+
+  test("6a. a class whose authorization was withdrawn after drafting cannot be submitted", async () => {
+    const id = await completeDraft();
+    await revokeAuthorization();
+
+    const res = await submit(id);
+
+    expect(res.body.error).toBe("SUBJECT_AUTHORIZATION_REQUIRED");
+    expect(await statusOf(id)).toBe("DRAFT");
+    expect(await auditsOf(id, "CLASS_SUBMITTED")).toBe(0);
+    expect(await TeacherSubjectAuthorization.countDocuments()).toBe(0);
   });
 
   test.each([
-    ["authorization", "SUBJECT_AUTHORIZATION_REQUIRED"],
     ["contract", "TEACHER_CONTRACT_NOT_FOUND"],
   ])("6. a complete class missing %s is submitted with a warning and grants nothing", async (skipped, code) => {
-    await grantAllExcept(skipped);
     const id = await completeDraft();
+    await revokeContract();
 
     const res = await submit(id);
 
@@ -291,8 +402,7 @@ describe("Submitting", () => {
     expect(log.afterState).toMatchObject({ submittedBy: teacher._id.toString(), pendingConditions: [code] });
     expect(await Notification.countDocuments({ type: "CLASS_SUBMITTED" })).toBe(2); // one per admin
 
-    const granted = { authorization: TeacherSubjectAuthorization, contract: TeacherContract };
-    expect(await granted[skipped].countDocuments()).toBe(0);
+    expect(await TeacherContract.countDocuments()).toBe(0);
   });
 
   test.each([
@@ -323,8 +433,8 @@ describe("Approving", () => {
     ["7. authorization", "authorization", "SUBJECT_AUTHORIZATION_REQUIRED", 403],
     ["8. contract", "contract", "TEACHER_CONTRACT_NOT_FOUND", 403],
   ])("%s missing is refused", async (_name, skipped, code, statusCode) => {
-    await grantAllExcept(skipped);
     const id = await pendingClass();
+    await revoke[skipped]();
 
     const res = await approve(id);
 
@@ -338,6 +448,8 @@ describe("Approving", () => {
 
   test("lists every failed condition at once", async () => {
     const id = await pendingClass();
+    await revokeAuthorization();
+    await revokeContract();
     expect(codes((await approve(id)).body.details.pendingChecks)).toEqual([
       "SUBJECT_AUTHORIZATION_REQUIRED",
       "TEACHER_CONTRACT_NOT_FOUND",
@@ -346,15 +458,15 @@ describe("Approving", () => {
 
   test.each([
     ["authorization is for another grade", "authorization", { gradeLevel: "GRADE_11" }, "SUBJECT_AUTHORIZATION_REQUIRED"],
-    ["authorization is for another level", "authorization", { level: "BEGINNER" }, "SUBJECT_AUTHORIZATION_REQUIRED"],
+    ["authorization is for another grade", "authorization", { gradeLevel: "GRADE_11" }, "SUBJECT_AUTHORIZATION_REQUIRED"],
     ["authorization is pending", "authorization", { status: "PENDING" }, "SUBJECT_AUTHORIZATION_PENDING"],
     ["contract is terminated", "contract", { status: "TERMINATED" }, "TEACHER_CONTRACT_NOT_ACTIVE"],
     ["contract has expired", "contract", { effectiveFrom: inDays(-9), expiresAt: inDays(-1) }, "TEACHER_CONTRACT_EXPIRED"],
     ["contract is not effective yet", "contract", { effectiveFrom: inDays(9) }, "TEACHER_CONTRACT_NOT_ACTIVE"],
   ])("is refused when the %s", async (_name, which, overrides, code) => {
     await grantAllExcept(which);
-    await grant[which](overrides);
     const id = await pendingClass();
+    await grant[which](overrides);
     expect((await approve(id)).body.error).toBe(code);
     expect(await statusOf(id)).toBe("PENDING_APPROVAL");
   });
@@ -389,6 +501,58 @@ describe("Approving", () => {
     expect(await Notification.countDocuments({ userId: teacher._id, type: "CLASS_APPROVED" })).toBe(1);
     expect(JSON.stringify((await request(app).get("/api/classes")).body)).toContain(id);
     expect((await call(teacher, "patch", `/teacher/classes/${id}`, { capacity: 9 })).body.error).toBe("CLASS_NOT_EDITABLE");
+  });
+
+  test("the course level does not matter: an authorization of another level opens the class", async () => {
+    await grant.authorization({ level: "BEGINNER" });
+    const id = await pendingClass();
+
+    expect((await approve(id)).body.data.status).toBe("OPEN");
+  });
+
+  describe("the approved teaching profile is the authorization", () => {
+    const withProfile = (subjects, gradeLevels, verificationStatus = "VERIFIED") =>
+      User.updateOne(
+        { _id: teacher._id },
+        {
+          $set: {
+            "teacherProfile.verificationStatus": verificationStatus,
+            "teacherProfile.reviewedBy": admin._id,
+            "teacherProfile.teachingProfile": { degree: "BACHELOR", subjects, gradeLevels, studentNote: "x", yearsOfExperience: 3 },
+          },
+        }
+      );
+
+    test("a profile covering the subject and grade opens the class and records the grant", async () => {
+      const id = await pendingClass();
+      await revokeAuthorization();
+      await withProfile(["toán "], ["GRADE_12"]);
+
+      expect((await approve(id)).body.data.status).toBe("OPEN");
+      const auth = await TeacherSubjectAuthorization.findOne({ teacherId: teacher._id, subjectId: subject._id }).lean();
+      expect(auth).toMatchObject({ status: "APPROVED", gradeLevel: "GRADE_12", level: null, approvedBy: admin._id });
+    });
+
+    test.each([
+      ["another subject", ["Vật lý"], ["GRADE_12"], "VERIFIED"],
+      ["another grade", ["Toán"], ["GRADE_11"], "VERIFIED"],
+    ])("a profile with %s grants nothing", async (_name, subjects, grades, status) => {
+      const id = await pendingClass();
+      await revokeAuthorization();
+      await withProfile(subjects, grades, status);
+
+      expect((await approve(id)).body.error).toBe("SUBJECT_AUTHORIZATION_REQUIRED");
+      expect(await TeacherSubjectAuthorization.countDocuments({})).toBe(0);
+    });
+
+    test("a suspension still blocks a teacher whose profile covers the class", async () => {
+      const id = await pendingClass();
+      await grant.authorization({ status: "SUSPENDED" });
+      await withProfile(["Toán"], ["GRADE_12"]);
+
+      expect((await approve(id)).body.error).toBe("SUBJECT_AUTHORIZATION_SUSPENDED");
+      expect(await statusOf(id)).toBe("PENDING_APPROVAL");
+    });
   });
 
   test("14. NEED_CHANGES, then edit, then resubmit, then approval", async () => {
@@ -546,10 +710,11 @@ describe("Readiness", () => {
     expect(res.body.data.checks.filter((check) => check.status === "PENDING").every((check) => !check.blocksSubmit)).toBe(true);
 
     expect((await submit(ready)).statusCode).toBe(200);
+    await revokeContract();
     res = await call(admin, "get", `/admin/classes/${ready}/readiness`);
     expect(res.body.data).toMatchObject({ canSaveDraft: false, canSubmit: false, canApprove: false });
 
-    await grantAllExcept();
+    await signContract();
     res = await call(admin, "get", `/admin/classes/${ready}/readiness`);
     expect(res.body.data.canApprove).toBe(true);
     expect((await approve(ready)).statusCode).toBe(200);
@@ -558,6 +723,7 @@ describe("Readiness", () => {
   test("no session yet is a blocking schedule failure, never shown as a tuition one", async () => {
     await grantAllExcept();
     const id = (await create(completeFields())).body.data.id;
+    await Session.deleteMany({ classId: id });
 
     const { body } = await call(teacher, "get", `/teacher/classes/${id}/readiness`);
     const check = (key) => body.data.checks.find((item) => item.key === key);
@@ -568,8 +734,8 @@ describe("Readiness", () => {
   });
 
   test("tells Admin why a contract is not active", async () => {
-    await grant.contract({ status: "PENDING_SIGNATURE", signedAt: null });
     const id = await pendingClass();
+    await grant.contract({ status: "PENDING_SIGNATURE", signedAt: null });
     const { body } = await call(admin, "get", `/admin/classes/${id}/readiness`);
     expect(body.data.checks.find((check) => check.key === "TEACHER_CONTRACT").message).toMatch(/chờ giáo viên ký/);
   });

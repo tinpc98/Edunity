@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const { softDeletePlugin } = require("./plugins");
+const { SUPPORTED_GRADE_LEVELS, TEACHER_DEGREES } = require("./constants");
 
 const studentProfileSchema = new Schema(
   {
@@ -45,6 +46,25 @@ const teacherBankAccountSchema = new Schema(
   { _id: false }
 );
 
+// Registration step 2: what the teacher teaches and their background, read by the Admin reviewing the dossier
+const teachingProfileSchema = new Schema(
+  {
+    degree: { type: String, enum: TEACHER_DEGREES, required: true },
+    major: { type: String, trim: true, default: null },
+    school: { type: String, trim: true, default: null },
+    certificates: {
+      type: [new Schema({ name: { type: String, required: true, trim: true }, year: { type: Number, default: null } }, { _id: false })],
+      default: [],
+    },
+    achievements: { type: String, default: null },
+    subjects: { type: [String], default: [] },
+    gradeLevels: { type: [{ type: String, enum: SUPPORTED_GRADE_LEVELS }], default: [] },
+    studentNote: { type: String, default: null },
+    yearsOfExperience: { type: Number, min: 0, max: 60, required: true },
+  },
+  { _id: false }
+);
+
 const teacherProfileSchema = new Schema(
   {
     fullName: { type: String, required: true, trim: true },
@@ -68,6 +88,7 @@ const teacherProfileSchema = new Schema(
     bankAccount: { type: teacherBankAccountSchema, default: undefined },
 
     qualificationSummary: String,
+    teachingProfile: { type: teachingProfileSchema, default: undefined },
     ratingAverage: { type: Number, default: 0 },
     ratingCount: { type: Number, default: 0 },
   },

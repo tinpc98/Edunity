@@ -16,6 +16,7 @@ const { hashPassword } = require("../src/utils/password");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
 const { deleteCourse } = require("../src/services/courseCatalogService");
 const { createClass } = require("../src/services/teacherClassService");
+const { signContract } = require("./helpers/contract");
 const { createEnrollment } = require("../src/services/enrollmentService");
 
 describe("TASK CHAU-P0-SAFE-DELETE-VERIFY: Real MongoMemoryReplSet Concurrency & Transaction Integrity Suite", () => {
@@ -58,6 +59,7 @@ describe("TASK CHAU-P0-SAFE-DELETE-VERIFY: Real MongoMemoryReplSet Concurrency &
         verificationStatus: "VERIFIED",
       },
     });
+    await signContract(teacher._id, admin._id);
 
     student = await User.create({
       email: "student-safedel@edunity.test",
