@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App as AntdApp, Button, Descriptions, Form, Input, Modal, Radio, Space, Tag } from "antd";
-import { SolutionOutlined } from "@ant-design/icons";
+import { Alert, App as AntdApp, Button, Descriptions, Form, Input, Modal, Select, Space, Table, Tag } from "antd";
+import { ReloadOutlined, SolutionOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import AdminDataTable from "../../../../components/admin/AdminDataTable";
-import AdminPageHeader from "../../../../components/admin/AdminPageHeader";
+import { AdminPageHero, AdminFilterBar, AdminTableCard } from "../../../../components/admin";
 import { FetchError } from "../../../../api/apiClient";
 import { classKeys } from "../../../../services/class.service";
 import { teacherSubjectAuthorizationService } from "../../../../services/teacherSubjectAuthorization.service";
@@ -92,25 +91,17 @@ export default function AdminSubjectAuthorizationsPage() {
   const suspending = action?.next === "SUSPENDED";
 
   return (
-    <div className="w-full pb-10">
-      <AdminPageHeader
-        eyebrow="Quản lý giáo viên"
-        eyebrowIcon={<SolutionOutlined />}
+    <div className="flex flex-col gap-5 w-full pb-10">
+      <AdminPageHero
+        icon={<SolutionOutlined />}
         title="Duyệt quyền giảng dạy"
         description="Lớp chỉ mở được khi quyền đã duyệt khớp đúng môn, khối lớp và cấp độ của khóa học."
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isLoading} className="rounded-xl">
+            Làm mới
+          </Button>
+        }
       />
-
-      <div className="mb-4 overflow-x-auto pb-1">
-        <Radio.Group
-          aria-label="Lọc theo trạng thái"
-          className="whitespace-nowrap"
-          optionType="button"
-          buttonStyle="solid"
-          value={status}
-          options={FILTERS.map((value) => ({ value, label: value === "ALL" ? "Tất cả" : STATUS[value].label }))}
-          onChange={(event) => setParams({ status: event.target.value })}
-        />
-      </div>
 
       {isError ? (
         <Alert
@@ -121,20 +112,33 @@ export default function AdminSubjectAuthorizationsPage() {
           action={<Button onClick={() => refetch()}>Thử lại</Button>}
         />
       ) : (
-        <AdminDataTable<AdminSubjectAuthorization>
-          tableTitle="Yêu cầu quyền giảng dạy"
-          totalCount={data?.total}
-          totalCountLabel="yêu cầu"
+        <AdminTableCard>
+        <AdminFilterBar
+          title="Bộ lọc yêu cầu"
+          onReset={() => setParams({})}
+          hasFilter={status !== "PENDING"}
+          gridClassName="sm:grid-cols-[260px_auto]"
+          summary={data ? <>Có <span className="font-semibold text-[#0F766E]">{data.total}</span> yêu cầu</> : null}
+        >
+          <Select
+            aria-label="Lọc theo trạng thái"
+            className="w-full"
+            value={status}
+            onChange={(value) => setParams({ status: value })}
+            options={FILTERS.map((value) => ({ value, label: value === "ALL" ? "Tất cả trạng thái" : STATUS[value].label }))}
+          />
+        </AdminFilterBar>
+        <Table<AdminSubjectAuthorization>
           rowKey="_id"
           loading={isLoading}
           dataSource={data?.items}
-          scroll={{ x: 920 }}
           locale={{ emptyText: "Không có yêu cầu nào trong mục này." }}
           pagination={{
             current: page,
             pageSize: PAGE_SIZE,
             total: data?.total,
             showSizeChanger: false,
+            showTotal: (total) => `Tổng số ${total} yêu cầu`,
             onChange: (next) => setParams({ status, page: String(next) }),
           }}
           columns={[
@@ -182,6 +186,7 @@ export default function AdminSubjectAuthorizationsPage() {
             },
           ]}
         />
+        </AdminTableCard>
       )}
 
       <Modal

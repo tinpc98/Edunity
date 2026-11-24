@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
@@ -23,6 +23,7 @@ import {
   EyeOutlined,
   DeleteOutlined,
   ReloadOutlined,
+  SearchOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
@@ -32,9 +33,12 @@ import type {
   CreateCategoryPayload,
   UpdateCategoryPayload,
 } from "../../../types/catalog";
-import { GRADE_LEVEL_LABELS } from "../../../types/catalog";
+import { GRADE_LEVEL_LABELS, SUPPORTED_GRADE_LEVELS } from "../../../types/catalog";
+import { AdminPageHero, AdminFilterBar, AdminFilterField, AdminTableCard } from "../../../components/admin";
 
 const { TextArea } = Input;
+
+type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
 
 export default function AdminCategoriesPage() {
   const queryClient = useQueryClient();
@@ -64,6 +68,39 @@ export default function AdminCategoriesPage() {
     queryFn: () => catalogService.listCategories(),
     staleTime: 60_000,
   });
+
+  // Filters (client-side: listCategories returns the full list)
+  const [keyword, setKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [gradeFilter, setGradeFilter] = useState<string | undefined>();
+  const hasFilter = keyword.trim() !== "" || statusFilter !== "ALL" || !!gradeFilter;
+
+  const statusCounts = useMemo(
+    () => ({
+      ALL: categories.length,
+      ACTIVE: categories.filter((c) => c.status === "ACTIVE").length,
+      INACTIVE: categories.filter((c) => c.status !== "ACTIVE").length,
+    }),
+    [categories]
+  );
+
+  const filteredCategories = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    return categories.filter((c) => {
+      if (statusFilter === "ACTIVE" && c.status !== "ACTIVE") return false;
+      if (statusFilter === "INACTIVE" && c.status === "ACTIVE") return false;
+      // null/empty allowedGradeLevels means the category applies to every grade
+      if (gradeFilter && c.allowedGradeLevels?.length && !c.allowedGradeLevels.includes(gradeFilter as never)) return false;
+      if (!q) return true;
+      return [c.name, c.slug, c.description].some((v) => v?.toLowerCase().includes(q));
+    });
+  }, [categories, keyword, statusFilter, gradeFilter]);
+
+  const resetFilters = () => {
+    setKeyword("");
+    setStatusFilter("ALL");
+    setGradeFilter(undefined);
+  };
 
   // Save (Create/Update) mutation
   const saveCategoryMutation = useMutation({
@@ -139,10 +176,16 @@ export default function AdminCategoriesPage() {
       title: "Tên danh mục",
       dataIndex: "name",
       key: "name",
+      sorter: (a, b) => a.name.localeCompare(b.name, "vi"),
       render: (name: string, record: Category) => (
-        <div>
-          <div className="font-semibold text-slate-800">{name}</div>
-          <div className="font-mono text-xs text-slate-500 mt-0.5">{record.slug}</div>
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-9 h-9 shrink-0 rounded-lg bg-[#E5F5F1] text-[#0F766E] flex items-center justify-center">
+            <FolderOutlined />
+          </div>
+          <div className="min-w-0 break-words">
+            <div className="font-semibold text-[#163B40]">{name}</div>
+            <div className="font-mono text-xs text-slate-500 mt-0.5 break-all">{record.slug}</div>
+          </div>
         </div>
       ),
     },
@@ -150,8 +193,7 @@ export default function AdminCategoriesPage() {
       title: "Mô tả",
       dataIndex: "description",
       key: "description",
-      ellipsis: true,
-      render: (desc: string) => desc || <span className="text-slate-400 italic">Chưa có mô tả</span>,
+      render: (desc: string) => desc ? <span className="break-words">{desc}</span> : <span className="text-slate-400 italic">Chưa có mô tả</span>,
     },
     {
       title: "Khối lớp áp dụng",
@@ -192,6 +234,7 @@ export default function AdminCategoriesPage() {
       dataIndex: "createdAt",
       key: "createdAt",
       width: 130,
+      sorter: (a, b) => dayjs(a.createdAt).valueOf() - dayjs(b.createdAt).valueOf(),
       render: (date: string) => (
         <span className="text-xs text-slate-600 font-mono">
           {date ? dayjs(date).format("DD/MM/YYYY") : "—"}
@@ -230,32 +273,21 @@ export default function AdminCategoriesPage() {
   ];
 
   return (
-    <div className="space-y-5 p-6 bg-[#F8FAFC] min-h-screen">
+    <div className="flex flex-col gap-5 w-full">
       {contextHolder}
 
-      {/* Page Header */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-            <span>Admin</span>
-            <span>›</span>
-            <span className="font-semibold text-teal-700">Danh mục đào tạo</span>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center text-lg">
-              <FolderOutlined />
-            </div>
-            <h1 className="text-xl font-bold text-[#163B40] m-0">Quản lý Danh mục đào tạo</h1>
-          </div>
-          <p className="text-xs text-slate-500 mt-1 mb-0">
-            Phân loại cấp bậc học và các nhóm chương trình đào tạo trên toàn hệ thống.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+      <AdminPageHero
+        icon={<FolderOutlined />}
+        title="Quản lý danh mục đào tạo"
+        crumb="Danh mục"
+        description="Phân loại cấp bậc học và các nhóm chương trình đào tạo trên toàn hệ thống."
+        extra={
+          <>
           <Button
             icon={<ReloadOutlined />}
             onClick={() => refetchCategories()}
             loading={loadingCategories}
+            className="rounded-xl"
           >
             Làm mới
           </Button>
@@ -267,8 +299,9 @@ export default function AdminCategoriesPage() {
           >
             Thêm danh mục
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Error state */}
       {isErrorCategories && (
@@ -285,8 +318,52 @@ export default function AdminCategoriesPage() {
         />
       )}
 
-      {/* Data Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      {/* Data Table + Filter bar */}
+      <AdminTableCard>
+        <AdminFilterBar
+          title="Bộ lọc danh mục"
+          onReset={resetFilters}
+          hasFilter={hasFilter}
+          summary={
+            hasFilter && !loadingCategories ? (
+              <>
+                Tìm thấy <span className="font-semibold text-[#0F766E]">{filteredCategories.length}</span> /{" "}
+                {categories.length} danh mục
+              </>
+            ) : null
+          }
+        >
+            <AdminFilterField label="Tìm kiếm">
+              <Input
+                allowClear
+                prefix={<SearchOutlined className="text-[#64748B]" />}
+                placeholder="Tên, slug hoặc mô tả..."
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="rounded-xl"
+              />
+            </AdminFilterField>
+            <AdminFilterField label="Trạng thái">
+              <Select<StatusFilter>
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[
+                  { value: "ALL", label: `Tất cả (${statusCounts.ALL})` },
+                  { value: "ACTIVE", label: `Hoạt động (${statusCounts.ACTIVE})` },
+                  { value: "INACTIVE", label: `Tạm ngưng (${statusCounts.INACTIVE})` },
+                ]}
+              />
+            </AdminFilterField>
+            <AdminFilterField label="Khối lớp áp dụng">
+              <Select
+                allowClear
+                placeholder="Tất cả khối lớp"
+                value={gradeFilter}
+                onChange={setGradeFilter}
+                options={SUPPORTED_GRADE_LEVELS.map((g) => ({ value: g, label: GRADE_LEVEL_LABELS[g] || g }))}
+              />
+            </AdminFilterField>
+        </AdminFilterBar>
         {loadingCategories ? (
           <div className="p-6">
             <Skeleton active paragraph={{ rows: 6 }} />
@@ -304,11 +381,18 @@ export default function AdminCategoriesPage() {
               </Button>
             </Empty>
           </div>
+        ) : filteredCategories.length === 0 ? (
+          <div className="p-12 text-center">
+            <Empty description="Không có danh mục nào khớp bộ lọc">
+              <Button onClick={resetFilters}>Xóa bộ lọc</Button>
+            </Empty>
+          </div>
         ) : (
           <Table<Category>
             columns={columns}
-            dataSource={categories}
+            dataSource={filteredCategories}
             rowKey="id"
+            tableLayout="fixed"
             pagination={{
               pageSize: 10,
               showTotal: (total) => `Tổng số ${total} danh mục`,
@@ -317,7 +401,7 @@ export default function AdminCategoriesPage() {
             }}
           />
         )}
-      </div>
+      </AdminTableCard>
 
       {/* Modal: Create / Edit Category */}
       <Modal

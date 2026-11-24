@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Typography, Tabs, Table, Tag, Button, Input, Card, Badge, Space, Select, Modal, Alert, message } from 'antd';
+import { Tabs, Table, Tag, Button, Input, Badge, Space, Select, Modal, Alert, message } from 'antd';
 import { 
   SearchOutlined, 
   EyeOutlined, 
@@ -7,15 +7,15 @@ import {
   BookOutlined,
   DeleteOutlined,
   ExclamationCircleOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
+import { AdminPageHero, AdminFilterBar, AdminFilterField, AdminTableCard } from '../../../components/admin';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ROUTES } from '../../../routes/routePaths';
 import { classService, classKeys } from '../../../services/class.service';
 import type { ClassModel, ClassStatus } from '../../../types/class';
 import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../types/class';
-
-const { Title, Text } = Typography;
 
 export default function AdminClassesPage() {
   const navigate = useNavigate();
@@ -187,24 +187,21 @@ export default function AdminClassesPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-6 w-full pb-10">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <Title level={2} className="!m-0 text-gray-900">Quản lý Lớp học</Title>
-          <Text className="text-gray-500">
-            Giám sát, theo dõi và phê duyệt mở lớp trực tuyến từ các giảng viên
-          </Text>
-        </div>
-      </div>
+    <div className="flex flex-col gap-5 w-full pb-10">
+      <AdminPageHero
+        icon={<AppstoreOutlined />}
+        title="Quản lý lớp học"
+        crumb="Lớp học"
+        description="Giám sát, theo dõi và phê duyệt mở lớp trực tuyến từ các giảng viên."
+      />
 
       {/* Main Tabs */}
-      <Card className="rounded-2xl shadow-sm border-gray-100 p-2">
+      <AdminTableCard>
         <Tabs
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key as 'pending' | 'all')}
-          size="large"
           className="font-medium"
+          tabBarStyle={{ padding: "0 20px", margin: 0 }}
           items={[
             {
               key: 'pending',
@@ -218,7 +215,7 @@ export default function AdminClassesPage() {
                 </Space>
               ),
               children: (
-                <div className="mt-4">
+                <div>
                   <Table
                     rowKey="id"
                     columns={columns}
@@ -231,7 +228,6 @@ export default function AdminClassesPage() {
                       onChange: (page) => setPendingPage(page),
                       showTotal: (total) => `Tổng số ${total} lớp chờ duyệt`,
                     }}
-                    className="overflow-x-auto"
                   />
                 </div>
               ),
@@ -245,21 +241,27 @@ export default function AdminClassesPage() {
                 </Space>
               ),
               children: (
-                <div className="mt-4 flex flex-col gap-4">
-                  {/* Filters Bar */}
-                  <div className="flex flex-wrap items-center gap-3">
+                <div>
+                  <AdminFilterBar
+                    title="Bộ lọc lớp học"
+                    gridClassName="md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_240px_auto]"
+                    hasFilter={searchTerm !== '' || statusFilter !== 'all'}
+                    onReset={() => { setSearchTerm(''); setStatusFilter('all'); setAllPage(1); }}
+                  >
+                    <AdminFilterField label="Tìm kiếm">
                     <Input
-                      placeholder="Tìm kiếm theo tên lớp, khóa học..."
-                      prefix={<SearchOutlined className="text-gray-400" />}
+                      placeholder="Tên lớp, khóa học..."
+                      prefix={<SearchOutlined className="text-[#64748B]" />}
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full md:w-[300px] rounded-lg"
+                      onChange={(e) => { setSearchTerm(e.target.value); setAllPage(1); }}
+                      className="rounded-xl"
                       allowClear
                     />
+                    </AdminFilterField>
+                    <AdminFilterField label="Trạng thái">
                     <Select
                       value={statusFilter}
-                      onChange={setStatusFilter}
-                      className="w-[180px]"
+                      onChange={(v) => { setStatusFilter(v); setAllPage(1); }}
                       options={[
                         { value: 'all', label: 'Tất cả trạng thái' },
                         { value: 'OPEN', label: 'Đang mở (OPEN)' },
@@ -268,7 +270,8 @@ export default function AdminClassesPage() {
                         { value: 'CANCELLED', label: 'Đã hủy (CANCELLED)' },
                       ]}
                     />
-                  </div>
+                    </AdminFilterField>
+                  </AdminFilterBar>
 
                   <Table
                     rowKey="id"
@@ -282,14 +285,13 @@ export default function AdminClassesPage() {
                       onChange: (page) => setAllPage(page),
                       showTotal: (total) => `Tổng số ${total} lớp học`,
                     }}
-                    className="overflow-x-auto"
                   />
                 </div>
               ),
             },
           ]}
         />
-      </Card>
+      </AdminTableCard>
 
       {/* Soft Delete Confirmation Modal */}
       <Modal

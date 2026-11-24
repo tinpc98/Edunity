@@ -42,7 +42,7 @@ import type {
   SettableUserStatus,
 } from "../../../types/adminUser";
 import { useAuthStore } from "../../../stores/auth.store";
-import AdminPageHeader from "../../../components/admin/AdminPageHeader";
+import { AdminPageHero, AdminFilterBar, AdminFilterField, AdminTableCard } from "../../../components/admin";
 import AdminKpiCard from "../../../components/admin/AdminKpiCard";
 import AdminStatusBadge from "../../../components/admin/AdminStatusBadge";
 
@@ -315,29 +315,26 @@ export default function AdminUsersPage() {
   ];
 
   return (
-    <div className="flex flex-col w-full pb-10">
-      {/* Top Header */}
-      <AdminPageHeader
-        eyebrow="Phân hệ quản trị nhân sự"
-        eyebrowIcon={<UserOutlined />}
+    <div className="flex flex-col gap-5 w-full pb-10">
+      <AdminPageHero
+        icon={<UserOutlined />}
         title="Quản lý người dùng"
+        crumb="Người dùng"
         description="Tra cứu, phân quyền, xác thực danh tính và kiểm soát quyền truy cập người dùng toàn hệ thống."
         extra={
-          <div className="flex items-center gap-2.5">
-            <Button
-              icon={<SyncOutlined spin={isFetching} />}
-              onClick={() => queryClient.invalidateQueries({ queryKey: adminUserKeys.all })}
-              disabled={isFetching}
-              className="rounded-xl border-[#D6E5E2] text-[#163B40] font-medium"
-            >
-              Làm mới
-            </Button>
-          </div>
+          <Button
+            icon={<SyncOutlined spin={isFetching} />}
+            onClick={() => queryClient.invalidateQueries({ queryKey: adminUserKeys.all })}
+            disabled={isFetching}
+            className="rounded-xl"
+          >
+            Làm mới
+          </Button>
         }
       />
 
       {/* 4 Summary Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <AdminKpiCard
           title="Tổng người dùng"
           value={data?.total ? data.total.toLocaleString("vi-VN") : "—"}
@@ -375,80 +372,68 @@ export default function AdminUsersPage() {
         />
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#D6E5E2] shadow-[0_2px_8px_rgba(15,118,110,0.04)] mb-6">
-        <form
-          onSubmit={handleSearchSubmit}
-          className="flex flex-col md:flex-row items-stretch md:items-center gap-3"
-        >
-          <Input
-            placeholder="Tìm theo tên hoặc email người dùng..."
-            prefix={<SearchOutlined className="text-[#64748B]" />}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 rounded-xl h-10 border-[#D6E5E2] placeholder:text-[#64748B]"
-            allowClear
-          />
-          <Select
-            placeholder="Tất cả vai trò"
-            value={roleFilter}
-            onChange={(val) => {
-              setRoleFilter(val);
-              setPage(1);
-            }}
-            allowClear
-            className="w-full md:w-44 h-10"
+      {/* Main Data Table + Filter bar */}
+      <AdminTableCard>
+        <form onSubmit={handleSearchSubmit}>
+          <AdminFilterBar
+            title="Bộ lọc người dùng"
+            gridClassName="md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_200px_200px_auto_auto]"
+            onReset={handleResetFilters}
+            hasFilter={Boolean(search || appliedSearch || roleFilter || statusFilter)}
+            summary={data ? <>Tìm thấy <span className="font-semibold text-[#0F766E]">{data.total.toLocaleString("vi-VN")}</span> người dùng</> : null}
           >
-            <Option value="STUDENT">Học viên</Option>
-            <Option value="TEACHER">Giáo viên</Option>
-            <Option value="SPONSOR">Nhà tài trợ</Option>
-            <Option value="ADMIN">Quản trị viên</Option>
-          </Select>
-          <Select
-            placeholder="Tất cả trạng thái"
-            value={statusFilter}
-            onChange={(val) => {
-              setStatusFilter(val);
-              setPage(1);
-            }}
-            allowClear
-            className="w-full md:w-44 h-10"
-          >
-            <Option value="ACTIVE">Hoạt động</Option>
-            <Option value="PENDING">Chờ kích hoạt</Option>
-            <Option value="SUSPENDED">Tạm ngưng</Option>
-            <Option value="BANNED">Bị khóa</Option>
-          </Select>
-          <Button
-            type="primary"
-            htmlType="submit"
-            className="rounded-xl h-10 px-6 font-bold"
-          >
-            Tìm kiếm
-          </Button>
-          {(appliedSearch || roleFilter || statusFilter) && (
+            <AdminFilterField label="Tìm kiếm">
+              <Input
+                placeholder="Tên hoặc email người dùng..."
+                prefix={<SearchOutlined className="text-[#64748B]" />}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="rounded-xl"
+                allowClear
+              />
+            </AdminFilterField>
+            <AdminFilterField label="Vai trò">
+              <Select
+                placeholder="Tất cả vai trò"
+                value={roleFilter}
+                onChange={(val) => {
+                  setRoleFilter(val);
+                  setPage(1);
+                }}
+                allowClear
+              >
+                <Option value="STUDENT">Học viên</Option>
+                <Option value="TEACHER">Giáo viên</Option>
+                <Option value="SPONSOR">Nhà tài trợ</Option>
+                <Option value="ADMIN">Quản trị viên</Option>
+              </Select>
+            </AdminFilterField>
+            <AdminFilterField label="Trạng thái">
+              <Select
+                placeholder="Tất cả trạng thái"
+                value={statusFilter}
+                onChange={(val) => {
+                  setStatusFilter(val);
+                  setPage(1);
+                }}
+                allowClear
+              >
+                <Option value="ACTIVE">Hoạt động</Option>
+                <Option value="PENDING">Chờ kích hoạt</Option>
+                <Option value="SUSPENDED">Tạm ngưng</Option>
+                <Option value="BANNED">Bị khóa</Option>
+              </Select>
+            </AdminFilterField>
             <Button
-              onClick={handleResetFilters}
-              className="rounded-xl h-10 border-[#D6E5E2] text-[#334155] font-medium"
+              type="primary"
+              htmlType="submit"
+              icon={<SearchOutlined />}
+              className="bg-[#0F766E] hover:bg-[#0D9488] border-none font-semibold rounded-xl justify-self-start"
             >
-              Đặt lại
+              Tìm kiếm
             </Button>
-          )}
+          </AdminFilterBar>
         </form>
-      </div>
-
-      {/* Main Data Table */}
-      <div className="bg-white rounded-2xl border border-[#D6E5E2] shadow-[0_2px_8px_rgba(15,118,110,0.04)] overflow-hidden">
-        <div className="p-4 sm:p-5 bg-[#F0F8F6] border-b border-[#D6E5E2] flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-[#163B40] text-sm sm:text-base">
-              Danh sách tài khoản hệ thống
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-[#CCFBF1] text-[#0F766E] border border-[#99F6E4] text-xs font-bold">
-              {data?.total ? `${data.total.toLocaleString("vi-VN")} người dùng` : "0"}
-            </span>
-          </div>
-        </div>
 
         {isError && (
           <Alert
@@ -487,10 +472,9 @@ export default function AdminUsersPage() {
                 </span>
               ),
             }}
-            scroll={{ x: 850 }}
           />
         )}
-      </div>
+      </AdminTableCard>
 
       {/* ========================================================================= */}
       {/* CRITICAL REQUIREMENT: CENTERED USER DETAIL MODAL (~820px, rounded 20px)    */}
