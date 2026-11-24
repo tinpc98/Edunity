@@ -22,10 +22,10 @@ import {
   ExclamationCircleOutlined,
   ClockCircleOutlined,
   EyeOutlined,
-  FilterOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { AdminPageHero, AdminFilterBar, AdminTableCard } from "../../../components/admin";
 import { courseProposalService } from "../../../services/courseProposal.service";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
@@ -279,28 +279,33 @@ export default function AdminCourseProposalsPage() {
     approveMutation.isPending || rejectMutation.isPending || requestChangesMutation.isPending;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-5 w-full">
       {contextHolder}
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-            <FileTextOutlined className="text-brand-600" />
-            Xét duyệt Đề xuất Khóa học
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Kiểm tra và duyệt các đề xuất khóa học mới do giáo viên gửi lên trước khi đưa vào catalog chính thức.
-          </p>
-        </div>
-      </div>
+      <AdminPageHero
+        icon={<FileTextOutlined />}
+        title="Xét duyệt đề xuất khóa học"
+        crumb="Duyệt đề xuất khóa học"
+        description="Kiểm tra và duyệt các đề xuất khóa học mới do giáo viên gửi lên trước khi đưa vào catalog chính thức."
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isLoading} className="rounded-xl">
+            Làm mới
+          </Button>
+        }
+      />
 
-      {/* Filter toolbar */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <FilterOutlined className="text-gray-400" />
-          <span className="text-xs font-semibold text-gray-600">Trạng thái:</span>
+      {/* Proposals Table + Filter bar */}
+      <AdminTableCard>
+        <AdminFilterBar
+          title="Bộ lọc đề xuất"
+          gridClassName="sm:grid-cols-[260px_auto]"
+          hasFilter={statusFilter !== "PENDING_REVIEW"}
+          onReset={() => updateSearchParams({ status: undefined, page: "1" })}
+          summary={proposalsData ? <>Có <span className="font-semibold text-[#0F766E]">{proposalsData.total}</span> đề xuất</> : null}
+        >
           <Select
+            aria-label="Lọc theo trạng thái"
+            className="w-full"
             value={statusFilter}
             onChange={(val) => {
               updateSearchParams({
@@ -308,24 +313,15 @@ export default function AdminCourseProposalsPage() {
                 page: "1",
               });
             }}
-            className="w-52"
             options={[
               { value: "", label: "Tất cả trạng thái" },
-              { value: "PENDING_REVIEW", label: "Chờ duyệt (Pending)" },
+              { value: "PENDING_REVIEW", label: "Chờ duyệt" },
               { value: "NEED_CHANGES", label: "Yêu cầu chỉnh sửa" },
-              { value: "APPROVED", label: "Đã duyệt (Approved)" },
-              { value: "REJECTED", label: "Đã từ chối (Rejected)" },
+              { value: "APPROVED", label: "Đã duyệt" },
+              { value: "REJECTED", label: "Đã từ chối" },
             ]}
           />
-        </div>
-
-        <Button onClick={() => refetch()} size="small">
-          Làm mới
-        </Button>
-      </div>
-
-      {/* Proposals Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+        </AdminFilterBar>
         {isError ? (
           <div className="p-6">
             <Alert
@@ -366,9 +362,9 @@ export default function AdminCourseProposalsPage() {
               dataIndex: "title",
               key: "title",
               render: (title: string, record: CourseProposal) => (
-                <div>
-                  <div className="font-semibold text-gray-900">{title}</div>
-                  <div className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
+                <div className="break-words">
+                  <div className="font-semibold text-[#163B40]">{title}</div>
+                  <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
                     <span>{record.categoryName}</span>
                     <span>•</span>
                     <span>{record.subjectName}</span>
@@ -384,7 +380,7 @@ export default function AdminCourseProposalsPage() {
                   <div className="text-sm font-medium text-gray-800">
                     {record.teacherName || "Chưa cập nhật tên"}
                   </div>
-                  <div className="text-xs text-gray-400">{record.teacherEmail}</div>
+                  <div className="text-xs text-gray-400 break-all">{record.teacherEmail}</div>
                 </div>
               ),
             },
@@ -428,7 +424,7 @@ export default function AdminCourseProposalsPage() {
               key: "action",
               align: "right",
               render: (_: unknown, record: CourseProposal) => (
-                <Space>
+                <Space wrap size={[6, 6]} className="justify-end">
                   <Button
                     size="small"
                     icon={<EyeOutlined />}
@@ -472,7 +468,7 @@ export default function AdminCourseProposalsPage() {
           ]}
         />
         )}
-      </div>
+      </AdminTableCard>
 
       {/* ================================================= */}
       {/* MODAL: DETAIL VIEW */}

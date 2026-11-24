@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Avatar, Alert, Empty } from "antd";
+import { Avatar, Alert, Button, Empty, Select, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
   ClockCircleOutlined,
@@ -21,9 +21,8 @@ import type {
   VerificationStatus,
 } from "../../../../types/teacherVerification";
 import { getFriendlyErrorMessage } from "../../../../utils/apiErrorMap";
-import AdminPageHeader from "../../../../components/admin/AdminPageHeader";
+import { AdminPageHero, AdminFilterBar, AdminTableCard } from "../../../../components/admin";
 import AdminKpiCard from "../../../../components/admin/AdminKpiCard";
-import AdminDataTable from "../../../../components/admin/AdminDataTable";
 import AdminStatusBadge from "../../../../components/admin/AdminStatusBadge";
 
 const VALID_STATUSES: readonly VerificationStatus[] = [
@@ -300,27 +299,21 @@ export default function TeacherVerificationPage() {
   ];
 
   return (
-    <div className="flex flex-col w-full pb-10">
-      {/* Header */}
-      <AdminPageHeader
-        eyebrow="Cổng kiểm duyệt học thuật"
-        eyebrowIcon={<IdcardOutlined />}
+    <div className="flex flex-col gap-5 w-full pb-10">
+      <AdminPageHero
+        icon={<IdcardOutlined />}
         title="Xác minh giáo viên"
+        crumb="Giáo viên"
         description="Kiểm tra hồ sơ pháp lý, bằng cấp học thuật và phê duyệt năng lực sư phạm của đối tác giảng dạy."
         extra={
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-[#D6E5E2] text-[#163B40] hover:text-[#0F766E] hover:bg-[#E5F5F1] text-xs font-bold shadow-2xs transition-all cursor-pointer"
-          >
-            <ReloadOutlined className={isFetching ? "animate-spin" : ""} />
-            <span>Làm mới</span>
-          </button>
+          <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching} className="rounded-xl">
+            Làm mới
+          </Button>
         }
       />
 
       {/* 4 Summary Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <AdminKpiCard
           title="Tổng hồ sơ"
           value={pagedVerifications?.total ? pagedVerifications.total.toLocaleString("vi-VN") : "—"}
@@ -358,33 +351,6 @@ export default function TeacherVerificationPage() {
         />
       </div>
 
-      {/* Tab Filter Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4">
-        {STATUS_FILTERS.map((f) => {
-          const isActive = activeStatus === f.value;
-          const Icon = f.icon;
-          return (
-            <button
-              key={f.value}
-              onClick={() => handleStatusChange(f.value)}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                isActive
-                  ? "bg-[#0D9488] text-white shadow-xs"
-                  : "bg-white text-[#334155] border border-[#D6E5E2] hover:bg-[#E5F5F1] hover:text-[#0F766E]"
-              }`}
-            >
-              <Icon className="text-sm" />
-              <span>{f.label}</span>
-              {isActive && pagedVerifications && (
-                <span className="px-2 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-extrabold ml-0.5">
-                  {pagedVerifications.total}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Main Table */}
       {isError ? (
         <Alert
@@ -403,10 +369,23 @@ export default function TeacherVerificationPage() {
           }
         />
       ) : (
-        <AdminDataTable
-          tableTitle="Hồ sơ giảng viên"
-          totalCount={pagedVerifications?.total}
-          totalCountLabel="giảng viên"
+        <AdminTableCard>
+        <AdminFilterBar
+          title="Bộ lọc hồ sơ"
+          gridClassName="sm:grid-cols-[260px_auto]"
+          hasFilter={activeStatus !== DEFAULT_STATUS}
+          onReset={() => handleStatusChange(DEFAULT_STATUS)}
+          summary={pagedVerifications ? <>Có <span className="font-semibold text-[#0F766E]">{pagedVerifications.total}</span> hồ sơ</> : null}
+        >
+          <Select
+            aria-label="Lọc theo trạng thái"
+            className="w-full"
+            value={activeStatus}
+            onChange={handleStatusChange}
+            options={STATUS_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
+          />
+        </AdminFilterBar>
+        <Table<AdminTeacherVerificationListItem>
           rowKey="teacherId"
           columns={columns}
           dataSource={pagedVerifications?.items || []}
@@ -416,6 +395,8 @@ export default function TeacherVerificationPage() {
             pageSize: currentPageSize,
             total: pagedVerifications?.total || 0,
             onChange: handlePaginationChange,
+            showSizeChanger: true,
+            showTotal: (total) => `Tổng số ${total} hồ sơ`,
           }}
           locale={{
             emptyText: (
@@ -426,6 +407,7 @@ export default function TeacherVerificationPage() {
             ),
           }}
         />
+        </AdminTableCard>
       )}
     </div>
   );

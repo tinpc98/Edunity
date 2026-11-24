@@ -71,7 +71,6 @@ export const ROUTES = {
     CATEGORIES: "/admin/categories",
     SUBJECTS: "/admin/subjects",
     COURSES: "/admin/courses",
-    SYLLABUS: "/admin/syllabus",
     COURSE_PROPOSALS: "/admin/course-proposals",
     TEACHER_VERIFICATIONS: "/admin/teachers/verifications",
     TEACHER_VERIFICATION_DETAIL: "/admin/teachers/verifications/:teacherId",

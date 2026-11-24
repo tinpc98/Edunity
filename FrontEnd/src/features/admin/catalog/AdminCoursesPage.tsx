@@ -29,6 +29,7 @@ import {
   CheckCircleOutlined,
   StopOutlined,
 } from "@ant-design/icons";
+import { AdminPageHero, AdminFilterBar, AdminFilterField, AdminTableCard } from "../../../components/admin";
 import dayjs from "dayjs";
 import { courseService } from "../../../services/course.service";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
@@ -372,16 +373,22 @@ export default function AdminCoursesPage() {
       title: "Khóa học & Mã tham chiếu",
       dataIndex: "title",
       key: "title",
+      width: "32%",
       render: (title: string, record: Course) => (
-        <div>
-          <div className="font-semibold text-slate-800">{title}</div>
-          <div className="font-mono text-xs text-slate-500 mt-0.5">{record.slug}</div>
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-9 h-9 shrink-0 rounded-lg bg-[#E5F5F1] text-[#0F766E] flex items-center justify-center">
+            <BookOutlined />
+          </div>
+          <div className="min-w-0 break-words">
+          <div className="font-semibold text-[#163B40]">{title}</div>
+          <div className="font-mono text-xs text-slate-500 mt-0.5 break-all">{record.slug}</div>
           {record.curriculumReference && (
             <div className="text-[11px] text-teal-700 mt-0.5 flex items-center gap-1 font-medium">
               <span>📖 Sách:</span>
               <span className="font-semibold">{record.curriculumReference}</span>
             </div>
           )}
+          </div>
         </div>
       ),
     },
@@ -469,32 +476,21 @@ export default function AdminCoursesPage() {
   ];
 
   return (
-    <div className="space-y-5 p-6 bg-[#F8FAFC] min-h-screen">
+    <div className="flex flex-col gap-5 w-full">
       {contextHolder}
 
-      {/* Page Header */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-            <span>Admin</span>
-            <span>›</span>
-            <span className="font-semibold text-teal-700">Khóa học chuẩn</span>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center text-lg">
-              <BookOutlined />
-            </div>
-            <h1 className="text-xl font-bold text-[#163B40] m-0">Quản lý Khóa học chuẩn</h1>
-          </div>
-          <p className="text-xs text-slate-500 mt-1 mb-0">
-            Kiểm soát nội dung, tiêu chuẩn đầu ra và thời lượng của từng khóa học chuẩn trên toàn nền tảng.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+      <AdminPageHero
+        icon={<BookOutlined />}
+        title="Quản lý khóa học chuẩn"
+        crumb="Khóa học"
+        description="Kiểm soát nội dung, tiêu chuẩn đầu ra và thời lượng của từng khóa học chuẩn trên toàn nền tảng."
+        extra={
+          <>
           <Button
             icon={<ReloadOutlined />}
             onClick={() => refetchCourses()}
             loading={loadingCourses}
+            className="rounded-xl"
           >
             Làm mới
           </Button>
@@ -506,91 +502,9 @@ export default function AdminCoursesPage() {
           >
             Thêm khóa học
           </Button>
-        </div>
-      </div>
-
-      {/* Filters Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
-          {/* Search */}
-          <div className="md:col-span-2">
-            <Input
-              prefix={<SearchOutlined className="text-slate-400" />}
-              placeholder="Tìm theo tên khóa học, slug, sách..."
-              value={searchInput}
-              onChange={(e) => setSearchDraft(e.target.value)}
-              allowClear
-            />
-          </div>
-
-          {/* Category Filter */}
-          <div>
-            <Select
-              className="w-full"
-              placeholder="Tất cả danh mục"
-              allowClear
-              value={courseCatFilter || undefined}
-              onChange={(val) =>
-                updateSearchParams({ categoryId: val, subjectId: undefined, page: "1" })
-              }
-              options={categories.map((c) => ({ value: c.id, label: c.name }))}
-            />
-          </div>
-
-          {/* Subject Filter */}
-          <div>
-            <Select
-              className="w-full"
-              placeholder="Tất cả môn học"
-              allowClear
-              disabled={!courseCatFilter}
-              value={courseSubFilter || undefined}
-              onChange={(val) => updateSearchParams({ subjectId: val, page: "1" })}
-              options={filterSubjects.map((s) => ({ value: s.id, label: s.name }))}
-            />
-          </div>
-
-          {/* Grade Level Filter */}
-          <div>
-            <Select
-              className="w-full"
-              placeholder="Khối lớp"
-              allowClear
-              value={courseGradeFilter || undefined}
-              onChange={(val) => updateSearchParams({ gradeLevel: val, page: "1" })}
-              options={GRADE_LEVELS.map((g) => ({
-                value: g,
-                label: GRADE_LEVEL_LABELS[g],
-              }))}
-            />
-          </div>
-
-          {/* Status Filter (Supports ACTIVE, INACTIVE, ALL) */}
-          <div>
-            <Select
-              className="w-full"
-              placeholder="Trạng thái"
-              value={courseStatusFilter}
-              onChange={(val) => updateSearchParams({ status: val, page: "1" })}
-              options={[
-                { value: "ALL", label: "Tất cả trạng thái" },
-                { value: "ACTIVE", label: "Hoạt động (ACTIVE)" },
-                { value: "INACTIVE", label: "Tạm ngưng (INACTIVE)" },
-              ]}
-            />
-          </div>
-        </div>
-
-        {/* Filter Summary & Reset */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-          <span className="text-slate-500">
-            Hiển thị kết quả tìm kiếm với đầy đủ trạng thái <strong>ACTIVE</strong> và <strong>INACTIVE</strong>.
-          </span>
-          <Button size="small" onClick={handleResetFilters}>
-            Xóa bộ lọc
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Error state */}
       {isErrorCourses && (
@@ -607,8 +521,71 @@ export default function AdminCoursesPage() {
         />
       )}
 
-      {/* Data Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      {/* Data Table + Filter bar */}
+      <AdminTableCard>
+        <AdminFilterBar
+          title="Bộ lọc khóa học"
+          gridClassName="md:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto]"
+          onReset={handleResetFilters}
+          hasFilter={Array.from(searchParams.keys()).some((k) => k !== "page") || !!searchDraft}
+          summary={
+            coursesData && !loadingCourses ? (
+              <>
+                Tìm thấy <span className="font-semibold text-[#0F766E]">{coursesData.total}</span> khóa học
+              </>
+            ) : null
+          }
+        >
+          <AdminFilterField label="Tìm kiếm">
+            <Input
+              prefix={<SearchOutlined className="text-[#64748B]" />}
+              placeholder="Tên khóa học, slug, sách..."
+              value={searchInput}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              allowClear
+              className="rounded-xl"
+            />
+          </AdminFilterField>
+          <AdminFilterField label="Danh mục">
+            <Select
+              placeholder="Tất cả danh mục"
+              allowClear
+              value={courseCatFilter || undefined}
+              onChange={(val) => updateSearchParams({ categoryId: val, subjectId: undefined, page: "1" })}
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+            />
+          </AdminFilterField>
+          <AdminFilterField label="Môn học">
+            <Select
+              placeholder={courseCatFilter ? "Tất cả môn học" : "Chọn danh mục trước"}
+              allowClear
+              disabled={!courseCatFilter}
+              value={courseSubFilter || undefined}
+              onChange={(val) => updateSearchParams({ subjectId: val, page: "1" })}
+              options={filterSubjects.map((s) => ({ value: s.id, label: s.name }))}
+            />
+          </AdminFilterField>
+          <AdminFilterField label="Khối lớp">
+            <Select
+              placeholder="Tất cả khối lớp"
+              allowClear
+              value={courseGradeFilter || undefined}
+              onChange={(val) => updateSearchParams({ gradeLevel: val, page: "1" })}
+              options={GRADE_LEVELS.map((g) => ({ value: g, label: GRADE_LEVEL_LABELS[g] }))}
+            />
+          </AdminFilterField>
+          <AdminFilterField label="Trạng thái">
+            <Select
+              value={courseStatusFilter}
+              onChange={(val) => updateSearchParams({ status: val, page: "1" })}
+              options={[
+                { value: "ALL", label: "Tất cả trạng thái" },
+                { value: "ACTIVE", label: "Hoạt động" },
+                { value: "INACTIVE", label: "Tạm ngưng" },
+              ]}
+            />
+          </AdminFilterField>
+        </AdminFilterBar>
         {loadingCourses ? (
           <div className="p-6">
             <Skeleton active paragraph={{ rows: 6 }} />
@@ -631,6 +608,7 @@ export default function AdminCoursesPage() {
             columns={columns}
             dataSource={coursesData.items}
             rowKey="id"
+            tableLayout="fixed"
             pagination={{
               current: coursesData.page,
               pageSize: coursesData.pageSize,
@@ -640,7 +618,7 @@ export default function AdminCoursesPage() {
             }}
           />
         )}
-      </div>
+      </AdminTableCard>
 
       {/* Modal: Create / Edit Course */}
       <Modal

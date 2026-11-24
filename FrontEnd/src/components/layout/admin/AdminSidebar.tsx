@@ -101,12 +101,6 @@ const navGroups: NavGroup[] = [
         path: ROUTES.ADMIN.COURSES,
       },
       {
-        key: ROUTES.ADMIN.SYLLABUS,
-        label: "Giáo trình / Phiên bản",
-        icon: <FileTextOutlined className="text-[17px]" />,
-        path: ROUTES.ADMIN.SYLLABUS,
-      },
-      {
         key: ROUTES.ADMIN.COURSE_PROPOSALS,
         label: "Duyệt đề xuất khóa học",
         icon: <FileDoneOutlined className="text-[17px]" />,

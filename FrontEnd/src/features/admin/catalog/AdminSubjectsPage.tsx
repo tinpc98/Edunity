@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
@@ -23,8 +23,9 @@ import {
   EyeOutlined,
   DeleteOutlined,
   ReloadOutlined,
-  FilterOutlined,
+  SearchOutlined,
 } from "@ant-design/icons";
+import { AdminPageHero, AdminFilterBar, AdminFilterField, AdminTableCard } from "../../../components/admin";
 import dayjs from "dayjs";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
@@ -81,6 +82,23 @@ export default function AdminSubjectsPage() {
     enabled: !!activeCategoryIdForSubjects,
     staleTime: 60_000,
   });
+
+  // Client-side filters within the selected category
+  const [keyword, setKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const hasFilter = keyword.trim() !== "" || statusFilter !== "ALL";
+  const filteredSubjects = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    return subjects.filter((s) => {
+      if (statusFilter === "ACTIVE" && s.status !== "ACTIVE") return false;
+      if (statusFilter === "INACTIVE" && s.status === "ACTIVE") return false;
+      return !q || [s.name, s.slug, s.description].some((v) => v?.toLowerCase().includes(q));
+    });
+  }, [subjects, keyword, statusFilter]);
+  const resetFilters = () => {
+    setKeyword("");
+    setStatusFilter("ALL");
+  };
 
   // Subject detail query (for viewing modal)
   const { data: viewingSubject, isLoading: loadingSubjectDetail } = useQuery({
@@ -169,10 +187,16 @@ export default function AdminSubjectsPage() {
       title: "Tên môn học",
       dataIndex: "name",
       key: "name",
+      sorter: (a, b) => a.name.localeCompare(b.name, "vi"),
       render: (name: string, record: Subject) => (
-        <div>
-          <div className="font-semibold text-slate-800">{name}</div>
-          <div className="font-mono text-xs text-slate-500 mt-0.5">{record.slug}</div>
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-9 h-9 shrink-0 rounded-lg bg-[#E5F5F1] text-[#0F766E] flex items-center justify-center">
+            <ReadOutlined />
+          </div>
+          <div className="min-w-0 break-words">
+            <div className="font-semibold text-[#163B40]">{name}</div>
+            <div className="font-mono text-xs text-slate-500 mt-0.5 break-all">{record.slug}</div>
+          </div>
         </div>
       ),
     },
@@ -190,8 +214,7 @@ export default function AdminSubjectsPage() {
       title: "Mô tả",
       dataIndex: "description",
       key: "description",
-      ellipsis: true,
-      render: (desc: string) => desc || <span className="text-slate-400 italic">Chưa có mô tả</span>,
+      render: (desc: string) => desc ? <span className="break-words">{desc}</span> : <span className="text-slate-400 italic">Chưa có mô tả</span>,
     },
     {
       title: "Trạng thái",
@@ -210,6 +233,7 @@ export default function AdminSubjectsPage() {
       dataIndex: "createdAt",
       key: "createdAt",
       width: 130,
+      sorter: (a, b) => dayjs(a.createdAt).valueOf() - dayjs(b.createdAt).valueOf(),
       render: (date: string) => (
         <span className="text-xs text-slate-600 font-mono">
           {date ? dayjs(date).format("DD/MM/YYYY") : "—"}
@@ -248,32 +272,21 @@ export default function AdminSubjectsPage() {
   ];
 
   return (
-    <div className="space-y-5 p-6 bg-[#F8FAFC] min-h-screen">
+    <div className="flex flex-col gap-5 w-full">
       {contextHolder}
 
-      {/* Page Header */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-            <span>Admin</span>
-            <span>›</span>
-            <span className="font-semibold text-teal-700">Môn học</span>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center text-lg">
-              <ReadOutlined />
-            </div>
-            <h1 className="text-xl font-bold text-[#163B40] m-0">Quản lý Môn học</h1>
-          </div>
-          <p className="text-xs text-slate-500 mt-1 mb-0">
-            Thiết lập danh mục các môn học trực thuộc từng chuyên ngành đào tạo.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+      <AdminPageHero
+        icon={<ReadOutlined />}
+        title="Quản lý môn học"
+        crumb="Môn học"
+        description="Thiết lập danh mục các môn học trực thuộc từng chuyên ngành đào tạo."
+        extra={
+          <>
           <Button
             icon={<ReloadOutlined />}
             onClick={() => refetchSubjects()}
             loading={loadingSubjects}
+            className="rounded-xl"
           >
             Làm mới
           </Button>
@@ -286,29 +299,9 @@ export default function AdminSubjectsPage() {
           >
             Thêm môn học
           </Button>
-        </div>
-      </div>
-
-      {/* Category Filter Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-          <FilterOutlined className="text-teal-600" />
-          <span>Lọc theo Danh mục đào tạo:</span>
-        </div>
-        <div className="w-full sm:w-72">
-          <Select
-            className="w-full"
-            loading={loadingCategories}
-            value={activeCategoryIdForSubjects}
-            onChange={(val) => setSelectedCatFilter(val)}
-            placeholder="Chọn danh mục để xem môn học"
-            options={categories.map((c) => ({
-              value: c.id,
-              label: `${c.name} (${c.status === "ACTIVE" ? "Hoạt động" : "Tạm ngưng"})`,
-            }))}
-          />
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Error state */}
       {isErrorSubjects && (
@@ -325,8 +318,56 @@ export default function AdminSubjectsPage() {
         />
       )}
 
-      {/* Data Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      {/* Data Table + Filter bar */}
+      <AdminTableCard>
+        <AdminFilterBar
+          title="Bộ lọc môn học"
+          gridClassName="md:grid-cols-2 xl:grid-cols-[260px_minmax(0,1fr)_220px_auto]"
+          onReset={resetFilters}
+          hasFilter={hasFilter}
+          summary={
+            hasFilter && !loadingSubjects ? (
+              <>
+                Tìm thấy <span className="font-semibold text-[#0F766E]">{filteredSubjects.length}</span> /{" "}
+                {subjects.length} môn học
+              </>
+            ) : null
+          }
+        >
+          <AdminFilterField label="Danh mục đào tạo">
+            <Select
+              loading={loadingCategories}
+              value={activeCategoryIdForSubjects || undefined}
+              onChange={(val) => setSelectedCatFilter(val)}
+              placeholder="Chọn danh mục"
+              options={categories.map((c) => ({
+                value: c.id,
+                label: `${c.name}${c.status === "ACTIVE" ? "" : " (Tạm ngưng)"}`,
+              }))}
+            />
+          </AdminFilterField>
+          <AdminFilterField label="Tìm kiếm">
+            <Input
+              allowClear
+              prefix={<SearchOutlined className="text-[#64748B]" />}
+              placeholder="Tên, slug hoặc mô tả..."
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="rounded-xl"
+            />
+          </AdminFilterField>
+          <AdminFilterField label="Trạng thái">
+            <Select
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "ALL", label: "Tất cả trạng thái" },
+                { value: "ACTIVE", label: "Hoạt động" },
+                { value: "INACTIVE", label: "Tạm ngưng" },
+              ]}
+            />
+          </AdminFilterField>
+        </AdminFilterBar>
         {loadingSubjects ? (
           <div className="p-6">
             <Skeleton active paragraph={{ rows: 6 }} />
@@ -345,11 +386,18 @@ export default function AdminSubjectsPage() {
               </Button>
             </Empty>
           </div>
+        ) : filteredSubjects.length === 0 ? (
+          <div className="p-12 text-center">
+            <Empty description="Không có môn học nào khớp bộ lọc">
+              <Button onClick={resetFilters}>Xóa bộ lọc</Button>
+            </Empty>
+          </div>
         ) : (
           <Table<Subject>
             columns={columns}
-            dataSource={subjects}
+            dataSource={filteredSubjects}
             rowKey="id"
+            tableLayout="fixed"
             pagination={{
               pageSize: 10,
               showTotal: (total) => `Tổng số ${total} môn học`,
@@ -358,7 +406,7 @@ export default function AdminSubjectsPage() {
             }}
           />
         )}
-      </div>
+      </AdminTableCard>
 
       {/* Modal: Create / Edit Subject */}
       <Modal
