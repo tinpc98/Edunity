@@ -222,6 +222,14 @@ const router = createBrowserRouter([
         element: <StudentSchedulePage />,
       },
       {
+        path: "messages",
+        element: <MessagesPage />,
+      },
+      {
+        path: "notifications",
+        element: <NotificationsPage />,
+      },
+      {
         path: "enrollments",
         element: <StudentEnrollmentsPage />,
       },
@@ -258,6 +266,10 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <TeacherHomePage />,
+      },
+      {
+        path: "messages",
+        element: <MessagesPage />,
       },
       {
         path: "classes",

@@ -99,7 +99,7 @@ export default function TeacherClassDetailPage() {
         participantId: studentId,
         classId,
       });
-      navigate(`/messages?id=${conv.id}`);
+      navigate(`${ROUTES.TEACHER.MESSAGES}?id=${conv.id}`);
     } catch (err: any) {
       message.error(err?.message || "Không thể mở cuộc trò chuyện với học viên");
     } finally {

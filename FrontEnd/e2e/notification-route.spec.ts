@@ -26,6 +26,11 @@ const CASES = [
   ['ADMIN', 'TEACHER_SOMETHING_NEW', '/admin/notifications'],
   ['TEACHER', 'TEACHER_WARNING_YELLOW', '/teacher/schedule'],
   ['TEACHER', 'TEACHER_VERIFIED', '/teacher/profile'],
+  // Messages / notifications stay inside the Student and Teacher layouts
+  ['STUDENT', 'NEW_MESSAGE', '/student/messages'],
+  ['TEACHER', 'NEW_MESSAGE', '/teacher/messages'],
+  ['SPONSOR', 'NEW_MESSAGE', '/messages'],
+  ['STUDENT', 'SOMETHING_NEW', '/student/notifications'],
 ];
 
 for (const [role, type, page] of CASES) {

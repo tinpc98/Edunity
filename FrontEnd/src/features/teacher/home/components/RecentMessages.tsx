@@ -2,6 +2,7 @@ import { useNow } from "../../../../hooks/useNow";
 import { Card, Typography, List, Avatar, Button } from "antd";
 import { MessageOutlined, UserOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { ROUTES } from "../../../../routes/routePaths";
 import type { ConversationItem } from "../../../../types/communication";
 
 const { Title, Text } = Typography;
@@ -70,7 +71,7 @@ export default function RecentMessages({ conversations = [] }: RecentMessagesPro
 
             return (
               <List.Item 
-                onClick={() => navigate("/messages")}
+                onClick={() => navigate(ROUTES.TEACHER.MESSAGES)}
                 className="px-2 py-2.5 rounded-xl transition-colors cursor-pointer border-0 mb-1.5 hover:bg-gray-50"
               >
                 <div className="flex items-start gap-2.5 w-full">
@@ -104,7 +105,7 @@ export default function RecentMessages({ conversations = [] }: RecentMessagesPro
         <Button 
           block 
           type="text" 
-          onClick={() => navigate("/messages")}
+          onClick={() => navigate(ROUTES.TEACHER.MESSAGES)}
           className="bg-gray-50 text-indigo-600 font-bold h-9 hover:bg-gray-100 rounded-xl flex items-center justify-center text-[12px] cursor-pointer"
         >
           Mở hộp thư tin nhắn <MessageOutlined className="ml-1 text-[14px]" />

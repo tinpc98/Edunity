@@ -190,7 +190,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
                 shape="circle"
                 icon={<MessageOutlined className="text-[16px] text-gray-600" />}
                 className="bg-gray-50 hover:bg-gray-100 h-9 w-9"
-                onClick={() => navigate(ROUTES.MESSAGES)}
+                onClick={() => navigate(role === "TEACHER" ? ROUTES.TEACHER.MESSAGES : ROUTES.MESSAGES)}
                 title="Tin nhắn"
               />
               <NotificationPopover />
