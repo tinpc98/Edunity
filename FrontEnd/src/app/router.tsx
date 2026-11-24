@@ -11,7 +11,7 @@ import EnrollmentPage from "../features/enrollment/EnrollmentPage";
 import StudentLayout from "../components/layout/StudentLayout";
 
 // Jade/teal Ant Design tokens (same as Admin/Public) for the Student learning + classroom screens.
-// Applied per page, not on StudentLayout, so Student payment screens keep their current look.
+// Student pages get it from StudentLayout; used here for screens outside that layout.
 const Jade = ({ children }: { children: ReactNode }) => (
   <ConfigProvider theme={publicThemeConfig}>{children}</ConfigProvider>
 );
@@ -211,15 +211,15 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Jade><StudentHomePage /></Jade>,
+        element: <StudentHomePage />,
       },
       {
         path: "classes/:classId",
-        element: <Jade><StudentClassSessionsPage /></Jade>,
+        element: <StudentClassSessionsPage />,
       },
       {
         path: "schedule",
-        element: <Jade><StudentSchedulePage /></Jade>,
+        element: <StudentSchedulePage />,
       },
       {
         path: "enrollments",

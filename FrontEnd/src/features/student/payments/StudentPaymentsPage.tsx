@@ -140,7 +140,7 @@ export default function StudentPaymentsPage() {
               <Button
                 type="primary"
                 size="small"
-                className="bg-indigo-600 hover:bg-indigo-500"
+                className="bg-teal-600 hover:bg-teal-500"
                 icon={<ArrowRightOutlined />}
               >
                 Thanh toán
@@ -158,7 +158,7 @@ export default function StudentPaymentsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Title level={3} className="!mb-1 !text-slate-900 font-bold flex items-center gap-2">
-            <WalletOutlined className="text-indigo-600" /> Lịch sử thanh toán
+            <WalletOutlined className="text-teal-600" /> Lịch sử thanh toán
           </Title>
           <Text type="secondary" className="text-sm">
             Theo dõi các khoản thanh toán học phí và giao dịch ghi danh trực tuyến.
@@ -190,7 +190,7 @@ export default function StudentPaymentsPage() {
                   Khi bạn đăng ký khóa học có học phí, các phiên giao dịch sẽ được ghi nhận tại đây.
                 </p>
                 <Link to={ROUTES.CLASSES}>
-                  <Button type="primary" className="bg-indigo-600 hover:bg-indigo-500 mt-2">
+                  <Button type="primary" className="bg-teal-600 hover:bg-teal-500 mt-2">
                     Khám phá lớp học ngay
                   </Button>
                 </Link>
@@ -214,7 +214,7 @@ export default function StudentPaymentsPage() {
       <Modal
         title={
           <div className="flex items-center gap-2 text-base font-bold text-slate-800">
-            <WalletOutlined className="text-indigo-600" />
+            <WalletOutlined className="text-teal-600" />
             Chi tiết thanh toán
           </div>
         }
@@ -226,7 +226,7 @@ export default function StudentPaymentsPage() {
           </Button>,
           selectedPayment?.paymentStatus === "PENDING" && selectedPayment?.enrollmentId && (
             <Link key="checkout" to={`/checkout/${selectedPayment.enrollmentId}`}>
-              <Button type="primary" className="bg-indigo-600 hover:bg-indigo-500">
+              <Button type="primary" className="bg-teal-600 hover:bg-teal-500">
                 Tiếp tục thanh toán
               </Button>
             </Link>

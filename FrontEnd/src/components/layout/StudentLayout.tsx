@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { Avatar, Dropdown, Badge, Button, App as AntdApp } from "antd";
+import { Avatar, Dropdown, Badge, Button, App as AntdApp, ConfigProvider } from "antd";
 import type { MenuProps } from "antd";
 import {
   BookOutlined,
@@ -285,7 +285,9 @@ export default function StudentLayout() {
 
         {/* Content Outlet */}
         <main className="flex-1 p-6 sm:p-8">
-          <Outlet />
+          <ConfigProvider theme={publicThemeConfig}>
+            <Outlet />
+          </ConfigProvider>
         </main>
       </div>
     </div>

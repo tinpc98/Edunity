@@ -149,14 +149,10 @@ export default function StudentProfilePage() {
   }
 
   return (
-    <div className="max-w-[1040px] mx-auto space-y-4 sm:space-y-5">
-      {/* Breadcrumb & Header */}
+    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-5">
+      {/* Header */}
       <div>
-        <div className="text-[12px] font-medium text-slate-400 mb-1">
-          Tài khoản / <span className="text-indigo-600">Hồ sơ cá nhân</span>
-        </div>
         <h1 className="text-[28px] font-bold text-slate-800 leading-tight">Hồ sơ cá nhân</h1>
-        <p className="text-[14px] text-slate-500 mt-0.5">Quản lý thông tin cá nhân của bạn</p>
       </div>
 
       {/* Profile Overview Card */}
@@ -167,14 +163,14 @@ export default function StudentProfilePage() {
               size={64}
               src={profile.avatarUrl}
               icon={<UserOutlined />}
-              className="border-2 border-white shadow-sm flex items-center justify-center text-2xl font-bold text-white bg-indigo-600"
+              className="border-2 border-white shadow-sm flex items-center justify-center text-2xl font-bold text-white bg-teal-600"
             >
               {!profile.avatarUrl && profile.fullName ? profile.fullName.charAt(0).toUpperCase() : null}
             </Avatar>
             <Upload {...uploadProps}>
               <button
                 type="button"
-                className="absolute bottom-0 right-0 h-7 w-7 bg-white rounded-full border border-slate-200 shadow-sm flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors cursor-pointer"
+                className="absolute bottom-0 right-0 h-7 w-7 bg-white rounded-full border border-slate-200 shadow-sm flex items-center justify-center text-slate-600 hover:text-teal-600 hover:border-teal-200 transition-colors cursor-pointer"
                 disabled={updateAvatarMutation.isPending}
               >
                 <CameraOutlined className="text-xs" />
@@ -187,7 +183,7 @@ export default function StudentProfilePage() {
             </h2>
             <div className="flex items-center gap-2">
               <span className="text-[13px] text-slate-500">{profile.email}</span>
-              <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-[10px] font-bold tracking-wider">
+              <span className="px-1.5 py-0.5 rounded bg-teal-50 text-teal-600 text-[10px] font-bold tracking-wider">
                 HỌC VIÊN
               </span>
             </div>
@@ -197,7 +193,7 @@ export default function StudentProfilePage() {
           <Button
             icon={<UploadOutlined />}
             loading={updateAvatarMutation.isPending}
-            className="text-indigo-600 border-indigo-100 hover:bg-indigo-50 font-medium rounded-xl h-[38px] px-4"
+            className="text-teal-600 border-teal-100 hover:bg-teal-50 font-medium rounded-xl h-[38px] px-4"
           >
             Đổi ảnh đại diện
           </Button>
@@ -223,7 +219,7 @@ export default function StudentProfilePage() {
                 type="primary"
                 icon={<EditOutlined />}
                 onClick={handleEditClick}
-                className="bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium h-[38px] px-4 shadow-sm"
+                className="bg-teal-600 hover:bg-teal-500 rounded-xl font-medium h-[38px] px-4 shadow-sm"
               >
                 Chỉnh sửa
               </Button>
@@ -236,7 +232,7 @@ export default function StudentProfilePage() {
             // VIEW MODE
             <div className="flex flex-col gap-[14px]">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-indigo-50/50 rounded-xl p-3.5 h-[66px] flex flex-col justify-center">
+                <div className="bg-teal-50/50 rounded-xl p-3.5 h-[66px] flex flex-col justify-center">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
                     Họ và tên
                   </div>
@@ -244,7 +240,7 @@ export default function StudentProfilePage() {
                     {profile.fullName}
                   </div>
                 </div>
-                <div className="bg-indigo-50/50 rounded-xl p-3.5 h-[66px] flex flex-col justify-center">
+                <div className="bg-teal-50/50 rounded-xl p-3.5 h-[66px] flex flex-col justify-center">
                   <div className="flex items-center justify-between mb-0.5">
                     <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                       Email
@@ -260,7 +256,7 @@ export default function StudentProfilePage() {
                 </div>
               </div>
 
-              <div className="bg-indigo-50/50 rounded-xl p-3.5 h-[64px] flex flex-col justify-center">
+              <div className="bg-teal-50/50 rounded-xl p-3.5 h-[64px] flex flex-col justify-center">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
                   Ngày sinh
                 </div>
@@ -269,7 +265,7 @@ export default function StudentProfilePage() {
                 </div>
               </div>
 
-              <div className="bg-indigo-50/50 rounded-xl p-3.5 min-h-[76px] flex flex-col justify-start">
+              <div className="bg-teal-50/50 rounded-xl p-3.5 min-h-[76px] flex flex-col justify-start">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
                   Giới thiệu bản thân
                 </div>
@@ -293,7 +289,7 @@ export default function StudentProfilePage() {
                   name="fullName"
                   rules={[{ required: true, message: "Vui lòng nhập họ và tên" }]}
                 >
-                  <Input size="large" className="rounded-xl bg-slate-50 border-slate-200 hover:border-indigo-400 focus:border-indigo-500 text-sm font-medium" />
+                  <Input size="large" className="rounded-xl bg-slate-50 border-slate-200 hover:border-teal-400 focus:border-teal-500 text-sm font-medium" />
                 </Form.Item>
                 <Form.Item
                   label={<span className="text-xs font-semibold text-slate-600">Email</span>}
@@ -321,7 +317,7 @@ export default function StudentProfilePage() {
                   size="large"
                   format="DD/MM/YYYY"
                   placeholder="Chọn ngày sinh"
-                  className="w-full rounded-xl bg-slate-50 border-slate-200 hover:border-indigo-400 focus:border-indigo-500 text-sm font-medium"
+                  className="w-full rounded-xl bg-slate-50 border-slate-200 hover:border-teal-400 focus:border-teal-500 text-sm font-medium"
                 />
               </Form.Item>
 
@@ -332,7 +328,7 @@ export default function StudentProfilePage() {
                 <Input.TextArea
                   rows={4}
                   placeholder="Viết vài dòng giới thiệu về bạn..."
-                  className="rounded-xl bg-slate-50 border-slate-200 hover:border-indigo-400 focus:border-indigo-500 text-sm font-medium resize-none p-3 leading-relaxed"
+                  className="rounded-xl bg-slate-50 border-slate-200 hover:border-teal-400 focus:border-teal-500 text-sm font-medium resize-none p-3 leading-relaxed"
                 />
               </Form.Item>
 
@@ -348,7 +344,7 @@ export default function StudentProfilePage() {
                   type="primary"
                   htmlType="submit"
                   loading={updateProfileMutation.isPending}
-                  className="h-10 px-6 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 shadow-sm"
+                  className="h-10 px-6 rounded-xl text-sm font-semibold bg-teal-600 hover:bg-teal-500 shadow-sm"
                 >
                   Lưu thay đổi
                 </Button>
@@ -360,7 +356,7 @@ export default function StudentProfilePage() {
         {/* Profile Footer */}
         <div className="px-5 py-3.5 sm:px-6 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-[12px] text-slate-500">
           <div className="flex items-center gap-2">
-            <SafetyCertificateOutlined className="text-indigo-500" />
+            <SafetyCertificateOutlined className="text-teal-500" />
             <span>Thông tin hồ sơ của bạn được quản lý bởi Edunity.</span>
           </div>
           {profile.updatedAt && (

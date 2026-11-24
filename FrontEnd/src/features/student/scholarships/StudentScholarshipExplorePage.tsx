@@ -26,7 +26,7 @@ import {
 } from "../../../utils/campaign";
 import { useMyApplicationByCampaign } from "./hooks/useMyApplications";
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Paragraph } = Typography;
 
 type StatusTab = "OPEN_FOR_FUNDING" | "CLOSED";
 const PAGE_SIZE = 9;
@@ -61,12 +61,9 @@ export default function StudentScholarshipExplorePage() {
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <Title level={2} className="!mb-1 !text-2xl font-black text-slate-900 tracking-tight">
+          <Title level={2} className="!mb-0 !text-2xl font-black text-slate-900 tracking-tight">
             Tìm học bổng
           </Title>
-          <Text className="text-xs text-slate-500">
-            Khám phá các chiến dịch học bổng đang mở và nộp hồ sơ để nhận hỗ trợ học phí.
-          </Text>
         </div>
         <Link to={ROUTES.STUDENT.SCHOLARSHIP_APPLICATIONS}>
           <Button icon={<FileSearchOutlined />} className="rounded-xl text-xs font-semibold h-10 px-4">
@@ -150,12 +147,12 @@ export default function StudentScholarshipExplorePage() {
               <Card
                 key={campaign.id}
                 className={`rounded-2xl border shadow-2xs hover:shadow-md transition-all flex flex-col ${
-                  phase === "OPEN" ? "border-indigo-200" : "border-slate-200"
+                  phase === "OPEN" ? "border-teal-200" : "border-slate-200"
                 }`}
                 styles={{ body: { display: "flex", flexDirection: "column", height: "100%" } }}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-lg shrink-0">
                     <GiftOutlined />
                   </div>
                   <div className="flex flex-col items-end gap-1">
@@ -170,16 +167,16 @@ export default function StudentScholarshipExplorePage() {
                   </div>
                 </div>
 
-                <Link to={detailPath} className="mt-3 font-bold text-[15px] text-slate-900 hover:text-indigo-600 leading-snug line-clamp-2">
+                <Link to={detailPath} className="mt-3 font-bold text-[15px] text-slate-900 hover:text-teal-600 leading-snug line-clamp-2">
                   {campaign.title}
                 </Link>
                 <Paragraph className="!mt-1.5 !mb-0 text-xs text-slate-500" ellipsis={{ rows: 2 }}>
                   {campaign.description || campaign.eligibilityCriteria || "Chưa có mô tả."}
                 </Paragraph>
 
-                <div className="mt-4 rounded-xl bg-indigo-50/50 border border-indigo-100/60 p-3">
+                <div className="mt-4 rounded-xl bg-teal-50/50 border border-teal-100/60 p-3">
                   <div className="text-[11px] text-slate-500">Mức hỗ trợ / suất</div>
-                  <div className="text-lg font-black text-indigo-700">{formatVND(campaign.awardAmountPerStudent)}</div>
+                  <div className="text-lg font-black text-teal-700">{formatVND(campaign.awardAmountPerStudent)}</div>
                 </div>
 
                 <div className="mt-3 space-y-1.5 text-xs text-slate-600">
@@ -204,7 +201,7 @@ export default function StudentScholarshipExplorePage() {
                     <Button
                       block
                       type={phase === "OPEN" && !myApp ? "primary" : "default"}
-                      className={`h-10 rounded-xl text-xs font-bold ${phase === "OPEN" && !myApp ? "bg-indigo-600" : ""}`}
+                      className={`h-10 rounded-xl text-xs font-bold ${phase === "OPEN" && !myApp ? "bg-teal-600" : ""}`}
                     >
                       {phase === "OPEN" && !myApp ? "Xem chi tiết & nộp hồ sơ" : "Xem chi tiết"}
                     </Button>
