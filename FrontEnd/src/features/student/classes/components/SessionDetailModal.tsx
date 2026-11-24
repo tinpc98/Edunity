@@ -170,7 +170,7 @@ export default function SessionDetailModal({
             /* 4A. Compact Recording Row */
             <div className="bg-teal-50/40 border border-teal-100 rounded-xl p-3.5 sm:p-4 flex items-center justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-3 min-w-0">
-                {/* Left: Small square Edunity indigo play icon */}
+                {/* Left: Small square Edunity teal play icon */}
                 <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <CaretRightOutlined className="text-base translate-x-0.5" />
                 </div>
@@ -189,7 +189,7 @@ export default function SessionDetailModal({
                 </div>
               </div>
 
-              {/* Right: Small Edunity indigo text action */}
+              {/* Right: Small Edunity teal text action */}
               <button
                 type="button"
                 onClick={handleWatchRecordingClick}

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { 
-  Typography, Card, Row, Col, Tag, Button, Select, Radio, 
-  Skeleton, Breadcrumb, Tooltip
+  Typography, Card, Row, Col, Tag, Button, Select, 
+  Skeleton, Tooltip
 } from 'antd';
 import { 
   CalendarOutlined, 
@@ -33,6 +33,7 @@ import {
   getVerificationGuidanceMessage,
   useTeacherVerification,
 } from '../../../hooks/useTeacherVerification';
+import { AdminFilterBar, AdminFilterField, AdminTableCard } from "../../../components/admin";
 
 dayjs.extend(isBetween);
 
@@ -143,22 +144,11 @@ export default function TeacherSchedulePage() {
   const isLoading = isLoadingClasses || (teacherClasses.length > 0 && isLoadingSessions);
 
   return (
-    <div className="flex flex-col w-full pb-10 max-w-[1200px] mx-auto">
-      <Breadcrumb 
-        className="mb-4 text-sm font-medium"
-        items={[
-          { title: <Link to={ROUTES.TEACHER.HOME}>Tổng quan</Link> },
-          { title: 'Lịch giảng dạy' },
-        ]}
-      />
-
+    <div className="flex flex-col w-full pb-10">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <Title level={2} className="!m-0 text-gray-900">Lịch giảng dạy & Quản lý ca học thông minh</Title>
-          <Text className="text-gray-500 text-sm">
-            Theo dõi ca học trực tuyến, cảnh báo chuyên cần giảng dạy và gửi báo cáo sự cố / đề xuất dạy bù
-          </Text>
+          <Title level={2} className="!text-2xl !m-0 text-gray-900">Lịch giảng dạy & Quản lý ca học thông minh</Title>
         </div>
         <Link to={ROUTES.TEACHER.CLASSES}>
           <Button icon={<BookOutlined />} className="rounded-xl font-medium">
@@ -174,7 +164,7 @@ export default function TeacherSchedulePage() {
             <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-1">
               Hôm nay
             </Text>
-            <Title level={2} className="!m-0 text-teal-600">{stats.todayCount}</Title>
+            <Title level={2} className="!text-2xl !m-0 text-teal-600">{stats.todayCount}</Title>
             <Text className="text-gray-500 text-xs font-medium">ca học trong ngày</Text>
           </Card>
         </Col>
@@ -184,7 +174,7 @@ export default function TeacherSchedulePage() {
             <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-1">
               Đang diễn ra
             </Text>
-            <Title level={2} className="!m-0 text-amber-500">{stats.inProgressCount}</Title>
+            <Title level={2} className="!text-2xl !m-0 text-amber-500">{stats.inProgressCount}</Title>
             <Text className="text-gray-500 text-xs font-medium">buổi học LIVE</Text>
           </Card>
         </Col>
@@ -194,7 +184,7 @@ export default function TeacherSchedulePage() {
             <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-1">
               Sắp diễn ra
             </Text>
-            <Title level={2} className="!m-0 text-blue-600">{stats.scheduledCount}</Title>
+            <Title level={2} className="!text-2xl !m-0 text-blue-600">{stats.scheduledCount}</Title>
             <Text className="text-gray-500 text-xs font-medium">ca học đã lên lịch</Text>
           </Card>
         </Col>
@@ -204,55 +194,61 @@ export default function TeacherSchedulePage() {
             <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-1">
               Đã hoàn thành
             </Text>
-            <Title level={2} className="!m-0 text-emerald-600">{stats.completedCount}</Title>
+            <Title level={2} className="!text-2xl !m-0 text-emerald-600">{stats.completedCount}</Title>
             <Text className="text-gray-500 text-xs font-medium">buổi học đã xong</Text>
           </Card>
         </Col>
       </Row>
 
       {/* Filter Bar */}
-      <Card className="rounded-2xl border-gray-100 shadow-2xs bg-white mb-6 p-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <Radio.Group 
-              value={timeFilter} 
-              onChange={(e) => setTimeFilter(e.target.value)}
-              buttonStyle="solid"
-            >
-              <Radio.Button value="ALL">Tất cả ({scheduleItems.length})</Radio.Button>
-              <Radio.Button value="TODAY">Hôm nay</Radio.Button>
-              <Radio.Button value="WEEK">Tuần này</Radio.Button>
-            </Radio.Group>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
+      <div className="mb-6">
+      <AdminTableCard>
+        <AdminFilterBar
+          title="Bộ lọc ca học"
+          gridClassName="md:grid-cols-2 xl:grid-cols-[200px_minmax(0,1fr)_220px_auto]"
+          hasFilter={timeFilter !== "ALL" || selectedClassId !== "ALL" || selectedStatus !== "ALL"}
+          onReset={() => { setTimeFilter("ALL"); setSelectedClassId("ALL"); setSelectedStatus("ALL"); }}
+          summary={<>Hiển thị <span className="font-semibold text-[#0F766E]">{filteredSchedule.length}</span> / {scheduleItems.length} ca học</>}
+        >
+          <AdminFilterField label="Thời gian">
+            <Select
+              value={timeFilter}
+              onChange={setTimeFilter}
+              options={[
+                { value: "ALL", label: `Tất cả (${scheduleItems.length})` },
+                { value: "TODAY", label: "Hôm nay" },
+                { value: "WEEK", label: "Tuần này" },
+              ]}
+            />
+          </AdminFilterField>
+          <AdminFilterField label="Lớp học">
             <Select
               value={selectedClassId}
               onChange={setSelectedClassId}
-              className="w-56"
               options={[
-                { value: 'ALL', label: 'Tất cả lớp học' },
+                { value: "ALL", label: "Tất cả lớp học" },
                 ...teacherClasses.map((c) => ({ value: c.id, label: c.className })),
               ]}
             />
-
+          </AdminFilterField>
+          <AdminFilterField label="Trạng thái">
             <Select
               value={selectedStatus}
               onChange={setSelectedStatus}
-              className="w-44"
               options={[
-                { value: 'ALL', label: 'Tất cả trạng thái' },
-                { value: 'SCHEDULED', label: 'Đã lên lịch' },
-                { value: 'WAITING', label: 'Phòng chờ (10p)' },
-                { value: 'IN_PROGRESS', label: 'Đang diễn ra' },
-                { value: 'INTERRUPTED', label: 'Tạm gián đoạn' },
-                { value: 'COMPLETED', label: 'Đã hoàn thành' },
-                { value: 'CANCELLED', label: 'Đã hủy' },
+                { value: "ALL", label: "Tất cả trạng thái" },
+                { value: "SCHEDULED", label: "Đã lên lịch" },
+                { value: "WAITING", label: "Phòng chờ (10p)" },
+                { value: "IN_PROGRESS", label: "Đang diễn ra" },
+                { value: "INTERRUPTED", label: "Tạm gián đoạn" },
+                { value: "COMPLETED", label: "Đã hoàn thành" },
+                { value: "CANCELLED", label: "Đã hủy" },
               ]}
             />
-          </div>
-        </div>
-      </Card>
+          </AdminFilterField>
+        </AdminFilterBar>
+      </AdminTableCard>
+      </div>
 
       {/* Schedule Content */}
       {isLoading ? (
@@ -262,7 +258,7 @@ export default function TeacherSchedulePage() {
       ) : filteredSchedule.length === 0 ? (
         <Card className="rounded-2xl text-center py-16 shadow-2xs border-dashed border-gray-300">
           <CalendarOutlined className="text-5xl text-gray-300 mb-3" />
-          <Title level={4} className="text-gray-700 !mb-1">Không có ca học nào phù hợp</Title>
+          <Title level={4} className="!text-base text-gray-700 !mb-1">Không có ca học nào phù hợp</Title>
           <Text className="text-gray-400 text-sm block mb-6">
             {teacherClasses.length === 0 
               ? 'Bạn chưa khởi tạo lớp học nào trên hệ thống.' 

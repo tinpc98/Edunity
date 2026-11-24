@@ -4,18 +4,18 @@ import {
   SearchOutlined, 
   MessageOutlined,
   UserOutlined,
-  ReadOutlined,
   LogoutOutlined,
   MenuUnfoldOutlined,
   MenuFoldOutlined
 } from "@ant-design/icons";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/auth.store";
 import { ROUTES } from "../../routes/routePaths";
+import { LOGO_URL } from "../../data/homeData";
 import { NotificationPopover } from "../../features/notifications/components/NotificationPopover";
 
 const { Header, Sider, Content } = Layout;
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -100,12 +100,13 @@ export default function DashboardShell({ children, menuItems, role, userName, us
     },
   ];
 
-  const currentMarginLeft = isMobile ? (collapsed ? 0 : 220) : (collapsed ? 80 : 220);
+  // Same sidebar width as the Student layout (w-64 = 256px)
+  const currentMarginLeft = isMobile ? (collapsed ? 0 : 256) : (collapsed ? 80 : 256);
 
   return (
-    <Layout style={{ minHeight: "100vh", background: "#f7f7fb", overflowX: "hidden" }}>
+    <Layout style={{ minHeight: "100vh", background: "#F5FAF9", overflowX: "hidden" }}>
       <Sider 
-        width={220} 
+        width={256} 
         collapsedWidth={isMobile ? 0 : 80}
         theme="light" 
         collapsible 
@@ -115,26 +116,19 @@ export default function DashboardShell({ children, menuItems, role, userName, us
         style={{ borderRight: "none" }}
       >
         <div className="flex flex-col h-full bg-white">
-          <div className="h-16 flex items-center px-4 mb-2 mt-2">
-            {!collapsed ? (
-              <Flex align="center" gap="small" className="w-full justify-between">
-                <Flex align="center" gap="small">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/20">
-                    <ReadOutlined className="text-[18px]" />
-                  </div>
-                  <div className="flex flex-col leading-none">
-                    <span className="font-bold text-base text-indigo-600 tracking-tight">Edunity</span>
-                  </div>
-                </Flex>
-                <div className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[9px] font-bold tracking-wider uppercase">
-                  {role}
+          {/* Same logo block as the Student sidebar */}
+          <div className="h-16 flex items-center px-4 mb-2 mt-2 border-b border-slate-100">
+            <Link to={ROUTES.HOME} className={`flex items-center gap-3 ${collapsed ? "mx-auto" : ""}`}>
+              <img src={LOGO_URL} alt="Edunity" className="h-8 w-auto object-contain" />
+              {!collapsed && (
+                <div className="flex flex-col">
+                  <span className="text-lg font-black tracking-tight text-teal-900 leading-none">Edunity</span>
+                  <span className="text-[8px] font-bold text-teal-600 tracking-wider uppercase mt-1">
+                    Học Trực Tuyến Live
+                  </span>
                 </div>
-              </Flex>
-            ) : (
-              <div className="w-8 h-8 mx-auto rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md">
-                <ReadOutlined className="text-[18px]" />
-              </div>
-            )}
+              )}
+            </Link>
           </div>
           
           <Menu 
@@ -142,7 +136,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
             mode="inline" 
             selectedKeys={[location.pathname]} 
             items={menuItems} 
-            className="border-none px-2 font-semibold text-[13px]"
+            className="border-none px-2 font-medium text-[13px] [&_.ant-menu-item-group-title]:!text-[11px] [&_.ant-menu-item-group-title]:!font-bold [&_.ant-menu-item-group-title]:!uppercase [&_.ant-menu-item-group-title]:!tracking-wider [&_.ant-menu-item-group-title]:!text-[#0F766E]"
           />
           
         </div>
@@ -151,7 +145,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
       <Layout style={{ marginLeft: currentMarginLeft, transition: 'all 0.2s', background: 'transparent', maxWidth: '100%', overflowX: 'hidden' }}>
         <Header 
           style={{ 
-            padding: isMobile ? '0 12px' : '0 24px', 
+            padding: isMobile ? '0 24px' : '0 32px', 
             background: 'rgba(255, 255, 255, 0.85)', 
             backdropFilter: 'blur(12px)',
             display: 'flex', 
@@ -173,14 +167,16 @@ export default function DashboardShell({ children, menuItems, role, userName, us
               className="flex items-center justify-center text-[16px] h-8 w-8"
               title="Đóng / mở thanh điều hướng"
             />
-            <Title level={4} style={{ margin: 0, fontSize: '18px' }}>Tổng quan</Title>
+            <span className="text-sm font-bold text-[#163B40] leading-none">
+              {role === "TEACHER" ? "Không gian giảng dạy" : role === "SPONSOR" ? "Không gian tài trợ" : "Không gian học tập"}
+            </span>
           </div>
           
           <div className="flex items-center gap-2 sm:gap-6">
             <Input 
               placeholder="Tìm kiếm..." 
               prefix={<SearchOutlined className="text-gray-400" />} 
-              className="hidden md:flex w-56 lg:w-72 rounded-xl bg-gray-50 border-transparent hover:border-indigo-300 focus:border-indigo-400"
+              className="hidden md:flex w-56 lg:w-72 rounded-xl bg-gray-50 border-transparent hover:border-teal-300 focus:border-teal-400"
               size="middle"
             />
             
@@ -190,7 +186,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
                 shape="circle"
                 icon={<MessageOutlined className="text-[16px] text-gray-600" />}
                 className="bg-gray-50 hover:bg-gray-100 h-9 w-9"
-                onClick={() => navigate(ROUTES.MESSAGES)}
+                onClick={() => navigate(role === "TEACHER" ? ROUTES.TEACHER.MESSAGES : ROUTES.MESSAGES)}
                 title="Tin nhắn"
               />
               <NotificationPopover />
@@ -203,7 +199,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
                 {user.avatarUrl ? (
                   <Avatar src={user.avatarUrl} size="default" />
                 ) : (
-                  <Avatar size="default" icon={<UserOutlined />} className="bg-indigo-600" />
+                  <Avatar size="default" icon={<UserOutlined />} className="bg-teal-600" />
                 )}
                 <div className="hidden sm:flex flex-col leading-tight justify-center h-full">
                   <Text strong className="text-[13px] leading-tight">{user.fullName || userName}</Text>
@@ -214,8 +210,9 @@ export default function DashboardShell({ children, menuItems, role, userName, us
           </div>
         </Header>
         
-        <Content style={{ padding: isMobile ? '12px' : '20px', minHeight: 280, maxWidth: '1280px', margin: '0 auto', width: '100%', overflowX: 'hidden' }}>
-          {children}
+        {/* Same spacing as the Student layout: p-6 sm:p-8, pages in a centered max-w-6xl frame */}
+        <Content className="p-6 sm:p-8" style={{ minHeight: 280, width: '100%', overflowX: 'hidden' }}>
+          <div className="max-w-6xl mx-auto w-full">{children}</div>
         </Content>
       </Layout>
     </Layout>

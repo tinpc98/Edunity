@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { Avatar, Dropdown, Badge, Button, App as AntdApp } from "antd";
+import { Avatar, Dropdown, App as AntdApp, ConfigProvider } from "antd";
 import type { MenuProps } from "antd";
 import {
   BookOutlined,
@@ -9,7 +9,7 @@ import {
   WalletOutlined,
   HomeOutlined,
   LogoutOutlined,
-  BellOutlined,
+  MessageOutlined,
   DownOutlined,
   GiftOutlined,
   FileSearchOutlined,
@@ -20,6 +20,7 @@ import { logoutUser } from "../../services/auth.service";
 import { ROUTES } from "../../routes/routePaths";
 import { publicThemeConfig } from "./publicTheme";
 import { LOGO_URL } from "../../data/homeData";
+import { NotificationPopover } from "../../features/notifications/components/NotificationPopover";
 
 export default function StudentLayout() {
   const location = useLocation();
@@ -144,6 +145,18 @@ export default function StudentLayout() {
               <CalendarOutlined className="text-sm" />
               <span>Lịch học</span>
             </Link>
+
+            <Link
+              to={ROUTES.STUDENT.MESSAGES}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                location.pathname === ROUTES.STUDENT.MESSAGES
+                  ? "bg-teal-50 text-teal-600 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-teal-600 hover:bg-slate-50"
+              }`}
+            >
+              <MessageOutlined className="text-sm" />
+              <span>Tin nhắn</span>
+            </Link>
           </div>
 
           {/* Nav Section: HỌC BỔNG */}
@@ -249,15 +262,10 @@ export default function StudentLayout() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Notification Icon */}
-            <Badge dot color={publicThemeConfig.token?.colorPrimary}>
-              <Button
-                type="text"
-                shape="circle"
-                icon={<BellOutlined className="text-base text-slate-600" />}
-                className="hover:bg-slate-100 flex items-center justify-center h-9 w-9"
-              />
-            </Badge>
+            {/* Notifications: live unread count + dropdown list */}
+            <ConfigProvider theme={publicThemeConfig}>
+              <NotificationPopover />
+            </ConfigProvider>
 
             <div className="h-4 w-px bg-slate-200" />
 
@@ -285,7 +293,9 @@ export default function StudentLayout() {
 
         {/* Content Outlet */}
         <main className="flex-1 p-6 sm:p-8">
-          <Outlet />
+          <ConfigProvider theme={publicThemeConfig}>
+            <Outlet />
+          </ConfigProvider>
         </main>
       </div>
     </div>

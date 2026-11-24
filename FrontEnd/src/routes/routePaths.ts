@@ -45,7 +45,8 @@ export const ROUTES = {
     SCHOLARSHIP_EXPLORE: "/student/scholarships/explore",
     SCHOLARSHIPS_EXPLORE: "/student/scholarships/explore",
     SCHOLARSHIP_DETAIL: "/student/scholarships/explore/:campaignId",
-    MESSAGES: "/messages",
+    MESSAGES: "/student/messages",
+    NOTIFICATIONS: "/student/notifications",
     REPORTS: "/reports",
   },
   TEACHER: {
@@ -58,7 +59,7 @@ export const ROUTES = {
     PROFILE: "/teacher/profile",
     REVENUE: "/teacher/revenue",
     REVIEWS: "/teacher/reviews",
-    MESSAGES: "/messages",
+    MESSAGES: "/teacher/messages",
   },
   ADMIN: {
     HOME: "/admin",

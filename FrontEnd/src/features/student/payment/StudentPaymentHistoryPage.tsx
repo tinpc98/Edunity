@@ -118,18 +118,12 @@ export default function StudentPaymentHistoryPage() {
         : "Không thể tải lịch sử thanh toán. Vui lòng kiểm tra kết nối và thử lại.";
 
   return (
-    <div className="max-w-[1200px] mx-auto space-y-4 sm:space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <div className="text-[12px] font-medium text-slate-400 mb-1">
-            Tài khoản / <span className="text-indigo-600">Lịch sử thanh toán</span>
-          </div>
           <h1 className="text-[28px] font-bold text-slate-800 leading-tight">
             Lịch sử thanh toán
           </h1>
-          <p className="text-[14px] text-slate-500 mt-0.5">
-            Theo dõi các giao dịch thanh toán lớp học của bạn.
-          </p>
         </div>
         <Button
           icon={<ReloadOutlined spin={isFetching} />}

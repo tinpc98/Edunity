@@ -2,6 +2,7 @@ import { useNow } from "../../../../hooks/useNow";
 import { Card, Typography, List, Avatar, Button } from "antd";
 import { MessageOutlined, UserOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { ROUTES } from "../../../../routes/routePaths";
 import type { ConversationItem } from "../../../../types/communication";
 
 const { Title, Text } = Typography;
@@ -46,7 +47,7 @@ export default function RecentMessages({ conversations = [] }: RecentMessagesPro
     >
       <div className="flex items-center justify-between pb-2 border-b border-gray-100">
         <div className="flex items-center gap-2">
-          <MessageOutlined className="text-indigo-600 text-[20px]" />
+          <MessageOutlined className="text-teal-600 text-[20px]" />
           <Title level={4} style={{ margin: 0, fontSize: '16px' }}>Tin nhắn gần đây</Title>
         </div>
         {conversations.length > 0 && (
@@ -70,7 +71,7 @@ export default function RecentMessages({ conversations = [] }: RecentMessagesPro
 
             return (
               <List.Item 
-                onClick={() => navigate("/messages")}
+                onClick={() => navigate(ROUTES.TEACHER.MESSAGES)}
                 className="px-2 py-2.5 rounded-xl transition-colors cursor-pointer border-0 mb-1.5 hover:bg-gray-50"
               >
                 <div className="flex items-start gap-2.5 w-full">
@@ -78,7 +79,7 @@ export default function RecentMessages({ conversations = [] }: RecentMessagesPro
                     size={36} 
                     src={conv.participant?.avatarUrl} 
                     icon={!conv.participant?.avatarUrl && <UserOutlined />}
-                    className="bg-indigo-100 text-indigo-600 font-bold text-[13px] shrink-0"
+                    className="bg-teal-100 text-teal-600 font-bold text-[13px] shrink-0"
                   >
                     {initials}
                   </Avatar>
@@ -104,8 +105,8 @@ export default function RecentMessages({ conversations = [] }: RecentMessagesPro
         <Button 
           block 
           type="text" 
-          onClick={() => navigate("/messages")}
-          className="bg-gray-50 text-indigo-600 font-bold h-9 hover:bg-gray-100 rounded-xl flex items-center justify-center text-[12px] cursor-pointer"
+          onClick={() => navigate(ROUTES.TEACHER.MESSAGES)}
+          className="bg-gray-50 text-teal-600 font-bold h-9 hover:bg-gray-100 rounded-xl flex items-center justify-center text-[12px] cursor-pointer"
         >
           Mở hộp thư tin nhắn <MessageOutlined className="ml-1 text-[14px]" />
         </Button>
