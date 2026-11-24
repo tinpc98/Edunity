@@ -34,6 +34,7 @@ import dayjs from "dayjs";
 import { courseService } from "../../../services/course.service";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
+import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import type {
   Course,
   CreateCoursePayload,
@@ -49,6 +50,7 @@ import {
   COURSE_LEVELS,
   COURSE_LEVEL_LABELS,
   COURSE_STATUS_LABELS,
+  SCHOOL_AND_LANGUAGE_COURSE_SCOPE,
 } from "../../../types/catalog";
 
 const { TextArea } = Input;
@@ -160,31 +162,37 @@ export default function AdminCoursesPage() {
     staleTime: 60_000,
   });
 
-  // Filter subjects query (based on selected category filter)
-  const { data: filterSubjects = [] } = useQuery({
-    queryKey: ["admin-subjects", courseCatFilter],
-    queryFn: () =>
-      courseCatFilter
-        ? catalogService.listSubjectsByCategory(courseCatFilter)
-        : Promise.resolve([]),
-    enabled: !!courseCatFilter,
+  const {
+    data: subjects = [],
+    isPending: loadingSubjects,
+    isError: subjectListError,
+    refetch: refetchSubjects,
+  } = useQuery({
+    queryKey: ["admin-subjects", SCHOOL_AND_LANGUAGE_COURSE_SCOPE],
+    queryFn: () => catalogService.adminListSubjects(SCHOOL_AND_LANGUAGE_COURSE_SCOPE),
     staleTime: 60_000,
   });
+  const filterSubjects = courseCatFilter
+    ? subjects.filter((subject) => subject.categoryId === courseCatFilter)
+    : subjects;
 
-  // Modal subjects query (based on selected category in modal)
-  const { data: modalSubjects = [] } = useQuery({
-    queryKey: ["modal-subjects", courseModalCategoryId],
-    queryFn: () =>
-      courseModalCategoryId
-        ? catalogService.listSubjectsByCategory(courseModalCategoryId)
-        : Promise.resolve([]),
-    enabled: !!courseModalCategoryId,
-    staleTime: 60_000,
-  });
+  const filterCategories = categories.filter((category) =>
+    subjects.some((subject) => subject.categoryId === category.id)
+  );
+  const creationCategories = filterCategories.filter((category) =>
+    offeredGradeLevels(category).length > 0 &&
+    subjects.some((subject) => subject.categoryId === category.id && subject.status === "ACTIVE")
+  );
+  const modalSubjects = subjects.filter((subject) =>
+    subject.categoryId === courseModalCategoryId && subject.status === "ACTIVE"
+  );
 
   // Allowed grade levels for category in modal. An older grade stays selectable on its own course.
   const allowedCourseModalGradeLevels = useMemo(() => {
-    const offered = offeredGradeLevels(categories.find((c) => c.id === courseModalCategoryId));
+    const category = categories.find((c) => c.id === courseModalCategoryId);
+    const offered = offeredGradeLevels(category).filter((grade) =>
+      category?.slug === "ngoai-ngu" || grade.startsWith("GRADE_")
+    );
     const current = editingCourse?.gradeLevel;
     return current && !offered.includes(current) ? [current, ...offered] : offered;
   }, [categories, courseModalCategoryId, editingCourse]);
@@ -201,6 +209,7 @@ export default function AdminCoursesPage() {
   } = useQuery({
     queryKey: [
       "admin-courses",
+      SCHOOL_AND_LANGUAGE_COURSE_SCOPE,
       coursePage,
       courseSearch.trim(),
       courseCatFilter,
@@ -219,7 +228,7 @@ export default function AdminCoursesPage() {
         gradeLevel: courseGradeFilter || undefined,
         level: courseLevelFilter || undefined,
         status: courseStatusFilter,
-      }),
+      }, SCHOOL_AND_LANGUAGE_COURSE_SCOPE),
     staleTime: 60_000,
   });
 
@@ -340,7 +349,7 @@ export default function AdminCoursesPage() {
       });
     } else {
       setEditingCourse(null);
-      const defaultCatId = categories.find((c) => offeredGradeLevels(c).length > 0)?.id || "";
+      const defaultCatId = creationCategories[0]?.id || "";
       setCourseModalCategoryId(defaultCatId);
       courseForm.resetFields();
       courseForm.setFieldsValue({
@@ -401,7 +410,7 @@ export default function AdminCoursesPage() {
             {record.categoryName}
           </Tag>
           <Tag color="cyan" className="text-xs block w-fit">
-            {record.subjectName}
+            {formatSubjectLabel(record.subjectName, undefined, record.categoryName)}
           </Tag>
         </div>
       ),
@@ -483,12 +492,12 @@ export default function AdminCoursesPage() {
         icon={<BookOutlined />}
         title="Quản lý khóa học chuẩn"
         crumb="Khóa học"
-        description="Kiểm soát nội dung, tiêu chuẩn đầu ra và thời lượng của từng khóa học chuẩn trên toàn nền tảng."
+        description="Quản lý khóa học các môn từ lớp 6 đến lớp 12 và các khóa ngoại ngữ."
         extra={
           <>
           <Button
             icon={<ReloadOutlined />}
-            onClick={() => refetchCourses()}
+            onClick={() => Promise.all([refetchCourses(), refetchSubjects()])}
             loading={loadingCourses}
             className="rounded-xl"
           >
@@ -551,18 +560,29 @@ export default function AdminCoursesPage() {
               placeholder="Tất cả danh mục"
               allowClear
               value={courseCatFilter || undefined}
-              onChange={(val) => updateSearchParams({ categoryId: val, subjectId: undefined, page: "1" })}
-              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+              onChange={(val) => {
+                const selectedSubject = subjects.find((subject) => subject.id === courseSubFilter);
+                const keepSubject = !val || selectedSubject?.categoryId === val;
+                updateSearchParams({
+                  categoryId: val,
+                  subjectId: keepSubject ? courseSubFilter : undefined,
+                  page: "1",
+                });
+              }}
+              options={filterCategories.map((c) => ({ value: c.id, label: c.name }))}
             />
           </AdminFilterField>
           <AdminFilterField label="Môn học">
             <Select
-              placeholder={courseCatFilter ? "Tất cả môn học" : "Chọn danh mục trước"}
+              placeholder="Tất cả môn học"
               allowClear
-              disabled={!courseCatFilter}
+              showSearch={{ optionFilterProp: "label" }}
+              loading={loadingSubjects}
+              status={subjectListError ? "error" : undefined}
+              notFoundContent={subjectListError ? "Không thể tải danh sách môn học" : undefined}
               value={courseSubFilter || undefined}
               onChange={(val) => updateSearchParams({ subjectId: val, page: "1" })}
-              options={filterSubjects.map((s) => ({ value: s.id, label: s.name }))}
+              options={filterSubjects.map((s) => ({ value: s.id, label: formatSubjectLabel(s.name, s.slug) }))}
             />
           </AdminFilterField>
           <AdminFilterField label="Khối lớp">
@@ -652,7 +672,7 @@ export default function AdminCoursesPage() {
                 rules={[{ required: true, message: "Vui lòng chọn danh mục" }]}
               >
                 <Select
-                  options={categories.map((c) => ({ value: c.id, label: c.name, disabled: offeredGradeLevels(c).length === 0 }))}
+                  options={creationCategories.map((c) => ({ value: c.id, label: c.name }))}
                   onChange={(val) => {
                     setCourseModalCategoryId(val);
                     courseForm.setFieldsValue({ subjectId: undefined, gradeLevel: undefined });
@@ -667,7 +687,7 @@ export default function AdminCoursesPage() {
                 rules={[{ required: true, message: "Vui lòng chọn môn học" }]}
               >
                 <Select
-                  options={modalSubjects.map((s) => ({ value: s.id, label: s.name }))}
+                  options={modalSubjects.map((s) => ({ value: s.id, label: formatSubjectLabel(s.name, s.slug) }))}
                   placeholder="Chọn môn học"
                 />
               </Form.Item>
@@ -854,7 +874,7 @@ export default function AdminCoursesPage() {
                 <Tag color="teal">{detailCourse.categoryName}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Môn học">
-                <Tag color="cyan">{detailCourse.subjectName}</Tag>
+                <Tag color="cyan">{formatSubjectLabel(detailCourse.subjectName, undefined, detailCourse.categoryName)}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Khối lớp">
                 {detailCourse.gradeLevel ? (

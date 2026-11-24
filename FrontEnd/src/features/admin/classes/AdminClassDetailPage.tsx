@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import { useState } from 'react';
 import { 
   Typography, Breadcrumb, Tag, Button, Row, Col, Card, 
@@ -348,7 +349,7 @@ export default function AdminClassDetailPage() {
                 {cls.course?.subjectName && (
                   <div>
                     <Text className="text-gray-400 block mb-0.5">Môn học:</Text>
-                    <div className="font-medium text-gray-800">{cls.course.subjectName}</div>
+                    <div className="font-medium text-gray-800">{formatSubjectLabel(cls.course.subjectName, undefined, cls.course.categoryName)}</div>
                   </div>
                 )}
                 {cls.course?.categoryName && (

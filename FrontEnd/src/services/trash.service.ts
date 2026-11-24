@@ -1,5 +1,19 @@
 import { apiClient } from "../api/apiClient";
 import type { TrashFilterQuery, TrashListResponse, TrashItem } from "../types/trash";
+import { formatSubjectLabel } from "../utils/subjectLabel";
+
+function presentTrashItem(item: TrashItem & { name?: string; slug?: string }): TrashItem {
+  if (item.type === "SUBJECT") {
+    return { ...item, title: formatSubjectLabel(item.title ?? item.name, item.codeOrSlug ?? item.slug) };
+  }
+  if (item.type === "COURSE" && item.parentInfo) {
+    const parentInfo = item.parentInfo.replace(/^([^()]+?) \(([^()]*)\)$/, (_, name, category) =>
+      `${formatSubjectLabel(name, undefined, category)} (${category})`
+    );
+    return { ...item, parentInfo };
+  }
+  return item;
+}
 
 function buildTrashQuery(params: TrashFilterQuery = {}): string {
   const qs = new URLSearchParams();
@@ -19,14 +33,16 @@ class TrashService {
    */
   async listTrash(params: TrashFilterQuery = {}): Promise<TrashListResponse> {
     const qs = buildTrashQuery(params);
-    return apiClient<TrashListResponse>(`/admin/trash${qs}`);
+    const result = await apiClient<TrashListResponse>(`/admin/trash${qs}`);
+    return { ...result, items: result.items.map(presentTrashItem) };
   }
 
   /**
    * GET /admin/trash/:type/:id — Pre-flight restoration check and detail
    */
   async getTrashDetail(type: string, id: string): Promise<TrashItem> {
-    return apiClient<TrashItem>(`/admin/trash/${type}/${id}`);
+    const item = await apiClient<TrashItem & { name?: string; slug?: string }>(`/admin/trash/${type}/${id}`);
+    return presentTrashItem(item);
   }
 
   /**

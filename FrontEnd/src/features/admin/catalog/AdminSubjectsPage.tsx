@@ -29,6 +29,7 @@ import { AdminPageHero, AdminFilterBar, AdminFilterField, AdminTableCard } from 
 import dayjs from "dayjs";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
+import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import type {
   Subject,
   CreateSubjectPayload,
@@ -49,7 +50,7 @@ export default function AdminSubjectsPage() {
   const [subjectForm] = Form.useForm();
 
   // Category filter state
-  const [selectedCatFilter, setSelectedCatFilter] = useState<string>("");
+  const [selectedCatFilter, setSelectedCatFilter] = useState<string>();
 
   // Soft delete state
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
@@ -64,8 +65,6 @@ export default function AdminSubjectsPage() {
     staleTime: 60_000,
   });
 
-  const activeCategoryIdForSubjects = selectedCatFilter || (categories[0]?.id ?? "");
-
   // Subjects query
   const {
     data: subjects = [],
@@ -74,28 +73,25 @@ export default function AdminSubjectsPage() {
     error: errorSubjects,
     refetch: refetchSubjects,
   } = useQuery({
-    queryKey: ["admin-subjects", activeCategoryIdForSubjects],
-    queryFn: () =>
-      activeCategoryIdForSubjects
-        ? catalogService.listSubjectsByCategory(activeCategoryIdForSubjects)
-        : Promise.resolve([]),
-    enabled: !!activeCategoryIdForSubjects,
+    queryKey: ["admin-subjects"],
+    queryFn: () => catalogService.adminListSubjects(),
     staleTime: 60_000,
   });
 
-  // Client-side filters within the selected category
+  // Filter the full subject list as the controls change.
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
-  const hasFilter = keyword.trim() !== "" || statusFilter !== "ALL";
+  const hasFilter = !!selectedCatFilter || keyword.trim() !== "" || statusFilter !== "ALL";
   const filteredSubjects = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     return subjects.filter((s) => {
-      if (statusFilter === "ACTIVE" && s.status !== "ACTIVE") return false;
-      if (statusFilter === "INACTIVE" && s.status === "ACTIVE") return false;
-      return !q || [s.name, s.slug, s.description].some((v) => v?.toLowerCase().includes(q));
+      if (selectedCatFilter && s.categoryId !== selectedCatFilter) return false;
+      if (statusFilter !== "ALL" && s.status !== statusFilter) return false;
+      return !q || [formatSubjectLabel(s.name, s.slug), s.name, s.slug, s.description].some((v) => v?.toLowerCase().includes(q));
     });
-  }, [subjects, keyword, statusFilter]);
+  }, [subjects, selectedCatFilter, keyword, statusFilter]);
   const resetFilters = () => {
+    setSelectedCatFilter(undefined);
     setKeyword("");
     setStatusFilter("ALL");
   };
@@ -111,7 +107,12 @@ export default function AdminSubjectsPage() {
   const saveSubjectMutation = useMutation({
     mutationFn: async (values: CreateSubjectPayload | UpdateSubjectPayload) => {
       if (editingSubject) {
-        return catalogService.updateSubject(editingSubject.id, values as UpdateSubjectPayload);
+        const payload = { ...values } as UpdateSubjectPayload;
+        const label = formatSubjectLabel(editingSubject.name, editingSubject.slug);
+        if (label !== editingSubject.name && payload.name?.trim() === label) {
+          delete payload.name;
+        }
+        return catalogService.updateSubject(editingSubject.id, payload);
       }
       return catalogService.createSubject(values as CreateSubjectPayload);
     },
@@ -153,7 +154,7 @@ export default function AdminSubjectsPage() {
       setEditingSubject(sub);
       subjectForm.setFieldsValue({
         categoryId: sub.categoryId,
-        name: sub.name,
+        name: formatSubjectLabel(sub.name, sub.slug),
         description: sub.description,
         status: sub.status,
       });
@@ -161,7 +162,7 @@ export default function AdminSubjectsPage() {
       setEditingSubject(null);
       subjectForm.resetFields();
       subjectForm.setFieldsValue({
-        categoryId: activeCategoryIdForSubjects,
+        categoryId: selectedCatFilter,
         status: "ACTIVE",
       });
     }
@@ -180,8 +181,6 @@ export default function AdminSubjectsPage() {
     deleteSubjectMutation.mutate({ id: deleteTarget.id, reason: deleteReasonInput });
   };
 
-  const currentCategory = categories.find((c) => c.id === activeCategoryIdForSubjects);
-
   const columns: ColumnsType<Subject> = [
     {
       title: "Tên môn học",
@@ -194,7 +193,7 @@ export default function AdminSubjectsPage() {
             <ReadOutlined />
           </div>
           <div className="min-w-0 break-words">
-            <div className="font-semibold text-[#163B40]">{name}</div>
+            <div className="font-semibold text-[#163B40]">{formatSubjectLabel(name, record.slug)}</div>
             <div className="font-mono text-xs text-slate-500 mt-0.5 break-all">{record.slug}</div>
           </div>
         </div>
@@ -204,9 +203,9 @@ export default function AdminSubjectsPage() {
       title: "Thuộc danh mục",
       dataIndex: "categoryName",
       key: "categoryName",
-      render: (catName: string) => (
+      render: (catName: string, record: Subject) => (
         <Tag color="teal" className="text-xs">
-          {catName || currentCategory?.name || "Danh mục"}
+          {catName || categories.find((c) => c.id === record.categoryId)?.name || "Danh mục"}
         </Tag>
       ),
     },
@@ -337,9 +336,10 @@ export default function AdminSubjectsPage() {
           <AdminFilterField label="Danh mục đào tạo">
             <Select
               loading={loadingCategories}
-              value={activeCategoryIdForSubjects || undefined}
-              onChange={(val) => setSelectedCatFilter(val)}
-              placeholder="Chọn danh mục"
+              value={selectedCatFilter}
+              onChange={setSelectedCatFilter}
+              placeholder="Tất cả danh mục"
+              allowClear
               options={categories.map((c) => ({
                 value: c.id,
                 label: `${c.name}${c.status === "ACTIVE" ? "" : " (Tạm ngưng)"}`,
@@ -374,7 +374,7 @@ export default function AdminSubjectsPage() {
           </div>
         ) : subjects.length === 0 ? (
           <div className="p-12 text-center">
-            <Empty description={`Chưa có môn học nào thuộc danh mục "${currentCategory?.name || "này"}"`}>
+            <Empty description="Chưa có môn học nào">
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
@@ -488,7 +488,7 @@ export default function AdminSubjectsPage() {
         title={
           <div className="flex items-center gap-2 text-base font-bold text-[#163B40]">
             <ReadOutlined className="text-teal-600" />
-            <span>Chi tiết môn học: {viewingSubject?.name}</span>
+            <span>Chi tiết môn học: {formatSubjectLabel(viewingSubject?.name, viewingSubject?.slug)}</span>
           </div>
         }
         open={!!viewingSubjectId}
@@ -506,13 +506,15 @@ export default function AdminSubjectsPage() {
           <div className="space-y-4 mt-4">
             <Descriptions bordered size="small" column={1}>
               <Descriptions.Item label="Tên môn học">
-                <span className="font-semibold text-slate-800">{viewingSubject.name}</span>
+                <span className="font-semibold text-slate-800">{formatSubjectLabel(viewingSubject.name, viewingSubject.slug)}</span>
               </Descriptions.Item>
               <Descriptions.Item label="Đường dẫn (Slug)">
                 <span className="font-mono text-xs text-slate-600">{viewingSubject.slug}</span>
               </Descriptions.Item>
               <Descriptions.Item label="Danh mục trực thuộc">
-                <Tag color="teal">{viewingSubject.categoryName || currentCategory?.name}</Tag>
+                <Tag color="teal">
+                  {viewingSubject.categoryName || categories.find((c) => c.id === viewingSubject.categoryId)?.name || "Danh mục"}
+                </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Mô tả">
                 {viewingSubject.description || <span className="text-slate-400 italic">Chưa có mô tả</span>}
@@ -596,7 +598,7 @@ export default function AdminSubjectsPage() {
       >
         <div className="space-y-3 py-2">
           <p className="text-xs text-slate-600">
-            Bạn có chắc chắn muốn chuyển môn học <strong>{deleteTarget?.name}</strong> vào Thùng rác không?
+            Bạn có chắc chắn muốn chuyển môn học <strong>{formatSubjectLabel(deleteTarget?.name, deleteTarget?.slug)}</strong> vào Thùng rác không?
           </p>
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800">
             ⚠️ <strong>Lưu ý:</strong> Môn học chỉ có thể xóa khi không còn khóa học hoặc lớp học liên quan đang mở. Dữ liệu có thể được khôi phục lại từ Thùng rác.

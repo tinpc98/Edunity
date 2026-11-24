@@ -182,7 +182,7 @@ const requestAuthorization = async (teacherId, body = {}) => {
   const teacherName = teacher.teacherProfile?.fullName || teacher.email;
   await notifyAdmins(
     "Yêu cầu cấp quyền giảng dạy mới",
-    `Giảng viên ${teacherName} yêu cầu quyền dạy môn "${subject.name}" (${level}${gradeLevel ? ` - ${gradeLevel}` : ""}).`,
+    `Giảng viên ${teacherName} yêu cầu quyền dạy môn "${subject.name}" thuộc danh mục "${category.name}" (${level}${gradeLevel ? ` - ${gradeLevel}` : ""}).`,
     "TEACHER_SUBJECT_AUTH_REQUESTED"
   );
 
@@ -369,7 +369,7 @@ const adminCreateAuthorization = async (adminId, body = {}) => {
     await notify(
       teacher._id,
       "Bạn đã được cấp quyền giảng dạy",
-      `Admin đã phê duyệt quyền dạy môn "${subject.name}" (${level}${gradeLevel ? ` - ${gradeLevel}` : ""}).`,
+      `Admin đã phê duyệt quyền dạy môn "${subject.name}" thuộc danh mục "${category.name}" (${level}${gradeLevel ? ` - ${gradeLevel}` : ""}).`,
       "TEACHER_SUBJECT_AUTH_APPROVED"
     );
   }

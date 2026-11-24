@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../utils/subjectLabel";
 import type {
   ApiClass,
   ClassModel,
@@ -192,8 +193,9 @@ export function adaptClassModelToDiscoveryItem(cls: ClassModel): ClassDiscoveryI
     title: cls.className,
     courseId: cls.courseId,
     courseTitle: cls.courseTitle,
+    categoryId: cls.categoryId,
     subjectId: cls.subjectId,
-    subjectName: (cls.course as any)?.subjectName || "",
+    subjectName: formatSubjectLabel(cls.course?.subjectName, undefined, cls.course?.categoryName),
     teacherId: cls.teacherId,
     teacherName: cls.teacherName || cls.teacher?.fullName || "Giảng viên",
     teacherAvatar: cls.teacher?.avatarUrl || undefined,

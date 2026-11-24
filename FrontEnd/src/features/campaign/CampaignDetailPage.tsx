@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../utils/subjectLabel";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -465,7 +466,7 @@ export default function PublicCampaignDetailPage() {
                           <div className="flex flex-wrap gap-2">
                             {campaign.scopeDetail.subjects.map((s) => (
                               <Tag key={s._id} color="purple">
-                                {s.name}
+                                {formatSubjectLabel(s.name, s.slug)}
                               </Tag>
                             ))}
                           </div>

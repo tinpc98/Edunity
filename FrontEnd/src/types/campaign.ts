@@ -13,7 +13,7 @@ export interface CampaignScope {
 
 export interface CampaignScopeDetail {
   categories?: { _id: string; name: string }[];
-  subjects?: { _id: string; name: string }[];
+  subjects?: { _id: string; name: string; slug?: string }[];
   courses?: { _id: string; title: string }[];
 }
 

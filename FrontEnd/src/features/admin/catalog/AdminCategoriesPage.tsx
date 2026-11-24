@@ -64,12 +64,12 @@ export default function AdminCategoriesPage() {
     error: errorCategories,
     refetch: refetchCategories,
   } = useQuery({
-    queryKey: ["admin-categories"],
-    queryFn: () => catalogService.listCategories(),
+    queryKey: ["admin-categories", "all"],
+    queryFn: () => catalogService.adminListCategories(),
     staleTime: 60_000,
   });
 
-  // Filters (client-side: listCategories returns the full list)
+  // Filter the full admin list locally.
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [gradeFilter, setGradeFilter] = useState<string | undefined>();

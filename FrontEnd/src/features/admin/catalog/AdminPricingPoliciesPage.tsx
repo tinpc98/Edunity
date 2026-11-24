@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -235,7 +236,7 @@ export default function AdminPricingPoliciesPage() {
     [categoriesQuery.data]
   );
   const subjectLabels = useMemo(
-    () => new Map((subjectsQuery.data ?? []).map((subject) => [subject.id, subject.name])),
+    () => new Map((subjectsQuery.data ?? []).map((subject) => [subject.id, formatSubjectLabel(subject.name, subject.slug)])),
     [subjectsQuery.data]
   );
 
@@ -479,7 +480,7 @@ export default function AdminPricingPoliciesPage() {
                     disabled={!categoryId}
                     options={(subjectsQuery.data ?? []).map((subject) => ({
                       value: subject.id,
-                      label: subject.name,
+                      label: formatSubjectLabel(subject.name, subject.slug),
                     }))}
                   />
                 </Form.Item>
@@ -492,7 +493,7 @@ export default function AdminPricingPoliciesPage() {
                     loading={coursesQuery.isLoading}
                     options={courses.map((course: Course) => ({
                       value: course.id,
-                      label: `${course.title} · ${course.subjectName}`,
+                      label: `${course.title} · ${formatSubjectLabel(course.subjectName, undefined, course.categoryName)}`,
                     }))}
                     placeholder="Khóa học ACTIVE"
                   />

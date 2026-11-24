@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import React, { useState, useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -367,7 +368,7 @@ export default function AdminCourseProposalsPage() {
                   <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
                     <span>{record.categoryName}</span>
                     <span>•</span>
-                    <span>{record.subjectName}</span>
+                    <span>{formatSubjectLabel(record.subjectName, undefined, record.categoryName)}</span>
                   </div>
                 </div>
               ),
@@ -568,7 +569,7 @@ export default function AdminCourseProposalsPage() {
                 <Tag color="blue">{activeProposal.categoryName}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Môn học">
-                <Tag color="cyan">{activeProposal.subjectName}</Tag>
+                <Tag color="cyan">{formatSubjectLabel(activeProposal.subjectName, undefined, activeProposal.categoryName)}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Khối lớp">
                 {activeProposal.gradeLevel

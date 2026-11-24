@@ -9,6 +9,7 @@ const body = (req) => req.body || {};
 
 // Categories
 exports.listCategories = handle(() => catalog.listCategories());
+exports.adminListCategories = handle(() => catalog.listCategories({ includeInactive: true }));
 exports.createCategory = handle((req) => catalog.createCategory(req.user.id, body(req)), 201);
 exports.updateCategory = handle((req) => catalog.updateCategory(req.user.id, req.params.id, body(req)));
 exports.deleteCategory = handle((req) => catalog.deleteCategory(req.user.id, req.params.id, body(req).reason));
@@ -16,6 +17,7 @@ exports.restoreCategory = handle((req) => catalog.restoreCategory(req.user.id, r
 
 // Subjects
 exports.listSubjectsByCategory = handle((req) => catalog.listSubjectsByCategory(req.params.id));
+exports.adminListSubjects = handle((req) => catalog.adminListSubjects(req.query.scope));
 exports.getSubject = handle((req) => catalog.getSubject(req.params.id));
 exports.createSubject = handle((req) => catalog.createSubject(req.user.id, body(req)), 201);
 exports.updateSubject = handle((req) => catalog.updateSubject(req.user.id, req.params.id, body(req)));

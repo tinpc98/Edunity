@@ -379,6 +379,9 @@ export interface ReviewProposalPayload {
 }
 
 // ─── SEARCH PARAMS ───────────────────────────────────────────
+export const SCHOOL_AND_LANGUAGE_COURSE_SCOPE = "school-and-languages";
+export type AdminCourseScope = typeof SCHOOL_AND_LANGUAGE_COURSE_SCOPE;
+
 export interface CourseSearchParams {
   search?: string;
   categoryId?: string;

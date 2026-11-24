@@ -160,12 +160,13 @@ export default function AdminPayoutsPage() {
 
   const evaluateMutation = useMutation({
     mutationFn: () => financeService.evaluateSettlements(),
-    onSuccess: (res: any) => {
-      message.success(
-        `Đã rà soát quyết toán thù lao: ${res?.evaluatedCount ?? 0} khoản đã quét, ${
-          res?.settledCount ?? 0
-        } khoản đủ điều kiện chuyển thành Khả dụng.`
-      );
+    onSuccess: ({ evaluatedCount, availableCount, failedCount }) => {
+      const summary = `Đã quét ${evaluatedCount} khoản thù lao. ${availableCount} khoản đang khả dụng.`;
+      if (failedCount) {
+        message.warning(`${summary} ${failedCount} khoản gặp lỗi khi quét.`);
+      } else {
+        message.success(summary);
+      }
       refresh();
     },
     onError: (err: any) => message.error(err?.message || "Lỗi quét quyết toán."),
@@ -470,7 +471,7 @@ export default function AdminPayoutsPage() {
             loading={evaluateMutation.isPending}
             className="rounded-xl border-[#D6E5E2] text-[#0F766E] hover:border-[#0D9488]"
           >
-            Quét đối soát (7 ngày)
+            Quét quyết toán
           </Button>
         }
       />

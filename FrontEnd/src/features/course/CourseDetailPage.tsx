@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../utils/subjectLabel";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
@@ -85,7 +86,7 @@ export default function CourseDetailPage() {
             ]}
           />
           <p className="text-teal-100 text-sm font-medium mb-2">
-            {course.categoryName} › {course.subjectName}
+            {course.categoryName} › {formatSubjectLabel(course.subjectName, undefined, course.categoryName)}
           </p>
           <h1 className="text-3xl font-bold mb-4">{course.title}</h1>
           <div className="flex flex-wrap gap-2">
@@ -162,7 +163,7 @@ export default function CourseDetailPage() {
             <Divider className="my-2 border-[#D6E5E2]/60" />
             <div>
               <p className="text-xs text-slate-400 font-semibold uppercase mb-1">Môn học</p>
-              <p className="font-semibold text-[#163B40]">{course.subjectName}</p>
+              <p className="font-semibold text-[#163B40]">{formatSubjectLabel(course.subjectName, undefined, course.categoryName)}</p>
             </div>
             {course.level && (
               <>

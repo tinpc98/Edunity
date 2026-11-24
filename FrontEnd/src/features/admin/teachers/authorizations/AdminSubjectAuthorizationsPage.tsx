@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../../../utils/subjectLabel";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -155,7 +156,7 @@ export default function AdminSubjectAuthorizationsPage() {
               title: "Môn học",
               render: (_, item) => (
                 <>
-                  <div className="font-semibold">{item.subjectName}</div>
+                  <div className="font-semibold">{formatSubjectLabel(item.subjectName, undefined, item.categoryName)}</div>
                   <div className="text-xs text-slate-500">{item.categoryName}</div>
                 </>
               ),
@@ -205,7 +206,7 @@ export default function AdminSubjectAuthorizationsPage() {
             <Descriptions bordered size="small" column={1}>
               <Descriptions.Item label="Giáo viên">{action.item.teacher?.fullName || "—"}</Descriptions.Item>
               <Descriptions.Item label="Danh mục">{action.item.categoryName}</Descriptions.Item>
-              <Descriptions.Item label="Môn học">{action.item.subjectName}</Descriptions.Item>
+              <Descriptions.Item label="Môn học">{formatSubjectLabel(action.item.subjectName, undefined, action.item.categoryName)}</Descriptions.Item>
               <Descriptions.Item label="Khối lớp">{gradeText(action.item)}</Descriptions.Item>
               <Descriptions.Item label="Cấp độ">{COURSE_LEVEL_LABELS[action.item.level]}</Descriptions.Item>
               {action.item.requestNote && (

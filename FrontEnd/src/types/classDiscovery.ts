@@ -92,6 +92,7 @@ export interface SessionEntity {
  * Derived cleanly from domain models without corrupting backend contracts.
  */
 export interface ClassDiscoveryItem {
+  categoryId: string;
   id: string;
   className: string;
   title: string;
