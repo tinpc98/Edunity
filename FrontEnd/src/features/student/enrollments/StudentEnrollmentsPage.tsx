@@ -35,7 +35,7 @@ import {
   ENROLLMENT_STATUS_COLORS,
 } from "../../../types/enrollment";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 type StatusTab = "ALL" | EnrollmentStatus;
 
@@ -130,15 +130,12 @@ export default function StudentEnrollmentsPage() {
   ];
 
   return (
-    <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div>
-        <Title level={2} className="!mb-1 !text-2xl font-black text-slate-900 tracking-tight">
+        <Title level={2} className="!mb-0 !text-2xl font-black text-slate-900 tracking-tight">
           Đơn đăng ký của tôi
         </Title>
-        <Text className="text-xs text-slate-500">
-          Theo dõi trạng thái các lớp đã đăng ký, thời gian giữ chỗ và lịch sử tham gia.
-        </Text>
       </div>
 
       {/* Tabs */}
@@ -180,7 +177,7 @@ export default function StudentEnrollmentsPage() {
             }
           >
             <Link to={ROUTES.CLASSES}>
-              <Button type="primary" className="bg-indigo-600 font-semibold text-xs rounded-xl h-9 px-5">
+              <Button type="primary" className="bg-teal-600 font-semibold text-xs rounded-xl h-9 px-5">
                 Khám phá lớp học ngay
               </Button>
             </Link>
@@ -209,7 +206,7 @@ export default function StudentEnrollmentsPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   {/* Left: Class details */}
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0 text-indigo-600 text-xl font-bold">
+                    <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center shrink-0 text-teal-600 text-xl font-bold">
                       <BookOutlined />
                     </div>
 
@@ -217,7 +214,7 @@ export default function StudentEnrollmentsPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           to={`/classes/${enrollment.classId}`}
-                          className="font-bold text-sm text-slate-900 hover:text-indigo-600 transition-colors"
+                          className="font-bold text-sm text-slate-900 hover:text-teal-600 transition-colors"
                         >
                           {classInfo?.className || "Lớp học #" + enrollment.classId.slice(-6)}
                         </Link>
@@ -260,7 +257,7 @@ export default function StudentEnrollmentsPage() {
                           Đăng ký: {new Date(enrollment.enrolledAt).toLocaleDateString("vi-VN")}
                         </span>
                         {!isFree && (
-                          <span className="font-semibold text-indigo-700">
+                          <span className="font-semibold text-teal-700">
                             Học phí: {enrollment.tuitionAmount.toLocaleString("vi-VN")} đ
                           </span>
                         )}
@@ -325,7 +322,7 @@ export default function StudentEnrollmentsPage() {
                         <Link to={`/checkout/${enrollment.id}`}>
                           <Button
                             type="primary"
-                            className="bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold h-9 rounded-xl border-none shadow-2xs"
+                            className="bg-teal-600 hover:bg-teal-500 text-xs font-semibold h-9 rounded-xl border-none shadow-2xs"
                           >
                             {enrollment.paymentSource === "MIXED" ? "Thanh toán phần đồng chi trả" : "Thanh toán ngay"}
                           </Button>

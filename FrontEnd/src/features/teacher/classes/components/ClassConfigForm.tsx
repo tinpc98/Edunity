@@ -138,10 +138,10 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
   return (
     <Form layout="vertical" form={form} preserve initialValues={{ ...CLASS_FORM_DEFAULTS, enrollmentStart: lockClassType ? undefined : firstEnrollmentDay }}>
       <Card className="rounded-2xl shadow-sm border-gray-100 p-6">
-        <Title level={4} className="!mb-6 !font-bold">Thông tin lớp học</Title>
+        <Title level={4} className="!text-base !mb-6 !font-bold">Thông tin lớp học</Title>
 
         <Form.Item label="Tên lớp học công khai" name="className" rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập tên lớp học' }]}>
-          <Input size="large" className="rounded-lg" placeholder="VD: Lớp Ôn thi môn Toán 12 Nâng cao" />
+          <Input className="rounded-lg" placeholder="VD: Lớp Ôn thi môn Toán 12 Nâng cao" />
         </Form.Item>
 
         <Form.Item label="Loại hình lớp học" name="classType" rules={[{ required: true }]}>
@@ -150,7 +150,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
               <Col span={12}>
                 <Radio.Button
                   value="PAID"
-                  className="w-full h-auto py-3 px-4 rounded-xl text-left border-2 [&.ant-radio-button-wrapper-checked]:border-indigo-600 [&.ant-radio-button-wrapper-checked]:bg-indigo-50"
+                  className="w-full h-auto py-3 px-4 rounded-xl text-left border-2 [&.ant-radio-button-wrapper-checked]:border-teal-600 [&.ant-radio-button-wrapper-checked]:bg-teal-50"
                 >
                   <div className="font-semibold text-gray-800 mb-1">Lớp có thu phí (PAID)</div>
                   <div className="text-xs text-gray-500 font-normal leading-tight">Học viên đóng học phí để ghi danh.</div>
@@ -173,7 +173,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
           {!isFree && (
             <Col xs={24} sm={12}>
               <Form.Item label="Học phí trọn khóa (VNĐ)" name="price" required extra={CLASS_PRICE_HINT} rules={[classPriceRule]}>
-                <PriceInput size="large" className="w-full rounded-lg" />
+                <PriceInput className="w-full rounded-lg" />
               </Form.Item>
             </Col>
           )}
@@ -186,7 +186,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
                 { type: 'number', min: 1, message: 'Sĩ số phải >= 1' },
               ]}
             >
-              <InputNumber size="large" className="w-full rounded-lg" addonAfter="Học viên" min={1} />
+              <InputNumber className="w-full rounded-lg" addonAfter="Học viên" min={1} />
             </Form.Item>
           </Col>
         </Row>
@@ -208,7 +208,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
               ]}
             >
               <DatePicker
-                size="large"
+               
                 className="w-full rounded-lg"
                 format="DD/MM/YYYY"
                 placeholder="Chọn ngày"
@@ -226,7 +226,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
                 notBeforeField('enrollmentStart', 'Không được trước ngày mở tuyển sinh'),
               ]}
             >
-              <DatePicker size="large" className="w-full rounded-lg" format="DD/MM/YYYY" placeholder="Chọn ngày" />
+              <DatePicker className="w-full rounded-lg" format="DD/MM/YYYY" placeholder="Chọn ngày" />
             </Form.Item>
           </Col>
         </Row>
@@ -243,12 +243,12 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
       <Card className="rounded-2xl shadow-sm border-gray-100 p-6 mt-6">
         <div className="flex justify-between items-start gap-4 mb-6">
           <div>
-            <Title level={4} className="!m-0 !font-bold">Lịch giảng dạy & ca học hằng tuần</Title>
+            <Title level={4} className="!text-base !m-0 !font-bold">Lịch giảng dạy & ca học hằng tuần</Title>
             <Text className="text-gray-500 text-sm">
               Chọn số buổi, ngày bắt đầu và các ca trong tuần. Ngày kết thúc được tính tự động từ buổi học cuối cùng.
             </Text>
           </div>
-          <Tag color="indigo" className="font-semibold rounded-full px-3 py-1 shrink-0">
+          <Tag color="cyan" className="font-semibold rounded-full px-3 py-1 shrink-0">
             {schedule.length} ca / tuần
           </Tag>
         </div>
@@ -263,7 +263,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
                 { type: 'number', min: 1, max: MAX_CLASS_SESSIONS, message: `Từ 1 đến ${MAX_CLASS_SESSIONS} buổi` },
               ]}
             >
-              <InputNumber size="large" className="w-full rounded-lg" min={1} max={MAX_CLASS_SESSIONS} precision={0} addonAfter="buổi" />
+              <InputNumber className="w-full rounded-lg" min={1} max={MAX_CLASS_SESSIONS} precision={0} addonAfter="buổi" />
             </Form.Item>
           </Col>
           <Col xs={24} sm={12}>
@@ -274,7 +274,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
               extra="Có thể trùng ngày hạn chót tuyển sinh"
               rules={[notBeforeField('enrollmentEnd', 'Không được trước hạn chót tuyển sinh')]}
             >
-              <DatePicker size="large" className="w-full rounded-lg" format="DD/MM/YYYY" placeholder="Chọn ngày" />
+              <DatePicker className="w-full rounded-lg" format="DD/MM/YYYY" placeholder="Chọn ngày" />
             </Form.Item>
           </Col>
         </Row>
@@ -344,7 +344,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
                 const clash = conflictIndexes.has(index);
                 return (
                   <li key={index} className={`flex items-center gap-4 px-4 py-2.5 ${clash ? 'bg-red-50' : ''}`}>
-                    <span className={`w-6 text-center font-semibold ${clash ? 'text-red-600' : 'text-indigo-600'}`}>{index}</span>
+                    <span className={`w-6 text-center font-semibold ${clash ? 'text-red-600' : 'text-teal-600'}`}>{index}</span>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-gray-900">
                         Buổi {index} {clash && <Tag color="red" className="ml-1">Trùng lịch</Tag>}

@@ -246,16 +246,13 @@ export default function StudentScholarshipApplicationsPage() {
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <Title level={2} className="!mb-1 !text-2xl font-black text-slate-900 tracking-tight">
+          <Title level={2} className="!mb-0 !text-2xl font-black text-slate-900 tracking-tight">
             Hồ sơ xin học bổng
           </Title>
-          <Text className="text-xs text-slate-500">
-            Theo dõi tiến độ xét duyệt và bổ sung thông tin hồ sơ học bổng theo yêu cầu.
-          </Text>
         </div>
 
         <Link to={ROUTES.STUDENT.SCHOLARSHIP_EXPLORE}>
-          <Button type="primary" className="bg-indigo-600 font-semibold text-xs rounded-xl h-10 px-5 shadow-2xs">
+          <Button type="primary" className="bg-teal-600 font-semibold text-xs rounded-xl h-10 px-5 shadow-2xs">
             Tìm học bổng để ứng tuyển
           </Button>
         </Link>
@@ -312,7 +309,7 @@ export default function StudentScholarshipApplicationsPage() {
           >
             {allItems.length === 0 && (
               <Link to={ROUTES.STUDENT.SCHOLARSHIP_EXPLORE}>
-                <Button type="primary" className="bg-indigo-600 font-semibold text-xs rounded-xl h-9 px-5">
+                <Button type="primary" className="bg-teal-600 font-semibold text-xs rounded-xl h-9 px-5">
                   Tìm kiếm chiến dịch để ứng tuyển
                 </Button>
               </Link>
@@ -346,7 +343,7 @@ export default function StudentScholarshipApplicationsPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
                         to={`${ROUTES.STUDENT.SCHOLARSHIP_EXPLORE}/${app.campaignId}`}
-                        className="font-bold text-base text-slate-900 hover:text-indigo-600 transition-colors"
+                        className="font-bold text-base text-slate-900 hover:text-teal-600 transition-colors"
                       >
                         {app.campaignTitle || "Chiến dịch học bổng"}
                       </Link>
@@ -362,7 +359,7 @@ export default function StudentScholarshipApplicationsPage() {
                     <div className="text-xs text-slate-500 flex flex-wrap items-center gap-x-4 gap-y-1">
                       <span>
                         Mức học bổng định mức:{" "}
-                        <strong className="text-indigo-700">{formatVND(app.awardAmountPerStudent)}</strong>
+                        <strong className="text-teal-700">{formatVND(app.awardAmountPerStudent)}</strong>
                       </span>
                       <span>•</span>
                       <span>Mã hồ sơ: {app.applicationCode || `#${app.id.slice(-6).toUpperCase()}`}</span>
@@ -464,7 +461,7 @@ export default function StudentScholarshipApplicationsPage() {
                       <Link
                         to={`${ROUTES.STUDENT.SCHOLARSHIP_EXPLORE}/${app.campaignId}?draftId=${encodeURIComponent(app.id)}`}
                       >
-                        <Button type="primary" className="bg-indigo-600 text-xs font-bold rounded-xl h-10 px-5 border-none shadow-2xs">
+                        <Button type="primary" className="bg-teal-600 text-xs font-bold rounded-xl h-10 px-5 border-none shadow-2xs">
                           Tiếp tục hoàn thiện
                         </Button>
                       </Link>

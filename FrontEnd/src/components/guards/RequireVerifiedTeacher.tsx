@@ -42,7 +42,7 @@ const STATUS_META: Record<
     tagLabel: "Đang chờ duyệt",
     tagColor: "processing",
     icon: <ClockCircleOutlined />,
-    iconBgClass: "bg-indigo-100 text-indigo-600",
+    iconBgClass: "bg-teal-100 text-teal-600",
   },
   REJECTED: {
     title: "Hồ sơ xác minh chưa được phê duyệt",
@@ -117,7 +117,7 @@ export const TeacherVerificationGateCard: React.FC<TeacherVerificationGateCardPr
             title={VERIFICATION_REQUIRED_MESSAGE}
           />
           <div className="flex flex-wrap justify-center gap-3">
-            <Button type="primary" icon={<ReloadOutlined />} onClick={onRetry} className="bg-indigo-600">
+            <Button type="primary" icon={<ReloadOutlined />} onClick={onRetry} className="bg-teal-600">
               Thử lại
             </Button>
             <Link to={ROUTES.TEACHER.HOME}>
@@ -179,7 +179,7 @@ export const TeacherVerificationGateCard: React.FC<TeacherVerificationGateCardPr
 
           {status === "UNVERIFIED" && (
             <Link to={ROUTES.AUTH.TEACHER_QUALIFICATION}>
-              <Button type="primary" size="large" className="bg-indigo-600 hover:bg-indigo-700 font-semibold">
+              <Button type="primary" size="large" className="bg-teal-600 hover:bg-teal-700 font-semibold">
                 Hoàn thiện hồ sơ xác minh
               </Button>
             </Link>
@@ -195,7 +195,7 @@ export const TeacherVerificationGateCard: React.FC<TeacherVerificationGateCardPr
 
           {status === "PENDING" && (
             <Link to={ROUTES.TEACHER.PROFILE}>
-              <Button type="primary" size="large" className="bg-indigo-600 hover:bg-indigo-700 font-semibold">
+              <Button type="primary" size="large" className="bg-teal-600 hover:bg-teal-700 font-semibold">
                 Xem trạng thái hồ sơ
               </Button>
             </Link>

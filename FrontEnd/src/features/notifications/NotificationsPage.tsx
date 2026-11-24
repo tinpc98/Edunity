@@ -36,7 +36,7 @@ function getNotificationIcon(type?: string) {
     return <CheckCircleOutlined className="text-emerald-500 text-lg" />;
   }
   if (safeType.includes("SCHOLARSHIP")) {
-    return <TrophyOutlined className="text-indigo-500 text-lg" />;
+    return <TrophyOutlined className="text-teal-500 text-lg" />;
   }
   return <NotificationOutlined className="text-slate-500 text-lg" />;
 }
@@ -86,7 +86,7 @@ export const NotificationsPage: React.FC = () => {
 
     const target = getNotificationRoute(item.type, user?.role);
     // Already on the notifications page: nothing to navigate to
-    if (target !== ROUTES.NOTIFICATIONS) navigate(target);
+    if (target !== ROUTES.NOTIFICATIONS && target !== ROUTES.STUDENT.NOTIFICATIONS) navigate(target);
   };
 
   const items = useMemo(() => data?.items ?? [], [data]);
@@ -116,7 +116,7 @@ export const NotificationsPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <Title level={2} className="!mb-1 flex items-center gap-2">
-            <BellOutlined className="text-indigo-600" />
+            <BellOutlined className="text-teal-600" />
             Trung tâm thông báo
           </Title>
           <Text type="secondary">
@@ -130,7 +130,7 @@ export const NotificationsPage: React.FC = () => {
             icon={<CheckOutlined />}
             loading={markAllMutation.isPending}
             onClick={() => markAllMutation.mutate()}
-            className="bg-indigo-600 hover:bg-indigo-700 shrink-0"
+            className="bg-teal-600 hover:bg-teal-700 shrink-0"
           >
             Đánh dấu tất cả đã đọc ({unreadCount})
           </Button>
@@ -162,7 +162,7 @@ export const NotificationsPage: React.FC = () => {
                 <span className="flex items-center gap-1.5 font-medium">
                   Chưa đọc
                   {unreadCount > 0 && (
-                    <Tag color="indigo" className="ml-1 rounded-full text-xs">
+                    <Tag color="cyan" className="ml-1 rounded-full text-xs">
                       {unreadCount}
                     </Tag>
                   )}
@@ -194,7 +194,7 @@ export const NotificationsPage: React.FC = () => {
                 key={item.id}
                 onClick={() => handleNotificationClick(item)}
                 className={`p-4 flex items-start gap-4 cursor-pointer transition-colors hover:bg-slate-50/80 ${
-                  !item.isRead ? "bg-indigo-50/30" : "bg-white"
+                  !item.isRead ? "bg-teal-50/30" : "bg-white"
                 }`}
               >
                 <div className="p-2.5 rounded-lg bg-slate-100/80 shrink-0 mt-0.5">
@@ -215,7 +215,7 @@ export const NotificationsPage: React.FC = () => {
                         {new Date(item.createdAt).toLocaleString("vi-VN")}
                       </span>
                       {!item.isRead && (
-                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 shrink-0" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-teal-600 shrink-0" />
                       )}
                     </div>
                   </div>
@@ -238,7 +238,7 @@ export const NotificationsPage: React.FC = () => {
                           e.stopPropagation();
                           markReadMutation.mutate(item.id);
                         }}
-                        className="text-xs text-indigo-600 hover:text-indigo-800 p-0 h-auto"
+                        className="text-xs text-teal-600 hover:text-teal-800 p-0 h-auto"
                       >
                         Đánh dấu đã đọc
                       </Button>

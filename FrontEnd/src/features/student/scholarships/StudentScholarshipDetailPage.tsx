@@ -144,7 +144,7 @@ export default function StudentScholarshipDetailPage() {
 
           <Card
             className="rounded-2xl border-slate-200 shadow-2xs"
-            title={<span className="text-sm font-bold"><InfoCircleOutlined className="text-indigo-600 mr-2" />Phạm vi áp dụng học bổng</span>}
+            title={<span className="text-sm font-bold"><InfoCircleOutlined className="text-teal-600 mr-2" />Phạm vi áp dụng học bổng</span>}
           >
             {hasScope ? (
               <div className="space-y-3 text-sm">
@@ -178,7 +178,7 @@ export default function StudentScholarshipDetailPage() {
 
           <Card
             className="rounded-2xl border-slate-200 shadow-2xs"
-            title={<span className="text-sm font-bold"><FileProtectOutlined className="text-indigo-600 mr-2" />Hồ sơ cần chuẩn bị</span>}
+            title={<span className="text-sm font-bold"><FileProtectOutlined className="text-teal-600 mr-2" />Hồ sơ cần chuẩn bị</span>}
           >
             <ul className="list-disc pl-5 space-y-1.5 text-sm text-slate-700 !mb-0">
               {REQUIRED_DOCUMENTS.map((doc) => <li key={doc}>{doc}</li>)}
@@ -187,12 +187,12 @@ export default function StudentScholarshipDetailPage() {
         </div>
 
         <div className="lg:col-span-4 lg:sticky lg:top-24 space-y-4">
-          <Card className="rounded-2xl border-indigo-200 shadow-sm">
+          <Card className="rounded-2xl border-teal-200 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl"><GiftOutlined /></div>
+              <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-xl"><GiftOutlined /></div>
               <div>
                 <div className="text-xs text-slate-500">Mức hỗ trợ / suất</div>
-                <div className="text-2xl font-black text-indigo-700">{formatVND(campaign.awardAmountPerStudent)}</div>
+                <div className="text-2xl font-black text-teal-700">{formatVND(campaign.awardAmountPerStudent)}</div>
               </div>
             </div>
 
@@ -208,8 +208,8 @@ export default function StudentScholarshipDetailPage() {
             </div>
 
             <div className="mt-4">
-              <div className="flex justify-between text-xs text-slate-500"><span>Tiến độ gây quỹ</span><b className="text-indigo-600">{campaign.fundingProgress}%</b></div>
-              <Progress percent={campaign.fundingProgress} showInfo={false} strokeColor="#4f46e5" size="small" />
+              <div className="flex justify-between text-xs text-slate-500"><span>Tiến độ gây quỹ</span><b className="text-teal-600">{campaign.fundingProgress}%</b></div>
+              <Progress percent={campaign.fundingProgress} showInfo={false} strokeColor="#0D9488" size="small" />
               <div className="text-[11px] text-slate-400">Đã gây quỹ {formatVND(campaign.fundedAmount)} / {formatVND(campaign.targetBudget)}</div>
             </div>
 
@@ -250,7 +250,7 @@ export default function StudentScholarshipDetailPage() {
                     onClick={() => {
                       setIsApplyOpen(true);
                     }}
-                    className="h-11 rounded-xl bg-indigo-600 font-bold"
+                    className="h-11 rounded-xl bg-teal-600 font-bold"
                   >
                     {phase === "OPEN" ? "Nộp hồ sơ xin học bổng" : APPLICATION_PHASE_LABELS[phase]}
                   </Button>

@@ -76,7 +76,7 @@ export default function GuardianConsentCard({ campaignId }: { campaignId: string
   return (
     <Card
       className="rounded-2xl border-slate-200 shadow-2xs"
-      title={<span className="flex items-center gap-2"><SafetyCertificateOutlined className="text-indigo-600" /> Đồng thuận của phụ huynh</span>}
+      title={<span className="flex items-center gap-2"><SafetyCertificateOutlined className="text-teal-600" /> Đồng thuận của phụ huynh</span>}
     >
       <p className="text-sm text-slate-600 mb-3">
         Học sinh dưới 18 tuổi cần giấy đồng thuận có chữ ký của phụ huynh/người giám hộ (kèm ảnh CCCD của họ) trước khi nộp hồ sơ chiến dịch này.

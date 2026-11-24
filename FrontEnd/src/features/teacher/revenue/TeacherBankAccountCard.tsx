@@ -34,7 +34,7 @@ export default function TeacherBankAccountCard() {
   return (
     <div className="rounded-xl border border-slate-200 p-4 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div className="flex items-start gap-3">
-        <BankOutlined className="text-indigo-600 text-xl mt-1" />
+        <BankOutlined className="text-teal-600 text-xl mt-1" />
         {account ? (
           <div className="text-sm">
             <div className="flex flex-wrap items-center gap-2">

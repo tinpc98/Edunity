@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { 
-  Typography, Tabs, Breadcrumb, Tag, Button, Row, Col, Card, 
+  Typography, Tabs, Tag, Button, Row, Col, Card, 
   Modal, Form, Input, Skeleton, Alert, message, List, Popconfirm, Table, Progress,
   Avatar, Empty, Tooltip
 } from 'antd';
@@ -101,7 +101,7 @@ export default function TeacherClassDetailPage() {
         participantId: studentId,
         classId,
       });
-      navigate(`/messages?id=${conv.id}`);
+      navigate(`${ROUTES.TEACHER.MESSAGES}?id=${conv.id}`);
     } catch (err: any) {
       message.error(err?.message || "Không thể mở cuộc trò chuyện với học viên");
     } finally {
@@ -319,7 +319,7 @@ export default function TeacherClassDetailPage() {
               </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{cls.enrolledCount}</Title>
+              <Title level={2} className="!text-2xl !m-0 text-gray-900">{cls.enrolledCount}</Title>
               <span className="text-gray-500 text-lg mb-1">/ {cls.capacity}</span>
             </div>
             <div className="flex items-center justify-between text-xs font-medium">
@@ -357,7 +357,7 @@ export default function TeacherClassDetailPage() {
               </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{(cls.sessions || []).length}</Title>
+              <Title level={2} className="!text-2xl !m-0 text-gray-900">{(cls.sessions || []).length}</Title>
               <span className="text-gray-500 text-lg mb-1">buổi</span>
             </div>
             <div className="text-xs text-gray-500 font-medium">
@@ -375,7 +375,7 @@ export default function TeacherClassDetailPage() {
               </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{cls.ratingAverage?.toFixed(1) || '0.0'}</Title>
+              <Title level={2} className="!text-2xl !m-0 text-gray-900">{cls.ratingAverage?.toFixed(1) || '0.0'}</Title>
               <StarFilled className="text-amber-400 text-lg mb-1" />
             </div>
             <div className="text-xs text-gray-500 font-medium">
@@ -387,7 +387,7 @@ export default function TeacherClassDetailPage() {
 
       {/* Main Details Card */}
       <Card className="rounded-2xl shadow-sm border-gray-100">
-        <Title level={4} className="!mb-4">Thông tin khóa học & Giảng dạy</Title>
+        <Title level={4} className="!text-base !mb-4">Thông tin khóa học & Giảng dạy</Title>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
           <div>
             <Text className="text-gray-400 block mb-1">Khóa học chuẩn:</Text>
@@ -439,7 +439,7 @@ export default function TeacherClassDetailPage() {
       <Card className="rounded-2xl border border-gray-100 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
           <div>
-            <Title level={4} className="!m-0">Tiến độ giảng dạy</Title>
+            <Title level={4} className="!text-base !m-0">Tiến độ giảng dạy</Title>
             <Text className="text-gray-500 text-sm">
               <CalendarOutlined className="mr-1" />
               Lịch học: <strong className="text-gray-800">{scheduleDisplay}</strong>
@@ -450,7 +450,7 @@ export default function TeacherClassDetailPage() {
         </div>
         <div className="flex items-end justify-between mt-4 mb-1">
           <div>
-            <span className="text-3xl font-bold text-gray-900">{completedCount}/{countedSessions}</span>
+            <span className="text-2xl font-bold text-gray-900">{completedCount}/{countedSessions}</span>
             <span className="ml-2 text-gray-500">buổi đã hoàn thành</span>
           </div>
           <span className="font-semibold text-gray-800">{progressOfTeaching}%</span>
@@ -479,7 +479,7 @@ export default function TeacherClassDetailPage() {
       {sessionsList.length === 0 ? (
         <Card className="rounded-2xl text-center py-16 border-dashed border-gray-300">
           <ClockCircleOutlined className="text-5xl text-gray-300 mb-4" />
-          <Title level={4} className="text-gray-700 !mb-2">Chưa có buổi học nào</Title>
+          <Title level={4} className="!text-base text-gray-700 !mb-2">Chưa có buổi học nào</Title>
           <Paragraph className="text-gray-500 text-sm max-w-md mx-auto mb-6">
             Buổi học sẽ được tạo tự động khi lớp có lịch học hàng tuần, ngày khai giảng và ngày kết thúc.
             {isEditable && ' Bấm "Chỉnh sửa lớp" để bổ sung.'}
@@ -819,16 +819,7 @@ export default function TeacherClassDetailPage() {
   );
 
   return (
-    <div className="flex flex-col w-full pb-10 max-w-[1200px] mx-auto">
-      <Breadcrumb 
-        className="mb-4 text-sm font-medium"
-        items={[
-          { title: <Link to={ROUTES.TEACHER.HOME}>Tổng quan</Link> },
-          { title: <Link to={ROUTES.TEACHER.CLASSES}>Lớp của tôi</Link> },
-          { title: cls.className },
-        ]}
-      />
-
+    <div className="flex flex-col w-full pb-10">
       {/* Top Banner Alert if REJECTED */}
       {cls.status === 'REJECTED' && (
         <Alert
@@ -875,7 +866,7 @@ export default function TeacherClassDetailPage() {
       {/* Header Info & Actions */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
         <div>
-          <Title level={2} className="!m-0 mb-3 text-gray-900">{cls.className}</Title>
+          <Title level={2} className="!text-2xl !m-0 mb-3 text-gray-900">{cls.className}</Title>
           <div className="flex flex-wrap items-center gap-3">
             <Tag color={cls.classType === 'PAID' ? 'cyan' : 'green'} className="!m-0 px-2.5 py-0.5 rounded font-bold">
               {cls.classType}
@@ -918,7 +909,7 @@ export default function TeacherClassDetailPage() {
             >
               <Button 
                 type="primary" 
-                size="large" 
+                
                 icon={<SendOutlined />}
                 loading={submitMutation.isPending}
                 className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold px-6 shadow-sm border-none"
@@ -931,7 +922,7 @@ export default function TeacherClassDetailPage() {
           {/* Edit class if DRAFT or NEED_CHANGES */}
           {isEditable && (
             <Button 
-              size="large"
+             
               icon={<EditOutlined />} 
               onClick={handleOpenEdit}
               className="rounded-xl font-medium"
@@ -945,7 +936,7 @@ export default function TeacherClassDetailPage() {
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}
-        size="large"
+       
         className="font-medium"
         items={[
           { key: 'overview', label: `Tổng quan`, children: renderOverview() },

@@ -38,8 +38,8 @@ export default function TeacherRevenue({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3">
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
-            <WalletOutlined className="text-indigo-600 text-[22px]" />
-            <Title level={4} style={{ margin: 0, fontSize: '18px' }}>Tổng quan Doanh thu</Title>
+            <WalletOutlined className="text-teal-600 text-[22px]" />
+            <Title level={4} style={{ margin: 0, fontSize: '16px' }}>Tổng quan Doanh thu</Title>
             <Tag color="cyan" className="rounded-full border-0 font-bold flex items-center gap-1 text-[11px] px-2 py-0.5 m-0">
               <SafetyCertificateOutlined className="text-[14px]" /> Đã đối soát
             </Tag>
@@ -49,7 +49,7 @@ export default function TeacherRevenue({
         <Button 
           type="link" 
           onClick={() => navigate("/teacher/revenue")}
-          className="font-semibold text-indigo-600 p-0 flex items-center text-[13px] cursor-pointer"
+          className="font-semibold text-teal-600 p-0 flex items-center text-[13px] cursor-pointer"
         >
           Xem chi tiết doanh thu <ArrowRightOutlined className="ml-1" />
         </Button>
@@ -71,7 +71,7 @@ export default function TeacherRevenue({
         <div className="flex flex-col">
           <Text strong className="text-teal-700 text-[12px]">Thu nhập thực nhận (Net payout)</Text>
           <div className="flex items-baseline gap-2 mt-0.5 whitespace-nowrap">
-            <div className="text-indigo-600 font-extrabold text-xl tracking-tight leading-none">
+            <div className="text-teal-600 font-extrabold text-xl tracking-tight leading-none">
               {formatVND(net)}
             </div>
           </div>
@@ -92,16 +92,16 @@ export default function TeacherRevenue({
             const heightPercent = `${Math.min(Math.max((data.value / maxVal) * 100, 6), 100)}%`;
             return (
               <div key={index} className="flex flex-col items-center gap-2 h-full justify-end group">
-                <span className={`text-[10px] font-bold ${data.isActive ? 'text-indigo-600' : 'text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity'}`}>
+                <span className={`text-[10px] font-bold ${data.isActive ? 'text-teal-600' : 'text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity'}`}>
                   {data.value > 0 ? `${data.value}M` : '0đ'}
                 </span>
                 <div 
                   className={`w-full max-w-[48px] rounded-t-lg transition-all duration-300 ${
-                    data.isActive ? 'bg-indigo-600 shadow-md shadow-indigo-600/25' : 'bg-gray-200 hover:bg-indigo-300'
+                    data.isActive ? 'bg-teal-600 shadow-md shadow-teal-600/25' : 'bg-gray-200 hover:bg-teal-300'
                   }`} 
                   style={{ height: heightPercent }}
                 ></div>
-                <span className={`text-[12px] font-bold ${data.isActive ? 'text-indigo-600' : 'text-gray-400 font-medium'}`}>
+                <span className={`text-[12px] font-bold ${data.isActive ? 'text-teal-600' : 'text-gray-400 font-medium'}`}>
                   {data.month}
                 </span>
               </div>

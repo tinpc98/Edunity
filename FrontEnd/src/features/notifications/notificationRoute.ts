@@ -13,7 +13,8 @@ export function getNotificationRoute(type: string | undefined, role: Role): stri
   // Exact types first
   switch (t) {
     case "NEW_MESSAGE":
-      return ROUTES.MESSAGES;
+      if (role === "STUDENT") return ROUTES.STUDENT.MESSAGES;
+      return role === "TEACHER" ? ROUTES.TEACHER.MESSAGES : ROUTES.MESSAGES;
     case "TEACHER_VERIFIED":
     case "TEACHER_VERIFICATION_REJECTED":
       if (role === "TEACHER") return ROUTES.TEACHER.PROFILE;
@@ -107,7 +108,7 @@ export function getNotificationRoute(type: string | undefined, role: Role): stri
     if (t.startsWith("SCHOLARSHIP_")) return ROUTES.STUDENT.SCHOLARSHIP_APPLICATIONS;
     if (t.startsWith("REPORT_")) return ROUTES.REPORTS;
     if (t.startsWith("SESSION_") || t.startsWith("RESCHEDULE_")) return ROUTES.STUDENT.SCHEDULE;
-    return ROUTES.NOTIFICATIONS;
+    return ROUTES.STUDENT.NOTIFICATIONS; // stays inside the My learning layout
   }
 
   if (t.startsWith("REPORT_")) return ROUTES.REPORTS;

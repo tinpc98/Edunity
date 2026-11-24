@@ -36,7 +36,7 @@ function getNotificationIcon(type?: string) {
     return <CheckCircleOutlined className="text-emerald-500 text-base" />;
   }
   if (safeType.includes("SCHOLARSHIP")) {
-    return <TrophyOutlined className="text-indigo-500 text-base" />;
+    return <TrophyOutlined className="text-teal-500 text-base" />;
   }
   return <NotificationOutlined className="text-slate-500 text-base" />;
 }
@@ -136,7 +136,7 @@ export const NotificationPopover: React.FC = () => {
         <div className="flex items-center gap-2">
           <span className="font-semibold text-sm text-slate-800">Thông báo</span>
           {unreadCount > 0 && (
-            <span className="px-1.5 py-0.5 text-[11px] font-bold bg-indigo-100 text-indigo-700 rounded-full">
+            <span className="px-1.5 py-0.5 text-[11px] font-bold bg-teal-100 text-teal-700 rounded-full">
               {unreadCount} mới
             </span>
           )}
@@ -148,7 +148,7 @@ export const NotificationPopover: React.FC = () => {
             icon={<CheckOutlined className="text-xs" />}
             loading={markAllMutation.isPending}
             onClick={() => markAllMutation.mutate()}
-            className="text-xs text-indigo-600 hover:text-indigo-700 p-0 h-auto"
+            className="text-xs text-teal-600 hover:text-teal-700 p-0 h-auto"
           >
             Đọc tất cả
           </Button>
@@ -171,7 +171,7 @@ export const NotificationPopover: React.FC = () => {
               key={item.id}
               onClick={() => handleItemClick(item)}
               className={`p-3 flex gap-3 cursor-pointer transition-colors hover:bg-slate-50 ${
-                !item.isRead ? "bg-indigo-50/40" : "bg-white"
+                !item.isRead ? "bg-teal-50/40" : "bg-white"
               }`}
             >
               <div className="mt-0.5 shrink-0">{getNotificationIcon(item.type)}</div>
@@ -184,7 +184,7 @@ export const NotificationPopover: React.FC = () => {
                     {item.title}
                   </Text>
                   {!item.isRead && (
-                    <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />
                   )}
                 </div>
                 {item.content && (
@@ -208,9 +208,15 @@ export const NotificationPopover: React.FC = () => {
           size="small"
           onClick={() => {
             setOpen(false);
-            navigate(user?.role === "ADMIN" ? ROUTES.ADMIN.NOTIFICATIONS : "/notifications");
+            navigate(
+              user?.role === "ADMIN"
+                ? ROUTES.ADMIN.NOTIFICATIONS
+                : user?.role === "STUDENT"
+                  ? ROUTES.STUDENT.NOTIFICATIONS
+                  : ROUTES.NOTIFICATIONS
+            );
           }}
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+          className="text-xs font-medium text-teal-600 hover:text-teal-800"
         >
           Xem tất cả thông báo
         </Button>

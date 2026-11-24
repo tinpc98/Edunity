@@ -25,7 +25,7 @@ import {
 import { formatVND } from "../../../types/payment";
 import { ROUTES } from "../../../routes/routePaths";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 export default function StudentScholarshipsPage() {
   const now = useNow();
@@ -39,12 +39,9 @@ export default function StudentScholarshipsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <Title level={2} className="!mb-1 !text-2xl font-black text-slate-900 tracking-tight">
+          <Title level={2} className="!mb-0 !text-2xl font-black text-slate-900 tracking-tight">
             Học bổng của tôi
           </Title>
-          <Text className="text-xs text-slate-500">
-            Quản lý số dư học bổng được cấp, hạn sử dụng và tra cứu phạm vi áp dụng khóa học.
-          </Text>
         </div>
 
         <div className="flex items-center gap-2">
@@ -54,7 +51,7 @@ export default function StudentScholarshipsPage() {
             </Button>
           </Link>
           <Link to={ROUTES.CLASSES}>
-            <Button type="primary" className="bg-indigo-600 font-semibold text-xs rounded-xl h-10 px-5 shadow-2xs">
+            <Button type="primary" className="bg-teal-600 font-semibold text-xs rounded-xl h-10 px-5 shadow-2xs">
               Tìm lớp học phù hợp
             </Button>
           </Link>
@@ -89,7 +86,7 @@ export default function StudentScholarshipsPage() {
                 Hãy ứng tuyển vào các chiến dịch học bổng đang mở để nhận hỗ trợ học phí từ các Nhà tài trợ.
               </p>
               <Link to={ROUTES.STUDENT.SCHOLARSHIP_EXPLORE}>
-                <Button type="primary" className="bg-indigo-600 font-semibold text-xs rounded-xl h-9 px-5">
+                <Button type="primary" className="bg-teal-600 font-semibold text-xs rounded-xl h-9 px-5">
                   Khám phá chiến dịch học bổng
                 </Button>
               </Link>
@@ -110,7 +107,7 @@ export default function StudentScholarshipsPage() {
                 key={sch.id}
                 className={`rounded-2xl border transition-all shadow-2xs hover:shadow-xs overflow-hidden ${
                   sch.isUsable
-                    ? "border-indigo-200 bg-white"
+                    ? "border-teal-200 bg-white"
                     : "border-slate-200 bg-slate-50/50"
                 }`}
               >
@@ -118,7 +115,7 @@ export default function StudentScholarshipsPage() {
                 <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100 mb-4">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${
-                      sch.isUsable ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-400"
+                      sch.isUsable ? "bg-teal-50 text-teal-600" : "bg-slate-100 text-slate-400"
                     }`}>
                       <GiftOutlined />
                     </div>
@@ -149,10 +146,10 @@ export default function StudentScholarshipsPage() {
 
                 {/* Balance breakdown */}
                 <div className="space-y-4">
-                  <div className="bg-indigo-50/40 border border-indigo-100/60 rounded-xl p-4">
+                  <div className="bg-teal-50/40 border border-teal-100/60 rounded-xl p-4">
                     <div className="text-xs text-slate-500 mb-1 flex items-center justify-between">
                       <span>Số dư khả dụng:</span>
-                      <span className="font-bold text-indigo-900 text-lg">
+                      <span className="font-bold text-teal-900 text-lg">
                         {formatVND(sch.remainingAmount)}
                       </span>
                     </div>
@@ -166,7 +163,7 @@ export default function StudentScholarshipsPage() {
                         percent={usagePercent}
                         showInfo={false}
                         size={["100%", 6]}
-                        strokeColor="#4f46e5"
+                        strokeColor="#0D9488"
                         trailColor="#e2e8f0"
                         className="!m-0"
                       />
@@ -202,7 +199,7 @@ export default function StudentScholarshipsPage() {
                           type="primary"
                           block
                           icon={<BookOutlined />}
-                          className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-xs font-bold shadow-2xs"
+                          className="h-10 rounded-xl bg-teal-600 hover:bg-teal-700 text-xs font-bold shadow-2xs"
                         >
                           Chọn lớp học để đăng ký ngay
                         </Button>

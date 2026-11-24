@@ -66,7 +66,7 @@ export default function RecentStudents({ classes = [], total = 0 }: RecentStuden
               <div className="flex items-center justify-between gap-2 w-full px-1">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="flex flex-col min-w-0">
-                    <Text strong className="truncate group-hover:text-indigo-600 transition-colors text-[13px]">
+                    <Text strong className="truncate group-hover:text-teal-600 transition-colors text-[13px]">
                       {cls.className}
                     </Text>
                     <Text type="secondary" className="truncate text-[11px]">
@@ -88,7 +88,7 @@ export default function RecentStudents({ classes = [], total = 0 }: RecentStuden
           block 
           type="text" 
           onClick={() => navigate("/teacher/classes")}
-          className="bg-gray-50 text-indigo-600 font-bold h-9 hover:bg-gray-100 rounded-xl flex items-center justify-center text-[12px] cursor-pointer"
+          className="bg-gray-50 text-teal-600 font-bold h-9 hover:bg-gray-100 rounded-xl flex items-center justify-center text-[12px] cursor-pointer"
         >
           Xem tất cả lớp học ({total}) <ArrowRightOutlined />
         </Button>

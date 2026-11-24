@@ -33,7 +33,7 @@ export default function DashboardStatCard({
     >
       <Flex justify="space-between" align="center" className="mb-3">
         <Text type="secondary" className="font-semibold text-xs sm:text-sm">{title}</Text>
-        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-[18px] shrink-0">
+        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-[18px] shrink-0">
           {icon}
         </div>
       </Flex>

@@ -108,7 +108,7 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
         <div>
           <Title level={5} className="!mb-1 text-slate-800 flex items-center gap-2">
-            <BankOutlined className="text-indigo-600" /> Quản lý Yêu cầu Rút tiền
+            <BankOutlined className="text-teal-600" /> Quản lý Yêu cầu Rút tiền
           </Title>
           <Text type="secondary" className="text-xs">
             Thu nhập đạt chuẩn sau khi kết thúc lớp và đủ thời hạn bảo đảm 7 ngày sẽ chuyển thành số dư Khả dụng.
@@ -126,7 +126,7 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
           className={
             payoutDataUnavailable || !isMonday || available <= 0 || hasOpenRequest || !bankReady
               ? ""
-              : "bg-indigo-600 hover:bg-indigo-500"
+              : "bg-teal-600 hover:bg-teal-500"
           }
         >
           {payoutDataUnavailable
@@ -297,7 +297,7 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
       {/* Request Modal */}
       <Modal
         title={
-          <div className="flex items-center gap-2 text-indigo-700 font-semibold">
+          <div className="flex items-center gap-2 text-teal-700 font-semibold">
             <BankOutlined /> Yêu cầu Rút thù lao giảng viên (Thứ Hai)
           </div>
         }
