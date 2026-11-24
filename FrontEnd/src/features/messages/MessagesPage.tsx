@@ -213,11 +213,9 @@ export const MessagesPage: React.FC = () => {
     <div
       // Fill the viewport below the layout header (and its content padding) without page scroll
       className={
-        inStudentLayout
-          ? "h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)] max-w-6xl mx-auto flex flex-col"
-          : inTeacherLayout
-            ? "h-[calc(100vh-5.5rem)] md:h-[calc(100vh-6.5rem)] w-full flex flex-col"
-            : "h-[calc(100vh-4rem)] max-w-7xl mx-auto p-4 md:p-6 flex flex-col"
+        inStudentLayout || inTeacherLayout
+          ? "h-[calc(100vh-7rem)] sm:h-[calc(100vh-8rem)] max-w-6xl mx-auto w-full flex flex-col"
+          : "h-[calc(100vh-4rem)] max-w-7xl mx-auto p-4 md:p-6 flex flex-col"
       }
     >
       <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row">

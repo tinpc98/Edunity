@@ -338,7 +338,7 @@ export default function CreateTeacherClassPage() {
           <Select<GradeLevel>
             aria-label="Lọc theo lớp"
             placeholder="Tất cả các lớp"
-            size="large"
+           
             className="w-full"
             allowClear
             value={gradeFilter}
@@ -348,7 +348,7 @@ export default function CreateTeacherClassPage() {
           <Select<string>
             aria-label="Lọc theo môn học"
             placeholder="Tất cả môn học"
-            size="large"
+           
             className="w-full"
             allowClear
             showSearch
@@ -363,7 +363,7 @@ export default function CreateTeacherClassPage() {
             placeholder="Tìm khóa học theo tên hoặc chủ đề..." 
             prefix={<SearchOutlined className="text-gray-400" />} 
             className="rounded-lg" 
-            size="large" 
+            
             value={courseSearch}
             onChange={(e) => setCourseSearch(e.target.value)}
             allowClear
@@ -422,15 +422,15 @@ export default function CreateTeacherClassPage() {
                   }}
                   className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
                     isSelected 
-                      ? 'border-indigo-600 bg-indigo-50/50 shadow-xs' 
-                      : 'border-gray-200 hover:border-indigo-300 bg-white'
+                      ? 'border-teal-600 bg-teal-50/50 shadow-xs' 
+                      : 'border-gray-200 hover:border-teal-300 bg-white'
                   }`}
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1 pr-4">
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         {course.gradeLevel && (
-                          <span className="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded">
+                          <span className="text-xs font-bold text-teal-700 bg-teal-100 px-2 py-0.5 rounded">
                             {GRADE_LEVEL_LABELS[course.gradeLevel]}
                           </span>
                         )}
@@ -444,7 +444,7 @@ export default function CreateTeacherClassPage() {
                       )}
                     </div>
                     <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                      isSelected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-300'
+                      isSelected ? 'border-teal-600 bg-teal-600 text-white' : 'border-gray-300'
                     }`}>
                       {isSelected && <CheckCircleOutlined className="text-xs" />}
                     </div>
@@ -458,13 +458,13 @@ export default function CreateTeacherClassPage() {
 
       {/* Preview Column */}
       <div className="w-full lg:w-[350px]">
-        <Card className="rounded-2xl border border-indigo-100 shadow-sm sticky top-6 overflow-hidden" bodyStyle={{ padding: 0 }}>
-          <div className="bg-indigo-50/60 p-4 border-b border-indigo-100 flex justify-between items-center">
-            <span className="font-semibold text-indigo-900">Khóa học đã chọn</span>
+        <Card className="rounded-2xl border border-teal-100 shadow-sm sticky top-6 overflow-hidden" bodyStyle={{ padding: 0 }}>
+          <div className="bg-teal-50/60 p-4 border-b border-teal-100 flex justify-between items-center">
+            <span className="font-semibold text-teal-900">Khóa học đã chọn</span>
           </div>
           <div className="p-5">
             <div className="w-full h-[150px] bg-slate-100 rounded-xl mb-4 relative overflow-hidden flex items-center justify-center">
-              <BookOutlined className="text-4xl text-indigo-300" />
+              <BookOutlined className="text-4xl text-teal-300" />
             </div>
             <Title level={5} className="!m-0 !mb-2 !font-semibold">
               {selectedCourse ? selectedCourse.title : 'Chưa chọn khóa học'}
@@ -520,7 +520,7 @@ export default function CreateTeacherClassPage() {
             </Col>
             <Col span={12}>
               <div className="text-sm text-gray-500 mb-0.5">Khóa học chuẩn</div>
-              <div className="font-semibold text-indigo-700 text-base">{selectedCourse?.title || '-'}</div>
+              <div className="font-semibold text-teal-700 text-base">{selectedCourse?.title || '-'}</div>
             </Col>
             <Col span={12}>
               <div className="text-sm text-gray-500 mb-0.5">Loại hình & Học phí</div>
@@ -528,7 +528,7 @@ export default function CreateTeacherClassPage() {
                 {values.classType === 'FREE' ? (
                   <Tag color="green">Miễn phí (FREE)</Tag>
                 ) : (
-                  <span className="text-indigo-600 font-bold">{parsePrice(values.price).toLocaleString('vi-VN')} VNĐ/học viên</span>
+                  <span className="text-teal-600 font-bold">{parsePrice(values.price).toLocaleString('vi-VN')} VNĐ/học viên</span>
                 )}
               </div>
             </Col>
@@ -632,7 +632,7 @@ export default function CreateTeacherClassPage() {
                 : 'Bạn chưa có hợp đồng giảng dạy còn hiệu lực. Edunity sẽ gửi hợp đồng cho bạn; sau khi ký, bạn có thể tạo lớp học.'}
             </Paragraph>
             <Link to={ROUTES.TEACHER.PROFILE}>
-              <Button type="primary" size="large" className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-semibold">
+              <Button type="primary" className="bg-teal-600 hover:bg-teal-700 rounded-xl font-semibold">
                 {contractAwaitingSignature ? 'Đi đến ký hợp đồng' : 'Xem hợp đồng của tôi'}
               </Button>
             </Link>
@@ -643,7 +643,7 @@ export default function CreateTeacherClassPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full max-w-[1200px] mx-auto pb-10">
+    <div className="flex flex-col gap-6 w-full pb-10">
       <Breadcrumb 
         className="mb-2 text-sm"
         items={[
@@ -654,10 +654,10 @@ export default function CreateTeacherClassPage() {
       />
       
       <div>
-        <div className="flex items-center gap-2 mb-1 text-indigo-700 font-bold uppercase tracking-wider text-xs">
+        <div className="flex items-center gap-2 mb-1 text-teal-700 font-bold uppercase tracking-wider text-xs">
           <SettingOutlined /> KHỞI TẠO LỚP GIẢNG DẠY
         </div>
-        <Title level={2} className="!m-0 !font-bold tracking-tight text-gray-900">Tạo lớp học mới</Title>
+        <Title level={2} className="!text-2xl !m-0 !font-bold tracking-tight text-gray-900">Tạo lớp học mới</Title>
         <Text className="text-gray-500">
           Thiết lập và mở lớp học trực tuyến từ danh mục khóa học chuẩn hóa của Edunity
         </Text>
@@ -703,7 +703,7 @@ export default function CreateTeacherClassPage() {
                   createClassMutation.isPending ||
                   (currentStep === 0 && (isCheckingSelectedCourse || isInvalidSelectedCourse))
                 }
-                className="h-[44px] px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-medium"
+                className="h-[44px] px-8 rounded-xl bg-teal-600 hover:bg-teal-700 font-medium"
               >
                 Tiếp tục
               </Button>
@@ -713,7 +713,7 @@ export default function CreateTeacherClassPage() {
               type="primary" 
               onClick={handleSaveDraft}
               loading={createClassMutation.isPending}
-              className="h-[44px] px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-medium"
+              className="h-[44px] px-8 rounded-xl bg-teal-600 hover:bg-teal-700 font-medium"
             >
               Xác nhận & Lưu bản nháp
             </Button>

@@ -316,7 +316,7 @@ export default function TeacherClassDetailPage() {
               </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{cls.enrolledCount}</Title>
+              <Title level={2} className="!text-2xl !m-0 text-gray-900">{cls.enrolledCount}</Title>
               <span className="text-gray-500 text-lg mb-1">/ {cls.capacity}</span>
             </div>
             <div className="flex items-center justify-between text-xs font-medium">
@@ -354,7 +354,7 @@ export default function TeacherClassDetailPage() {
               </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{(cls.sessions || []).length}</Title>
+              <Title level={2} className="!text-2xl !m-0 text-gray-900">{(cls.sessions || []).length}</Title>
               <span className="text-gray-500 text-lg mb-1">buổi</span>
             </div>
             <div className="text-xs text-gray-500 font-medium">
@@ -372,7 +372,7 @@ export default function TeacherClassDetailPage() {
               </div>
             </div>
             <div className="flex items-end gap-2 mb-2">
-              <Title level={2} className="!m-0 text-gray-900">{cls.ratingAverage?.toFixed(1) || '0.0'}</Title>
+              <Title level={2} className="!text-2xl !m-0 text-gray-900">{cls.ratingAverage?.toFixed(1) || '0.0'}</Title>
               <StarFilled className="text-amber-400 text-lg mb-1" />
             </div>
             <div className="text-xs text-gray-500 font-medium">
@@ -445,7 +445,7 @@ export default function TeacherClassDetailPage() {
         </div>
         <div className="flex items-end justify-between mt-4 mb-1">
           <div>
-            <span className="text-3xl font-bold text-gray-900">{completedCount}/{countedSessions}</span>
+            <span className="text-2xl font-bold text-gray-900">{completedCount}/{countedSessions}</span>
             <span className="ml-2 text-gray-500">buổi đã hoàn thành</span>
           </div>
           <span className="font-semibold text-gray-800">{progressOfTeaching}%</span>
@@ -802,7 +802,7 @@ export default function TeacherClassDetailPage() {
   );
 
   return (
-    <div className="flex flex-col w-full pb-10 max-w-[1200px] mx-auto">
+    <div className="flex flex-col w-full pb-10">
       <Breadcrumb 
         className="mb-4 text-sm font-medium"
         items={[
@@ -858,7 +858,7 @@ export default function TeacherClassDetailPage() {
       {/* Header Info & Actions */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
         <div>
-          <Title level={2} className="!m-0 mb-3 text-gray-900">{cls.className}</Title>
+          <Title level={2} className="!text-2xl !m-0 mb-3 text-gray-900">{cls.className}</Title>
           <div className="flex flex-wrap items-center gap-3">
             <Tag color={cls.classType === 'PAID' ? 'cyan' : 'green'} className="!m-0 px-2.5 py-0.5 rounded font-bold">
               {cls.classType}
@@ -901,7 +901,7 @@ export default function TeacherClassDetailPage() {
             >
               <Button 
                 type="primary" 
-                size="large" 
+                
                 icon={<SendOutlined />}
                 loading={submitMutation.isPending}
                 className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold px-6 shadow-sm border-none"
@@ -914,7 +914,7 @@ export default function TeacherClassDetailPage() {
           {/* Edit class if DRAFT or NEED_CHANGES */}
           {isEditable && (
             <Button 
-              size="large"
+             
               icon={<EditOutlined />} 
               onClick={handleOpenEdit}
               className="rounded-xl font-medium"
@@ -928,7 +928,7 @@ export default function TeacherClassDetailPage() {
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}
-        size="large"
+       
         className="font-medium"
         items={[
           { key: 'overview', label: `Tổng quan`, children: renderOverview() },

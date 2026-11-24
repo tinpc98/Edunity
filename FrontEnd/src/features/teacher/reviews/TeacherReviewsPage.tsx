@@ -43,10 +43,10 @@ export const TeacherReviewsPage: React.FC = () => {
   const ratingCount = data?.ratingCount || 0;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
+    <div>
       {/* Header */}
       <div className="mb-8">
-        <Title level={2} className="!mb-2 flex items-center gap-2">
+        <Title level={2} className="!text-2xl !mb-2 flex items-center gap-2">
           <StarFilled className="text-amber-500" />
           Đánh giá từ học viên
         </Title>
@@ -68,7 +68,7 @@ export const TeacherReviewsPage: React.FC = () => {
                   Điểm trung bình
                 </Text>
                 <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-3xl font-black text-slate-800">
+                  <span className="text-2xl font-black text-slate-800">
                     {ratingAverage > 0 ? ratingAverage.toFixed(1) : "0.0"}
                   </span>
                   <span className="text-xs text-slate-400 font-medium">/ 5.0</span>
@@ -85,16 +85,16 @@ export const TeacherReviewsPage: React.FC = () => {
         </Col>
 
         <Col xs={24} sm={12} md={8}>
-          <Card className="rounded-2xl border-slate-200/80 shadow-2xs bg-gradient-to-br from-indigo-50/50 to-blue-50/30">
+          <Card className="rounded-2xl border-slate-200/80 shadow-2xs bg-gradient-to-br from-teal-50/50 to-blue-50/30">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-600 text-2xl">
+              <div className="w-14 h-14 rounded-2xl bg-teal-500/10 flex items-center justify-center text-teal-600 text-2xl">
                 <SmileOutlined />
               </div>
               <div>
                 <Text type="secondary" className="text-xs font-semibold uppercase tracking-wider">
                   Tổng lượt đánh giá
                 </Text>
-                <div className="text-3xl font-black text-slate-800 mt-0.5">
+                <div className="text-2xl font-black text-slate-800 mt-0.5">
                   {ratingCount}
                 </div>
                 <Text type="secondary" className="text-xs mt-1 block">
@@ -116,7 +116,7 @@ export const TeacherReviewsPage: React.FC = () => {
 
         {isLoading ? (
           <div className="py-20 flex justify-center items-center">
-            <Spin size="large" />
+            <Spin />
           </div>
         ) : items.length === 0 ? (
           <div className="py-20 text-center">
@@ -135,7 +135,7 @@ export const TeacherReviewsPage: React.FC = () => {
                       src={review.student.avatarUrl}
                       icon={<UserOutlined />}
                       size={42}
-                      className="bg-indigo-600 shrink-0 mt-0.5"
+                      className="bg-teal-600 shrink-0 mt-0.5"
                     />
                     <div>
                       <div className="flex items-center gap-2">

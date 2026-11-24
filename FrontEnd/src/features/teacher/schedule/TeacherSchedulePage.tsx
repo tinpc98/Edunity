@@ -143,7 +143,7 @@ export default function TeacherSchedulePage() {
   const isLoading = isLoadingClasses || (teacherClasses.length > 0 && isLoadingSessions);
 
   return (
-    <div className="flex flex-col w-full pb-10 max-w-[1200px] mx-auto">
+    <div className="flex flex-col w-full pb-10">
       <Breadcrumb 
         className="mb-4 text-sm font-medium"
         items={[
@@ -155,7 +155,7 @@ export default function TeacherSchedulePage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <Title level={2} className="!m-0 text-gray-900">Lịch giảng dạy & Quản lý ca học thông minh</Title>
+          <Title level={2} className="!text-2xl !m-0 text-gray-900">Lịch giảng dạy & Quản lý ca học thông minh</Title>
           <Text className="text-gray-500 text-sm">
             Theo dõi ca học trực tuyến, cảnh báo chuyên cần giảng dạy và gửi báo cáo sự cố / đề xuất dạy bù
           </Text>
@@ -174,7 +174,7 @@ export default function TeacherSchedulePage() {
             <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-1">
               Hôm nay
             </Text>
-            <Title level={2} className="!m-0 text-teal-600">{stats.todayCount}</Title>
+            <Title level={2} className="!text-2xl !m-0 text-teal-600">{stats.todayCount}</Title>
             <Text className="text-gray-500 text-xs font-medium">ca học trong ngày</Text>
           </Card>
         </Col>
@@ -184,7 +184,7 @@ export default function TeacherSchedulePage() {
             <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-1">
               Đang diễn ra
             </Text>
-            <Title level={2} className="!m-0 text-amber-500">{stats.inProgressCount}</Title>
+            <Title level={2} className="!text-2xl !m-0 text-amber-500">{stats.inProgressCount}</Title>
             <Text className="text-gray-500 text-xs font-medium">buổi học LIVE</Text>
           </Card>
         </Col>
@@ -194,7 +194,7 @@ export default function TeacherSchedulePage() {
             <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-1">
               Sắp diễn ra
             </Text>
-            <Title level={2} className="!m-0 text-blue-600">{stats.scheduledCount}</Title>
+            <Title level={2} className="!text-2xl !m-0 text-blue-600">{stats.scheduledCount}</Title>
             <Text className="text-gray-500 text-xs font-medium">ca học đã lên lịch</Text>
           </Card>
         </Col>
@@ -204,7 +204,7 @@ export default function TeacherSchedulePage() {
             <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-1">
               Đã hoàn thành
             </Text>
-            <Title level={2} className="!m-0 text-emerald-600">{stats.completedCount}</Title>
+            <Title level={2} className="!text-2xl !m-0 text-emerald-600">{stats.completedCount}</Title>
             <Text className="text-gray-500 text-xs font-medium">buổi học đã xong</Text>
           </Card>
         </Col>

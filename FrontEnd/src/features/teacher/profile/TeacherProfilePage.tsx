@@ -277,7 +277,7 @@ export default function TeacherProfilePage() {
       return <FilePdfOutlined className="text-rose-500 text-lg" />;
     }
     if (file.type.startsWith("image/") || [".jpg", ".jpeg", ".png", ".webp"].includes(ext)) {
-      return <FileImageOutlined className="text-indigo-500 text-lg" />;
+      return <FileImageOutlined className="text-teal-500 text-lg" />;
     }
     return <FileOutlined className="text-slate-400 text-lg" />;
   };
@@ -383,7 +383,7 @@ export default function TeacherProfilePage() {
     return (
       <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start gap-3">
-          <InfoCircleFilled className="text-indigo-500 text-xl mt-0.5" />
+          <InfoCircleFilled className="text-teal-500 text-xl mt-0.5" />
           <div>
             <h4 className="text-slate-800 font-bold m-0 text-base">Chưa xác minh hồ sơ</h4>
             <p className="text-slate-500 text-sm mt-1 mb-0">
@@ -400,7 +400,7 @@ export default function TeacherProfilePage() {
             });
             setIsVerificationModalVisible(true);
           }}
-          className="bg-indigo-600 hover:bg-indigo-700 font-semibold shrink-0"
+          className="bg-teal-600 hover:bg-teal-700 font-semibold shrink-0"
         >
           Nộp hồ sơ xác minh
         </Button>
@@ -409,12 +409,12 @@ export default function TeacherProfilePage() {
   };
 
   return (
-    <div className="max-w-[1040px] mx-auto space-y-5">
+    <div className="space-y-5">
       <div>
         <div className="text-[12px] font-medium text-slate-400 mb-1">
-          Tài khoản / <span className="text-indigo-600">Hồ sơ giáo viên</span>
+          Tài khoản / <span className="text-teal-600">Hồ sơ giáo viên</span>
         </div>
-        <h1 className="text-[28px] font-bold text-slate-800 leading-tight">Hồ sơ giáo viên</h1>
+        <h1 className="text-2xl font-bold text-slate-800 leading-tight">Hồ sơ giáo viên</h1>
       </div>
 
       {/* Verification Status Banner */}
@@ -482,11 +482,11 @@ export default function TeacherProfilePage() {
       <div className="bg-white rounded-2xl p-5 sm:px-6 border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="relative">
-            <Avatar size={72} src={profile.avatarUrl} icon={<UserOutlined />} className="bg-indigo-600 text-2xl font-bold" />
+            <Avatar size={72} src={profile.avatarUrl} icon={<UserOutlined />} className="bg-teal-600 text-2xl font-bold" />
             <Upload {...avatarUploadProps}>
               <button
                 type="button"
-                className="absolute bottom-0 right-0 h-7 w-7 bg-white rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-indigo-600 cursor-pointer shadow-xs"
+                className="absolute bottom-0 right-0 h-7 w-7 bg-white rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-teal-600 cursor-pointer shadow-xs"
                 title="Thay đổi ảnh đại diện"
               >
                 <CameraOutlined className="text-xs" />
@@ -497,7 +497,7 @@ export default function TeacherProfilePage() {
             <h2 className="text-[20px] font-bold text-slate-800 leading-tight mb-1">{profile.fullName}</h2>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[13px] text-slate-500">{profile.email}</span>
-              <Tag color="indigo" className="m-0 font-bold text-[11px]">GIÁO VIÊN</Tag>
+              <Tag color="cyan" className="m-0 font-bold text-[11px]">GIÁO VIÊN</Tag>
               {profile.ratingAverage !== undefined && profile.ratingAverage > 0 && (
                 <Tag color="warning" icon={<StarFilled className="text-amber-500" />} className="m-0 font-semibold text-[11px]">
                   {profile.ratingAverage.toFixed(1)} ({profile.ratingCount || 0} đánh giá)
@@ -561,14 +561,14 @@ export default function TeacherProfilePage() {
                   { max: 120, message: "Họ và tên tối đa 120 ký tự" },
                 ]}
               >
-                <Input size="large" placeholder="Nhập họ và tên đầy đủ" />
+                <Input placeholder="Nhập họ và tên đầy đủ" />
               </Form.Item>
               <Form.Item
                 label={<span className="font-semibold text-slate-700">Tóm tắt chuyên môn</span>}
                 name="qualificationSummary"
                 rules={[{ max: 2000, message: "Tóm tắt chuyên môn tối đa 2000 ký tự" }]}
               >
-                <Input size="large" placeholder="Ví dụ: Thạc sĩ Toán học - Đại học Sư phạm, 8 năm kinh nghiệm giảng dạy" />
+                <Input placeholder="Ví dụ: Thạc sĩ Toán học - Đại học Sư phạm, 8 năm kinh nghiệm giảng dạy" />
               </Form.Item>
               <Form.Item
                 label={<span className="font-semibold text-slate-700">Tiểu sử & Giới thiệu bản thân</span>}
@@ -581,7 +581,7 @@ export default function TeacherProfilePage() {
                 <Button onClick={() => setIsEditing(false)} disabled={updateProfileMutation.isPending}>
                   Hủy
                 </Button>
-                <Button type="primary" htmlType="submit" loading={updateProfileMutation.isPending} className="bg-indigo-600">
+                <Button type="primary" htmlType="submit" loading={updateProfileMutation.isPending} className="bg-teal-600">
                   Lưu thay đổi
                 </Button>
               </div>
@@ -615,7 +615,7 @@ export default function TeacherProfilePage() {
           {/* Section 1: Identity Documents */}
           <div className="mb-5 p-4 rounded-xl bg-slate-50 border border-slate-200">
             <h4 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs">1</span>
+              <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-xs">1</span>
               Căn cước công dân (CCCD) *
             </h4>
             <p className="text-xs text-slate-500 mb-3">
@@ -628,7 +628,7 @@ export default function TeacherProfilePage() {
               <div data-testid="upload-id-front" className="border border-slate-200 rounded-lg p-3 bg-white flex flex-col justify-between">
                 <div className="text-xs font-semibold text-slate-700 mb-2">Mặt trước (Bắt buộc)</div>
                 {identityFrontFile ? (
-                  <div className="flex items-center justify-between p-2 rounded bg-indigo-50/50 border border-indigo-100">
+                  <div className="flex items-center justify-between p-2 rounded bg-teal-50/50 border border-teal-100">
                     <div className="flex items-center gap-2 overflow-hidden">
                       {getFileIcon(identityFrontFile)}
                       <div className="overflow-hidden">
@@ -670,7 +670,7 @@ export default function TeacherProfilePage() {
               <div data-testid="upload-id-back" className="border border-slate-200 rounded-lg p-3 bg-white flex flex-col justify-between">
                 <div className="text-xs font-semibold text-slate-700 mb-2">Mặt sau (Bắt buộc)</div>
                 {identityBackFile ? (
-                  <div className="flex items-center justify-between p-2 rounded bg-indigo-50/50 border border-indigo-100">
+                  <div className="flex items-center justify-between p-2 rounded bg-teal-50/50 border border-teal-100">
                     <div className="flex items-center gap-2 overflow-hidden">
                       {getFileIcon(identityBackFile)}
                       <div className="overflow-hidden">
@@ -713,7 +713,7 @@ export default function TeacherProfilePage() {
           {/* Section 2: Qualification Documents */}
           <div data-testid="upload-qual" className="mb-5 p-4 rounded-xl bg-slate-50 border border-slate-200">
             <h4 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs">2</span>
+              <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-xs">2</span>
               Bằng cấp / Chứng chỉ chuyên môn (Tối đa 5 tệp) *
             </h4>
             <p className="text-xs text-slate-500 mb-3">
@@ -739,7 +739,7 @@ export default function TeacherProfilePage() {
               multiple
               disabled={qualificationFiles.length >= 5}
             >
-              <p className="ant-upload-drag-icon !mb-1 text-indigo-500"><InboxOutlined /></p>
+              <p className="ant-upload-drag-icon !mb-1 text-teal-500"><InboxOutlined /></p>
               <p className="ant-upload-text text-xs font-semibold text-slate-700">
                 Kéo thả hoặc nhấn để chọn tệp bằng cấp (PDF, JPG, PNG, WebP)
               </p>
@@ -809,7 +809,7 @@ export default function TeacherProfilePage() {
               htmlType="submit"
               loading={submitVerificationMutation.isPending}
               disabled={!identityFrontFile || qualificationFiles.length === 0}
-              className="bg-indigo-600 hover:bg-indigo-700 font-semibold"
+              className="bg-teal-600 hover:bg-teal-700 font-semibold"
             >
               {submitVerificationMutation.isPending ? "Đang tải tệp & gửi hồ sơ..." : "Gửi hồ sơ xác minh"}
             </Button>
@@ -830,7 +830,7 @@ export default function TeacherProfilePage() {
             name="currentPassword"
             rules={[{ required: true, message: "Vui lòng nhập mật khẩu hiện tại" }]}
           >
-            <Input.Password size="large" />
+            <Input.Password />
           </Form.Item>
           <Form.Item
             label={<span className="font-medium text-slate-700">Mật khẩu mới</span>}
@@ -840,7 +840,7 @@ export default function TeacherProfilePage() {
               { min: 8, message: "Mật khẩu phải có ít nhất 8 ký tự" },
             ]}
           >
-            <Input.Password size="large" />
+            <Input.Password />
           </Form.Item>
           <Form.Item
             label={<span className="font-medium text-slate-700">Xác nhận mật khẩu mới</span>}
@@ -858,7 +858,7 @@ export default function TeacherProfilePage() {
               }),
             ]}
           >
-            <Input.Password size="large" />
+            <Input.Password />
           </Form.Item>
           <div className="flex justify-end gap-3 mt-5">
             <Button onClick={() => setIsPasswordModalVisible(false)} disabled={changePasswordMutation.isPending}>
@@ -868,7 +868,7 @@ export default function TeacherProfilePage() {
               type="primary"
               htmlType="submit"
               loading={changePasswordMutation.isPending}
-              className="bg-indigo-600"
+              className="bg-teal-600"
             >
               Đổi mật khẩu
             </Button>

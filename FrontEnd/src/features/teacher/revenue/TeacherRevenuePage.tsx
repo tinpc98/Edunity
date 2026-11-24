@@ -160,12 +160,12 @@ export default function TeacherRevenuePage() {
   ];
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Title level={3} className="!mb-1 !text-slate-900 font-bold flex items-center gap-2">
-            <WalletOutlined className="text-indigo-600" /> Quản lý Doanh thu & Quyết toán Thù lao
+            <WalletOutlined className="text-teal-600" /> Quản lý Doanh thu & Quyết toán Thù lao
           </Title>
           <Text type="secondary" className="text-sm">
             Hạch toán doanh thu giảng dạy, theo dõi điều kiện quyết toán (7 ngày sau kết thúc buổi dạy) và yêu cầu rút tiền.
@@ -189,7 +189,7 @@ export default function TeacherRevenuePage() {
               title={<span className="text-xs font-semibold text-slate-500 uppercase">Tổng doanh thu gộp</span>}
               value={rawSummary.totalGross}
               formatter={(val) => formatVND(Number(val))}
-              prefix={<DollarOutlined className="text-indigo-500 text-lg mr-2" />}
+              prefix={<DollarOutlined className="text-teal-500 text-lg mr-2" />}
               valueStyle={{ color: "#1e293b", fontWeight: "bold" }}
             />
             <div className="mt-2 text-xs text-slate-400">

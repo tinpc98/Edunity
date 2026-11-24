@@ -84,10 +84,10 @@ export default function TeacherClassesPage() {
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <Title level={3} className="!m-0 text-indigo-700 uppercase !text-[12px] font-bold tracking-wider mb-1">
+          <Title level={3} className="!m-0 text-teal-700 uppercase !text-[12px] font-bold tracking-wider mb-1">
             Hệ thống giảng dạy
           </Title>
-          <Title level={2} className="!m-0 text-gray-900">Lớp của tôi</Title>
+          <Title level={2} className="!text-2xl !m-0 text-gray-900">Lớp của tôi</Title>
           <Text className="text-gray-500">
             Quản lý tất cả lớp học bạn đang phụ trách, theo dõi tiến độ duyệt và tuyển sinh
           </Text>
@@ -97,7 +97,7 @@ export default function TeacherClassesPage() {
             placeholder="Tìm kiếm lớp học..." 
             prefix={<SearchOutlined className="text-gray-400" />} 
             className="w-full md:w-[250px] rounded-lg"
-            size="large"
+           
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             allowClear
@@ -105,7 +105,7 @@ export default function TeacherClassesPage() {
           <Select 
             value={filterType} 
             onChange={setFilterType}
-            size="large" 
+            
             className="w-[130px]"
             options={[
               { value: 'all', label: 'Tất cả loại' },
@@ -117,9 +117,9 @@ export default function TeacherClassesPage() {
             <Button 
               type="primary" 
               icon={<PlusOutlined />} 
-              size="large"
+             
               disabled={!isVerified}
-              className="rounded-lg bg-indigo-600 hover:bg-indigo-700"
+              className="rounded-lg bg-teal-600 hover:bg-teal-700"
               onClick={() => isVerified && navigate(ROUTES.TEACHER.CREATE_CLASS)}
             >
               Tạo lớp mới
@@ -136,12 +136,12 @@ export default function TeacherClassesPage() {
               <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Tổng số lớp</Text>
             </div>
             <div className="flex items-end gap-2">
-              <Title level={1} className="!m-0 text-indigo-900 !text-4xl">{stats.total}</Title>
+              <Title level={1} className="!m-0 text-teal-900 !text-2xl">{stats.total}</Title>
               <Text className="text-gray-400 text-sm font-medium mb-1">lớp</Text>
             </div>
             <div className="mt-2 flex items-center justify-between">
               <Text className="text-gray-500 text-sm">Hồ sơ lớp giảng dạy</Text>
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600">
                 <BookOutlined className="text-xl" />
               </div>
             </div>
@@ -154,7 +154,7 @@ export default function TeacherClassesPage() {
               <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Đang mở / Giảng dạy</Text>
             </div>
             <div className="flex items-end gap-2">
-              <Title level={1} className="!m-0 text-emerald-600 !text-4xl">{stats.active}</Title>
+              <Title level={1} className="!m-0 text-emerald-600 !text-2xl">{stats.active}</Title>
               <Text className="text-emerald-500 text-sm font-medium mb-1">hoạt động</Text>
             </div>
             <div className="mt-2 flex items-center justify-between">
@@ -172,7 +172,7 @@ export default function TeacherClassesPage() {
               <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Chờ xét duyệt</Text>
             </div>
             <div className="flex items-end gap-2">
-              <Title level={1} className="!m-0 text-amber-600 !text-4xl">{stats.pending}</Title>
+              <Title level={1} className="!m-0 text-amber-600 !text-2xl">{stats.pending}</Title>
               <Text className="text-amber-500 text-sm font-medium mb-1">chờ duyệt</Text>
             </div>
             <div className="mt-2 flex items-center justify-between">
@@ -190,12 +190,12 @@ export default function TeacherClassesPage() {
               <Text className="text-gray-500 text-xs font-bold uppercase tracking-wider">Tổng học viên</Text>
             </div>
             <div className="flex items-end gap-2">
-              <Title level={1} className="!m-0 text-indigo-900 !text-4xl">{stats.totalStudents}</Title>
-              <Text className="text-indigo-600 text-sm font-medium mb-1">học viên</Text>
+              <Title level={1} className="!m-0 text-teal-900 !text-2xl">{stats.totalStudents}</Title>
+              <Text className="text-teal-600 text-sm font-medium mb-1">học viên</Text>
             </div>
             <div className="mt-2 flex items-center justify-between">
               <Text className="text-gray-500 text-sm">Đã ghi danh thực tế</Text>
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600">
                 <TeamOutlined className="text-xl" />
               </div>
             </div>
@@ -259,7 +259,7 @@ export default function TeacherClassesPage() {
                 type="primary" 
                 icon={<PlusOutlined />}
                 disabled={!isVerified}
-                className="bg-indigo-600 hover:bg-indigo-700"
+                className="bg-teal-600 hover:bg-teal-700"
                 onClick={() => isVerified && navigate(ROUTES.TEACHER.CREATE_CLASS)}
               >
                 Tạo lớp mới ngay
@@ -284,7 +284,7 @@ export default function TeacherClassesPage() {
             return (
               <Card 
                 key={cls.id} 
-                className="rounded-2xl shadow-sm border-gray-200 overflow-hidden hover:border-indigo-300 transition-all cursor-pointer" 
+                className="rounded-2xl shadow-sm border-gray-200 overflow-hidden hover:border-teal-300 transition-all cursor-pointer" 
                 onClick={() => navigate(ROUTES.TEACHER.CLASS_DETAIL.replace(":classId", cls.id))}
               >
                 <div className="flex flex-col md:flex-row gap-5">
@@ -296,7 +296,7 @@ export default function TeacherClassesPage() {
                       className="w-full h-full object-cover" 
                     />
                     <div className="absolute top-2.5 left-2.5 flex gap-1.5 flex-wrap">
-                      <Tag color={cls.classType === 'PAID' ? 'indigo' : 'green'} className="!m-0 rounded border-0 font-bold tracking-wider">
+                      <Tag color={cls.classType === 'PAID' ? 'cyan' : 'green'} className="!m-0 rounded border-0 font-bold tracking-wider">
                         {cls.classType}
                       </Tag>
                       {getStatusTag(cls.status)}
@@ -308,15 +308,15 @@ export default function TeacherClassesPage() {
                     <div>
                       <div className="flex justify-between items-start gap-4">
                         <div>
-                          <Text className="text-indigo-600 text-xs font-bold uppercase tracking-wider">
+                          <Text className="text-teal-600 text-xs font-bold uppercase tracking-wider">
                             {cls.courseTitle || "Khóa học"}
                           </Text>
-                          <Title level={4} className="!m-0 !mt-0.5 text-gray-900 hover:text-indigo-600 transition-colors">
+                          <Title level={4} className="!m-0 !mt-0.5 text-gray-900 hover:text-teal-600 transition-colors">
                             {cls.className}
                           </Title>
                         </div>
                         <div className="text-right shrink-0">
-                          <span className={`text-base font-extrabold ${cls.classType === 'FREE' ? 'text-emerald-600' : 'text-indigo-700'}`}>
+                          <span className={`text-base font-extrabold ${cls.classType === 'FREE' ? 'text-emerald-600' : 'text-teal-700'}`}>
                             {cls.formattedPrice}
                           </span>
                         </div>
@@ -339,11 +339,11 @@ export default function TeacherClassesPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6 mt-3 text-sm text-gray-600">
                         <div className="flex items-center gap-2">
-                          <ClockCircleOutlined className="text-indigo-500" />
+                          <ClockCircleOutlined className="text-teal-500" />
                           <span>{scheduleDisplay}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <CalendarOutlined className="text-indigo-500" />
+                          <CalendarOutlined className="text-teal-500" />
                           <span>Khai giảng: <strong className="text-gray-800">{formattedStartDate}</strong></span>
                         </div>
                       </div>
@@ -356,7 +356,7 @@ export default function TeacherClassesPage() {
                           <TeamOutlined /> Sĩ số: <strong>{cls.enrolledCount} / {cls.capacity}</strong>
                         </span>
                         <div className="w-24">
-                          <Progress percent={progressPercent} size="small" showInfo={false} strokeColor="#4f46e5" />
+                          <Progress percent={progressPercent} size="small" showInfo={false} strokeColor="#0D9488" />
                         </div>
                       </div>
 
@@ -364,7 +364,7 @@ export default function TeacherClassesPage() {
                       <Button 
                         type="primary" 
                         size="small"
-                        className="bg-indigo-600 hover:bg-indigo-700 rounded-md font-medium px-4"
+                        className="bg-teal-600 hover:bg-teal-700 rounded-md font-medium px-4"
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(ROUTES.TEACHER.CLASS_DETAIL.replace(":classId", cls.id));

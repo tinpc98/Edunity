@@ -29,7 +29,7 @@ export default function ScheduleEditor({ value = [], onChange }: ScheduleEditorP
           <div
             key={index}
             className={`border rounded-xl p-4 flex flex-col md:flex-row md:flex-wrap items-center justify-between gap-4 transition-colors ${
-              errors[index] ? 'border-red-300 bg-red-50/40' : 'border-gray-200 bg-white hover:border-indigo-200'
+              errors[index] ? 'border-red-300 bg-red-50/40' : 'border-gray-200 bg-white hover:border-teal-200'
             }`}
           >
             <div className="flex items-center gap-3 w-full md:w-auto">
@@ -86,10 +86,10 @@ export default function ScheduleEditor({ value = [], onChange }: ScheduleEditorP
       <Button
         type="dashed"
         block
-        size="large"
+       
         icon={<PlusOutlined />}
         onClick={() => onChange?.([...value, { dayOfWeek: 1, startTime: '18:00', endTime: '19:30' }])}
-        className="rounded-xl border-indigo-200 text-indigo-600 hover:bg-indigo-50 font-medium h-[46px]"
+        className="rounded-xl border-teal-200 text-teal-600 hover:bg-teal-50 font-medium h-[46px]"
       >
         Thêm ca học trong tuần
       </Button>

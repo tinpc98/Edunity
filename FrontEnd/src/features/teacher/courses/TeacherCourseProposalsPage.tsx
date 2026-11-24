@@ -259,15 +259,15 @@ export default function TeacherCourseProposalsPage() {
   const allowedGradeLevels = offeredGradeLevels(selectedCategory);
 
   return (
-    <div className="max-w-[1200px] mx-auto space-y-5 sm:space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {contextHolder}
 
       <div className="flex items-center justify-between">
         <div>
           <div className="text-[12px] font-medium text-slate-400 mb-1">
-            Giáo viên / <span className="text-indigo-600">Đề xuất khóa học</span>
+            Giáo viên / <span className="text-teal-600">Đề xuất khóa học</span>
           </div>
-          <h1 className="text-[28px] font-bold text-slate-800 leading-tight">Đề xuất khóa học</h1>
+          <h1 className="text-2xl font-bold text-slate-800 leading-tight">Đề xuất khóa học</h1>
           <p className="text-slate-500 text-sm mt-1">Gửi đề xuất khóa học để Admin xem xét và thêm vào danh mục.</p>
         </div>
         <Tooltip title={!isVerified ? lockTooltip : undefined}>
@@ -276,7 +276,7 @@ export default function TeacherCourseProposalsPage() {
             icon={<PlusOutlined />}
             disabled={!isVerified}
             onClick={openCreate}
-            className="bg-indigo-600 rounded-xl font-semibold h-[42px]"
+            className="bg-teal-600 rounded-xl font-semibold h-[42px]"
           >
             Đề xuất mới
           </Button>
@@ -321,7 +321,7 @@ export default function TeacherCourseProposalsPage() {
                       icon={<PlusOutlined />}
                       disabled={!isVerified}
                       onClick={openCreate}
-                      className="bg-indigo-600"
+                      className="bg-teal-600"
                     >
                       Tạo đề xuất đầu tiên
                     </Button>
@@ -441,7 +441,7 @@ export default function TeacherCourseProposalsPage() {
               type="primary"
               htmlType="submit"
               loading={isPending}
-              className="bg-indigo-600"
+              className="bg-teal-600"
             >
               {mode === "create" ? "Gửi đề xuất" : "Cập nhật và gửi lại"}
             </Button>

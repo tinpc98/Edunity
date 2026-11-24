@@ -81,9 +81,9 @@ export default function PrivateDocumentCard({
   // Row / Compact Variant
   if (variant === "row") {
     return (
-      <div className={`flex items-center justify-between p-3.5 border border-slate-200 rounded-xl bg-white hover:border-indigo-300 transition-all ${className}`}>
+      <div className={`flex items-center justify-between p-3.5 border border-slate-200 rounded-xl bg-white hover:border-teal-300 transition-all ${className}`}>
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-lg ${isPdf ? "bg-rose-50 text-rose-600" : "bg-indigo-50 text-indigo-600"}`}>
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-lg ${isPdf ? "bg-rose-50 text-rose-600" : "bg-teal-50 text-teal-600"}`}>
             {isPdf ? <FilePdfOutlined /> : <FileImageOutlined />}
           </div>
           <div className="overflow-hidden">
@@ -102,7 +102,7 @@ export default function PrivateDocumentCard({
                 size="small"
                 icon={<EyeOutlined />}
                 onClick={() => setIsPdfModalOpen(true)}
-                className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                className="text-teal-600 border-teal-200 hover:bg-teal-50"
               >
                 Xem PDF
               </Button>
@@ -145,7 +145,7 @@ export default function PrivateDocumentCard({
                 href={viewUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-indigo-600"
+                className="bg-teal-600"
               >
                 Mở trong tab mới
               </Button>,
@@ -166,7 +166,7 @@ export default function PrivateDocumentCard({
 
   // Card Variant (Default)
   return (
-    <div className={`border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs hover:border-indigo-300 transition-all flex flex-col justify-between ${className}`}>
+    <div className={`border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs hover:border-teal-300 transition-all flex flex-col justify-between ${className}`}>
       {/* Top Preview Area */}
       <div className="relative bg-slate-50 border-b border-slate-100 min-h-[180px] flex items-center justify-center overflow-hidden">
         <div className="absolute top-2 right-2 bg-emerald-500/90 text-white text-[11px] px-2 py-0.5 rounded-md font-semibold shadow-xs z-10 flex items-center gap-1">
@@ -194,7 +194,7 @@ export default function PrivateDocumentCard({
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center p-6 text-center gap-2">
-            <FileExclamationOutlined className="text-3xl text-indigo-500" />
+            <FileExclamationOutlined className="text-3xl text-teal-500" />
             <div className="text-xs font-semibold text-slate-700">{displayTitle}</div>
           </div>
         )}
@@ -213,7 +213,7 @@ export default function PrivateDocumentCard({
               </span>
             )}
             {documentType && (
-              <span className="text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-medium">
+              <span className="text-[10px] text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded font-medium">
                 {documentType}
               </span>
             )}
@@ -227,7 +227,7 @@ export default function PrivateDocumentCard({
                 size="small"
                 icon={<EyeOutlined />}
                 onClick={() => setIsPdfModalOpen(true)}
-                className="text-xs text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                className="text-xs text-teal-600 border-teal-200 hover:bg-teal-50"
               >
                 Xem PDF
               </Button>
@@ -250,7 +250,7 @@ export default function PrivateDocumentCard({
                 href={viewUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-indigo-600"
+                className="text-teal-600"
               >
                 Mở tab mới
               </Button>
@@ -275,7 +275,7 @@ export default function PrivateDocumentCard({
               href={viewUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-indigo-600"
+              className="bg-teal-600"
             >
               Mở trong tab mới
             </Button>,

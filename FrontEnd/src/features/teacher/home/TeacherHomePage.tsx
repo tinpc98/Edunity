@@ -142,7 +142,7 @@ export default function TeacherHomePage() {
               >
                 <Button
                   type="primary"
-                  className="bg-indigo-600 hover:bg-indigo-700 font-semibold rounded-lg"
+                  className="bg-teal-600 hover:bg-teal-700 font-semibold rounded-lg"
                 >
                   Hoàn thiện hồ sơ
                 </Button>
@@ -258,8 +258,8 @@ export default function TeacherHomePage() {
           <RecentMessages conversations={conversations} />
           
           {verificationStatus === "VERIFIED" && (
-            <div className="relative overflow-hidden rounded-2xl bg-indigo-50 p-4 flex items-center gap-3 mt-1 shadow-sm">
-              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
+            <div className="relative overflow-hidden rounded-2xl bg-teal-50 p-4 flex items-center gap-3 mt-1 shadow-sm">
+              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-md">
                 <SafetyCertificateFilled className="text-[20px]" />
               </div>
               <div className="flex flex-col">
