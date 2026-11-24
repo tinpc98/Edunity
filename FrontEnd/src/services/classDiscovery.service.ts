@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../utils/subjectLabel";
 import type {
   BackendGradeLevel,
   ClassDiscoveryItem,
@@ -23,7 +24,7 @@ const BULK_PAGE_SIZE = 100;
 const MAX_BULK_PAGES = 10;
 
 interface RawFilters {
-  subjects?: Array<{ id: string; name: string; count?: number }>;
+  subjects?: Array<{ id: string; name: string; slug?: string; count?: number }>;
   courses?: Array<{ id: string; name?: string; title?: string; count?: number }>;
   minPrice?: number;
   maxPrice?: number;
@@ -56,7 +57,7 @@ class ClassDiscoveryService {
   private async withSubjectNames(items: ClassDiscoveryItem[]): Promise<ClassDiscoveryItem[]> {
     try {
       const raw = await this.getRawFilters();
-      const names = new Map((raw.subjects || []).map((s) => [s.id, s.name]));
+      const names = new Map((raw.subjects || []).map((s) => [s.id, formatSubjectLabel(s.name, s.slug)]));
       return items.map((item) => ({ ...item, subjectName: names.get(item.subjectId) || item.subjectName }));
     } catch {
       return items;
@@ -166,7 +167,7 @@ class ClassDiscoveryService {
     const teachers = teachersResult.status === "fulfilled" ? teachersResult.value : [];
 
     return {
-      subjects: (data.subjects || []).map((s) => ({ id: s.id, name: s.name, count: s.count || 0 })),
+      subjects: (data.subjects || []).map((s) => ({ id: s.id, name: formatSubjectLabel(s.name, s.slug), count: s.count || 0 })),
       grades,
       courses: (data.courses || []).map((c) => ({ id: c.id, title: c.title || c.name || "", count: c.count || 0 })),
       teachers: teachers.map((t) => ({ id: t.id, name: t.fullName, count: 0 })),

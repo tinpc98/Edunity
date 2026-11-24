@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App as AntdApp, Button, Form, Input, Modal, Select, Skeleton, Space, Tag } from "antd";
@@ -96,7 +97,7 @@ export default function TeacherSubjectAuthorizationCard() {
         <Space wrap>
           {authorizations.map((authorization: TeacherSubjectAuthorization) => (
             <Tag key={authorization.id} color={AUTH_STATUS[authorization.status].color} className="!m-0 px-2 py-1">
-              {authorization.categoryName} · {authorization.subjectName}
+              {authorization.categoryName} · {formatSubjectLabel(authorization.subjectName, undefined, authorization.categoryName)}
               {authorization.gradeLevel ? ` · ${GRADE_LEVEL_LABELS[authorization.gradeLevel]}` : ""}
               {` · ${COURSE_LEVEL_LABELS[authorization.level]} · ${AUTH_STATUS[authorization.status].label}`}
               {authorization.reviewNote ? ` · ${authorization.reviewNote}` : ""}
@@ -151,7 +152,7 @@ export default function TeacherSubjectAuthorizationCard() {
                 optionFilterProp="label"
                 loading={subjectsQuery.isLoading}
                 disabled={!requestCategoryId}
-                options={(subjectsQuery.data ?? []).map((subject) => ({ value: subject.id, label: subject.name }))}
+                options={(subjectsQuery.data ?? []).map((subject) => ({ value: subject.id, label: formatSubjectLabel(subject.name, subject.slug) }))}
               />
             </Form.Item>
             {subjectsQuery.isError && (

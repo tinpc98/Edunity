@@ -85,7 +85,7 @@ export default function AdminTrashPage() {
   const restoreMutation = useMutation({
     mutationFn: ({ type, id }: { type: string; id: string }) =>
       trashService.restoreTrashItem(type, id),
-    onSuccess: () => {
+    onSuccess: (_, { type }) => {
       message.success("Khôi phục dữ liệu thành công!");
       setIsRestoreModalOpen(false);
       setIsDetailModalOpen(false);
@@ -94,6 +94,12 @@ export default function AdminTrashPage() {
       // Invalidate related catalog / class queries
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      if (type === "CATEGORY") {
+        queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+      }
+      if (type === "SUBJECT") {
+        queryClient.invalidateQueries({ queryKey: ["admin-subjects"] });
+      }
       queryClient.invalidateQueries({ queryKey: ["courses"] });
       queryClient.invalidateQueries({ queryKey: ["adminPendingClasses"] });
     },

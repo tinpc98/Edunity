@@ -56,7 +56,7 @@ class CatalogService {
     
     // Simplification for counts and minMax
     return {
-      subjects: subjects.map(s => ({ id: s._id.toString(), name: s.name, count: 0 })),
+      subjects: subjects.map(s => ({ id: s._id.toString(), name: s.name, slug: s.slug, count: 0 })),
       grades: [],
       courses: courses.map(c => ({ id: c._id.toString(), name: c.title, count: 0 })),
       teachers: [],

@@ -14,6 +14,7 @@ import { useParams, Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
 import { teacherVerificationService } from '../../../../services/teacherVerification.service';
+import { catalogKeys, catalogService } from '../../../../services/catalog.service';
 import PrivateDocumentCard from '../../../../components/common/PrivateDocumentCard';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import { TEACHER_DEGREE_LABELS, type VerificationStatus } from '../../../../types/teacherVerification';
@@ -46,6 +47,11 @@ export default function TeacherVerificationDetailPage() {
     queryKey: ['admin-teacher-verification', teacherId],
     queryFn: () => teacherVerificationService.adminGetVerification(teacherId as string),
     enabled: !!teacherId,
+  });
+  const { data: teachingSubjectOptions = [] } = useQuery({
+    queryKey: catalogKeys.teachingSubjects(),
+    queryFn: () => catalogService.getTeachingSubjectOptions(),
+    enabled: Boolean(teacher?.teachingProfile),
   });
 
   const approveMutation = useMutation({
@@ -213,7 +219,9 @@ export default function TeacherVerificationDetailPage() {
                 <Descriptions.Item label="Chuyên ngành">{teacher.teachingProfile.major || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Trường">{teacher.teachingProfile.school || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Môn nhận dạy" span="filled">
-                  <div className="flex flex-wrap gap-1">{teacher.teachingProfile.subjects.map((s) => <Tag key={s}>{s}</Tag>)}</div>
+                  <div className="flex flex-wrap gap-1">{teacher.teachingProfile.subjects.map((name) => (
+                    <Tag key={name}>{teachingSubjectOptions.find(({ value }) => value === name)?.label ?? name}</Tag>
+                  ))}</div>
                 </Descriptions.Item>
                 <Descriptions.Item label="Cấp học" span="filled">
                   <div className="flex flex-wrap gap-1">{teacher.teachingProfile.gradeLevels.map((g) => <Tag key={g} color="cyan">{GRADE_LEVEL_LABELS[g] ?? g}</Tag>)}</div>

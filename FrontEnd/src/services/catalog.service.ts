@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../utils/subjectLabel";
 import { apiClient } from "../api/apiClient";
 import type { ApiClass } from "../types/class";
 
@@ -33,9 +34,24 @@ export const catalogKeys = {
     ["catalog", "teachers", params] as const,
   teacherDetail: (id: string) => ["catalog", "teachers", "detail", id] as const,
   categories: () => ["catalog", "categories"] as const,
+  teachingSubjects: () => ["catalogFilters", "subjectNames"] as const,
 };
 
 class CatalogService {
+  async getTeachingSubjectOptions(): Promise<{ value: string; label: string }[]> {
+    const { subjects = [] } = await apiClient<{ subjects?: PublicSubject[] }>("/catalog/filters");
+    const labels = new Map<string, string>();
+    for (const subject of subjects) {
+      const value = subject.name.trim();
+      if (!value) continue;
+      const label = formatSubjectLabel(value, subject.slug);
+      const previous = labels.get(value);
+      labels.set(value, previous !== undefined && previous !== label ? value : label);
+    }
+    return [...labels].map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "vi"));
+  }
+
   async getTeachers(featured?: boolean, limit: number = 24): Promise<PublicTeacherListItem[]> {
     const query = new URLSearchParams();
     if (featured !== undefined) query.set("featured", String(featured));
@@ -58,7 +74,7 @@ class CatalogService {
       slug: category.slug,
       subjects: (category.subjects || []).map((subject) => ({
         id: subject.id,
-        name: subject.name,
+        name: formatSubjectLabel(subject.name, subject.slug),
         slug: subject.slug,
       })),
     }));

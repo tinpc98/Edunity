@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../utils/subjectLabel";
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -146,7 +147,7 @@ export default function CoursesPage() {
                   placeholder="Tất cả môn học"
                   allowClear
                   className="w-full"
-                  options={subjects.map((s) => ({ value: s.id, label: s.name }))}
+                  options={subjects.map((s) => ({ value: s.id, label: formatSubjectLabel(s.name, s.slug) }))}
                 />
               </div>
             )}
@@ -256,7 +257,7 @@ export default function CoursesPage() {
                           <BookOutlined className="text-[#0D9488] text-lg" />
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-[#0D9488] font-semibold truncate">{course.categoryName} · {course.subjectName}</p>
+                          <p className="text-xs text-[#0D9488] font-semibold truncate">{course.categoryName} · {formatSubjectLabel(course.subjectName, undefined, course.categoryName)}</p>
                           <h3 className="font-bold text-[#163B40] text-sm leading-snug line-clamp-2 group-hover:text-[#0D9488] transition-colors">
                             {course.title}
                           </h3>

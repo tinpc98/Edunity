@@ -13,6 +13,7 @@ import {
 import type {
   ApiCategory,
   ApiSubject,
+  AdminCourseScope,
   Category,
   Subject,
   CreateCategoryPayload,
@@ -43,6 +44,17 @@ class CourseCatalogService {
   }
 
   // ─── ADMIN ─────────────────────────────────────────────────
+
+  async adminListCategories(): Promise<Category[]> {
+    const raw = await apiClient<ApiCategory[]>("/admin/categories");
+    return (raw || []).map(adaptCategory);
+  }
+
+  async adminListSubjects(scope?: AdminCourseScope): Promise<Subject[]> {
+    const query = scope ? `?${new URLSearchParams({ scope })}` : "";
+    const raw = await apiClient<ApiSubject[]>(`/admin/subjects${query}`);
+    return (raw || []).map(adaptSubject);
+  }
 
   /** POST /admin/categories */
   async createCategory(payload: CreateCategoryPayload): Promise<Category> {

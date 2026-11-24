@@ -173,9 +173,16 @@ export const financeService = {
     return apiClient<Payout>(`/admin/payouts/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) });
   },
 
-  /** Admin: manual trigger settlement evaluation. POST /api/admin/finance/settlements/evaluate */
-  async evaluateSettlements(): Promise<any> {
-    return apiClient<any>(`/admin/finance/settlements/evaluate`, { method: "POST" });
+  /** Admin: manual trigger settlement evaluation. POST /api/finance/admin/settlements/evaluate */
+  async evaluateSettlements(): Promise<{ evaluatedCount: number; availableCount: number; failedCount: number }> {
+    const result = await apiClient<{ eligible?: boolean; status?: string; error?: string }[]>(
+      "/finance/admin/settlements/evaluate", { method: "POST" }
+    );
+    return {
+      evaluatedCount: result.length,
+      availableCount: result.filter((item) => item.eligible && item.status === "AVAILABLE").length,
+      failedCount: result.filter((item) => item.error).length,
+    };
   },
 
   /** Teacher: Get teacher's earnings breakdown. GET /api/teacher/earnings */

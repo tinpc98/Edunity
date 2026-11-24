@@ -10,6 +10,14 @@ const { allowedGradeLevelsForCategory, requireGradeLevel } = require("../utils/g
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const STATUSES = ["ACTIVE", "INACTIVE"];
 const COURSE_TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "curriculumReference"];
+const SCHOOL_AND_LANGUAGE_SCOPE = "school-and-languages";
+const LANGUAGE_CATEGORY_SLUG = "ngoai-ngu";
+const SCHOOL_CATEGORY_SLUGS = ["trung-hoc-co-so", "trung-hoc-pho-thong"];
+const SCHOOL_SUBJECT_SLUGS = [
+  "toan-thcs", "ly-thcs", "hoa-thcs", "sinh-thcs", "su-thcs", "dia-thcs", "van-thcs", "anh-thcs",
+  "toan-thpt", "ly-thpt", "hoa-thpt", "sinh-thpt", "su-thpt", "dia-thpt", "van-thpt", "anh-thpt",
+];
+const SCHOOL_GRADES = ["GRADE_6", "GRADE_7", "GRADE_8", "GRADE_9", "GRADE_10", "GRADE_11", "GRADE_12"];
 
 const isDuplicateKeyError = (err) =>
   Boolean(err && (err.code === 11000 || (err.cause && err.cause.code === 11000)));
@@ -72,8 +80,9 @@ const getCourseOrThrow = async (courseId) => {
 
 // ---------- Categories ----------
 
-const listCategories = async () => {
-  const categories = await Category.find({ status: "ACTIVE", ...NOT_DELETED }).sort({ name: 1 }).lean();
+const listCategories = async ({ includeInactive = false } = {}) => {
+  const filter = includeInactive ? NOT_DELETED : { ...NOT_DELETED, status: "ACTIVE" };
+  const categories = await Category.find(filter).sort({ name: 1 }).lean();
   return categories.map(presentCategory).map(toPublic);
 };
 
@@ -313,6 +322,32 @@ const restoreCategory = async (adminId, categoryId) => {
 const listSubjectsByCategory = async (categoryId) => {
   const category = await getCategoryOrThrow(categoryId);
   const subjects = await Subject.find({ categoryId: category._id, status: "ACTIVE", ...NOT_DELETED }).sort({ name: 1 }).lean();
+  return subjects.map(toPublic);
+};
+
+const schoolAndLanguageSubjects = async () => {
+  const categories = await Category.find({
+    ...NOT_DELETED,
+    slug: { $in: [...SCHOOL_CATEGORY_SLUGS, LANGUAGE_CATEGORY_SLUG] },
+  }).select("_id slug").lean();
+  const languageCategoryIds = categories.filter(({ slug }) => slug === LANGUAGE_CATEGORY_SLUG).map(({ _id }) => _id);
+  const schoolCategoryIds = categories.filter(({ slug }) => SCHOOL_CATEGORY_SLUGS.includes(slug)).map(({ _id }) => _id);
+  const subjects = await Subject.find({
+    ...NOT_DELETED,
+    $or: [
+      { categoryId: { $in: languageCategoryIds } },
+      { categoryId: { $in: schoolCategoryIds }, slug: { $in: SCHOOL_SUBJECT_SLUGS } },
+    ],
+  }).sort({ name: 1, _id: 1 }).lean();
+  return { subjects, languageCategoryIds, schoolCategoryIds };
+};
+
+const adminListSubjects = async (scope) => {
+  if (scope === SCHOOL_AND_LANGUAGE_SCOPE) {
+    const { subjects } = await schoolAndLanguageSubjects();
+    return subjects.map(toPublic);
+  }
+  const subjects = await Subject.find(NOT_DELETED).sort({ name: 1, _id: 1 }).lean();
   return subjects.map(toPublic);
 };
 
@@ -766,6 +801,19 @@ const adminListCourses = async (query, paging) => {
     filter.curriculumReference = { $regex: escapeRegex(query.curriculumReference.trim()), $options: "i" };
   }
 
+  if (query.scope === SCHOOL_AND_LANGUAGE_SCOPE) {
+    const { subjects, languageCategoryIds, schoolCategoryIds } = await schoolAndLanguageSubjects();
+    const languageIds = new Set(languageCategoryIds.map(String));
+    const languageSubjectIds = subjects.filter(({ categoryId }) => languageIds.has(String(categoryId))).map(({ _id }) => _id);
+    const schoolSubjectIds = subjects.filter(({ categoryId }) => !languageIds.has(String(categoryId))).map(({ _id }) => _id);
+    filter.$and = [{
+      $or: [
+        { categoryId: { $in: schoolCategoryIds }, subjectId: { $in: schoolSubjectIds }, gradeLevel: { $in: SCHOOL_GRADES } },
+        { categoryId: { $in: languageCategoryIds }, subjectId: { $in: languageSubjectIds } },
+      ],
+    }];
+  }
+
   // Stable sort: default createdAt: -1, _id: -1
   let sort = { createdAt: -1, _id: -1 };
   if (query.sortBy) {
@@ -1069,6 +1117,7 @@ module.exports = {
   deleteCategory,
   restoreCategory,
   listSubjectsByCategory,
+  adminListSubjects,
   getSubject,
   createSubject,
   updateSubject,

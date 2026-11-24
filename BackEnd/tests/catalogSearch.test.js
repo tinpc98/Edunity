@@ -168,6 +168,86 @@ describe("TIN-04A: Catalog Search, Filtering, Pagination & Stable Sorting Test S
   });
 
   // CAT-04A-01: FREE + minPrice=0 + maxPrice=5000000. Expected: Chá»‰ cÃ³ lá»›p miá»…n phÃ­.
+  it("lists inactive categories only in the admin catalog and leaves deleted categories in trash", async () => {
+    const [inactive] = await Category.create([
+      { name: "Former Program", slug: "former-program", createdBy: admin._id, status: "INACTIVE" },
+      { name: "Deleted Program", slug: "deleted-program", createdBy: admin._id, isDeleted: true },
+    ]);
+
+    const adminResponse = await request(app).get("/api/admin/categories").set(as(admin));
+    expect(adminResponse.status).toBe(200);
+    expect(adminResponse.body.data).toHaveLength(3);
+    expect(adminResponse.body.data).toContainEqual(expect.objectContaining({ _id: inactive._id.toString(), status: "INACTIVE" }));
+    const studentResponse = await request(app).get("/api/admin/categories").set(as(student));
+    expect(studentResponse.status).toBe(403);
+
+    const publicResponse = await request(app).get("/api/categories");
+    expect(publicResponse.body.data.map(({ _id }) => _id)).toEqual([categoryDesign._id.toString(), categoryIT._id.toString()]);
+  });
+
+  it("lists subjects across categories for admins, including inactive subjects and excluding trash", async () => {
+    const [inactiveSubject] = await Subject.create([
+      { name: "Design Basics", slug: "design-basics", categoryId: categoryDesign._id, categoryName: categoryDesign.name, createdBy: admin._id, status: "INACTIVE" },
+      { name: "Archived NodeJS", slug: "archived-nodejs", categoryId: categoryIT._id, categoryName: categoryIT.name, createdBy: admin._id, isDeleted: true },
+    ]);
+
+    const adminResponse = await request(app).get("/api/admin/subjects").set(as(admin));
+    expect(adminResponse.status).toBe(200);
+    expect(adminResponse.body.data.map(({ _id }) => _id)).toEqual([
+      inactiveSubject._id.toString(),
+      subjectNode._id.toString(),
+      subjectReact._id.toString(),
+    ]);
+
+    const studentResponse = await request(app).get("/api/admin/subjects").set(as(student));
+    expect(studentResponse.status).toBe(403);
+
+    const publicResponse = await request(app).get(`/api/categories/${categoryDesign._id}/subjects`);
+    expect(publicResponse.status).toBe(200);
+    expect(publicResponse.body.data).toEqual([]);
+  });
+
+  it("scopes course management to the selected school subjects and foreign languages before pagination", async () => {
+    const [middleSchool, languages] = await Category.create([
+      { name: "Trung học cơ sở", slug: "trung-hoc-co-so", createdBy: admin._id },
+      { name: "Ngoại ngữ", slug: "ngoai-ngu", createdBy: admin._id },
+    ]);
+    const makeSubject = (name, slug, category) => ({
+      name, slug, categoryId: category._id, categoryName: category.name, createdBy: admin._id,
+    });
+    const [math, science, english] = await Subject.create([
+      makeSubject("Toán THCS", "toan-thcs", middleSchool),
+      makeSubject("Khoa học tự nhiên", "khtn-thcs", middleSchool),
+      makeSubject("IELTS", "ielts", languages),
+    ]);
+    const makeCourse = (title, slug, subject, gradeLevel) => ({
+      title, slug, subjectId: subject._id, subjectName: subject.name,
+      categoryId: subject.categoryId, categoryName: subject.categoryName, gradeLevel, createdBy: admin._id,
+    });
+    await Course.create([
+      makeCourse("Toán 8", "toan-8", math, "GRADE_8"),
+      makeCourse("Toán ngoài khối", "toan-5-legacy", math, "GRADE_5"),
+      makeCourse("Khoa học tự nhiên 8", "khtn-8", science, "GRADE_8"),
+      makeCourse("IELTS Foundation", "ielts-foundation", english, null),
+    ]);
+
+    const scope = "school-and-languages";
+    const courseList = (query = {}) => request(app).get("/api/admin/courses").set(as(admin)).query({ scope, ...query });
+    const result = await courseList({ pageSize: 1 });
+    expect(result.status).toBe(200);
+    expect(result.body.data).toMatchObject({ total: 2, totalPages: 2, items: [expect.any(Object)] });
+
+    const search = await courseList({ search: "Toán" });
+    expect(search.body.data.items.map(({ title }) => title)).toEqual(["Toán 8"]);
+    const languageFilter = await courseList({ subjectId: english._id.toString() });
+    expect(languageFilter.body.data.items.map(({ title }) => title)).toEqual(["IELTS Foundation"]);
+
+    const subjectResult = await request(app).get("/api/admin/subjects").set(as(admin)).query({ scope });
+    expect(subjectResult.body.data.map(({ _id }) => _id)).toEqual([english._id.toString(), math._id.toString()]);
+    const unscoped = await request(app).get("/api/admin/courses").set(as(admin));
+    expect(unscoped.body.data.total).toBe(6);
+  });
+
   it("CAT-04A-01: FREE + minPrice=0 + maxPrice=5000000 returns only free classes (price = 0)", async () => {
     const res = await request(app).get("/api/classes?classTypes=FREE&minPrice=0&maxPrice=5000000");
     expect(res.statusCode).toBe(200);

@@ -4,7 +4,7 @@ import type { UploadFile } from "antd";
 import { DeleteOutlined, FileTextOutlined, IdcardOutlined, InboxOutlined, PlusOutlined, SafetyCertificateOutlined, UserOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import { apiClient } from "../../api/apiClient";
+import { catalogKeys, catalogService } from "../../services/catalog.service";
 import { teacherVerificationService } from "../../services/teacherVerification.service";
 import { profileService } from "../../services/profile.service";
 import { useAuthStore } from "../../stores/auth.store";
@@ -87,12 +87,9 @@ export default function TeacherQualificationPage() {
   });
 
   // The same subject (e.g. Toán) exists under several categories: offer each name once
-  const { data: subjectNames = [] } = useQuery({
-    queryKey: ["catalogFilters", "subjectNames"],
-    queryFn: async () => {
-      const raw = await apiClient<{ subjects?: { name: string }[] }>("/catalog/filters");
-      return [...new Set((raw.subjects ?? []).map((s) => s.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi"));
-    },
+  const { data: subjectOptions = [] } = useQuery({
+    queryKey: catalogKeys.teachingSubjects(),
+    queryFn: () => catalogService.getTeachingSubjectOptions(),
     enabled: isTeacher,
     staleTime: 10 * 60 * 1000,
   });
@@ -433,8 +430,8 @@ export default function TeacherQualificationPage() {
                 className="mb-3"
               >
                 <Checkbox.Group className="grid w-full grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 md:grid-cols-4">
-                  {subjectNames.map((name) => (
-                    <Checkbox key={name} value={name}>{name}</Checkbox>
+                  {subjectOptions.map(({ value, label }) => (
+                    <Checkbox key={value} value={value}>{label}</Checkbox>
                   ))}
                 </Checkbox.Group>
               </Form.Item>

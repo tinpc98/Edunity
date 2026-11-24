@@ -8,6 +8,7 @@ import { apiClient } from "../api/apiClient";
 import { adaptCourse, adaptPaged } from "../api/catalogAdapters";
 import type {
   ApiCourse,
+  AdminCourseScope,
   Course,
   CourseSearchParams,
   CreateCoursePayload,
@@ -15,8 +16,9 @@ import type {
   PagedResult,
 } from "../types/catalog";
 
-function buildCourseQuery(params: CourseSearchParams): string {
+function buildCourseQuery(params: CourseSearchParams, scope?: AdminCourseScope): string {
   const qs = new URLSearchParams();
+  if (scope) qs.set("scope", scope);
   if (params.search) qs.set("search", params.search);
   if (params.categoryId) qs.set("categoryId", params.categoryId);
   if (params.subjectId) qs.set("subjectId", params.subjectId);
@@ -57,8 +59,8 @@ class CourseService {
   // ─── ADMIN ─────────────────────────────────────────────────
 
   /** GET /admin/courses — includes both ACTIVE and INACTIVE courses, supports status filter */
-  async adminListCourses(params: CourseSearchParams = {}): Promise<PagedResult<Course>> {
-    const qs = buildCourseQuery(params);
+  async adminListCourses(params: CourseSearchParams = {}, scope?: AdminCourseScope): Promise<PagedResult<Course>> {
+    const qs = buildCourseQuery(params, scope);
     const raw = await apiClient<{
       items: ApiCourse[];
       total: number;

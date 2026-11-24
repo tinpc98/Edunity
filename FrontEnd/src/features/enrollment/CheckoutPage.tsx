@@ -118,7 +118,7 @@ export default function CheckoutPage() {
       ) {
         return true;
       }
-      const detailCategoryId = (classDetail as { categoryId?: string } | null)?.categoryId;
+      const detailCategoryId = classDetail?.categoryId;
       if (
         hasCategoryScope &&
         detailCategoryId &&
@@ -126,7 +126,7 @@ export default function CheckoutPage() {
       ) {
         return true;
       }
-      return !classDetail;
+      return false;
     });
   }, [myScholarships, enrollment?.courseId, classDetail]);
 

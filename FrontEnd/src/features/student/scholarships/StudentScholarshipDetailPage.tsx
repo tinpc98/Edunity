@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import GuardianConsentCard from "./components/GuardianConsentCard";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -152,7 +153,7 @@ export default function StudentScholarshipDetailPage() {
                   <div><span className="text-slate-500 mr-2">Danh mục:</span>{scope!.categories!.map((c) => <Tag key={c._id} color="purple">{c.name}</Tag>)}</div>
                 )}
                 {(scope?.subjects?.length ?? 0) > 0 && (
-                  <div><span className="text-slate-500 mr-2">Môn học:</span>{scope!.subjects!.map((s) => <Tag key={s._id} color="blue">{s.name}</Tag>)}</div>
+                  <div><span className="text-slate-500 mr-2">Môn học:</span>{scope!.subjects!.map((s) => <Tag key={s._id} color="blue">{formatSubjectLabel(s.name, s.slug)}</Tag>)}</div>
                 )}
                 {(scope?.courses?.length ?? 0) > 0 && (
                   <div><span className="text-slate-500 mr-2">Khóa học:</span>{scope!.courses!.map((c) => <Tag key={c._id} color="cyan">{c.title}</Tag>)}</div>

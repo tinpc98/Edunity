@@ -135,7 +135,7 @@ const withDetail = async (campaign) => {
   const scope = campaign.scope || {};
   const [categories, subjects, courses, scholarshipCount, contributions] = await Promise.all([
     Category.find({ _id: { $in: scope.categoryIds || [] } }).select("name").lean(),
-    Subject.find({ _id: { $in: scope.subjectIds || [] } }).select("name").lean(),
+    Subject.find({ _id: { $in: scope.subjectIds || [] } }).select("name slug").lean(),
     Course.find({ _id: { $in: scope.courseIds || [] } }).select("title").lean(),
     Scholarship.countDocuments({ campaignId: campaign._id }),
     SponsorContribution.countDocuments({ campaignId: campaign._id, contributionStatus: "COMPLETED" }),

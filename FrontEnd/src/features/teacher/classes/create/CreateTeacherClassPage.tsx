@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../../../utils/subjectLabel";
 import { useRef, useState } from 'react';
 import { 
   Typography, Steps, Button, Card, Form, Input,
@@ -15,6 +16,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ROUTES } from '../../../../routes/routePaths';
 import { courseService } from '../../../../services/course.service';
+import { catalogKeys, catalogService } from '../../../../services/catalog.service';
 import { teacherContractService } from '../../../../services/teacherContract.service';
 import { teacherSubjectAuthorizationService } from '../../../../services/teacherSubjectAuthorization.service';
 import { classService, classKeys } from '../../../../services/class.service';
@@ -118,6 +120,11 @@ export default function CreateTeacherClassPage() {
   // The list is only final once the authorizations are known too
   const isCoursesLoading = isCoursePagePending || authorizationsQuery.isPending;
   const teaching = verification?.teachingProfile;
+  const { data: teachingSubjectOptions = [] } = useQuery({
+    queryKey: catalogKeys.teachingSubjects(),
+    queryFn: () => catalogService.getTeachingSubjectOptions(),
+    enabled: Boolean(teaching),
+  });
   const authorizations = authorizationsQuery.data ?? [];
   const authFor = (course: Course, status: string) =>
     authorizations.some((a) => a.status === status && a.subjectId === course.subjectId && a.gradeLevel === course.gradeLevel);
@@ -138,7 +145,7 @@ export default function CreateTeacherClassPage() {
 
   const coursesOfGrade = courses.filter((course) => !gradeFilter || course.gradeLevel === gradeFilter);
   // Each subject names the grades it can be taught at
-  const subjectOptions = [...new Map(coursesOfGrade.map((course) => [course.subjectId, course.subjectName ?? '']))]
+  const subjectOptions = [...new Map(coursesOfGrade.map((course) => [course.subjectId, formatSubjectLabel(course.subjectName, undefined, course.categoryName)]))]
     .map(([id, name]) => {
       const grades = SUPPORTED_GRADE_LEVELS.filter((grade) =>
         coursesOfGrade.some((course) => course.subjectId === id && course.gradeLevel === grade)
@@ -150,7 +157,7 @@ export default function CreateTeacherClassPage() {
   const visibleCourses = coursesOfGrade.filter(
     (course) =>
       (!subjectFilter || course.subjectId === subjectFilter) &&
-      [course.title, course.subjectName, course.description, course.curriculumReference]
+      [course.title, formatSubjectLabel(course.subjectName, undefined, course.categoryName), course.description, course.curriculumReference]
         .join(' ')
         .toLocaleLowerCase('vi')
         .includes(keyword)
@@ -298,7 +305,7 @@ export default function CreateTeacherClassPage() {
             <div>
               <div className="font-semibold">Khóa học theo hồ sơ giảng dạy của bạn</div>
               <div className="text-sm leading-6">
-                Môn: {teaching.subjects.join(', ')} · Cấp học: {profileGrades.map((grade) => GRADE_LEVEL_LABELS[grade]).join(', ')}.
+                Môn: {teaching.subjects.map((name) => teachingSubjectOptions.find(({ value }) => value === name)?.label ?? name).join(', ')} · Cấp học: {profileGrades.map((grade) => GRADE_LEVEL_LABELS[grade]).join(', ')}.
                 Quyền giảng dạy được cấp tự động theo hồ sơ đã duyệt.
               </div>
             </div>
@@ -434,7 +441,7 @@ export default function CreateTeacherClassPage() {
                           </span>
                         )}
                         {course.subjectName && (
-                          <span className="text-sm text-slate-500">{course.subjectName}</span>
+                          <span className="text-sm text-slate-500">{formatSubjectLabel(course.subjectName, undefined, course.categoryName)}</span>
                         )}
                       </div>
                       <div className="text-base font-semibold leading-snug text-slate-900 mb-1">{course.title}</div>
@@ -472,7 +479,7 @@ export default function CreateTeacherClassPage() {
             <div className="flex flex-col gap-2.5 text-sm text-gray-600">
               <div className="flex justify-between">
                 <span className="text-gray-400 font-medium">Môn học:</span>
-                <span className="font-semibold text-gray-800">{selectedCourse?.subjectName || '-'}</span>
+                <span className="font-semibold text-gray-800">{formatSubjectLabel(selectedCourse?.subjectName, undefined, selectedCourse?.categoryName) || '-'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400 font-medium">Danh mục:</span>

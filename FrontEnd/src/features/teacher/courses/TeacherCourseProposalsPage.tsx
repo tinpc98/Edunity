@@ -1,3 +1,4 @@
+import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -180,7 +181,7 @@ export default function TeacherCourseProposalsPage() {
       render: (text: string, record: CourseProposal) => (
         <div>
           <div className="font-semibold text-gray-900">{text}</div>
-          <div className="text-xs text-gray-400">{record.categoryName} · {record.subjectName}</div>
+          <div className="text-xs text-gray-400">{record.categoryName} · {formatSubjectLabel(record.subjectName, undefined, record.categoryName)}</div>
         </div>
       ),
     },
@@ -369,7 +370,7 @@ export default function TeacherCourseProposalsPage() {
               <Select
                 placeholder={selectedCategoryId ? "Chọn môn học" : "Chọn danh mục trước"}
                 disabled={!selectedCategoryId}
-                options={subjects.map((s) => ({ value: s.id, label: s.name }))}
+                options={subjects.map((s) => ({ value: s.id, label: formatSubjectLabel(s.name, s.slug) }))}
               />
             </Form.Item>
           </div>
