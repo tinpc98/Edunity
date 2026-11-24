@@ -30,6 +30,9 @@ router.get("/teacher/classes/:id/planned-sessions", teacher, controller.getPlann
 router.post("/teacher/classes/:classId/sessions/generate", teacher, controller.generateSessions);
 router.post("/teacher/classes/:classId/sessions", teacher, controller.createSessions);
 router.get("/teacher/sessions/busy", teacher, controller.listBusySessions);
+router.post("/teacher/sessions/:id/materials", teacher, controller.addSessionMaterial);
+router.delete("/teacher/sessions/:id/materials/:materialId", teacher, controller.removeSessionMaterial);
+router.get("/sessions/:id/materials", anyAuthenticatedRole, controller.listSessionMaterials);
 router.patch("/teacher/sessions/:id", teacher, controller.updateSession);
 router.delete("/teacher/sessions/:id", teacher, controller.deleteSession);
 router.post("/teacher/sessions/:id/start", teacher, controller.startSession);

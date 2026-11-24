@@ -16,7 +16,8 @@ import {
   PoweroffOutlined,
   UserOutlined,
   VideoCameraOutlined,
-  MessageOutlined
+  MessageOutlined,
+  PaperClipOutlined,
 } from '@ant-design/icons';
 
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -46,6 +47,7 @@ import {
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import { sessionPlanNotice } from '../../../../utils/classForm';
 import ClassReadinessCard from '../../../../components/common/ClassReadinessCard';
+import SessionMaterials from '../../../../components/common/SessionMaterials';
 import ClassConfigForm, { CLASS_FORM_DEFAULTS, classFormPayload, planBlocker, useClassPlan } from '../components/ClassConfigForm';
 
 const { Title, Text, Paragraph } = Typography;
@@ -184,6 +186,7 @@ export default function TeacherClassDetailPage() {
 
   // Renaming a session: only its title changes, its time stays as planned
   const [renamingSession, setRenamingSession] = useState<Session | null>(null);
+  const [materialsSession, setMaterialsSession] = useState<Session | null>(null);
   const [sessionTitle, setSessionTitle] = useState('');
   const renameSessionMutation = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) => sessionService.updateSession(id, { title }),
@@ -427,6 +430,8 @@ export default function TeacherClassDetailPage() {
   const progressOfTeaching = countedSessions ? Math.round((completedCount / countedSessions) * 100) : 0;
   // Same rule as the Backend: a scheduled session of a class that is not waiting for approval or closed
   const canRenameSessions = isVerified && !['PENDING_APPROVAL', 'REJECTED', 'COMPLETED', 'CANCELLED'].includes(cls.status);
+  // Materials can be added before approval too, and after a session took place
+  const canManageMaterials = isVerified && !['REJECTED', 'COMPLETED', 'CANCELLED'].includes(cls.status);
 
   const renderSessions = () => (
     <div className="mt-6 flex flex-col gap-6">
@@ -579,6 +584,18 @@ export default function TeacherClassDetailPage() {
                           </Button>
                         </Tooltip>
                       )
+                    )}
+
+                    {!isCancelled && (
+                      <Button
+                        size="small"
+                        icon={<PaperClipOutlined />}
+                        aria-label={`Tài liệu ${session.title || `buổi ${index + 1}`}`}
+                        onClick={() => setMaterialsSession(session)}
+                        className="rounded-lg text-xs"
+                      >
+                        Tài liệu ({(session.contents || []).length})
+                      </Button>
                     )}
 
                     {canRenameSessions && isScheduled && (
@@ -973,6 +990,17 @@ export default function TeacherClassDetailPage() {
           placeholder="VD: Buổi 1 – Đa thức và phép nhân đa thức"
           className="mt-2"
         />
+      </Modal>
+
+      <Modal
+        title={`Tài liệu: ${materialsSession?.title || ''}`}
+        open={Boolean(materialsSession)}
+        onCancel={() => setMaterialsSession(null)}
+        footer={null}
+        destroyOnHidden
+        width={640}
+      >
+        {materialsSession && <SessionMaterials sessionId={materialsSession.id} canManage={canManageMaterials} />}
       </Modal>
 
       {/* Attendance List Modal */}

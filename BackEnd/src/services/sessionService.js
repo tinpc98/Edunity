@@ -14,6 +14,7 @@ const { validationError, parseDate, isBlank } = require("../utils/http");
 const { getDisplayProfile } = require("../utils/userProfile");
 const { computePlannedOccurrences, parseDateTimeInZone, validateTimeZone } = require("../utils/timezone");
 const videoProvider = require("./videoProvider");
+const storage = require("./storageService");
 const { getVerifiedTeacher, getOwnClass, isSessionWithinClass } = require("./teacherClassService");
 const presenceService = require("./sessionPresenceService");
 const { runInTeacherScheduleTx } = require("../utils/teacherScheduleLock");
@@ -449,6 +450,12 @@ const replanSessions = async (teacherId, classId) => {
       throw new AppError("Sessions are only planned while the class is a draft or needs changes", "CLASS_NOT_EDITABLE", 409);
     }
 
+    // What the teacher added to the old sessions (names, materials) moves to the new ones in the same order
+    const previous = await Session.find({ classId: cls._id, status: "SCHEDULED" })
+      .sort({ startDatetime: 1 })
+      .select("title contents")
+      .session(dbSession)
+      .lean();
     await Session.deleteMany({ classId: cls._id, status: "SCHEDULED" }, { session: dbSession });
     if (!cls.startDate || !cls.endDate || !Array.isArray(cls.schedule) || cls.schedule.length === 0) {
       return { generatedCount: 0, sessions: [] };
@@ -464,7 +471,8 @@ const replanSessions = async (teacherId, classId) => {
         classId: cls._id,
         className: cls.className,
         teacherId: cls.teacherId,
-        title: `Buổi ${sessionNumber}`,
+        title: previous[index] && !/^Buổi \d+$/.test(previous[index].title) ? previous[index].title : `Buổi ${sessionNumber}`,
+        contents: previous[index] ? previous[index].contents || [] : [],
         sessionNumber,
         scheduleSource: "SCHEDULE_GENERATED",
         startDatetime: occ.startDatetime,
@@ -478,6 +486,99 @@ const replanSessions = async (teacherId, classId) => {
     const created = docs.length ? await Session.insertMany(docs, { session: dbSession }) : [];
     return { generatedCount: created.length, sessions: created.map((doc) => doc.toObject()) };
   });
+};
+
+const MAX_SESSION_MATERIALS = 10;
+const MATERIALS_LOCKED_CLASS_STATUSES = ["REJECTED", ...CLOSED_CLASS_STATUSES];
+
+const presentMaterial = (content) => {
+  const signed = content.storageKey ? storage.createSignedUrl(content.storageKey, { fileName: content.fileName || content.title }) : null;
+  return {
+    id: String(content._id),
+    title: content.title,
+    type: content.type,
+    fileName: content.fileName || null,
+    mimeType: content.mimeType || null,
+    size: content.size || null,
+    order: content.order,
+    url: signed ? signed.url : null,
+    urlExpiresAt: signed ? signed.expiresAt : null,
+  };
+};
+
+const materialsOf = (session) => [...(session.contents || [])].sort((a, b) => a.order - b.order).map(presentMaterial);
+
+/** The teacher of the class, and its students with a confirmed enrollment, read the materials of a session. */
+const listSessionMaterials = async (user, sessionId) => {
+  if (!mongoose.isValidObjectId(sessionId)) throw sessionNotFound();
+  const session = await Session.findById(sessionId).select("teacherId classId contents").lean();
+  if (!session) throw sessionNotFound();
+  if (user.role === "TEACHER") {
+    if (String(session.teacherId) !== String(user.id)) throw sessionNotFound();
+  } else if (user.role === "STUDENT") {
+    const enrolled = await Enrollment.exists({ studentId: user.id, classId: session.classId, enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] } });
+    if (!enrolled) throw new AppError("Not enrolled in this class", "NOT_ENROLLED", 403);
+  } else if (user.role !== "ADMIN") {
+    throw FORBIDDEN("Only the class's teacher and students can read its materials");
+  }
+  return materialsOf(session);
+};
+
+const getOwnEditableSession = async (teacherId, sessionId) => {
+  await getVerifiedTeacher(teacherId);
+  const session = await getOwnSession(teacherId, sessionId);
+  if (session.status === "CANCELLED") throw new AppError("Session has been cancelled", "SESSION_CANCELLED", 409);
+  const cls = await Class.findOne({ _id: session.classId, ...NOT_DELETED }).select("status").lean();
+  if (!cls) throw CLASS_NOT_FOUND();
+  if (MATERIALS_LOCKED_CLASS_STATUSES.includes(cls.status)) {
+    throw new AppError("Materials of a closed or rejected class cannot change", "CLASS_CLOSED", 409);
+  }
+  return session;
+};
+
+/** Attaches a file the teacher uploaded (purpose SESSION_MATERIAL) to one of their sessions. */
+const addSessionMaterial = async (teacherId, sessionId, body = {}) => {
+  const session = await getOwnEditableSession(teacherId, sessionId);
+  const { storageKey } = body;
+  const parsed = storage.parsePrivateKey(storageKey);
+  if (!parsed || parsed.purpose !== "SESSION_MATERIAL") throw validationError("storageKey must be a session material you uploaded");
+  await storage.assertOwnedKeys(teacherId, [storageKey]);
+  if ((session.contents || []).some((content) => content.storageKey === storageKey)) {
+    throw new AppError("This file is already attached to the session", "MATERIAL_ALREADY_ATTACHED", 409);
+  }
+  const text = (value, max) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+  const fileName = text(body.fileName, 200);
+  const title = text(body.title, 200) || fileName || "Tài liệu";
+  const size = Number.isInteger(body.size) && body.size > 0 ? body.size : null;
+
+  // The count is part of the write, so two uploads at once cannot go past the limit
+  const order = Math.max(0, ...(session.contents || []).map((content) => content.order)) + 1;
+  const updated = await Session.findOneAndUpdate(
+    { _id: session._id, [`contents.${MAX_SESSION_MATERIALS - 1}`]: { $exists: false } },
+    {
+      $push: {
+        contents: { title, type: "MATERIAL", storageKey, fileName, mimeType: storage.mimeTypeOf(storageKey), size, order },
+      },
+    },
+    { returnDocument: "after" }
+  ).lean();
+  if (!updated) {
+    throw new AppError(`A session holds at most ${MAX_SESSION_MATERIALS} materials`, "TOO_MANY_MATERIALS", 409);
+  }
+  return materialsOf(updated);
+};
+
+const removeSessionMaterial = async (teacherId, sessionId, materialId) => {
+  const session = await getOwnEditableSession(teacherId, sessionId);
+  if (!(session.contents || []).some((content) => String(content._id) === String(materialId))) {
+    throw new AppError("Material not found", "MATERIAL_NOT_FOUND", 404);
+  }
+  const updated = await Session.findOneAndUpdate(
+    { _id: session._id },
+    { $pull: { contents: { _id: materialId } } },
+    { returnDocument: "after" }
+  ).lean();
+  return materialsOf(updated);
 };
 
 const BUSY_RANGE_MAX_MS = 400 * 24 * 60 * 60 * 1000;
@@ -1054,6 +1155,9 @@ module.exports = {
   generateSessionsFromSchedule,
   replanSessions,
   listBusySessions,
+  listSessionMaterials,
+  addSessionMaterial,
+  removeSessionMaterial,
   updateSession,
   deleteSession,
   joinSession,

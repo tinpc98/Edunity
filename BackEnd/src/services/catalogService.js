@@ -228,7 +228,7 @@ class CatalogService {
     if (!visible) throw new AppError("Class not found", "CLASS_NOT_FOUND", 404);
     // meetingRoomId and recording locations stay private: joining and playback go through authenticated endpoints
     return await Session.find({ classId })
-      .select("-meetingRoomId -recording.storageKey -recording.providerRecordingId")
+      .select("-meetingRoomId -recording.storageKey -recording.providerRecordingId -contents.storageKey")
       .sort({ startDatetime: 1 })
       .lean();
   }

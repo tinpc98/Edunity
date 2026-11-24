@@ -18,6 +18,7 @@ exports.uploadPrivate = handle(async (req) => {
     if (purpose === "SCHOLARSHIP_PROOF") {
       throw FORBIDDEN("TEACHER cannot upload scholarship proof documents");
     }
+    if (purpose === "SESSION_MATERIAL") await getVerifiedTeacher(req.user.id);
     if (purpose === "IDENTITY" || purpose === "QUALIFICATION") {
       const teacher = await User.findById(req.user.id)
         .select("role status isDeleted teacherProfile.verificationStatus teacherProfile.verifiedUntil teacherProfile.reverificationStatus teacherProfile.identity")
@@ -43,6 +44,9 @@ exports.uploadPrivate = handle(async (req) => {
     }
   }
 
+  if (purpose === "SESSION_MATERIAL" && req.user.role !== "TEACHER") {
+    throw FORBIDDEN("Only TEACHER can upload session materials");
+  }
   return storage.savePrivateFile(req.user.id, purpose, req.file);
 }, 201);
 
@@ -88,10 +92,17 @@ exports.createSignedUrl = handle(async (req) => {
 // GET /api/files/download?key&expires&signature — the signed URL itself is the credential
 exports.download = async (req, res, next) => {
   try {
-    const { absolutePath, mimeType } = await storage.resolveSignedDownload(req.query);
+    const { absolutePath, mimeType, fileName, extension } = await storage.resolveSignedDownload(req.query);
+    // Word and PowerPoint cannot be shown by the browser: they are saved, under their original name when known
+    const saved = ["doc", "docx", "ppt", "pptx"].includes(extension);
+    const disposition = fileName
+      ? `${saved ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(fileName)}`
+      : saved
+      ? "attachment"
+      : "inline";
     res.set({
       "Content-Type": mimeType,
-      "Content-Disposition": "inline",
+      "Content-Disposition": disposition,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
       // The FE shows documents in an <iframe>; everyone else is still refused
