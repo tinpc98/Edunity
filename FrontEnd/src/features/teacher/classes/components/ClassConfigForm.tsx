@@ -138,7 +138,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
   return (
     <Form layout="vertical" form={form} preserve initialValues={{ ...CLASS_FORM_DEFAULTS, enrollmentStart: lockClassType ? undefined : firstEnrollmentDay }}>
       <Card className="rounded-2xl shadow-sm border-gray-100 p-6">
-        <Title level={4} className="!mb-6 !font-bold">Thông tin lớp học</Title>
+        <Title level={4} className="!text-base !mb-6 !font-bold">Thông tin lớp học</Title>
 
         <Form.Item label="Tên lớp học công khai" name="className" rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập tên lớp học' }]}>
           <Input className="rounded-lg" placeholder="VD: Lớp Ôn thi môn Toán 12 Nâng cao" />
@@ -243,7 +243,7 @@ export default function ClassConfigForm({ form, schedule, onScheduleChange, plan
       <Card className="rounded-2xl shadow-sm border-gray-100 p-6 mt-6">
         <div className="flex justify-between items-start gap-4 mb-6">
           <div>
-            <Title level={4} className="!m-0 !font-bold">Lịch giảng dạy & ca học hằng tuần</Title>
+            <Title level={4} className="!text-base !m-0 !font-bold">Lịch giảng dạy & ca học hằng tuần</Title>
             <Text className="text-gray-500 text-sm">
               Chọn số buổi, ngày bắt đầu và các ca trong tuần. Ngày kết thúc được tính tự động từ buổi học cuối cùng.
             </Text>

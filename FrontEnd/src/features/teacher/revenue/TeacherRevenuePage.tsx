@@ -164,12 +164,9 @@ export default function TeacherRevenuePage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <Title level={3} className="!mb-1 !text-slate-900 font-bold flex items-center gap-2">
+          <Title level={3} className="!mb-0 !text-slate-900 font-bold flex items-center gap-2">
             <WalletOutlined className="text-teal-600" /> Quản lý Doanh thu & Quyết toán Thù lao
           </Title>
-          <Text type="secondary" className="text-sm">
-            Hạch toán doanh thu giảng dạy, theo dõi điều kiện quyết toán (7 ngày sau kết thúc buổi dạy) và yêu cầu rút tiền.
-          </Text>
         </div>
 
         <Button

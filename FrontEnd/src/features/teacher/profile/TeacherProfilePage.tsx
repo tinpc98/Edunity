@@ -411,9 +411,6 @@ export default function TeacherProfilePage() {
   return (
     <div className="space-y-5">
       <div>
-        <div className="text-[12px] font-medium text-slate-400 mb-1">
-          Tài khoản / <span className="text-teal-600">Hồ sơ giáo viên</span>
-        </div>
         <h1 className="text-2xl font-bold text-slate-800 leading-tight">Hồ sơ giáo viên</h1>
       </div>
 

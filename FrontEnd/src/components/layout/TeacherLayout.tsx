@@ -3,7 +3,7 @@ import { ConfigProvider, Tooltip } from "antd";
 import { Outlet, Link } from "react-router-dom";
 import { useAuthStore } from "../../stores/auth.store";
 import DashboardShell from "../dashboard/DashboardShell";
-import { publicThemeConfig } from "./publicTheme";
+import { adminThemeConfig } from "./admin/adminTheme";
 import { ROUTES } from "../../routes/routePaths";
 import {
   getVerificationGuidanceMessage,
@@ -113,8 +113,8 @@ export default function TeacherLayout() {
   }, [isVerified, lockTooltip]);
 
   return (
-    // Same jade theme (antd tokens, font) as the Student "My learning" area
-    <ConfigProvider theme={publicThemeConfig}>
+    // Same antd theme (font, sizes, component tokens) as the Admin area
+    <ConfigProvider theme={adminThemeConfig}>
     <DashboardShell
       menuItems={teacherMenuItems}
       role="TEACHER"

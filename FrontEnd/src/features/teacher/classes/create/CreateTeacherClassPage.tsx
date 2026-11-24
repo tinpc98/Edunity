@@ -1,11 +1,10 @@
 import { useRef, useState } from 'react';
 import { 
   Typography, Steps, Button, Card, Form, Input,
-  message, Breadcrumb, Tag, Row, Col, Divider, Spin, Alert, Select
+  message, Tag, Row, Col, Divider, Spin, Alert, Select
 } from 'antd';
 import { 
   BookOutlined, 
-  SettingOutlined, 
   CalendarOutlined, 
   CheckCircleOutlined, 
   SearchOutlined, 
@@ -507,7 +506,7 @@ export default function CreateTeacherClassPage() {
         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">
           <CheckCircleOutlined />
         </div>
-        <Title level={3} className="!m-0 !mb-2 !font-bold">Xác nhận thông tin lớp học</Title>
+        <Title level={3} className="!text-lg !m-0 !mb-2 !font-bold">Xác nhận thông tin lớp học</Title>
         <Paragraph className="text-gray-500 max-w-[500px] mx-auto text-sm">
           Lớp học sẽ được khởi tạo ở trạng thái <strong>Bản nháp (DRAFT)</strong> trên hệ thống Edunity.
         </Paragraph>
@@ -581,13 +580,6 @@ export default function CreateTeacherClassPage() {
   if (!isVerified) {
     return (
       <div className="site-container py-6 min-h-[500px] max-w-[800px] mx-auto">
-        <Breadcrumb 
-          className="mb-4 text-sm"
-          items={[
-            { title: <Link to={ROUTES.TEACHER.HOME}>Tổng quan</Link> },
-            { title: 'Tạo lớp học mới' },
-          ]}
-        />
         <TeacherVerificationGateCard
           verification={verification}
           isLoading={isVerificationLoading}
@@ -605,13 +597,6 @@ export default function CreateTeacherClassPage() {
   if (!hasSignedContract) {
     return (
       <div className="site-container py-6 min-h-[500px] max-w-[800px] mx-auto">
-        <Breadcrumb
-          className="mb-4 text-sm"
-          items={[
-            { title: <Link to={ROUTES.TEACHER.HOME}>Tổng quan</Link> },
-            { title: 'Tạo lớp học mới' },
-          ]}
-        />
         {contractsQuery.isPending ? (
           <div className="py-16 text-center"><Spin /></div>
         ) : contractsQuery.isError ? (
@@ -625,7 +610,7 @@ export default function CreateTeacherClassPage() {
         ) : (
           <Card className="rounded-2xl border border-amber-200 bg-amber-50/40 text-center p-4">
             <FileProtectOutlined className="text-5xl text-amber-500" />
-            <Title level={3} className="!mt-4 !mb-2 !font-bold">Cần ký hợp đồng giảng dạy</Title>
+            <Title level={3} className="!text-lg !mt-4 !mb-2 !font-bold">Cần ký hợp đồng giảng dạy</Title>
             <Paragraph className="text-slate-600 max-w-[520px] mx-auto">
               {contractAwaitingSignature
                 ? 'Hồ sơ của bạn đã được duyệt và Edunity đã gửi hợp đồng giảng dạy. Hãy ký hợp đồng để bắt đầu tạo lớp học.'
@@ -644,26 +629,11 @@ export default function CreateTeacherClassPage() {
 
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
-      <Breadcrumb 
-        className="mb-2 text-sm"
-        items={[
-          { title: <Link to={ROUTES.TEACHER.HOME}>Tổng quan</Link> },
-          { title: <Link to={ROUTES.TEACHER.CLASSES}>Lớp của tôi</Link> },
-          { title: 'Tạo lớp học mới' },
-        ]}
-      />
-      
       <div>
-        <div className="flex items-center gap-2 mb-1 text-teal-700 font-bold uppercase tracking-wider text-xs">
-          <SettingOutlined /> KHỞI TẠO LỚP GIẢNG DẠY
-        </div>
         <Title level={2} className="!text-2xl !m-0 !font-bold tracking-tight text-gray-900">Tạo lớp học mới</Title>
-        <Text className="text-gray-500">
-          Thiết lập và mở lớp học trực tuyến từ danh mục khóa học chuẩn hóa của Edunity
-        </Text>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-4">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <Steps 
           current={currentStep} 
           items={stepItems} 

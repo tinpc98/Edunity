@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Typography, Input, Button, Tabs, Card, Tag, Progress, Row, Col, Select, Skeleton, Alert, Empty, Tooltip } from 'antd';
+import { Typography, Input, Button, Card, Tag, Progress, Row, Col, Select, Skeleton, Alert, Empty, Tooltip } from 'antd';
 import { 
   PlusOutlined, 
   SearchOutlined, 
@@ -21,8 +21,20 @@ import {
   getVerificationGuidanceMessage,
   useTeacherVerification,
 } from '../../../hooks/useTeacherVerification';
+import { AdminFilterBar, AdminFilterField, AdminTableCard } from "../../../components/admin";
 
 const { Title, Text } = Typography;
+
+const STATUS_FILTER_LABELS = {
+  OPEN: "Đang mở",
+  PENDING_APPROVAL: "Chờ duyệt",
+  DRAFT: "Bản nháp",
+  NEED_CHANGES: "Cần chỉnh sửa",
+  IN_PROGRESS: "Đang học",
+  REJECTED: "Bị từ chối",
+  COMPLETED: "Hoàn thành",
+  CANCELLED: "Đã hủy",
+} as const;
 
 export default function TeacherClassesPage() {
   const navigate = useNavigate();
@@ -84,35 +96,9 @@ export default function TeacherClassesPage() {
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <Title level={3} className="!m-0 text-teal-700 uppercase !text-[12px] font-bold tracking-wider mb-1">
-            Hệ thống giảng dạy
-          </Title>
           <Title level={2} className="!text-2xl !m-0 text-gray-900">Lớp của tôi</Title>
-          <Text className="text-gray-500">
-            Quản lý tất cả lớp học bạn đang phụ trách, theo dõi tiến độ duyệt và tuyển sinh
-          </Text>
         </div>
         <div className="flex flex-row items-center gap-3">
-          <Input 
-            placeholder="Tìm kiếm lớp học..." 
-            prefix={<SearchOutlined className="text-gray-400" />} 
-            className="w-full md:w-[250px] rounded-lg"
-           
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            allowClear
-          />
-          <Select 
-            value={filterType} 
-            onChange={setFilterType}
-            
-            className="w-[130px]"
-            options={[
-              { value: 'all', label: 'Tất cả loại' },
-              { value: 'FREE', label: 'Miễn phí' },
-              { value: 'PAID', label: 'Có phí' }
-            ]}
-          />
           <Tooltip title={!isVerified ? lockTooltip : undefined}>
             <Button 
               type="primary" 
@@ -203,23 +189,50 @@ export default function TeacherClassesPage() {
         </Col>
       </Row>
 
-      {/* Tabs by Status */}
-      <Tabs 
-        activeKey={activeTab} 
-        onChange={setActiveTab}
-        className="mt-2 font-medium"
-        items={[
-          { key: 'all', label: `Tất cả (${allClasses.length})` },
-          { key: 'OPEN', label: `Đang mở (${allClasses.filter(c => c.status === 'OPEN').length})` },
-          { key: 'PENDING_APPROVAL', label: `Chờ duyệt (${allClasses.filter(c => c.status === 'PENDING_APPROVAL').length})` },
-          { key: 'DRAFT', label: `Bản nháp (${allClasses.filter(c => c.status === 'DRAFT').length})` },
-          { key: 'NEED_CHANGES', label: `Cần chỉnh sửa (${allClasses.filter(c => c.status === 'NEED_CHANGES').length})` },
-          { key: 'IN_PROGRESS', label: `Đang học (${allClasses.filter(c => c.status === 'IN_PROGRESS').length})` },
-          { key: 'REJECTED', label: `Bị từ chối (${allClasses.filter(c => c.status === 'REJECTED').length})` },
-          { key: 'COMPLETED', label: `Hoàn thành (${allClasses.filter(c => c.status === 'COMPLETED').length})` },
-          { key: 'CANCELLED', label: `Đã hủy (${allClasses.filter(c => c.status === 'CANCELLED').length})` },
-        ]}
-      />
+      {/* Filters */}
+      <AdminTableCard>
+        <AdminFilterBar
+          title="Bộ lọc lớp học"
+          gridClassName="md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_240px_200px_auto]"
+          hasFilter={searchTerm !== "" || activeTab !== "all" || filterType !== "all"}
+          onReset={() => { setSearchTerm(""); setActiveTab("all"); setFilterType("all"); }}
+        >
+          <AdminFilterField label="Tìm kiếm">
+            <Input
+              placeholder="Tên lớp, khóa học..."
+              prefix={<SearchOutlined className="text-[#64748B]" />}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="rounded-xl"
+              allowClear
+            />
+          </AdminFilterField>
+          <AdminFilterField label="Trạng thái">
+            <Select
+              value={activeTab}
+              onChange={setActiveTab}
+              options={[
+                { value: "all", label: `Tất cả (${allClasses.length})` },
+                ...(Object.keys(STATUS_FILTER_LABELS) as (keyof typeof STATUS_FILTER_LABELS)[]).map((st) => ({
+                  value: st,
+                  label: `${STATUS_FILTER_LABELS[st]} (${allClasses.filter((c) => c.status === st).length})`,
+                })),
+              ]}
+            />
+          </AdminFilterField>
+          <AdminFilterField label="Loại lớp">
+            <Select
+              value={filterType}
+              onChange={setFilterType}
+              options={[
+                { value: "all", label: "Tất cả loại" },
+                { value: "FREE", label: "Miễn phí" },
+                { value: "PAID", label: "Có phí" },
+              ]}
+            />
+          </AdminFilterField>
+        </AdminFilterBar>
+      </AdminTableCard>
 
       {/* Loading state */}
       {isLoading && (
@@ -311,7 +324,7 @@ export default function TeacherClassesPage() {
                           <Text className="text-teal-600 text-xs font-bold uppercase tracking-wider">
                             {cls.courseTitle || "Khóa học"}
                           </Text>
-                          <Title level={4} className="!m-0 !mt-0.5 text-gray-900 hover:text-teal-600 transition-colors">
+                          <Title level={4} className="!text-base !m-0 !mt-0.5 text-gray-900 hover:text-teal-600 transition-colors">
                             {cls.className}
                           </Title>
                         </div>

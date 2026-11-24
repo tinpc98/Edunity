@@ -46,13 +46,10 @@ export const TeacherReviewsPage: React.FC = () => {
     <div>
       {/* Header */}
       <div className="mb-8">
-        <Title level={2} className="!text-2xl !mb-2 flex items-center gap-2">
+        <Title level={2} className="!text-2xl !mb-0 flex items-center gap-2">
           <StarFilled className="text-amber-500" />
           Đánh giá từ học viên
         </Title>
-        <Text type="secondary">
-          Xem tất cả nhận xét và điểm đánh giá học viên gửi cho các lớp học của bạn.
-        </Text>
       </div>
 
       {/* Aggregate Stats Cards */}

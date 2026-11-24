@@ -39,7 +39,7 @@ export default function TeacherRevenue({
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <WalletOutlined className="text-teal-600 text-[22px]" />
-            <Title level={4} style={{ margin: 0, fontSize: '18px' }}>Tổng quan Doanh thu</Title>
+            <Title level={4} style={{ margin: 0, fontSize: '16px' }}>Tổng quan Doanh thu</Title>
             <Tag color="cyan" className="rounded-full border-0 font-bold flex items-center gap-1 text-[11px] px-2 py-0.5 m-0">
               <SafetyCertificateOutlined className="text-[14px]" /> Đã đối soát
             </Tag>

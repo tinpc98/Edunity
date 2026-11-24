@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { 
-  Typography, Tabs, Breadcrumb, Tag, Button, Row, Col, Card, 
+  Typography, Tabs, Tag, Button, Row, Col, Card, 
   Modal, Form, Input, Skeleton, Alert, message, List, Popconfirm, Table, Progress,
   Avatar, Empty, Tooltip
 } from 'antd';
@@ -384,7 +384,7 @@ export default function TeacherClassDetailPage() {
 
       {/* Main Details Card */}
       <Card className="rounded-2xl shadow-sm border-gray-100">
-        <Title level={4} className="!mb-4">Thông tin khóa học & Giảng dạy</Title>
+        <Title level={4} className="!text-base !mb-4">Thông tin khóa học & Giảng dạy</Title>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
           <div>
             <Text className="text-gray-400 block mb-1">Khóa học chuẩn:</Text>
@@ -434,7 +434,7 @@ export default function TeacherClassDetailPage() {
       <Card className="rounded-2xl border border-gray-100 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
           <div>
-            <Title level={4} className="!m-0">Tiến độ giảng dạy</Title>
+            <Title level={4} className="!text-base !m-0">Tiến độ giảng dạy</Title>
             <Text className="text-gray-500 text-sm">
               <CalendarOutlined className="mr-1" />
               Lịch học: <strong className="text-gray-800">{scheduleDisplay}</strong>
@@ -474,7 +474,7 @@ export default function TeacherClassDetailPage() {
       {sessionsList.length === 0 ? (
         <Card className="rounded-2xl text-center py-16 border-dashed border-gray-300">
           <ClockCircleOutlined className="text-5xl text-gray-300 mb-4" />
-          <Title level={4} className="text-gray-700 !mb-2">Chưa có buổi học nào</Title>
+          <Title level={4} className="!text-base text-gray-700 !mb-2">Chưa có buổi học nào</Title>
           <Paragraph className="text-gray-500 text-sm max-w-md mx-auto mb-6">
             Buổi học sẽ được tạo tự động khi lớp có lịch học hàng tuần, ngày khai giảng và ngày kết thúc.
             {isEditable && ' Bấm "Chỉnh sửa lớp" để bổ sung.'}
@@ -803,15 +803,6 @@ export default function TeacherClassDetailPage() {
 
   return (
     <div className="flex flex-col w-full pb-10">
-      <Breadcrumb 
-        className="mb-4 text-sm font-medium"
-        items={[
-          { title: <Link to={ROUTES.TEACHER.HOME}>Tổng quan</Link> },
-          { title: <Link to={ROUTES.TEACHER.CLASSES}>Lớp của tôi</Link> },
-          { title: cls.className },
-        ]}
-      />
-
       {/* Top Banner Alert if REJECTED */}
       {cls.status === 'REJECTED' && (
         <Alert

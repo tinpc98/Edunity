@@ -136,7 +136,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
             mode="inline" 
             selectedKeys={[location.pathname]} 
             items={menuItems} 
-            className="border-none px-2 font-semibold text-xs"
+            className="border-none px-2 font-medium text-[13px] [&_.ant-menu-item-group-title]:!text-[11px] [&_.ant-menu-item-group-title]:!font-bold [&_.ant-menu-item-group-title]:!uppercase [&_.ant-menu-item-group-title]:!tracking-wider [&_.ant-menu-item-group-title]:!text-[#0F766E]"
           />
           
         </div>
@@ -167,7 +167,7 @@ export default function DashboardShell({ children, menuItems, role, userName, us
               className="flex items-center justify-center text-[16px] h-8 w-8"
               title="Đóng / mở thanh điều hướng"
             />
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-none">
+            <span className="text-sm font-bold text-[#163B40] leading-none">
               {role === "TEACHER" ? "Không gian giảng dạy" : role === "SPONSOR" ? "Không gian tài trợ" : "Không gian học tập"}
             </span>
           </div>

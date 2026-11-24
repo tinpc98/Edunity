@@ -264,11 +264,7 @@ export default function TeacherCourseProposalsPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[12px] font-medium text-slate-400 mb-1">
-            Giáo viên / <span className="text-teal-600">Đề xuất khóa học</span>
-          </div>
           <h1 className="text-2xl font-bold text-slate-800 leading-tight">Đề xuất khóa học</h1>
-          <p className="text-slate-500 text-sm mt-1">Gửi đề xuất khóa học để Admin xem xét và thêm vào danh mục.</p>
         </div>
         <Tooltip title={!isVerified ? lockTooltip : undefined}>
           <Button

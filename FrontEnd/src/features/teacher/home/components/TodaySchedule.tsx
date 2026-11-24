@@ -40,7 +40,7 @@ export default function TodaySchedule({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <CalendarOutlined className="text-teal-600 text-[20px]" />
-          <Title level={4} style={{ margin: 0, fontSize: '18px' }}>Lịch dạy hôm nay</Title>
+          <Title level={4} style={{ margin: 0, fontSize: '16px' }}>Lịch dạy hôm nay</Title>
           <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[12px] font-bold text-teal-600 ml-1">
             {todaySessions.length} ca
           </span>
