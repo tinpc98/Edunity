@@ -276,7 +276,7 @@ export default function StudentSchedulePage() {
                     <div
                       key={session.id}
                       onClick={() => handleClassClick(session.classId)}
-                      className={`grid grid-cols-[76px_minmax(0,1fr)_auto] items-center bg-white rounded-xl border px-4 py-3 min-h-[76px] shadow-2xs hover:shadow-sm hover:border-teal-200 transition-all cursor-pointer group w-full max-w-[1000px] ${
+                      className={`grid grid-cols-[76px_minmax(0,1fr)_auto] gap-x-4 items-center bg-white rounded-xl border px-4 py-3 min-h-[76px] shadow-2xs hover:shadow-sm hover:border-teal-200 transition-all cursor-pointer group w-full max-w-[1000px] ${
                         isInProgress
                           ? "border-teal-300"
                           : isCancelled
@@ -285,27 +285,31 @@ export default function StudentSchedulePage() {
                       }`}
                     >
                       {/* TIME */}
-                      <div className={`w-[76px] h-[58px] rounded-[10px] flex flex-col justify-center items-center shrink-0 ${
+                      <div
+                        title={`Từ ${new Date(session.startDatetime).toLocaleTimeString("vi-VN", { hour: '2-digit', minute: '2-digit', hour12: false })} đến ${new Date(session.endDatetime).toLocaleTimeString("vi-VN", { hour: '2-digit', minute: '2-digit', hour12: false })}`}
+                        className={`w-[76px] min-h-[64px] py-2 rounded-[10px] flex flex-col justify-center items-center shrink-0 ${
                         isCompleted ? "bg-emerald-50" :
                         isCancelled ? "bg-rose-50" :
                         isInProgress ? "bg-teal-600 text-white" :
                         "bg-slate-50 text-slate-700"
                       }`}>
-                        <span className={`text-[13px] font-bold tracking-tight leading-none ${
+                        {/* 24h, same size for start/end; short dash between reads as "from – to" */}
+                        <span className={`text-sm font-bold tabular-nums leading-tight ${
                           isInProgress ? "text-white" :
                           isCompleted ? "text-emerald-700" :
                           isCancelled ? "text-rose-600" :
                           "text-slate-800"
                         }`}>
-                          {new Date(session.startDatetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(session.startDatetime).toLocaleTimeString("vi-VN", { hour: '2-digit', minute: '2-digit', hour12: false })}
                         </span>
-                        <span className={`text-[10px] font-medium leading-none mt-1 ${
+                        <span aria-hidden className="w-3 h-0.5 rounded-full bg-current opacity-25 my-1" />
+                        <span className={`text-sm font-semibold tabular-nums leading-tight ${
                           isInProgress ? "text-teal-100" :
-                          isCompleted ? "text-emerald-600/80" :
-                          isCancelled ? "text-rose-500/80" :
-                          "text-slate-400"
+                          isCompleted ? "text-emerald-600" :
+                          isCancelled ? "text-rose-500" :
+                          "text-slate-500"
                         }`}>
-                          {new Date(session.endDatetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(session.endDatetime).toLocaleTimeString("vi-VN", { hour: '2-digit', minute: '2-digit', hour12: false })}
                         </span>
                       </div>
 
