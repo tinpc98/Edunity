@@ -11,6 +11,7 @@ const AuditLog = require("../src/models/AuditLog");
 const adminClassService = require("../src/services/adminClassService");
 const teacherClassService = require("../src/services/teacherClassService");
 const classCreationGateService = require("../src/services/classCreationGateService");
+const sessionService = require("../src/services/sessionService");
 
 const mockQuery = (result) => {
   const q = {
@@ -73,7 +74,9 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
     jest.spyOn(Category, "findOne").mockReturnValue(
       mockQuery({ _id: catId, name: "Toán THPT", slug: "toan-thpt", status: "ACTIVE" })
     );
-    jest.spyOn(TeacherSubjectAuthorization, "findOne").mockReturnValue(mockQuery(auth));
+    // Authorization is looked up per (teacher, subject, grade), every level at once
+    jest.spyOn(TeacherSubjectAuthorization, "find").mockReturnValue(mockQuery(auth ? [auth] : []));
+    jest.spyOn(Subject, "findById").mockReturnValue(mockQuery({ _id: subId, categoryId: catId, name: "Toán", status: "ACTIVE" }));
   };
 
   const DAY = 86400000;
@@ -121,6 +124,9 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
   beforeEach(() => {
     jest.restoreAllMocks();
     classCreationGateService.resetDependencyVerifiers();
+    // Creating a class needs a signed contract; its sessions are planned from the schedule afterwards
+    classCreationGateService.setDependencyVerifiers({ contractVerifier: async () => ({ id: "c-signed", status: "ACTIVE" }) });
+    jest.spyOn(sessionService, "replanSessions").mockResolvedValue({ generatedCount: 0, sessions: [] });
     jest.spyOn(mongoose, "startSession").mockResolvedValue({
       withTransaction: async (fn) => fn(),
       endSession: jest.fn(),
@@ -183,12 +189,16 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
   // =========================================================================
   // 3. Course Attribute Mismatch & Missing Course Level
   // =========================================================================
-  test("CUR-10.3: Rejects Course missing level (400) and rejects mismatched subjectId/categoryId/gradeLevel/level (400)", async () => {
+  test("CUR-10.3: A Course without level is accepted; mismatched subjectId/categoryId/gradeLevel/level are rejected (400)", async () => {
+    // The course level no longer gates a class: it is stored as null
     mockCatalogAndAuth({ course: { ...baseCourse, level: undefined } });
-    await expect(teacherClassService.createClass(teacherId, validBody)).rejects.toMatchObject({
-      code: "COURSE_LEVEL_REQUIRED",
-      statusCode: 400,
+    const save = jest.spyOn(Class.prototype, "save").mockImplementation(async function () {
+      return this;
     });
+    const withoutLevel = await teacherClassService.createClass(teacherId, validBody);
+    expect(withoutLevel.status).toBe("DRAFT");
+    expect(withoutLevel.level).toBeNull();
+    save.mockRestore();
 
     // Spoofed gradeLevel / level / subjectId
     for (const badFields of [
@@ -218,17 +228,24 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
   // =========================================================================
   // 4. TEA-07: advisory for create, update & submit; enforced at approval (TEACHER-CLASS-FLOW-02)
   // =========================================================================
-  test("CUR-10.4: TEA-07 missing, PENDING or SUSPENDED lets create, update & submit through and blocks approval (403)", async () => {
+  test("CUR-10.4: TEA-07 missing, PENDING or SUSPENDED blocks create, submit & approval (403); an existing draft stays editable", async () => {
     const okOptions = { contractVerifier: async () => ({ status: "ACTIVE" }) };
     jest.spyOn(Class.prototype, "save").mockImplementation(async function () {
       return this;
     });
 
-    // Missing authorization -> createClass allowed
-    mockCatalogAndAuth({ auth: null });
-    expect((await teacherClassService.createClass(teacherId, validBody)).status).toBe("DRAFT");
+    // Create: no bypass, whatever the authorization is missing for
+    for (const [auth, code] of [
+      [null, "SUBJECT_AUTHORIZATION_REQUIRED"],
+      [{ status: "PENDING" }, "SUBJECT_AUTHORIZATION_PENDING"],
+      [{ status: "SUSPENDED" }, "SUBJECT_AUTHORIZATION_SUSPENDED"],
+    ]) {
+      mockCatalogAndAuth({ auth });
+      await expect(teacherClassService.createClass(teacherId, validBody)).rejects.toMatchObject({ code, statusCode: 403 });
+    }
+    expect(Class.prototype.save).not.toHaveBeenCalled();
 
-    // PENDING authorization -> updateClass allowed
+    // PENDING authorization -> editing a draft that already exists (same course) is allowed
     mockCatalogAndAuth({ auth: { _id: new mongoose.Types.ObjectId(), status: "PENDING" } });
     const draftClass = mockCompleteClass("DRAFT");
     draftClass.save = jest.fn();
@@ -236,18 +253,19 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
     await teacherClassService.updateClass(teacherId, draftClass._id.toString(), { className: "Edited" });
     expect(draftClass.save).toHaveBeenCalled();
 
-    // SUSPENDED authorization -> submitClass allowed, with a warning
+    // SUSPENDED authorization -> submitClass refused
     mockCatalogAndAuth({ auth: { _id: new mongoose.Types.ObjectId(), status: "SUSPENDED" } });
     const toSubmit = mockCompleteClass("DRAFT");
     const updateCAS = jest
       .spyOn(Class, "findOneAndUpdate")
       .mockReturnValue(mockQuery({ ...toSubmit.toObject(), status: "PENDING_APPROVAL" }));
     jest.spyOn(AuditLog, "create").mockResolvedValue([]);
-    const submitted = await teacherClassService.submitClass(teacherId, toSubmit._id.toString(), okOptions);
-    expect(submitted.approvalWarnings.map((warning) => warning.code)).toEqual(["SUBJECT_AUTHORIZATION_SUSPENDED"]);
+    await expect(teacherClassService.submitClass(teacherId, toSubmit._id.toString(), okOptions)).rejects.toMatchObject({
+      code: "SUBJECT_AUTHORIZATION_SUSPENDED",
+    });
+    expect(updateCAS).not.toHaveBeenCalled();
 
     // Approval: no bypass
-    updateCAS.mockClear();
     for (const [auth, code] of [
       [null, "SUBJECT_AUTHORIZATION_REQUIRED"],
       [{ status: "PENDING" }, "SUBJECT_AUTHORIZATION_PENDING"],

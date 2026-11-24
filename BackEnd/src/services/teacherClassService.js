@@ -54,6 +54,10 @@ const getOwnClass = async (teacherId, classId) => {
 const classNotEditable = () =>
   new AppError("Only DRAFT or NEED_CHANGES classes can be edited", "CLASS_NOT_EDITABLE", 409);
 
+// Every account, older ones included, opens classes only for a subject and grade it is authorized to teach
+const assertMayTeach = (teacherId, course) =>
+  assertApprovedAuthorization({ teacherId, subjectId: course.subjectId, gradeLevel: course.gradeLevel || null });
+
 const getActiveCourse = async (courseId) => {
   if (!mongoose.isValidObjectId(courseId)) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
   const course = await Course.findOne({ _id: courseId, status: "ACTIVE", ...NOT_DELETED });
@@ -177,12 +181,28 @@ const applyCourse = (cls, course) => {
   cls.level = course.level ? catalog.resolveLevel(course.level) : null;
 };
 
-const createClass = async (teacherId, body = {}) => {
+// The class is saved either way: a schedule that cannot be planned (e.g. it clashes with another class) is reported
+const syncPlannedSessions = async (teacherId, classId) => {
+  try {
+    const { generatedCount } = await require("./sessionService").replanSessions(teacherId, classId);
+    return { generatedCount };
+  } catch (err) {
+    return { generatedCount: 0, error: { code: err.code || "SESSION_PLAN_FAILED", message: err.message } };
+  }
+};
+
+const createClass = async (teacherId, body = {}, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   assertVerificationCurrent({ teacher });
+  // A teacher opens classes only under a signed, current contract
+  await assertTeacherContractGate({ teacher, contractVerifier: options.contractVerifier });
   if (!body.courseId) throw validationError("courseId is required");
   // An operator object such as { $ne: null } would otherwise reach the query and pick any ACTIVE course
   if (!mongoose.isObjectIdOrHexString(body.courseId)) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
+  // Checked before the transaction: a grant from the teaching profile is written by its own service
+  const chosen = await getActiveCourse(body.courseId);
+  assertSupportedGradeLevel(chosen.gradeLevel);
+  await assertMayTeach(teacher._id, chosen);
 
   if (typeof mongoose.startSession !== "function") {
     throw new AppError(
@@ -193,6 +213,7 @@ const createClass = async (teacherId, body = {}) => {
   }
 
   let session;
+  let created;
   try {
     session = await mongoose.startSession();
   } catch (sessionErr) {
@@ -213,7 +234,6 @@ const createClass = async (teacherId, body = {}) => {
       );
     }
 
-    let created;
     await session.withTransaction(async () => {
       // 1. Atomically lock and verify course is ACTIVE and not soft-deleted
       const course = await Course.findOneAndUpdate(
@@ -243,12 +263,12 @@ const createClass = async (teacherId, body = {}) => {
       await cls.save({ session });
       created = cls.toObject();
     });
-    return created;
   } finally {
     if (session && typeof session.endSession === "function") {
       await session.endSession();
     }
   }
+  return { ...created, sessionPlan: await syncPlannedSessions(teacherId, created._id) };
 };
 
 const updateClass = async (teacherId, classId, body = {}) => {
@@ -258,6 +278,9 @@ const updateClass = async (teacherId, classId, body = {}) => {
   assertVerificationCurrent({ teacher });
 
   const switchingCourse = body.courseId !== undefined && String(body.courseId) !== String(cls.courseId);
+  // Sessions are rebuilt only when what they come from changes, so a renamed session keeps its name
+  const planOf = (doc) => JSON.stringify([doc.startDate, doc.endDate, (doc.schedule || []).map(({ dayOfWeek, startTime, endTime }) => [dayOfWeek, startTime, endTime])]);
+  const planBefore = planOf(cls);
   const course = await getActiveCourse(switchingCourse ? body.courseId : cls.courseId);
 
   const renamed = body.className !== undefined && body.className !== cls.className;
@@ -267,7 +290,10 @@ const updateClass = async (teacherId, classId, body = {}) => {
   applyClassInput(cls, body);
 
   await assertCourseAlignment({ course, cls, body });
-  if (switchingCourse) assertSupportedGradeLevel(course.gradeLevel);
+  if (switchingCourse) {
+    assertSupportedGradeLevel(course.gradeLevel);
+    await assertMayTeach(teacher._id, course);
+  }
 
   const snapshots = await captureClassSnapshots({ course });
   Object.assign(cls, snapshots);
@@ -288,7 +314,8 @@ const updateClass = async (teacherId, classId, body = {}) => {
   if (renamed) {
     await Session.updateMany({ classId: cls._id }, { $set: { className: cls.className } }); // denormalized
   }
-  return withoutReviewer(cls.toObject());
+  const replanned = planOf(cls) !== planBefore;
+  return { ...withoutReviewer(cls.toObject()), sessionPlan: replanned ? await syncPlannedSessions(teacherId, cls._id) : undefined };
 };
 
 // BR-32: Session phải nằm trong thời gian hoạt động của Class (endDate tính đến hết ngày)
@@ -368,7 +395,7 @@ const evaluateClass = async (cls, options = {}) => {
     ["SCHEDULE_SESSIONS", true, () => assertScheduleAndSessions({ cls, sessions })],
     [
       "TEACHING_AUTHORIZATION",
-      false,
+      true,
       () =>
         assertApprovedAuthorization({
           teacherId: cls.teacherId,
@@ -405,7 +432,7 @@ const getReadiness = async (cls) => {
 
 const getMyClassReadiness = async (teacherId, classId) => getReadiness(await getOwnClass(teacherId, classId));
 
-// BR-48 / BR-49 / CUR-10: submit a completed Class. Authorization and contract are left to Admin approval
+// BR-48 / BR-49 / CUR-10: submit a completed Class. The contract is left to Admin approval
 const submitClass = async (teacherId, classId, options = {}) => {
   const teacher = await getVerifiedTeacher(teacherId);
   const cls = await getOwnClass(teacherId, classId);

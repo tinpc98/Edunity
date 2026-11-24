@@ -10,14 +10,13 @@ import {
 } from "@ant-design/icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
-import type { CreatePaymentResponse } from "../../../types/payment";
 import { useAuthStore } from "../../../stores/auth.store";
 import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
 import { classKeys } from "../../../services/class.service";
-import { gatewayPaymentService } from "../../../services/gatewayPayment.service";
+import { scholarshipService, scholarshipKeys } from "../../../services/scholarship.service";
 import { useHoldCountdown } from "../../../hooks/useHoldCountdown";
 import { ROUTES } from "../../../routes/routePaths";
-import DirectTuitionPaymentModal from "./DirectTuitionPaymentModal";
+import EnrollmentConfirmModal from "./EnrollmentConfirmModal";
 import { formatScheduleEntries } from "../../../api/classAdapters";
 import { checkScheduleConflicts, type ScheduleConflict } from "../../../utils/scheduleConflict";
 
@@ -32,8 +31,8 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
   const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuthStore();
 
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [paymentIntent, setPaymentIntent] = useState<CreatePaymentResponse | null>(null);
+  // Only with a usable scholarship is there a choice to confirm; otherwise registering goes straight to checkout
+  const [scholarshipChoiceOpen, setScholarshipChoiceOpen] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
 
   // Schedule conflict modal state
@@ -57,6 +56,13 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
   });
 
   const myEnrollments = enrollmentsData?.items || [];
+
+  const { data: myScholarships } = useQuery({
+    queryKey: scholarshipKeys.myList(),
+    queryFn: () => scholarshipService.getMyScholarships(),
+    enabled: isStudent,
+  });
+  const hasUsableScholarship = (myScholarships ?? []).some((scholarship) => scholarship.isUsable);
   const activeEnrollment = myEnrollments.find(
     (e) =>
       e.classId === item.id &&
@@ -137,10 +143,15 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
       return;
     }
 
-    // PAID class -> reserve seat + create tuition payment intent
+    // PAID class -> the same as the class cards: scholarship choice when one is usable, else reserve + checkout page
+    const heldEnrollmentId = activeEnrollment && !holdExpired ? activeEnrollment.id : null;
+    if (!heldEnrollmentId && (myScholarships === undefined || hasUsableScholarship)) {
+      setScholarshipChoiceOpen(true);
+      return;
+    }
     try {
       setIsRegistering(true);
-      let targetEnrollmentId = activeEnrollment && !holdExpired ? activeEnrollment.id : null;
+      let targetEnrollmentId = heldEnrollmentId;
 
       if (!targetEnrollmentId) {
         try {
@@ -159,24 +170,12 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
         throw new Error("Không thể khởi tạo hoặc tìm thấy đơn đăng ký lớp học.");
       }
 
-      // Automatically create payment intent for tuition
-      const intent = await gatewayPaymentService.createPayment(targetEnrollmentId);
-
-      // Invalidate queries to update reservation count & state
       queryClient.invalidateQueries({ queryKey: enrollmentKeys.availability(item.id) });
       queryClient.invalidateQueries({ queryKey: enrollmentKeys.myList(1, 100) });
-
-      // Open Direct VietQR Payment Modal
-      setPaymentIntent(intent);
-      setPaymentModalOpen(true);
+      queryClient.invalidateQueries({ queryKey: ["classDiscovery"] });
+      navigate(`/checkout/${targetEnrollmentId}`);
     } catch (err: any) {
-      if (err?.code === "PAYMENT_PROVIDER_DISABLED" || err?.status === 503) {
-        message.error(
-          "Cổng thanh toán thật payOS hiện chưa được kích hoạt hoặc đang bảo trì. Vui lòng liên hệ quản trị viên hoặc quay lại sau."
-        );
-      } else {
-        message.error(err?.message || "Không thể khởi tạo thanh toán.");
-      }
+      message.error(err?.message || "Không thể giữ chỗ cho lớp học này.");
     } finally {
       setIsRegistering(false);
     }
@@ -488,18 +487,7 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
         </div>
       </Modal>
 
-      {/* Direct Tuition VietQR Modal */}
-      <DirectTuitionPaymentModal
-        open={paymentModalOpen}
-        onClose={() => setPaymentModalOpen(false)}
-        item={item}
-        paymentIntent={paymentIntent}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: enrollmentKeys.all });
-          queryClient.invalidateQueries({ queryKey: enrollmentKeys.availability(item.id) });
-          queryClient.invalidateQueries({ queryKey: classKeys.all });
-        }}
-      />
+      <EnrollmentConfirmModal item={item} open={scholarshipChoiceOpen} onClose={() => setScholarshipChoiceOpen(false)} />
     </div>
   );
 }

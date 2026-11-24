@@ -104,7 +104,7 @@ export default function PaymentSuccessPage() {
           type="warning"
           showIcon
           message="Bạn đã rời khỏi trang cổng thanh toán"
-          description="Giao dịch của bạn hiện vẫn đang ở trạng thái Chờ thanh toán. Nếu thời gian hiệu lực 15 phút vẫn còn, bạn có thể tiếp tục quét mã VietQR bên dưới."
+          description="Giao dịch của bạn hiện vẫn đang ở trạng thái Chờ thanh toán. Nếu mã QR vẫn còn hiệu lực, bạn có thể tiếp tục quét mã VietQR bên dưới."
           className="rounded-2xl"
         />
       )}

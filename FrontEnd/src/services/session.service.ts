@@ -14,6 +14,15 @@ import type {
 } from "../types/session";
 import type { RecordingStatus } from "../types/classDiscovery";
 
+export interface BusySession {
+  _id: string;
+  classId: string;
+  className: string;
+  title: string;
+  startDatetime: string;
+  endDatetime: string;
+}
+
 export interface SessionRecordingPlayback {
   sessionId: string;
   status: RecordingStatus;
@@ -67,6 +76,16 @@ export const sessionService = {
       body: JSON.stringify(payload),
     });
     return adaptSessions(data);
+  },
+
+  /**
+   * Teacher: own sessions overlapping [from, to), optionally leaving one class out.
+   * GET /api/teacher/sessions/busy
+   */
+  async listBusySessions(from: string, to: string, excludeClassId?: string): Promise<BusySession[]> {
+    const query = new URLSearchParams({ from, to });
+    if (excludeClassId) query.set("excludeClassId", excludeClassId);
+    return apiClient<BusySession[]>(`/teacher/sessions/busy?${query.toString()}`);
   },
 
   /**

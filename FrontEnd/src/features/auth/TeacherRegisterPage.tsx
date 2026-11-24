@@ -3,12 +3,10 @@ import { CheckCircleFilled, LockOutlined, MailOutlined, UserOutlined } from "@an
 import { useMutation } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { loginUser, registerTeacher } from "../../services/auth.service";
-import { profileService } from "../../services/profile.service";
 import { useAuthStore } from "../../stores/auth.store";
-import { useTeacherRegistrationStore } from "../../stores/teacherRegistration.store";
 import { ROUTES } from "../../routes/routePaths";
 import type { TeacherRegisterRequest } from "../../types/auth";
-import { getAuthErrorMessage, getFriendlyErrorMessage } from "../../utils/apiErrorMap";
+import { getAuthErrorMessage } from "../../utils/apiErrorMap";
 import { getRoleHome } from "./authRedirect";
 import { useTeacherVerification } from "../../hooks/useTeacherVerification";
 
@@ -29,56 +27,26 @@ export default function TeacherRegisterPage() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((state) => state.setAuth);
   const { user, isAuthenticated } = useAuthStore();
-  const setDraft = useTeacherRegistrationStore((state) => state.setDraft);
   const { verificationStatus, isLoading: isVerificationLoading } = useTeacherVerification();
 
   const registerMutation = useMutation({
     mutationFn: async (values: TeacherRegisterRequest) => {
-      const account = await registerTeacher(values);
-      setDraft({
-        userId: account.userId,
-        fullName: account.fullName,
-        email: account.email,
-        qualificationSummary: values.qualificationSummary,
-        biography: values.biography,
-      });
+      await registerTeacher(values);
       // Step 2 uploads private documents, which requires an authenticated Teacher
-      let session: Awaited<ReturnType<typeof loginUser>>;
       try {
-        session = await loginUser({ email: values.email, password: values.password });
+        const session = await loginUser({ email: values.email, password: values.password });
+        setAuth(session.user, session.accessToken, session.refreshToken, true);
+        return { loggedIn: true };
       } catch {
-        return { loggedIn: false as const, draftSaveError: null };
-      }
-
-      setAuth(session.user, session.accessToken, session.refreshToken, true);
-      try {
-        await profileService.updateMyProfile({
-          qualificationSummary: values.qualificationSummary.trim(),
-          biography: values.biography?.trim() || "",
-        });
-        return { loggedIn: true as const, draftSaveError: null };
-      } catch (error) {
-        return {
-          loggedIn: true as const,
-          draftSaveError: getFriendlyErrorMessage(error, "Không thể lưu thông tin hồ sơ."),
-        };
+        return { loggedIn: false };
       }
     },
-    onSuccess: ({ loggedIn, draftSaveError }, values) => {
-      if (draftSaveError) {
-        notification.warning({
-          title: "Thông tin nháp chưa được lưu trên máy chủ",
-          description: draftSaveError,
-          placement: "topRight",
-        });
-      }
+    onSuccess: ({ loggedIn }, values) => {
       notification.success({
         title: "Tạo tài khoản giáo viên thành công",
         description: loggedIn
-          ? draftSaveError
-            ? "Tiếp tục bổ sung giấy tờ; bạn có thể lưu lại thông tin hồ sơ ở bước tiếp theo."
-            : "Thông tin chuyên môn đã được lưu. Tiếp tục bổ sung giấy tờ để xác minh hồ sơ."
-          : "Vui lòng đăng nhập để bổ sung hồ sơ xác minh.",
+          ? "Tiếp tục điền hồ sơ giảng dạy để Edunity xét duyệt và mở quyền tạo lớp."
+          : "Vui lòng đăng nhập để điền hồ sơ giảng dạy.",
         placement: "topRight",
       });
       if (loggedIn) {
@@ -106,8 +74,6 @@ export default function TeacherRegisterPage() {
       fullName: values.fullName.trim(),
       email: values.email.trim(),
       password: values.password,
-      qualificationSummary: values.qualificationSummary.trim(),
-      biography: values.biography?.trim(),
     });
   };
 
@@ -154,9 +120,9 @@ export default function TeacherRegisterPage() {
 
         <section className="rounded-2xl border border-[#D6E5E2] bg-white p-7 shadow-[0_18px_50px_rgba(13,148,136,0.08)] lg:p-9">
           <div className="mb-7">
-            <p className="mb-3 text-sm font-semibold tracking-wide text-[#0D9488]">Bước 1/2 · Thông tin giáo viên</p>
+            <p className="mb-3 text-sm font-semibold tracking-wide text-[#0D9488]">Bước 1/2 · Tạo tài khoản</p>
             <h2 className="text-2xl font-extrabold tracking-tight text-[#163B40]">Đăng ký giáo viên</h2>
-            <p className="mt-2 text-sm leading-6 text-[#64748B]">Tạo hồ sơ giảng dạy và bắt đầu chia sẻ chuyên môn của bạn.</p>
+            <p className="mt-2 text-sm leading-6 text-[#64748B]">Tạo tài khoản đăng nhập. Ở bước tiếp theo bạn sẽ điền hồ sơ giảng dạy để Edunity xét duyệt.</p>
           </div>
 
           <Form form={form} layout="vertical" requiredMark onFinish={handleSubmit} autoComplete="on" scrollToFirstError>
@@ -171,12 +137,6 @@ export default function TeacherRegisterPage() {
             </Form.Item>
             <Form.Item label="Xác nhận mật khẩu" name="confirmPassword" dependencies={["password"]} rules={[{ required: true, message: "Vui lòng nhập lại mật khẩu." }, ({ getFieldValue }) => ({ validator(_, value) { return !value || getFieldValue("password") === value ? Promise.resolve() : Promise.reject(new Error("Mật khẩu xác nhận không khớp.")); } })]}>
               <Input.Password prefix={<LockOutlined className="text-slate-400" />} placeholder="Nhập lại mật khẩu" autoComplete="new-password" size="large" />
-            </Form.Item>
-            <Form.Item label="Tóm tắt chuyên môn" name="qualificationSummary" rules={[{ required: true, whitespace: true, message: "Vui lòng nhập tóm tắt chuyên môn." }]}>
-              <Input placeholder="Ví dụ: Cử nhân Sư phạm Toán" size="large" />
-            </Form.Item>
-            <Form.Item label="Giới thiệu bản thân" name="biography">
-              <Input.TextArea placeholder="Chia sẻ ngắn gọn về kinh nghiệm giảng dạy của bạn" rows={3} />
             </Form.Item>
             <Form.Item name="agreement" valuePropName="checked" rules={[{ validator: (_, value) => value ? Promise.resolve() : Promise.reject(new Error("Vui lòng đồng ý với điều khoản.")) }]}>
               <Checkbox><span className="text-xs leading-5 text-[#64748B]">Tôi đồng ý với điều khoản đăng ký giáo viên của Edunity.</span></Checkbox>

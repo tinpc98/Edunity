@@ -95,7 +95,7 @@ export default function FreeEnrollmentModal({
         </p>
         {!isFree && (
           <p className="text-xs text-slate-500 text-center -mt-2">
-            Chỗ của bạn được giữ trong 15 phút để thanh toán trực tiếp.
+            Chỗ của bạn được giữ trong thời gian giữ chỗ để thanh toán trực tiếp.
             {onViewDetail && (
               <>
                 {" "}Muốn dùng học bổng?{" "}

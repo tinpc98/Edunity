@@ -38,7 +38,8 @@ const teacherSubjectAuthorizationSchema = new Schema(
     subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
     gradeLevel: { type: String, enum: GRADE_LEVELS, default: null },
-    level: { type: String, enum: COURSE_LEVELS, required: true },
+    // Kept for older requests; authorization is now per (subject, grade), whatever the course level
+    level: { type: String, enum: COURSE_LEVELS, default: null },
 
     status: {
       type: String,

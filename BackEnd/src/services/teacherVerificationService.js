@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { User, VerificationDocument } = require("../models");
+const { SUPPORTED_GRADE_LEVELS, TEACHER_DEGREES } = require("../models/constants");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { paged, validationError, isBlank, parseDate } = require("../utils/http");
 const { audit } = require("./auditService");
@@ -130,6 +131,64 @@ const runIdentityOcr = async (identityDocument, declared) => {
   await VerificationDocument.updateOne({ _id: identityDocument._id }, { $set: { ocr: { ...ocr, checkedAt: new Date() } } });
 };
 
+const optionalString = (value, field, max) => {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || value.trim().length > max) throw validationError(`${field} must be text (max ${max} characters)`);
+  return value.trim() || null;
+};
+
+// Registration step 2. Optional in the request: a resubmission from the profile page keeps the stored one.
+const parseTeachingProfile = (input, now = new Date()) => {
+  if (input === undefined) return undefined;
+  if (!input || typeof input !== "object") throw validationError("teachingProfile is invalid");
+  if (!TEACHER_DEGREES.includes(input.degree)) throw validationError("teachingProfile.degree is invalid");
+
+  const certificates = input.certificates ?? [];
+  if (!Array.isArray(certificates) || certificates.length > 10) throw validationError("teachingProfile.certificates: at most 10");
+  const thisYear = now.getFullYear();
+  const parsedCertificates = certificates.map((certificate, index) => {
+    const name = optionalString(certificate && certificate.name, `teachingProfile.certificates[${index}].name`, 150);
+    if (!name) throw validationError(`teachingProfile.certificates[${index}].name is required`);
+    const year = certificate.year === undefined || certificate.year === null || certificate.year === "" ? null : Number(certificate.year);
+    if (year !== null && !(Number.isInteger(year) && year >= 1950 && year <= thisYear)) {
+      throw validationError(`teachingProfile.certificates[${index}].year is invalid`);
+    }
+    return { name, year };
+  });
+
+  const subjects = input.subjects;
+  if (!Array.isArray(subjects) || subjects.length === 0 || subjects.length > 30) {
+    throw validationError("teachingProfile.subjects: choose 1 to 30 subjects");
+  }
+  const parsedSubjects = [...new Set(subjects.map((subject, index) => optionalString(subject, `teachingProfile.subjects[${index}]`, 60)).filter(Boolean))];
+  if (parsedSubjects.length === 0) throw validationError("teachingProfile.subjects: choose 1 to 30 subjects");
+
+  const gradeLevels = input.gradeLevels;
+  if (!Array.isArray(gradeLevels) || gradeLevels.length === 0 || gradeLevels.some((grade) => !SUPPORTED_GRADE_LEVELS.includes(grade))) {
+    throw validationError("teachingProfile.gradeLevels is invalid");
+  }
+
+  const studentNote = optionalString(input.studentNote, "teachingProfile.studentNote", 1000);
+  if (!studentNote) throw validationError("teachingProfile.studentNote is required");
+
+  const yearsOfExperience = Number(input.yearsOfExperience);
+  if (input.yearsOfExperience === null || input.yearsOfExperience === "" || !Number.isInteger(yearsOfExperience) || yearsOfExperience < 0 || yearsOfExperience > 60) {
+    throw validationError("teachingProfile.yearsOfExperience must be a whole number from 0 to 60");
+  }
+
+  return {
+    degree: input.degree,
+    major: optionalString(input.major, "teachingProfile.major", 150),
+    school: optionalString(input.school, "teachingProfile.school", 150),
+    certificates: parsedCertificates,
+    achievements: optionalString(input.achievements, "teachingProfile.achievements", 2000),
+    subjects: parsedSubjects,
+    gradeLevels: [...new Set(gradeLevels)],
+    studentNote,
+    yearsOfExperience,
+  };
+};
+
 const teacherNotFound = () => new AppError("Teacher not found", "TEACHER_NOT_FOUND", 404);
 
 const getTeacher = async (teacherId) => {
@@ -197,6 +256,8 @@ const presentStatus = async (teacher) => {
     fullName: profile.fullName,
     biography: profile.biography,
     qualificationSummary: profile.qualificationSummary,
+    avatarUrl: profile.avatarUrl || null,
+    teachingProfile: profile.teachingProfile || null,
     identity: presentIdentity(profile.identity),
     verificationStatus: profile.verificationStatus,
     verifiedUntil: isReverificationEnabled() ? profile.verifiedUntil || null : null,
@@ -227,6 +288,7 @@ const submitVerification = async (teacherId, body) => {
 
   const documents = parseDocuments(body.documents);
   const identity = parseIdentity(body.identity);
+  const teachingProfile = parseTeachingProfile(body.teachingProfile);
   const declared = {
     fullName: identity.fullName,
     idNumber: String(body.identity.idNumber).trim(),
@@ -249,6 +311,7 @@ const submitVerification = async (teacherId, body) => {
       if (body.qualificationSummary !== undefined) teacher.teacherProfile.qualificationSummary = body.qualificationSummary;
       if (body.biography !== undefined) teacher.teacherProfile.biography = body.biography;
       teacher.teacherProfile.identity = identity;
+      if (teachingProfile) teacher.teacherProfile.teachingProfile = teachingProfile;
       // A re-verification keeps the teacher VERIFIED (existing classes go on) while it is reviewed
       if (isReverification) teacher.teacherProfile.reverificationStatus = "PENDING";
       else teacher.teacherProfile.verificationStatus = "PENDING";
@@ -430,6 +493,28 @@ const reviewVerification = async (adminId, teacherId, body, status) => {
   }
 
   if (status === "VERIFIED") {
+    // Teaching rights follow the approved profile. A failure here is not fatal: the class gate grants them on demand.
+    try {
+      await require("./teacherSubjectAuthorizationService").grantAllFromProfile(teacher, adminId);
+    } catch (err) {
+      console.error("[teacher-verification] granting teaching authorizations failed:", err.message);
+    }
+    // Next step for the teacher: sign the teaching contract. Not sent again while one is current or awaiting signature.
+    // A failure (e.g. no e-contract provider configured) leaves sending it to the Admin, as before.
+    try {
+      const contracts = require("./teacherContractService");
+      const current = await contracts.verifyContract({ teacherId: teacher._id, now });
+      const stillCurrent =
+        current &&
+        (current.status === "PENDING_SIGNATURE" ||
+          current.status === "NOT_YET_EFFECTIVE" ||
+          (current.status === "ACTIVE" && new Date(current.expiresAt) > now));
+      if (!stillCurrent) {
+        await contracts.adminCreateContract(adminId, teacher._id.toString(), { note: "Tự động gửi sau khi duyệt hồ sơ giáo viên" });
+      }
+    } catch (err) {
+      console.error("[teacher-verification] sending the teaching contract failed:", err.message);
+    }
     await notify(teacher._id, "Hồ sơ giáo viên đã được xác minh", "Bạn có thể tạo lớp học và gửi duyệt.", "TEACHER_VERIFIED");
   } else {
     await notify(teacher._id, "Hồ sơ giáo viên bị từ chối", body.reviewNote, "TEACHER_VERIFICATION_REJECTED");

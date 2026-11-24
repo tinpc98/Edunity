@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Typography, Breadcrumb, Button, Card, Row, Col, Avatar, Divider, Form, Input, message, Modal, Skeleton, Alert } from 'antd';
+import { Typography, Breadcrumb, Button, Card, Row, Col, Avatar, Divider, Form, Input, message, Modal, Skeleton, Alert, Descriptions, Tag } from 'antd';
 import { 
   SafetyCertificateOutlined,
   UserOutlined,
@@ -16,7 +16,8 @@ import { ROUTES } from '../../../../routes/routePaths';
 import { teacherVerificationService } from '../../../../services/teacherVerification.service';
 import PrivateDocumentCard from '../../../../components/common/PrivateDocumentCard';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
-import type { VerificationStatus } from '../../../../types/teacherVerification';
+import { TEACHER_DEGREE_LABELS, type VerificationStatus } from '../../../../types/teacherVerification';
+import { GRADE_LEVEL_LABELS } from '../../../../types/catalog';
 import VerificationHistoryCard from './components/VerificationHistoryCard';
 import TeacherContractsCard from './components/TeacherContractsCard';
 import TeacherIdentityCard from './components/TeacherIdentityCard';
@@ -200,6 +201,33 @@ export default function TeacherVerificationDetailPage() {
               </Col>
             </Row>
           </Card>
+
+          {teacher.teachingProfile && (
+            <Card
+              className="rounded-2xl shadow-[0_2px_8px_rgba(15,118,110,0.04)] border-[#D6E5E2]"
+              title={<span className="font-bold flex items-center gap-2"><SolutionOutlined className="text-[#0F766E]" /> Hồ sơ giảng dạy</span>}
+            >
+              <Descriptions column={{ xs: 1, sm: 2 }} size="small" colon={false} styles={{ label: { color: '#64748B', fontSize: 12 } }}>
+                <Descriptions.Item label="Học vị">{TEACHER_DEGREE_LABELS[teacher.teachingProfile.degree] ?? teacher.teachingProfile.degree}</Descriptions.Item>
+                <Descriptions.Item label="Kinh nghiệm">{teacher.teachingProfile.yearsOfExperience} năm</Descriptions.Item>
+                <Descriptions.Item label="Chuyên ngành">{teacher.teachingProfile.major || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Trường">{teacher.teachingProfile.school || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Môn nhận dạy" span="filled">
+                  <div className="flex flex-wrap gap-1">{teacher.teachingProfile.subjects.map((s) => <Tag key={s}>{s}</Tag>)}</div>
+                </Descriptions.Item>
+                <Descriptions.Item label="Cấp học" span="filled">
+                  <div className="flex flex-wrap gap-1">{teacher.teachingProfile.gradeLevels.map((g) => <Tag key={g} color="cyan">{GRADE_LEVEL_LABELS[g] ?? g}</Tag>)}</div>
+                </Descriptions.Item>
+                <Descriptions.Item label="Chứng chỉ" span="filled">
+                  {teacher.teachingProfile.certificates.length
+                    ? teacher.teachingProfile.certificates.map((c) => `${c.name}${c.year ? ` (${c.year})` : ''}`).join(' · ')
+                    : '—'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Thành tích" span="filled">{teacher.teachingProfile.achievements || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Đối tượng" span="filled">{teacher.teachingProfile.studentNote || <span className="text-slate-400 italic">Chưa khai báo (hồ sơ nộp trước khi mục này bắt buộc)</span>}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+          )}
 
           {teacherId && <TeacherIdentityCard teacherId={teacherId} identity={teacher.identity} ocr={identityDoc?.ocr} />}
 

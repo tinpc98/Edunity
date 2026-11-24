@@ -1,5 +1,4 @@
 const { Category, Subject, SyllabusVersion } = require("../models");
-const { COURSE_LEVELS } = require("../models/constants");
 const { AppError } = require("../utils/errors");
 const { resolveGradeLevel } = require("../utils/gradeLevel");
 const catalog = require("./courseCatalogService");
@@ -56,14 +55,8 @@ const assertCourseAlignment = async ({ course, cls = null, body = {} }) => {
     throw new AppError("Course category is inactive or mismatched", "COURSE_CATALOG_INACTIVE", 400);
   }
 
-  const normalizedCourseLevel = catalog.resolveLevel(course.level);
-  if (!normalizedCourseLevel || !COURSE_LEVELS.includes(normalizedCourseLevel)) {
-    throw new AppError(
-      "Selected course must have a valid level (BEGINNER, INTERMEDIATE, ADVANCED) before opening a class",
-      "COURSE_LEVEL_REQUIRED",
-      400
-    );
-  }
+  // The course level is informative only: a class opens whether or not its course has one
+  const normalizedCourseLevel = course.level ? catalog.resolveLevel(course.level) : null;
 
   const normalizedCourseGrade = course.gradeLevel || null;
   // Validate course's gradeLevel against its category bounds

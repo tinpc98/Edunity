@@ -17,6 +17,13 @@ import {
   adaptClassAvailability,
 } from "../api/classAdapters";
 
+/** Sessions of a class being prepared are rebuilt from its schedule after each save (Backend sessionPlan). */
+export interface SessionPlanResult {
+  generatedCount: number;
+  error?: { code: string; message: string };
+}
+export type ClassWithSessionPlan = ClassModel & { sessionPlan?: SessionPlanResult };
+
 export const classKeys = {
   all: ["classes"] as const,
   publicList: (filters?: Record<string, any>) => ["classes", "public", filters] as const,
@@ -104,20 +111,20 @@ export const classService = {
     return adaptClassFromApi(data);
   },
 
-  async createClass(payload: CreateClassPayload): Promise<ClassModel> {
-    const data = await apiClient<ApiClass>("/teacher/classes", {
+  async createClass(payload: CreateClassPayload): Promise<ClassWithSessionPlan> {
+    const data = await apiClient<ApiClass & { sessionPlan?: SessionPlanResult }>("/teacher/classes", {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    return adaptClassFromApi(data);
+    return { ...adaptClassFromApi(data), sessionPlan: data.sessionPlan };
   },
 
-  async updateClass(classId: string, payload: UpdateClassPayload): Promise<ClassModel> {
-    const data = await apiClient<ApiClass>(`/teacher/classes/${classId}`, {
+  async updateClass(classId: string, payload: UpdateClassPayload): Promise<ClassWithSessionPlan> {
+    const data = await apiClient<ApiClass & { sessionPlan?: SessionPlanResult }>(`/teacher/classes/${classId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
-    return adaptClassFromApi(data);
+    return { ...adaptClassFromApi(data), sessionPlan: data.sessionPlan };
   },
 
   async submitClass(classId: string): Promise<ClassModel> {

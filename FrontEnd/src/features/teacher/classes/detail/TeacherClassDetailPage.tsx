@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   Typography, Tabs, Breadcrumb, Tag, Button, Row, Col, Card, 
-  Modal, Form, Input, InputNumber, DatePicker, Skeleton, Alert, message, List, Popconfirm, Table,
+  Modal, Form, Input, Skeleton, Alert, message, List, Popconfirm, Table, Progress,
   Avatar, Empty, Tooltip
 } from 'antd';
 import { 
@@ -12,8 +12,6 @@ import {
   StarFilled, 
   SendOutlined,
   BookOutlined,
-  PlusOutlined,
-  DeleteOutlined,
   StopOutlined,
   PoweroffOutlined,
   UserOutlined,
@@ -28,36 +26,27 @@ import { ROUTES } from '../../../../routes/routePaths';
 import { classService, classKeys } from '../../../../services/class.service';
 import { messageService } from '../../../../services/message.service';
 import { sessionService, sessionKeys } from '../../../../services/session.service';
-import type { UpdateClassPayload, ClassStudentRosterItem, PaymentSourceType } from '../../../../types/class';
+import type { UpdateClassPayload, ClassStudentRosterItem, PaymentSourceType, ScheduleEntry } from '../../../../types/class';
 import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../../types/class';
 import { deriveScheduleText } from '../../../../api/classAdapters';
-import type { 
-  CreateSessionPayload, 
-  UpdateSessionPayload, 
-  Session, 
+import type {
+  Session,
   SessionAttendanceItem 
 } from '../../../../types/session';
 import { 
   SESSION_STATUS_LABELS, 
   SESSION_STATUS_COLORS 
 } from '../../../../types/session';
-import { formatSessionTimeRange } from '../../../../api/sessionAdapters';
+import { formatOpensAt, formatSessionTimeRange, JOIN_EARLY_MINUTES, roomOpensLater } from '../../../../api/sessionAdapters';
+import { useNow } from '../../../../hooks/useNow';
 import {
   getVerificationGuidanceMessage,
   useTeacherVerification,
 } from '../../../../hooks/useTeacherVerification';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
-import {
-  CLASS_PRICE_HINT,
-  classPriceRule,
-  hasInvalidSlot,
-  INVALID_SLOT_MESSAGE,
-  notBeforeField,
-  parsePrice,
-} from '../../../../utils/classForm';
-import PriceInput from '../../../../components/common/PriceInput';
+import { sessionPlanNotice } from '../../../../utils/classForm';
 import ClassReadinessCard from '../../../../components/common/ClassReadinessCard';
-import ScheduleEditor from '../components/ScheduleEditor';
+import ClassConfigForm, { CLASS_FORM_DEFAULTS, classFormPayload, planBlocker, useClassPlan } from '../components/ClassConfigForm';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -79,8 +68,12 @@ export default function TeacherClassDetailPage() {
   const lockTooltip = getVerificationGuidanceMessage(verificationStatus);
 
   const [activeTab, setActiveTab] = useState('overview');
+  const now = useNow(30_000);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm] = Form.useForm();
+  const [editSchedule, setEditSchedule] = useState<ScheduleEntry[]>([]);
+  // The class's own sessions are rebuilt on save, so only the other classes count as clashes
+  const editPlan = useClassPlan(editForm, editSchedule, classId);
 
   // Student roster & messaging state
   const [isOpeningChat, setIsOpeningChat] = useState<string | null>(null);
@@ -115,11 +108,6 @@ export default function TeacherClassDetailPage() {
   };
 
   // Session management state
-  const [isCreateSessionModalOpen, setIsCreateSessionModalOpen] = useState(false);
-  const [isEditSessionModalOpen, setIsEditSessionModalOpen] = useState(false);
-  const [editingSession, setEditingSession] = useState<Session | null>(null);
-  const [createSessionForm] = Form.useForm();
-  const [editSessionForm] = Form.useForm();
 
   // Attendance state
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
@@ -154,8 +142,10 @@ export default function TeacherClassDetailPage() {
   // 2. Mutation: Update Class
   const updateMutation = useMutation({
     mutationFn: (payload: UpdateClassPayload) => classService.updateClass(classId!, payload),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       message.success("Cập nhật thông tin lớp học thành công!");
+      const notice = sessionPlanNotice(updated.sessionPlan);
+      if (notice) message[notice.type](notice.text, notice.type === 'warning' ? 8 : 4);
       setIsEditModalOpen(false);
       queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
       queryClient.invalidateQueries({ queryKey: classKeys.teacherList() });
@@ -179,63 +169,6 @@ export default function TeacherClassDetailPage() {
     },
   });
 
-  // 4. Mutation: Create Session
-  const createSessionMutation = useMutation({
-    mutationFn: (payload: CreateSessionPayload) => sessionService.createSession(classId!, payload),
-    onSuccess: () => {
-      message.success("Tạo buổi học thành công!");
-      setIsCreateSessionModalOpen(false);
-      createSessionForm.resetFields();
-      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
-      queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
-    },
-    onError: (err: any) => {
-      message.error(sessionErrorMessage(err, "Không thể tạo buổi học."));
-    },
-  });
-
-  // 5. Mutation: Auto-plan Sessions from schedule
-  const autoPlanMutation = useMutation({
-    mutationFn: async () => {
-      const planned = await sessionService.getPlannedSessions(classId!);
-      if (!planned || planned.length === 0) {
-        throw new Error("Không có buổi học nào được tính toán từ lịch khai giảng và ca học.");
-      }
-      const bulkPayload = {
-        sessions: planned.map((p) => ({
-          title: `Buổi ${p.index}: ${cls?.className || 'Buổi học'}`,
-          startDatetime: p.startDatetime,
-          endDatetime: p.endDatetime,
-        })),
-      };
-      return await sessionService.createSessionsBulk(classId!, bulkPayload);
-    },
-    onSuccess: (res) => {
-      message.success(`Đã tự động khởi tạo ${res.length} buổi học theo lịch cố định!`);
-      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
-      queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
-    },
-    onError: (err: any) => {
-      message.error(sessionErrorMessage(err, "Không thể lập lịch tự động."));
-    },
-  });
-
-  // 6. Mutation: Update Session
-  const updateSessionMutation = useMutation({
-    mutationFn: ({ sessionId, payload }: { sessionId: string; payload: UpdateSessionPayload }) => 
-      sessionService.updateSession(sessionId, payload),
-    onSuccess: () => {
-      message.success("Cập nhật buổi học thành công!");
-      setIsEditSessionModalOpen(false);
-      setEditingSession(null);
-      queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
-      queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
-    },
-    onError: (err: any) => {
-      message.error(sessionErrorMessage(err, "Không thể cập nhật buổi học."));
-    },
-  });
-
   // 7. Mutation: Cancel Session
   const cancelSessionMutation = useMutation({
     mutationFn: (sessionId: string) => sessionService.cancelSession(sessionId),
@@ -249,16 +182,19 @@ export default function TeacherClassDetailPage() {
     },
   });
 
-  // 8. Mutation: Delete Session (DRAFT/REJECTED only)
-  const deleteSessionMutation = useMutation({
-    mutationFn: (sessionId: string) => sessionService.deleteSession(sessionId),
+  // Renaming a session: only its title changes, its time stays as planned
+  const [renamingSession, setRenamingSession] = useState<Session | null>(null);
+  const [sessionTitle, setSessionTitle] = useState('');
+  const renameSessionMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => sessionService.updateSession(id, { title }),
     onSuccess: () => {
-      message.success("Đã xóa buổi học!");
+      message.success("Đã đổi tên buổi học.");
+      setRenamingSession(null);
       queryClient.invalidateQueries({ queryKey: classKeys.teacherDetail(classId!) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.classSessions(classId!) });
     },
     onError: (err: any) => {
-      message.error(err?.message || "Không thể xóa buổi học.");
+      message.error(sessionErrorMessage(err, "Không thể đổi tên buổi học."));
     },
   });
 
@@ -302,10 +238,6 @@ export default function TeacherClassDetailPage() {
   }
 
   const isEditable = isVerified && (cls.status === 'DRAFT' || cls.status === 'NEED_CHANGES');
-  // The backend deletes sessions of a DRAFT; a class sent back for changes cancels them instead
-  const canDeleteSessions = isVerified && cls.status === 'DRAFT';
-  const isClassClosed = cls.status === 'COMPLETED' || cls.status === 'CANCELLED';
-  const canManageSessions = isVerified && !isClassClosed && cls.status !== 'PENDING_APPROVAL' && cls.status !== 'REJECTED';
   const isClassActiveForLive = isVerified && (cls.status === 'OPEN' || cls.status === 'IN_PROGRESS');
   const scheduleDisplay = cls.schedule.length ? deriveScheduleText(cls.schedule) : 'Chưa thiết lập';
   const progressPercent = cls.capacity > 0 
@@ -313,104 +245,36 @@ export default function TeacherClassDetailPage() {
     : 0;
 
   const handleOpenEdit = () => {
+    const planned = (cls.sessions || []).filter((session) => session.status !== 'CANCELLED').length;
     editForm.setFieldsValue({
       className: cls.className,
+      classType: cls.classType,
       description: cls.description,
       capacity: cls.capacity,
       price: cls.price,
       enrollmentStart: cls.enrollmentStart ? dayjs(cls.enrollmentStart) : null,
       enrollmentEnd: cls.enrollmentEnd ? dayjs(cls.enrollmentEnd) : null,
       startDate: cls.startDate ? dayjs(cls.startDate) : null,
-      endDate: cls.endDate ? dayjs(cls.endDate) : null,
-      schedule: cls.schedule,
+      sessionCount: planned || CLASS_FORM_DEFAULTS.sessionCount,
     });
+    setEditSchedule(cls.schedule);
     setIsEditModalOpen(true);
   };
 
   const handleSaveEdit = async () => {
     try {
-      const values = await editForm.validateFields();
-      const payload: UpdateClassPayload = {
-        className: values.className,
-        description: values.description,
-        capacity: Number(values.capacity),
-        price: cls.classType === 'FREE' ? 0 : parsePrice(values.price),
-        enrollmentStart: values.enrollmentStart ? values.enrollmentStart.startOf('day').toISOString() : null,
-        enrollmentEnd: values.enrollmentEnd ? values.enrollmentEnd.endOf('day').toISOString() : null,
-        startDate: values.startDate ? values.startDate.startOf('day').toISOString() : null,
-        endDate: values.endDate ? values.endDate.endOf('day').toISOString() : null,
-        schedule: values.schedule,
-      };
-      updateMutation.mutate(payload);
+      await editForm.validateFields();
     } catch {
-      // Form validation error
+      message.error("Vui lòng kiểm tra lại các thông tin được đánh dấu.");
+      return;
     }
-  };
-
-  // Handle open create session
-  const handleOpenCreateSession = () => {
-    createSessionForm.resetFields();
-    // Pre-fill default times: if class starts today (or startDate is already reached), default to now + 5 minutes so live demo can enter waiting room immediately!
-    if (cls.startDate) {
-      const now = dayjs();
-      const startDay = dayjs(cls.startDate);
-      const isSameOrBeforeToday = startDay.isSame(now, 'day') || startDay.isBefore(now);
-      const defaultStart = isSameOrBeforeToday
-        ? now.add(5, 'minute').second(0).millisecond(0)
-        : startDay.hour(19).minute(0).second(0).millisecond(0);
-      const defaultEnd = isSameOrBeforeToday
-        ? defaultStart.add(90, 'minute')
-        : startDay.hour(20).minute(30).second(0).millisecond(0);
-      createSessionForm.setFieldsValue({
-        title: `Buổi ${((cls.sessions || []).length) + 1}`,
-        startDatetime: defaultStart,
-        endDatetime: defaultEnd,
-      });
+    const blocker = planBlocker(editSchedule, editPlan);
+    if (blocker) {
+      message.error(blocker);
+      return;
     }
-    setIsCreateSessionModalOpen(true);
-  };
-
-  const handleSaveCreateSession = async () => {
-    try {
-      const values = await createSessionForm.validateFields();
-      const payload: CreateSessionPayload = {
-        title: values.title,
-        description: values.description || undefined,
-        startDatetime: values.startDatetime.toISOString(),
-        endDatetime: values.endDatetime.toISOString(),
-      };
-      createSessionMutation.mutate(payload);
-    } catch {
-      // Form validation error
-    }
-  };
-
-  // Handle open edit session
-  const handleOpenEditSession = (session: Session) => {
-    setEditingSession(session);
-    editSessionForm.setFieldsValue({
-      title: session.title,
-      description: session.description,
-      startDatetime: dayjs(session.startDatetime),
-      endDatetime: dayjs(session.endDatetime),
-    });
-    setIsEditSessionModalOpen(true);
-  };
-
-  const handleSaveEditSession = async () => {
-    if (!editingSession) return;
-    try {
-      const values = await editSessionForm.validateFields();
-      const payload: UpdateSessionPayload = {
-        title: values.title,
-        description: values.description || undefined,
-        startDatetime: values.startDatetime.toISOString(),
-        endDatetime: values.endDatetime.toISOString(),
-      };
-      updateSessionMutation.mutate({ sessionId: editingSession.id, payload });
-    } catch {
-      // Form validation error
-    }
+    const payload: UpdateClassPayload = classFormPayload(editForm, editSchedule, editPlan);
+    updateMutation.mutate(payload);
   };
 
   // Handle view attendance
@@ -558,70 +422,63 @@ export default function TeacherClassDetailPage() {
 
   // ---------------- Tab 2: Sessions List ----------------
   const sessionsList = (cls.sessions || []) as Session[];
+  const countedSessions = sessionsList.filter((session) => session.status !== 'CANCELLED').length;
+  const completedCount = sessionsList.filter((session) => session.status === 'COMPLETED').length;
+  const progressOfTeaching = countedSessions ? Math.round((completedCount / countedSessions) * 100) : 0;
+  // Same rule as the Backend: a scheduled session of a class that is not waiting for approval or closed
+  const canRenameSessions = isVerified && !['PENDING_APPROVAL', 'REJECTED', 'COMPLETED', 'CANCELLED'].includes(cls.status);
 
   const renderSessions = () => (
     <div className="mt-6 flex flex-col gap-6">
-      {/* Session Header Actions */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-gray-100 shadow-2xs">
-        <div>
-          <Title level={4} className="!m-0">Danh sách buổi học ({sessionsList.length})</Title>
-          <Text className="text-gray-500 text-xs">
-            Quản lý kế hoạch buổi học, ca học trực tuyến và theo dõi trạng thái điểm danh
-          </Text>
+      {/* Teaching progress and the weekly schedule */}
+      <Card className="rounded-2xl border border-gray-100 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+          <div>
+            <Title level={4} className="!m-0">Tiến độ giảng dạy</Title>
+            <Text className="text-gray-500 text-sm">
+              <CalendarOutlined className="mr-1" />
+              Lịch học: <strong className="text-gray-800">{scheduleDisplay}</strong>
+              {cls.startDate && cls.endDate &&
+                ` · ${new Date(cls.startDate).toLocaleDateString('vi-VN')} – ${new Date(cls.endDate).toLocaleDateString('vi-VN')}`}
+            </Text>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Auto Plan Button */}
-          {cls.schedule && cls.schedule.length > 0 && cls.startDate && cls.endDate && canManageSessions && (
-            <Popconfirm
-              title="Lập lịch tự động"
-              description="Hệ thống sẽ tạo danh sách buổi học tự động dựa trên ngày khai giảng, ngày kết thúc và các ca học cố định. Bạn có muốn tiếp tục?"
-              onConfirm={() => autoPlanMutation.mutate()}
-              okText="Đồng ý tạo"
-              cancelText="Hủy"
-              okButtonProps={{ loading: autoPlanMutation.isPending, className: 'bg-teal-600' }}
-            >
-              <Button 
-                icon={<CalendarOutlined />}
-                loading={autoPlanMutation.isPending}
-                className="rounded-xl font-medium"
-              >
-                Lập lịch tự động
-              </Button>
-            </Popconfirm>
-          )}
-
-          {/* Add Session Button */}
-          {canManageSessions && (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleOpenCreateSession}
-              className="bg-teal-600 hover:bg-teal-700 rounded-xl font-bold px-5"
-            >
-              Thêm buổi học
-            </Button>
-          )}
+        <div className="flex items-end justify-between mt-4 mb-1">
+          <div>
+            <span className="text-3xl font-bold text-gray-900">{completedCount}/{countedSessions}</span>
+            <span className="ml-2 text-gray-500">buổi đã hoàn thành</span>
+          </div>
+          <span className="font-semibold text-gray-800">{progressOfTeaching}%</span>
         </div>
-      </div>
+        <Progress percent={progressOfTeaching} showInfo={false} strokeColor="#0d9488" aria-label="Tiến độ giảng dạy" />
+        <div className="grid grid-cols-3 gap-4 mt-4">
+          <div>
+            <div className="text-sm text-gray-500">Đã hoàn thành</div>
+            <div className="text-xl font-bold text-emerald-600">{completedCount}</div>
+          </div>
+          <div>
+            <div className="text-sm text-gray-500">Sắp diễn ra</div>
+            <div className="text-xl font-bold text-gray-900">{countedSessions - completedCount}</div>
+          </div>
+          <div>
+            <div className="text-sm text-gray-500">Đã hủy</div>
+            <div className="text-xl font-bold text-gray-500">{sessionsList.length - countedSessions}</div>
+          </div>
+        </div>
+        <Text className="text-gray-500 text-sm block mt-4">
+          Buổi học được tạo tự động theo lịch học. Bạn có thể đổi tên từng buổi.
+          {isEditable && ' Muốn đổi ngày giờ, hãy bấm "Chỉnh sửa lớp" và cập nhật lịch học.'}
+        </Text>
+      </Card>
 
       {sessionsList.length === 0 ? (
         <Card className="rounded-2xl text-center py-16 border-dashed border-gray-300">
           <ClockCircleOutlined className="text-5xl text-gray-300 mb-4" />
-          <Title level={4} className="text-gray-700 !mb-2">Chưa có buổi học nào được tạo</Title>
-          <Paragraph className="text-gray-400 text-sm max-w-md mx-auto mb-6">
-            Lớp học cần có ít nhất một buổi học hợp lệ trước khi gửi phê duyệt tới Quản trị viên.
+          <Title level={4} className="text-gray-700 !mb-2">Chưa có buổi học nào</Title>
+          <Paragraph className="text-gray-500 text-sm max-w-md mx-auto mb-6">
+            Buổi học sẽ được tạo tự động khi lớp có lịch học hàng tuần, ngày khai giảng và ngày kết thúc.
+            {isEditable && ' Bấm "Chỉnh sửa lớp" để bổ sung.'}
           </Paragraph>
-          {canManageSessions && (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              size="large"
-              onClick={handleOpenCreateSession}
-              className="bg-teal-600 hover:bg-teal-700 rounded-xl font-medium"
-            >
-              Tạo buổi học đầu tiên
-            </Button>
-          )}
         </Card>
       ) : (
         <List
@@ -633,6 +490,7 @@ export default function TeacherClassDetailPage() {
             const canEnterRoom = isScheduled || isInProgress || session.status === 'WAITING' || session.status === 'INTERRUPTED';
             const isCompleted = session.status === 'COMPLETED';
             const isCancelled = session.status === 'CANCELLED';
+            const opensAt = roomOpensLater(session, now);
 
             return (
               <Card 
@@ -689,7 +547,7 @@ export default function TeacherClassDetailPage() {
                   <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                     {/* Join Classroom button if SCHEDULED or IN_PROGRESS */}
                     {canEnterRoom && (
-                      isClassActiveForLive ? (
+                      isClassActiveForLive && !opensAt ? (
                         <Link to={`/classroom/${session.id}`}>
                           <Button
                             type="primary"
@@ -705,7 +563,9 @@ export default function TeacherClassDetailPage() {
                           title={
                             !isVerified
                               ? lockTooltip
-                              : "Lớp học cần được Quản trị viên phê duyệt và mở hoạt động trước khi vào phòng học trực tuyến."
+                              : !isClassActiveForLive
+                              ? "Lớp học cần được Quản trị viên phê duyệt và mở hoạt động trước khi vào phòng học trực tuyến."
+                              : `Phòng học mở ${JOIN_EARLY_MINUTES} phút trước giờ học.`
                           }
                         >
                           <Button
@@ -715,10 +575,25 @@ export default function TeacherClassDetailPage() {
                             icon={<VideoCameraOutlined />}
                             className="rounded-lg text-xs font-semibold"
                           >
-                            {isInProgress ? "Vào lớp (LIVE)" : "Vào lớp"}
+                            {isInProgress ? "Vào lớp (LIVE)" : isClassActiveForLive && opensAt ? `Mở lúc ${formatOpensAt(opensAt)}` : "Vào lớp"}
                           </Button>
                         </Tooltip>
                       )
+                    )}
+
+                    {canRenameSessions && isScheduled && (
+                      <Button
+                        size="small"
+                        icon={<EditOutlined />}
+                        aria-label={`Đổi tên ${session.title || `buổi ${index + 1}`}`}
+                        onClick={() => {
+                          setRenamingSession(session);
+                          setSessionTitle(session.title || '');
+                        }}
+                        className="rounded-lg text-xs"
+                      >
+                        Đổi tên
+                      </Button>
                     )}
 
                     {/* Attendance button if IN_PROGRESS or COMPLETED */}
@@ -756,20 +631,8 @@ export default function TeacherClassDetailPage() {
                       </Popconfirm>
                     )}
 
-                    {/* Edit button if SCHEDULED */}
-                    {canManageSessions && isScheduled && (
-                      <Button
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() => handleOpenEditSession(session)}
-                        className="rounded-lg text-xs"
-                      >
-                        Sửa
-                      </Button>
-                    )}
-
                     {/* Cancel session if SCHEDULED */}
-                    {canManageSessions && isScheduled && (
+                    {isClassActiveForLive && isScheduled && (
                       <Popconfirm
                         title="Hủy buổi học"
                         description="Bạn có chắc chắn muốn hủy buổi học này không? Học viên sẽ thấy trạng thái Đã hủy."
@@ -790,26 +653,6 @@ export default function TeacherClassDetailPage() {
                       </Popconfirm>
                     )}
 
-                    {/* Delete session if DRAFT */}
-                    {isScheduled && canDeleteSessions && (
-                      <Popconfirm
-                        title="Xóa buổi học"
-                        description="Buổi học sẽ bị xóa hoàn toàn khỏi kế hoạch giảng dạy. Thao tác này không thể hoàn tác."
-                        onConfirm={() => deleteSessionMutation.mutate(session.id)}
-                        okText="Xóa"
-                        cancelText="Đóng"
-                        okButtonProps={{ loading: deleteSessionMutation.isPending, danger: true }}
-                      >
-                        <Button
-                          size="small"
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          loading={deleteSessionMutation.isPending}
-                          className="rounded-lg text-xs"
-                        />
-                      </Popconfirm>
-                    )}
                   </div>
                 </div>
               </Card>
@@ -1094,7 +937,7 @@ export default function TeacherClassDetailPage() {
         ]}
       />
 
-      {/* Edit Class Modal */}
+      {/* Edit Class Modal: the same form as creating a class */}
       <Modal
         title="Chỉnh sửa thông tin lớp học"
         open={isEditModalOpen}
@@ -1104,231 +947,41 @@ export default function TeacherClassDetailPage() {
         okText="Lưu thay đổi"
         cancelText="Hủy"
         okButtonProps={{ className: 'bg-teal-600' }}
-        width={720}
+        width={900}
+        forceRender
       >
-        <Form layout="vertical" form={editForm} className="mt-4">
-          <Form.Item 
-            label="Tên lớp học" 
-            name="className" 
-            rules={[{ required: true, message: 'Vui lòng nhập tên lớp học' }]}
-          >
-            <Input size="large" />
-          </Form.Item>
-
-          <Row gutter={16}>
-            {cls.classType === 'PAID' && (
-              <Col xs={24} sm={12}>
-                <Form.Item 
-                  label="Học phí (VNĐ)" 
-                  name="price" 
-                  required
-                  extra={CLASS_PRICE_HINT}
-                  rules={[classPriceRule]}
-                >
-                  <PriceInput size="large" className="w-full" />
-                </Form.Item>
-              </Col>
-            )}
-            <Col xs={24} sm={cls.classType === 'PAID' ? 12 : 24}>
-              <Form.Item 
-                label="Sĩ số tối đa" 
-                name="capacity" 
-                rules={[
-                  { required: true, message: 'Vui lòng nhập sĩ số' },
-                  { type: 'number', min: 1, message: 'Sĩ số phải >= 1' }
-                ]}
-              >
-                <InputNumber size="large" className="w-full" min={1} />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="Mở tuyển sinh từ" name="enrollmentStart">
-                <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                label="Hạn chót tuyển sinh"
-                name="enrollmentEnd"
-                dependencies={['enrollmentStart']}
-                rules={[notBeforeField('enrollmentStart', 'Không được trước ngày mở tuyển sinh')]}
-              >
-                <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="Ngày khai giảng" name="startDate" extra="Từ hôm nay trở đi khi gửi duyệt">
-                <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                label="Ngày kết thúc"
-                name="endDate"
-                dependencies={['startDate']}
-                rules={[notBeforeField('startDate', 'Không được trước ngày khai giảng')]}
-              >
-                <DatePicker size="large" className="w-full" format="DD/MM/YYYY" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item
-            label="Lịch học hàng tuần"
-            name="schedule"
-            rules={[
-              {
-                validator: (_, value) =>
-                  hasInvalidSlot(value) ? Promise.reject(new Error(INVALID_SLOT_MESSAGE)) : Promise.resolve(),
-              },
-            ]}
-          >
-            <ScheduleEditor />
-          </Form.Item>
-
-          <Form.Item label="Mô tả lớp học" name="description">
-            <Input.TextArea rows={4} />
-          </Form.Item>
-        </Form>
+        <div className="mt-4">
+          <ClassConfigForm form={editForm} schedule={editSchedule} onScheduleChange={setEditSchedule} plan={editPlan} lockClassType createdOn={cls.createdAt ? dayjs(cls.createdAt) : undefined} />
+        </div>
       </Modal>
 
-      {/* Create Session Modal */}
       <Modal
-        title="Thêm buổi học mới"
-        open={isCreateSessionModalOpen}
-        onCancel={() => setIsCreateSessionModalOpen(false)}
-        onOk={handleSaveCreateSession}
-        confirmLoading={createSessionMutation.isPending}
-        okText="Tạo buổi học"
-        cancelText="Hủy"
-        okButtonProps={{ className: 'bg-teal-600' }}
-        width={560}
-      >
-        <Form layout="vertical" form={createSessionForm} className="mt-4">
-          <Form.Item
-            label="Tiêu đề buổi học"
-            name="title"
-            rules={[{ required: true, message: 'Vui lòng nhập tiêu đề buổi học' }]}
-          >
-            <Input size="large" placeholder="VD: Buổi 1: Giới thiệu nhập môn" />
-          </Form.Item>
-
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="Bắt đầu lúc"
-                name="startDatetime"
-                rules={[{ required: true, message: 'Vui lòng chọn thời gian bắt đầu' }]}
-              >
-                <DatePicker 
-                  showTime 
-                  format="DD/MM/YYYY HH:mm" 
-                  size="large" 
-                  className="w-full"
-                  placeholder="Chọn thời điểm"
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                label="Kết thúc lúc"
-                name="endDatetime"
-                rules={[
-                  { required: true, message: 'Vui lòng chọn thời gian kết thúc' },
-                  ({ getFieldValue }) => ({
-                    validator(_, value) {
-                      const start = getFieldValue('startDatetime');
-                      if (!value || !start || value.isAfter(start)) {
-                        return Promise.resolve();
-                      }
-                      return Promise.reject(new Error('Thời gian kết thúc phải sau thời gian bắt đầu'));
-                    },
-                  }),
-                ]}
-              >
-                <DatePicker 
-                  showTime 
-                  format="DD/MM/YYYY HH:mm" 
-                  size="large" 
-                  className="w-full"
-                  placeholder="Chọn thời điểm"
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item label="Mô tả nội dung buổi học" name="description">
-            <Input.TextArea rows={3} placeholder="Nội dung chính hoặc yêu cầu chuẩn bị cho học viên..." />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* Edit Session Modal */}
-      <Modal
-        title="Chỉnh sửa buổi học"
-        open={isEditSessionModalOpen}
-        onCancel={() => {
-          setIsEditSessionModalOpen(false);
-          setEditingSession(null);
+        title="Đổi tên buổi học"
+        open={Boolean(renamingSession)}
+        onCancel={() => setRenamingSession(null)}
+        onOk={() => {
+          const title = sessionTitle.trim();
+          if (!title) {
+            message.error("Tên buổi học không được để trống.");
+            return;
+          }
+          renameSessionMutation.mutate({ id: renamingSession!.id, title });
         }}
-        onOk={handleSaveEditSession}
-        confirmLoading={updateSessionMutation.isPending}
-        okText="Lưu thay đổi"
+        confirmLoading={renameSessionMutation.isPending}
+        okText="Lưu"
         cancelText="Hủy"
         okButtonProps={{ className: 'bg-teal-600' }}
-        width={560}
+        destroyOnHidden
       >
-        <Form layout="vertical" form={editSessionForm} className="mt-4">
-          <Form.Item
-            label="Tiêu đề buổi học"
-            name="title"
-            rules={[{ required: true, message: 'Vui lòng nhập tiêu đề buổi học' }]}
-          >
-            <Input size="large" />
-          </Form.Item>
-
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="Bắt đầu lúc"
-                name="startDatetime"
-                rules={[{ required: true, message: 'Vui lòng chọn thời gian bắt đầu' }]}
-              >
-                <DatePicker showTime format="DD/MM/YYYY HH:mm" size="large" className="w-full" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                label="Kết thúc lúc"
-                name="endDatetime"
-                rules={[
-                  { required: true, message: 'Vui lòng chọn thời gian kết thúc' },
-                  ({ getFieldValue }) => ({
-                    validator(_, value) {
-                      const start = getFieldValue('startDatetime');
-                      if (!value || !start || value.isAfter(start)) {
-                        return Promise.resolve();
-                      }
-                      return Promise.reject(new Error('Thời gian kết thúc phải sau thời gian bắt đầu'));
-                    },
-                  }),
-                ]}
-              >
-                <DatePicker showTime format="DD/MM/YYYY HH:mm" size="large" className="w-full" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item label="Mô tả nội dung buổi học" name="description">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-        </Form>
+        <Input
+          aria-label="Tên buổi học"
+          value={sessionTitle}
+          maxLength={200}
+          showCount
+          onChange={(event) => setSessionTitle(event.target.value)}
+          placeholder="VD: Buổi 1 – Đa thức và phép nhân đa thức"
+          className="mt-2"
+        />
       </Modal>
 
       {/* Attendance List Modal */}

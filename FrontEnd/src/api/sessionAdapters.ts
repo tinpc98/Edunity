@@ -104,3 +104,16 @@ export function formatSessionTimeRange(startIso: string, endIso: string): string
     return '';
   }
 }
+
+/** Same as the Backend (JOIN_WINDOW_BEFORE_MS): the room opens this many minutes before a session starts */
+export const JOIN_EARLY_MINUTES = 10;
+
+/** When the room of a SCHEDULED session opens, or null when it is open already */
+export const roomOpensLater = (session: { status: string; startDatetime: string }, now: number): Date | null => {
+  if (session.status !== "SCHEDULED") return null;
+  const opensAt = new Date(new Date(session.startDatetime).getTime() - JOIN_EARLY_MINUTES * 60_000);
+  return now < opensAt.getTime() ? opensAt : null;
+};
+
+export const formatOpensAt = (opensAt: Date) =>
+  opensAt.toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });

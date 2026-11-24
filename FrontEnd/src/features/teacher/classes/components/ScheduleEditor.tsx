@@ -3,6 +3,7 @@ import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { formatDayOfWeek } from '../../../../types/class';
 import type { ScheduleEntry } from '../../../../types/class';
+import { slotErrors } from '../../../../utils/classForm';
 
 const DAY_OPTIONS = [1, 2, 3, 4, 5, 6, 0].map((value) => ({ value, label: formatDayOfWeek(value) }));
 
@@ -12,6 +13,7 @@ interface ScheduleEditorProps {
 }
 
 export default function ScheduleEditor({ value = [], onChange }: ScheduleEditorProps) {
+  const errors = slotErrors(value);
   const updateSlot = (index: number, changes: Partial<ScheduleEntry>) =>
     onChange?.(value.map((entry, i) => (i === index ? { ...entry, ...changes } : entry)));
 
@@ -26,7 +28,9 @@ export default function ScheduleEditor({ value = [], onChange }: ScheduleEditorP
         {value.map((entry, index) => (
           <div
             key={index}
-            className="border border-gray-200 rounded-xl p-4 flex flex-col md:flex-row md:flex-wrap items-center justify-between gap-4 bg-white hover:border-indigo-200 transition-colors"
+            className={`border rounded-xl p-4 flex flex-col md:flex-row md:flex-wrap items-center justify-between gap-4 transition-colors ${
+              errors[index] ? 'border-red-300 bg-red-50/40' : 'border-gray-200 bg-white hover:border-indigo-200'
+            }`}
           >
             <div className="flex items-center gap-3 w-full md:w-auto">
               <span className="font-semibold text-gray-700 text-sm whitespace-nowrap">Ca {index + 1}:</span>
@@ -46,6 +50,7 @@ export default function ScheduleEditor({ value = [], onChange }: ScheduleEditorP
                 value={entry.startTime ? dayjs(`2000-01-01T${entry.startTime}`) : null}
                 format="HH:mm"
                 minuteStep={5}
+                status={errors[index] ? 'error' : undefined}
                 onChange={(time) => updateSlot(index, { startTime: time ? time.format('HH:mm') : '' })}
                 className="w-[100px]"
               />
@@ -55,6 +60,7 @@ export default function ScheduleEditor({ value = [], onChange }: ScheduleEditorP
                 value={entry.endTime ? dayjs(`2000-01-01T${entry.endTime}`) : null}
                 format="HH:mm"
                 minuteStep={5}
+                status={errors[index] ? 'error' : undefined}
                 onChange={(time) => updateSlot(index, { endTime: time ? time.format('HH:mm') : '' })}
                 className="w-[100px]"
               />
@@ -68,6 +74,11 @@ export default function ScheduleEditor({ value = [], onChange }: ScheduleEditorP
             >
               Xóa
             </Button>
+            {errors[index] && (
+              <div role="alert" className="w-full text-sm text-red-600">
+                {errors[index]}
+              </div>
+            )}
           </div>
         ))}
       </div>

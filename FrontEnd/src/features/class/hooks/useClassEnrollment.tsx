@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "../../../stores/auth.store";
 import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
 import { sessionKeys } from "../../../services/session.service";
+import { scholarshipService, scholarshipKeys } from "../../../services/scholarship.service";
 import { FetchError } from "../../../api/apiClient";
 import { ROUTES } from "../../../routes/routePaths";
 import FreeEnrollmentModal from "../components/FreeEnrollmentModal";
@@ -42,6 +43,14 @@ export function useClassEnrollment() {
     enabled: Boolean(user?.userId && user?.role === "STUDENT"),
   });
   const studentEnrollments = studentEnrollmentsData?.items || [];
+
+  // Only a student with a usable scholarship has a payment choice to make before checkout
+  const { data: myScholarships } = useQuery({
+    queryKey: scholarshipKeys.myList(),
+    queryFn: () => scholarshipService.getMyScholarships(),
+    enabled: Boolean(user?.userId && user?.role === "STUDENT"),
+  });
+  const hasUsableScholarship = (myScholarships ?? []).some((scholarship) => scholarship.isUsable);
 
   const isEnrolled = (classId: string): boolean => {
     return Boolean(
@@ -136,6 +145,23 @@ export function useClassEnrollment() {
     },
   });
 
+  // PAID without a scholarship: hold the seat and go straight to the tuition checkout
+  const directCheckoutMutation = useMutation({
+    mutationFn: (classId: string) => enrollmentService.createEnrollment(classId),
+    onSuccess: (enrollment, classId) => {
+      refreshAfterEnrollment(classId);
+      navigate(`/checkout/${enrollment.id}`);
+    },
+    onError: (error: Error, classId) => {
+      if (handleDuplicateEnrollment(error, classId)) return;
+      notification.error({
+        message: "Đăng ký không thành công",
+        description: error.message || "Không thể giữ chỗ cho lớp học này.",
+        placement: "topRight",
+      });
+    },
+  });
+
   const handleEnrollClass = (target: ClassDiscoveryItem) => {
     if (target.canEnroll === false) return;
 
@@ -175,9 +201,12 @@ export function useClassEnrollment() {
     // 5. Confirmation dialog: FREE enrolls at once; PAID offers scholarship or direct payment (seat hold + checkout)
     if (target.classType === "FREE") {
       setFreeClassTarget(target);
-    } else {
+    } else if (myScholarships === undefined || hasUsableScholarship) {
+      // Scholarships not known yet, or one to choose: the confirmation offers the choice
       setPaidClassTarget(target);
       setPaidModalOpen(true);
+    } else if (!directCheckoutMutation.isPending) {
+      directCheckoutMutation.mutate(target.id);
     }
   };
 
@@ -207,8 +236,8 @@ export function useClassEnrollment() {
     handleEnrollClass,
     isEnrolled,
     getPendingEnrollmentId,
-    isEnrolling: freeEnrollMutation.isPending,
-    enrollingClassId: freeEnrollMutation.variables?.classId,
+    isEnrolling: freeEnrollMutation.isPending || directCheckoutMutation.isPending,
+    enrollingClassId: directCheckoutMutation.isPending ? directCheckoutMutation.variables : freeEnrollMutation.variables?.classId,
     freeEnrollModal,
     paidEnrollModal,
   };

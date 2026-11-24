@@ -139,15 +139,16 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     expect(reqAuth.body.data.status).toBe("PENDING");
     expect(reqAuth.body.data.createdBy).toBeUndefined();
 
-    // PENDING TEA-07 does not block a DRAFT (TEACHER-CLASS-FLOW-02); approval enforces it in 4b
-    const pendingAuthDraft = await teacherClassService.createClass(teacher._id, {
-      courseId: course._id,
-      className: "Draft While Auth Pending",
-      classType: "PAID",
-      price: 500000,
-      capacity: 20,
-    });
-    expect(pendingAuthDraft.status).toBe("DRAFT");
+    // A signed contract and an APPROVED TEA-07 are both needed to create a class; approval enforces them again in 4b
+    const contractOk = { contractVerifier: async () => ({ id: "c-1", status: "ACTIVE" }) };
+    await expect(
+      teacherClassService.createClass(
+        teacher._id,
+        { courseId: course._id, className: "Draft While Auth Pending", classType: "PAID", price: 500000, capacity: 20 },
+        contractOk
+      )
+    ).rejects.toMatchObject({ code: "SUBJECT_AUTHORIZATION_PENDING", statusCode: 403 });
+    expect(await Class.countDocuments({ className: "Draft While Auth Pending" })).toBe(0);
 
     // Admin approves TEA-07
     await request(app)
@@ -163,23 +164,21 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
       .expect(200);
     expect(JSON.stringify(myAuthRes.body)).not.toContain(admin._id.toString());
 
-    // Step 2: a VERIFIED teacher with no signed contract can still draft; approval refuses in 4a
-    await request(app)
+    // Step 2: a VERIFIED teacher with no signed contract cannot create a class
+    const missingContract = await request(app)
       .post("/api/teacher/classes")
       .set(as(teacher))
       .send({ courseId: course._id, className: "Missing TEA-12", classType: "PAID", price: 500000, capacity: 20 })
-      .expect(201);
+      .expect(403);
+    expect(missingContract.body.error).toBe("TEACHER_CONTRACT_NOT_FOUND");
 
     // Step 3: the fixed range holds for a draft too; policyV1 (300000..1200000) plays no part
-    const contractOk = { contractVerifier: async () => ({ id: "c-1", status: "ACTIVE" }) };
     await expect(
-      teacherClassService.createClass(teacher._id, {
-        courseId: course._id,
-        className: "Too Cheap",
-        classType: "PAID",
-        price: 999,
-        capacity: 20,
-      })
+      teacherClassService.createClass(
+        teacher._id,
+        { courseId: course._id, className: "Too Cheap", classType: "PAID", price: 999, capacity: 20 },
+        contractOk
+      )
     ).rejects.toMatchObject({ code: "CLASS_PRICE_OUT_OF_RANGE", statusCode: 400 });
 
     const created = await teacherClassService.createClass(
@@ -208,6 +207,8 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
       },
       contractOk
     );
+    // This scenario adds its own sessions at chosen times, so the ones planned from the schedule make way
+    await Session.deleteMany({ classId: created._id });
 
     // Create 1 session (< minSessions=2 in policyV1) -> the schedule check no longer reads the policy
     const s1 = await sessionService.createSessions(teacher._id, created._id.toString(), {
@@ -540,13 +541,11 @@ describe("Phase 2 Real MongoMemoryReplSet Verification (TEA-07, CUR-09, CUR-10, 
     }
 
     await expect(
-      teacherClassService.createClass(teacher._id, {
-        courseId: course._id,
-        className: "Bad Price",
-        classType: "PAID",
-        price: true,
-        capacity: 15,
-      })
+      teacherClassService.createClass(
+        teacher._id,
+        { courseId: course._id, className: "Bad Price", classType: "PAID", price: true, capacity: 15 },
+        contractOk
+      )
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
 
     const day = 86400000;
