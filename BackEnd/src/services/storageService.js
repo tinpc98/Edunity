@@ -17,19 +17,41 @@ const getRoot = () => path.resolve(process.env.STORAGE_DIR || path.join(__dirnam
 const getPublicDir = () => path.join(getRoot(), "public");
 
 // What clients may upload. Recording keys are only ever created by the backend when a session starts.
-const PRIVATE_PURPOSES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF", "INCIDENT_EVIDENCE"];
+const PRIVATE_PURPOSES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF", "INCIDENT_EVIDENCE", "SESSION_MATERIAL"];
 const PUBLIC_PURPOSES = ["AVATAR", "COVER_IMAGE"];
 const MAX_PRIVATE_SIZE = 10 * 1024 * 1024;
 const MAX_PUBLIC_SIZE = 5 * 1024 * 1024;
+// Slides with pictures are bigger than scanned documents
+const MAX_MATERIAL_SIZE = 20 * 1024 * 1024;
+const MAX_UPLOAD_SIZE = Math.max(MAX_PRIVATE_SIZE, MAX_MATERIAL_SIZE);
 
 const IMAGE_TYPES = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp" };
 const DOCUMENT_TYPES = { ...IMAGE_TYPES, "application/pdf": "pdf" };
 // Only incident evidence may be a video clip; identity, qualification and scholarship proof stay documents
 const PRIVATE_TYPES = { ...DOCUMENT_TYPES, "video/mp4": "mp4" };
-const typesFor = (purpose) => (purpose === "INCIDENT_EVIDENCE" ? PRIVATE_TYPES : DOCUMENT_TYPES);
-const MIME_BY_EXTENSION = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf", mp4: "video/mp4" };
+// Session materials: documents plus Word and PowerPoint, old (OLE) and new (Office Open XML) formats
+const OFFICE_TYPES = {
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-powerpoint": "ppt",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+};
+const MATERIAL_TYPES = { ...DOCUMENT_TYPES, ...OFFICE_TYPES };
+const typesFor = (purpose) =>
+  purpose === "INCIDENT_EVIDENCE" ? PRIVATE_TYPES : purpose === "SESSION_MATERIAL" ? MATERIAL_TYPES : DOCUMENT_TYPES;
+const sizeFor = (purpose) => (purpose === "SESSION_MATERIAL" ? MAX_MATERIAL_SIZE : MAX_PRIVATE_SIZE);
+const MIME_BY_EXTENSION = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  pdf: "application/pdf",
+  mp4: "video/mp4",
+  ...Object.fromEntries(Object.entries(OFFICE_TYPES).map(([mime, extension]) => [extension, mime])),
+};
+const OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+const ZIP_SIGNATURE = [0x50, 0x4b, 0x03, 0x04];
 
-const PRIVATE_KEY_PATTERN = /^private\/([a-f0-9]{24})\/([A-Z_]+)\/[a-f0-9-]{36}\.(jpg|png|webp|pdf|mp4)$/;
+const PRIVATE_KEY_PATTERN = /^private\/([a-f0-9]{24})\/([A-Z_]+)\/[a-f0-9-]{36}\.(jpg|png|webp|pdf|mp4|docx?|pptx?)$/;
 
 // The declared mimetype comes from the client: check the real content signature too
 const matchesSignature = (buffer, mimeType) => {
@@ -46,6 +68,14 @@ const matchesSignature = (buffer, mimeType) => {
       return buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP";
     case "video/mp4":
       return buffer.length >= 8 && buffer.toString("ascii", 4, 8) === "ftyp"; // ISO base media box
+    case "application/msword":
+    case "application/vnd.ms-powerpoint":
+      return startsWith(OLE_SIGNATURE);
+    // A zip holding the part folder of the declared format, not any zip renamed to .docx/.pptx
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      return startsWith(ZIP_SIGNATURE) && buffer.includes("word/");
+    case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      return startsWith(ZIP_SIGNATURE) && buffer.includes("ppt/");
     default:
       return false;
   }
@@ -71,7 +101,7 @@ const write = async (key, buffer) => {
 
 const savePrivateFile = async (userId, purpose, file) => {
   if (!PRIVATE_PURPOSES.includes(purpose)) throw validationError(`purpose must be one of ${PRIVATE_PURPOSES.join(", ")}`);
-  const extension = validateFile(file, typesFor(purpose), MAX_PRIVATE_SIZE);
+  const extension = validateFile(file, typesFor(purpose), sizeFor(purpose));
 
   const storageKey = `private/${userId}/${purpose}/${crypto.randomUUID()}.${extension}`;
   await write(storageKey, file.buffer);
@@ -130,14 +160,20 @@ const readPrivateFile = async (storageKey) => {
 const getUrlSecret = () => getSecret("FILE_URL_SECRET");
 const getUrlTtlMs = () => (parseInt(process.env.FILE_URL_TTL_SECONDS, 10) || 300) * 1000;
 
-const sign = (storageKey, expires) =>
-  crypto.createHmac("sha256", getUrlSecret()).update(`${storageKey}:${expires}`).digest("hex");
+// Without a name the signed text is unchanged, so URLs issued before names existed stay valid
+const sign = (storageKey, expires, name = "") =>
+  crypto
+    .createHmac("sha256", getUrlSecret())
+    .update(name ? `${storageKey}:${expires}:${name}` : `${storageKey}:${expires}`)
+    .digest("hex");
 
 // Returns null for keys that do not point to a stored private file (e.g. legacy seed data)
-const createSignedUrl = (storageKey) => {
+const createSignedUrl = (storageKey, { fileName } = {}) => {
   if (!parsePrivateKey(storageKey)) return null;
   const expires = Date.now() + getUrlTtlMs();
-  const query = new URLSearchParams({ key: storageKey, expires: String(expires), signature: sign(storageKey, expires) });
+  const name = typeof fileName === "string" ? fileName.slice(0, 200) : "";
+  const query = new URLSearchParams({ key: storageKey, expires: String(expires), signature: sign(storageKey, expires, name) });
+  if (name) query.set("name", name);
   return { url: `${getBaseUrl()}/api/files/download?${query}`, expiresAt: new Date(expires) };
 };
 
@@ -155,25 +191,27 @@ const withSignedUrls = (documents) =>
  * Validates a signed download request and returns the file to stream.
  * The signature is the only credential: whoever was given the URL can read the file until it expires.
  */
-const resolveSignedDownload = async ({ key, expires, signature }) => {
+const resolveSignedDownload = async ({ key, expires, signature, name = "" }) => {
   const denied = () => new AppError("Invalid or expired file URL", "INVALID_FILE_URL", 403);
   const parsed = parsePrivateKey(key);
   const expiresAt = Number(expires);
   if (!parsed || !Number.isFinite(expiresAt) || typeof signature !== "string") throw denied();
 
-  const expected = sign(key, expiresAt);
+  if (typeof name !== "string") throw denied();
+  const expected = sign(key, expiresAt, name);
   const given = Buffer.from(signature);
   const valid = given.length === expected.length && crypto.timingSafeEqual(given, Buffer.from(expected));
   if (!valid || expiresAt <= Date.now()) throw denied();
   if (!(await exists(key))) throw new AppError("File not found", "FILE_NOT_FOUND", 404);
 
-  return { absolutePath: path.join(getRoot(), key), mimeType: MIME_BY_EXTENSION[parsed.extension] };
+  return { absolutePath: path.join(getRoot(), key), mimeType: MIME_BY_EXTENSION[parsed.extension], fileName: name || null, extension: parsed.extension };
 };
 
 module.exports = {
   PRIVATE_PURPOSES,
   PUBLIC_PURPOSES,
   MAX_PRIVATE_SIZE,
+  MAX_UPLOAD_SIZE,
   getPublicDir,
   savePrivateFile,
   savePublicFile,
@@ -181,6 +219,10 @@ module.exports = {
   assertOwnedKeys,
   readPrivateFile,
   createSignedUrl,
+  mimeTypeOf: (storageKey) => {
+    const parsed = parsePrivateKey(storageKey);
+    return parsed ? MIME_BY_EXTENSION[parsed.extension] : null;
+  },
   withSignedUrls,
   resolveSignedDownload,
 };

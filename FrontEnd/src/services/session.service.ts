@@ -14,6 +14,18 @@ import type {
 } from "../types/session";
 import type { RecordingStatus } from "../types/classDiscovery";
 
+export interface SessionMaterial {
+  id: string;
+  title: string;
+  type: string;
+  fileName: string | null;
+  mimeType: string | null;
+  size: number | null;
+  order: number;
+  url: string | null;
+  urlExpiresAt: string | null;
+}
+
 export interface BusySession {
   _id: string;
   classId: string;
@@ -38,6 +50,7 @@ export const sessionKeys = {
   classSessions: (classId: string) => ["sessions", "class", classId] as const,
   teacherPlanned: (classId: string) => ["sessions", "teacher", "planned", classId] as const,
   attendance: (sessionId: string) => ["sessions", "attendance", sessionId] as const,
+  materials: (sessionId: string) => ["sessions", "materials", sessionId] as const,
   liveStatus: (sessionId: string) => ["sessions", "liveStatus", sessionId] as const,
   teacherDiscipline: () => ["sessions", "teacher", "discipline"] as const,
   adminSmartClassroom: (status?: string) => ["sessions", "admin", "smartClassroom", status || "ALL"] as const,
@@ -76,6 +89,30 @@ export const sessionService = {
       body: JSON.stringify(payload),
     });
     return adaptSessions(data);
+  },
+
+  /**
+   * Teacher of the class or its enrolled students: the session's materials, each with a short-lived download URL.
+   * GET /api/sessions/:id/materials
+   */
+  async listMaterials(sessionId: string): Promise<SessionMaterial[]> {
+    return apiClient<SessionMaterial[]>(`/sessions/${sessionId}/materials`);
+  },
+
+  /** Teacher: uploads a file (PDF, image, Word, PowerPoint) and attaches it to the session. */
+  async addMaterial(sessionId: string, file: File): Promise<SessionMaterial[]> {
+    const formData = new FormData();
+    formData.append("purpose", "SESSION_MATERIAL");
+    formData.append("file", file);
+    const uploaded = await apiClient<{ storageKey: string; size: number }>("/uploads/private", { method: "POST", body: formData });
+    return apiClient<SessionMaterial[]>(`/teacher/sessions/${sessionId}/materials`, {
+      method: "POST",
+      body: JSON.stringify({ storageKey: uploaded.storageKey, fileName: file.name, size: uploaded.size }),
+    });
+  },
+
+  async removeMaterial(sessionId: string, materialId: string): Promise<SessionMaterial[]> {
+    return apiClient<SessionMaterial[]>(`/teacher/sessions/${sessionId}/materials/${materialId}`, { method: "DELETE" });
   },
 
   /**

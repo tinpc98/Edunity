@@ -14,6 +14,10 @@ const sessionContentSchema = new Schema(
     // Tham chiếu file/tài nguyên đính kèm (nếu có). Dùng private storage key,
     // không lưu public URL trực tiếp — thống nhất với VerificationDocument.
     storageKey: { type: String, default: null },
+    // The uploaded file as the teacher named it, for the download (materials only)
+    fileName: { type: String, default: null },
+    mimeType: { type: String, default: null },
+    size: { type: Number, default: null },
     order: { type: Number, required: true, min: 1 },
   },
   { _id: true }

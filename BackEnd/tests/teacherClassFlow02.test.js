@@ -751,3 +751,119 @@ describe("Readiness", () => {
     expect((await call(admin, "get", "/admin/classes/not-an-id/readiness")).statusCode).toBe(404);
   });
 });
+
+describe("Session materials", () => {
+  const os = require("os");
+  const path = require("path");
+  const fs = require("fs");
+  const { Enrollment } = require("../src/models");
+  const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  // Enough of each format for its signature check: a zip holding the format's folder, or an OLE header
+  const zipWith = (folder) => Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from(`[Content_Types].xml ${folder}document.xml`)]);
+  const ole = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(64)]);
+  const pdf = Buffer.from("%PDF-1.4 test");
+
+  const upload = (user, buffer, filename, contentType, purpose = "SESSION_MATERIAL") =>
+    request(app).post("/api/uploads/private").set(as(user)).field("purpose", purpose).attach("file", buffer, { filename, contentType });
+  const attach = (sessionId, body, user = teacher) => call(user, "post", `/teacher/sessions/${sessionId}/materials`, body);
+  const materials = (sessionId, user) => call(user, "get", `/sessions/${sessionId}/materials`);
+
+  let storageDir;
+  beforeAll(() => {
+    storageDir = fs.mkdtempSync(path.join(os.tmpdir(), "edunity-materials-"));
+    process.env.STORAGE_DIR = storageDir;
+  });
+  afterAll(() => {
+    delete process.env.STORAGE_DIR;
+    fs.rmSync(storageDir, { recursive: true, force: true });
+  });
+
+  const firstSession = async () => {
+    const id = await completeDraft();
+    return { classId: id, session: await Session.findOne({ classId: id }).sort({ startDatetime: 1 }).lean() };
+  };
+
+  test("Word, PowerPoint, PDF are accepted; a renamed zip, other files and students' uploads are not", async () => {
+    for (const [buffer, name, type] of [
+      [zipWith("word/"), "bai-1.docx", DOCX],
+      [zipWith("ppt/"), "slide.pptx", PPTX],
+      [ole, "cu.doc", "application/msword"],
+      [ole, "cu.ppt", "application/vnd.ms-powerpoint"],
+      [pdf, "de.pdf", "application/pdf"],
+    ]) {
+      const res = await upload(teacher, buffer, name, type);
+      expect(res.statusCode).toBe(201);
+      expect(res.body.data.storageKey).toMatch(/SESSION_MATERIAL\/.+\.(docx?|pptx?|pdf)$/);
+    }
+    expect((await upload(teacher, zipWith("xl/"), "x.docx", DOCX)).body.error).toBe("UNSUPPORTED_FILE_TYPE");
+    expect((await upload(teacher, Buffer.from("MZ binary"), "x.exe", "application/octet-stream")).body.error).toBe("UNSUPPORTED_FILE_TYPE");
+    // Word is only for session materials: identity documents stay PDF or images
+    expect((await upload(teacher, zipWith("word/"), "x.docx", DOCX, "INCIDENT_EVIDENCE")).body.error).toBe("UNSUPPORTED_FILE_TYPE");
+    expect((await upload(student, pdf, "de.pdf", "application/pdf")).statusCode).toBe(403);
+    expect((await upload(teacher, Buffer.concat([pdf, Buffer.alloc(21 * 1024 * 1024)]), "big.pdf", "application/pdf")).statusCode).toBe(413);
+  });
+
+  test("the teacher attaches materials, enrolled students read them, the file downloads under its name", async () => {
+    const { classId, session } = await firstSession();
+    const key = (await upload(teacher, zipWith("ppt/"), "Bài 1 – Đa thức.pptx", PPTX)).body.data.storageKey;
+
+    const added = await attach(session._id, { storageKey: key, fileName: "Bài 1 – Đa thức.pptx", size: 1234 });
+    expect(added.statusCode).toBe(201);
+    expect(added.body.data).toHaveLength(1);
+    expect(added.body.data[0]).toMatchObject({ title: "Bài 1 – Đa thức.pptx", type: "MATERIAL", mimeType: PPTX, size: 1234 });
+    expect(added.body.data[0]).not.toHaveProperty("storageKey");
+    expect((await attach(session._id, { storageKey: key })).body.error).toBe("MATERIAL_ALREADY_ATTACHED");
+
+    const cls = await Class.findById(classId).lean();
+    expect((await materials(session._id, student)).statusCode).toBe(403);
+    await Enrollment.create({ classId, courseId: cls.courseId, teacherId: teacher._id, studentId: student._id, enrollmentStatus: "CONFIRMED", paymentSource: "DIRECT_PAYMENT" });
+    const read = await materials(session._id, student);
+    expect(read.statusCode).toBe(200);
+    expect(read.body.data[0].title).toBe("Bài 1 – Đa thức.pptx");
+
+    const { pathname, search } = new URL(read.body.data[0].url);
+    const file = await request(app).get(pathname + search);
+    expect(file.statusCode).toBe(200);
+    expect(file.headers["content-type"]).toContain(PPTX);
+    expect(file.headers["content-disposition"]).toBe(`attachment; filename*=UTF-8''${encodeURIComponent("Bài 1 – Đa thức.pptx")}`);
+    // The name is signed with the key: it cannot be swapped
+    expect((await request(app).get(pathname + search.replace(/name=[^&]+/, "name=khac.pptx"))).statusCode).toBe(403);
+
+    // The public list names the material but not where the file is
+    const pub = await request(app).get(`/api/classes/${classId}/sessions`);
+    if (pub.statusCode === 200) expect(JSON.stringify(pub.body)).not.toContain(key);
+
+    const removed = await call(teacher, "delete", `/teacher/sessions/${session._id}/materials/${added.body.data[0].id}`);
+    expect(removed.body.data).toEqual([]);
+  });
+
+  test("only the class's teacher attaches, only their own uploads, and at most ten per session", async () => {
+    const { session } = await firstSession();
+    const own = async () => (await upload(teacher, pdf, "de.pdf", "application/pdf")).body.data.storageKey;
+
+    const othersFile = (await upload(otherTeacher, pdf, "x.pdf", "application/pdf")).body.data.storageKey;
+    expect((await attach(session._id, { storageKey: othersFile })).statusCode).toBe(400);
+    expect((await attach(session._id, { storageKey: await own() }, otherTeacher)).statusCode).toBe(403);
+    const evidence = (await upload(teacher, pdf, "e.pdf", "application/pdf", "INCIDENT_EVIDENCE")).body.data.storageKey;
+    expect((await attach(session._id, { storageKey: evidence })).statusCode).toBe(400);
+    expect((await attach(session._id, { storageKey: "../../etc/passwd" })).statusCode).toBe(400);
+
+    for (let i = 0; i < 10; i++) expect((await attach(session._id, { storageKey: await own() })).statusCode).toBe(201);
+    expect((await attach(session._id, { storageKey: await own() })).body.error).toBe("TOO_MANY_MATERIALS");
+    expect((await Session.findById(session._id).lean()).contents).toHaveLength(10);
+  });
+
+  test("rebuilding a draft's sessions keeps the names and materials in session order", async () => {
+    const { classId, session } = await firstSession();
+    const key = (await upload(teacher, pdf, "de.pdf", "application/pdf")).body.data.storageKey;
+    await attach(session._id, { storageKey: key, fileName: "de.pdf" });
+    await call(teacher, "patch", `/teacher/sessions/${session._id}`, { title: "Mở đầu" });
+
+    await call(teacher, "patch", `/teacher/classes/${classId}`, { schedule: [{ dayOfWeek: 2, startTime: "19:00", endTime: "21:00" }] });
+    const first = await Session.findOne({ classId }).sort({ startDatetime: 1 }).lean();
+    expect(String(first._id)).not.toBe(String(session._id));
+    expect(first.title).toBe("Mở đầu");
+    expect(first.contents.map((content) => content.storageKey)).toEqual([key]);
+  });
+});

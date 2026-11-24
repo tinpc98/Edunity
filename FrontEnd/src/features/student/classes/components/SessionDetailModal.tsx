@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { CloseOutlined, CaretRightOutlined, VideoCameraOutlined } from "@ant-design/icons";
 import type { SessionEntity, SessionStatus } from "../../../../types/classDiscovery";
 import { isSessionLive } from "../../../../utils/sessionLive";
+import SessionMaterials from "../../../../components/common/SessionMaterials";
 
 export interface SessionWithNumber extends SessionEntity {
   sessionNumber: number;
@@ -156,6 +157,14 @@ export default function SessionDetailModal({
               </Link>
             )}
 
+          </div>
+        )}
+
+        {/* Materials the teacher posted for this session */}
+        {session.status !== "CANCELLED" && (
+          <div className="mb-6">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-3">TÀI LIỆU BUỔI HỌC</span>
+            <SessionMaterials sessionId={session._id} />
           </div>
         )}
 

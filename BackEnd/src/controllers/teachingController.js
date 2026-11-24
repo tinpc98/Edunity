@@ -50,6 +50,9 @@ exports.listMyClasses = handle((req) => teacherClasses.listMyClasses(req.user.id
 exports.getMyClass = handle((req) => teacherClasses.getMyClass(req.user.id, req.params.id));
 exports.getMyClassReadiness = handle((req) => teacherClasses.getMyClassReadiness(req.user.id, req.params.id));
 exports.getClassStudents = handle((req) => teacherClasses.getClassStudents(req.user.id, req.params.id, req.query));
+exports.listSessionMaterials = handle((req) => sessions.listSessionMaterials(req.user, req.params.id));
+exports.addSessionMaterial = handle((req) => sessions.addSessionMaterial(req.user.id, req.params.id, body(req)), 201);
+exports.removeSessionMaterial = handle((req) => sessions.removeSessionMaterial(req.user.id, req.params.id, req.params.materialId));
 exports.listBusySessions = handle((req) => sessions.listBusySessions(req.user.id, req.query));
 exports.getPlannedSessions = handle((req) => teacherClasses.getPlannedSessions(req.user.id, req.params.id, req.query));
 
