@@ -1,6 +1,6 @@
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog } = require("./helpers/financialFixtures");
 const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
 const financeService = require("../src/services/financeService");
 const PaymentReconciliation = require("../src/models/PaymentReconciliation");
@@ -8,10 +8,6 @@ const RefundCase = require("../src/models/RefundCase");
 const Payment = require("../src/models/Payment");
 const Enrollment = require("../src/models/Enrollment");
 const Class = require("../src/models/Class");
-const Course = require("../src/models/Course");
-const Category = require("../src/models/Category");
-const Subject = require("../src/models/Subject");
-const User = require("../src/models/User");
 const BankTransferEvent = require("../src/models/BankTransferEvent");
 
 describe("Admin Reconciliation Resolution V3 Test Suite", () => {
@@ -24,65 +20,10 @@ describe("Admin Reconciliation Resolution V3 Test Suite", () => {
   let testSubject;
 
   beforeAll(async () => {
-    const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(uri);
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
 
-    adminUser = await User.findOne({ role: "ADMIN" });
-    if (!adminUser) {
-      adminUser = await User.create({
-        email: "testadmin_res_v3@edunity.test",
-        password: "hashedPassword123",
-        role: "ADMIN",
-        fullName: "Test Admin Res V3",
-      });
-    }
-
-    studentUser = await User.findOne({ role: "STUDENT" });
-    if (!studentUser) {
-      studentUser = await User.create({
-        email: "teststudent_res_v3@edunity.test",
-        password: "hashedPassword123",
-        role: "STUDENT",
-        studentProfile: { fullName: "Test Student Res V3" },
-      });
-    }
-
-    teacherUser = await User.findOne({ role: "TEACHER" });
-    if (!teacherUser) {
-      teacherUser = await User.create({
-        email: "testteacher_res_v3@edunity.test",
-        password: "hashedPassword123",
-        role: "TEACHER",
-        teacherProfile: { fullName: "Test Teacher Res V3" },
-      });
-    }
-
-    testCategory = await Category.findOne();
-    if (!testCategory) {
-      testCategory = await Category.create({ name: "Toán học V3", code: `MATH_V3_${Date.now()}` });
-    }
-
-    testSubject = await Subject.findOne();
-    if (!testSubject) {
-      testSubject = await Subject.create({
-        name: "Toán 12 V3",
-        code: `MATH12_V3_${Date.now()}`,
-        categoryId: testCategory._id,
-      });
-    }
-
-    testCourse = await Course.findOne();
-    if (!testCourse) {
-      testCourse = await Course.create({
-        title: "Khóa luyện thi THPT V3",
-        courseCode: `CRS_V3_${Date.now()}`,
-        teacherId: teacherUser._id,
-        categoryId: testCategory._id,
-        subjectId: testSubject._id,
-      });
-    }
+    ({ admin: adminUser, student: studentUser, teacher: teacherUser, category: testCategory, subject: testSubject, course: testCourse } = actors);
 
     testClass = await Class.create({
       courseId: testCourse._id,
@@ -100,11 +41,7 @@ describe("Admin Reconciliation Resolution V3 Test Suite", () => {
     });
   });
 
-  afterAll(async () => {
-    if (testClass) {
-      await Class.deleteOne({ _id: testClass._id });
-    }
-  });
+  afterAll(disconnectDB);
 
   test("1. Rejects resolution with invalid ID (400)", async () => {
     await expect(
@@ -254,7 +191,7 @@ describe("Admin Reconciliation Resolution V3 Test Suite", () => {
   });
 
   test("6. Safety Guard: Rejects RESOLVED_APPROVED if reason is REFERENCE_COLLISION (400)", async () => {
-    const orderCode6 = Math.floor(100000000 + Math.random() * 800000000);
+    const orderCode6 = 887766004;
     const class6 = await Class.create({
       courseId: testCourse._id,
       courseTitle: testCourse.title,
@@ -277,6 +214,7 @@ describe("Admin Reconciliation Resolution V3 Test Suite", () => {
       studentId: studentUser._id,
       enrollmentStatus: "PENDING_PAYMENT",
       paymentSource: "DIRECT_PAYMENT",
+      holdExpiresAt: new Date(Date.now() + 600_000),
       tuitionAmount: "5000",
     });
 
@@ -339,7 +277,7 @@ describe("Admin Reconciliation Resolution V3 Test Suite", () => {
   });
 
   test("7. RESOLVED_APPROVED successfully activates Payment, Enrollment, and Class enrolledCount", async () => {
-    const orderCode7 = Math.floor(100000000 + Math.random() * 800000000);
+    const orderCode7 = 887766005;
     const class7 = await Class.create({
       courseId: testCourse._id,
       courseTitle: testCourse.title,
@@ -355,7 +293,7 @@ describe("Admin Reconciliation Resolution V3 Test Suite", () => {
       status: "OPEN",
     });
 
-    // 1. Create Enrollment
+    // The legacy reservation is past its hold and has no seat in the class counter.
     const enrollment = await Enrollment.create({
       classId: class7._id,
       courseId: testCourse._id,
@@ -363,6 +301,7 @@ describe("Admin Reconciliation Resolution V3 Test Suite", () => {
       studentId: studentUser._id,
       enrollmentStatus: "PENDING_PAYMENT",
       paymentSource: "DIRECT_PAYMENT",
+      holdExpiresAt: new Date(Date.now() - 60_000),
       tuitionAmount: "5000",
     });
 
@@ -451,7 +390,7 @@ describe("Admin Reconciliation Resolution V3 Test Suite", () => {
   });
 
   test("8. RESOLVED_REFUNDED successfully creates RefundCase in NEEDS_REVIEW status (Pending Liability)", async () => {
-    const orderCode8 = Math.floor(100000000 + Math.random() * 800000000);
+    const orderCode8 = 887766006;
     const class8 = await Class.create({
       courseId: testCourse._id,
       courseTitle: testCourse.title,

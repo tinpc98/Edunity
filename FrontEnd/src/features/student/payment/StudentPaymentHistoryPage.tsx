@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Empty, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -16,19 +17,21 @@ import {
 export default function StudentPaymentHistoryPage() {
   const { user } = useAuthStore();
   const userId = user?.userId;
+  const [page, setPage] = useState(1);
 
   const {
-    data: payments = [],
+    data,
     error,
     isError,
     isLoading,
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: paymentKeys.myPayments(userId ?? ""),
-    queryFn: () => gatewayPaymentService.getMyPayments(),
+    queryKey: paymentKeys.myPaymentPage(userId ?? "", page),
+    queryFn: () => gatewayPaymentService.getMyPaymentPage(page),
     enabled: Boolean(userId && user?.role === "STUDENT"),
   });
+  const payments = data?.items ?? [];
 
   const columns: ColumnsType<Payment> = [
     {
@@ -139,7 +142,7 @@ export default function StudentPaymentHistoryPage() {
           <h2 className="text-[15px] font-bold text-slate-800">Tất cả giao dịch</h2>
           {!isLoading && !isError && payments.length > 0 && (
             <span className="text-[12px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-              {payments.length}
+              {data?.total}
             </span>
           )}
         </div>
@@ -167,7 +170,11 @@ export default function StudentPaymentHistoryPage() {
               loading={isLoading}
               scroll={{ x: 1100 }}
               pagination={{
-                pageSize: 10,
+                current: page,
+                pageSize: data?.pageSize ?? 10,
+                total: data?.total ?? 0,
+                showSizeChanger: false,
+                onChange: setPage,
                 showTotal: (total) => `Tổng cộng ${total} giao dịch`,
               }}
               locale={{

@@ -1,8 +1,12 @@
 const { Session, Enrollment, Payment } = require("../models");
 const sessionService = require("./sessionService");
+const { paged, validationError } = require("../utils/http");
+const { addCalendarDays, getZonedParts, parseDateTimeInZone, zonedWallTimeToUtc } = require("../utils/timezone");
+
+const SCHEDULE_TIMEZONE = "Asia/Ho_Chi_Minh";
 
 class StudentService {
-  async getMySessions(studentId, fromDate, toDate) {
+  async getMySessions(studentId, fromDate, toDate, now = new Date()) {
     // 1. Get confirmed enrollments
     const enrollments = await Enrollment.find({
       studentId,
@@ -14,23 +18,26 @@ class StudentService {
     const classIds = enrollments.map(e => e.classId);
     
     // 2. Default date range: today to 14 days later (plus active sessions crossing midnight)
-    const now = new Date();
-    const currentNow = new Date();
-    const from = fromDate ? new Date(fromDate) : new Date(now.setHours(0, 0, 0, 0));
-    const to = toDate ? new Date(toDate) : new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
-
     const filter = { classId: { $in: classIds } };
     if (fromDate || toDate) {
+      const from = parseDateTimeInZone(fromDate, "from", SCHEDULE_TIMEZONE);
+      const to = parseDateTimeInZone(toDate, "to", SCHEDULE_TIMEZONE);
+      if (fromDate && !from) throw validationError("from is not a valid date");
+      if (toDate && !to) throw validationError("to is not a valid date");
       filter.startDatetime = {
-        ...(fromDate ? { $gte: from } : {}),
-        ...(toDate ? { $lte: to } : {}),
+        ...(from ? { $gte: from } : {}),
+        ...(to ? { $lte: to } : {}),
       };
     } else {
+      const { year, month, day } = getZonedParts(now, SCHEDULE_TIMEZONE);
+      const today = { year, month, day };
+      const from = zonedWallTimeToUtc(today, SCHEDULE_TIMEZONE);
+      const to = zonedWallTimeToUtc(addCalendarDays(today, 14), SCHEDULE_TIMEZONE);
       filter.$or = [
         { startDatetime: { $gte: from, $lte: to } },
         {
           status: { $in: ["SCHEDULED", "WAITING", "IN_PROGRESS", "INTERRUPTED"] },
-          endDatetime: { $gte: currentNow },
+          endDatetime: { $gte: now },
           startDatetime: { $lte: to },
         },
       ];
@@ -45,7 +52,7 @@ class StudentService {
       const windowStart = new Date(start.getTime() - 10 * 60 * 1000);
       // A Student can join only after the Teacher started teaching (same rule as POST /sessions/:id/join)
       const isJoinableStatus = s.status === "IN_PROGRESS" && s.roomState === "LIVE";
-      const canJoin = isJoinableStatus && currentNow >= windowStart && currentNow <= end;
+      const canJoin = isJoinableStatus && now >= windowStart && now <= end;
       
       return {
         ...s,
@@ -60,11 +67,17 @@ class StudentService {
     return sessionService.joinSession({ id: studentId, role: "STUDENT" }, sessionId);
   }
 
-  async getMyPayments(studentId) {
-    const payments = await Payment.find({ payerUserId: studentId }).sort({ createdAt: -1 }).lean();
+  async getMyPayments(studentId, paging) {
+    const filter = { payerUserId: studentId, purpose: { $ne: "DONATION" } };
+    const query = Payment.find(filter).sort({ createdAt: -1, _id: -1 });
+    if (paging) query.skip(paging.skip).limit(paging.pageSize);
+    const [payments, total] = await Promise.all([
+      query.lean(),
+      paging ? Payment.countDocuments(filter) : null,
+    ]);
     
     const enrollmentIds = payments.map(p => p.enrollmentId);
-    const enrollments = await Enrollment.find({ _id: { $in: enrollmentIds } })
+    const enrollments = await Enrollment.find({ _id: { $in: enrollmentIds }, studentId })
       .populate("classId", "className")
       .lean();
       
@@ -73,15 +86,17 @@ class StudentService {
       return acc;
     }, {});
     
-    return payments.map(p => {
-      const e = enrollmentMap[p.enrollmentId.toString()];
+    const items = payments.map(p => {
+      const e = enrollmentMap[String(p.enrollmentId)];
       return {
         ...p,
         id: p._id.toString(),
+        classId: e?.classId?._id || null,
         className: e && e.classId ? e.classId.className : "Unknown Class",
         enrollmentStatus: e ? e.enrollmentStatus : "UNKNOWN"
       };
     });
+    return paging ? paged(items, total, paging) : items;
   }
   /**
    * Who may watch a recording: an Admin, the Teacher who owns the Session, and a Student whose enrollment in the

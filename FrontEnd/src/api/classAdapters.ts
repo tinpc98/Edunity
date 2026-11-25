@@ -1,4 +1,5 @@
 import { formatSubjectLabel } from "../utils/subjectLabel";
+import { getEnrollmentBlock } from "../utils/classEnrollmentWindow";
 import type {
   ApiClass,
   ClassModel,
@@ -185,7 +186,7 @@ export function adaptClassModelToDiscoveryItem(cls: ClassModel): ClassDiscoveryI
   const timeOfDay = deriveTimeOfDay(cls.schedule);
   const gradeLevel = (cls.gradeLevel as BackendGradeLevel) || null;
   const gradeLabel = gradeLevel ? GRADE_LEVEL_LABELS[gradeLevel] || gradeLevel : "Khối lớp";
-  const canEnroll = cls.status === "OPEN" && !cls.isFull;
+  const canEnroll = getEnrollmentBlock(cls, Date.now()) === null;
 
   return {
     id: cls.id,
@@ -219,6 +220,8 @@ export function adaptClassModelToDiscoveryItem(cls: ClassModel): ClassDiscoveryI
     syllabusVersionNumber: cls.syllabusVersionNumber,
     pricingPolicySnapshot: cls.pricingPolicySnapshot,
     canEnroll,
+    enrollmentStart: cls.enrollmentStart,
+    enrollmentEnd: cls.enrollmentEnd,
     startDate: formatDateVN(cls.startDate),
     endDate: cls.endDate || undefined,
     formattedEndDate: cls.endDate ? formatDateVN(cls.endDate) : undefined,

@@ -1,8 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 // Helper to seed localStorage with authenticated user
-async function setupAuth(page: any, user: { id: string; email: string; fullName: string; role: string; status: string }) {
-  await page.addInitScript((authUser: any) => {
+async function setupAuth(page: Page, user: { id: string; userId?: string; email: string; fullName: string; role: string; status: string }) {
+  await page.addInitScript((authUser) => {
     window.localStorage.setItem(
       'edunity-auth',
       JSON.stringify({
@@ -20,6 +20,45 @@ async function setupAuth(page: any, user: { id: string; email: string; fullName:
 }
 
 test.describe('E2E Browser Test Suite: Payment, Finance & PayOS Gates', () => {
+  test('Payment history retries an error and fetches past the first 100 records', async ({ page }) => {
+    const user = { id: 'student-history', userId: 'student-history', email: 'history@example.test', fullName: 'History Student', role: 'STUDENT', status: 'ACTIVE' };
+    await setupAuth(page, user);
+    await page.route('**/api/auth/me', (route) => route.fulfill({ json: { success: true, data: user } }));
+    let returnError = true;
+    const requestedPages: number[] = [];
+    await page.route((url) => url.pathname === '/api/me/payments', async (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const current = Number(params.get('page'));
+      const pageSize = Number(params.get('pageSize'));
+      requestedPages.push(current);
+      if (returnError) {
+        await route.fulfill({ status: 500, json: { success: false, message: 'Temporary failure' } });
+        return;
+      }
+      const start = (current - 1) * pageSize;
+      const items = Array.from({ length: Math.min(pageSize, 102 - start) }, (_, index) => ({
+        _id: String(start + index + 1),
+        gatewayReference: `history-tx-${start + index + 1}`,
+        className: 'Toán 12',
+        gateway: 'PAYOS',
+        amount: '10000',
+        paymentStatus: 'COMPLETED',
+        createdAt: '2026-01-01T00:00:00Z',
+      }));
+      await route.fulfill({ json: { success: true, data: { items, page: current, pageSize, total: 102, totalPages: 11 } } });
+    });
+
+    await page.goto('/student/payments');
+    await expect(page.getByText('Lỗi tải dữ liệu')).toBeVisible();
+    await expect(page.getByText('Chưa có giao dịch nào')).toHaveCount(0);
+    returnError = false;
+    await page.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page.getByText('history-tx-1', { exact: true })).toBeVisible();
+    await page.getByTitle('11', { exact: true }).click();
+    await expect(page.getByText('history-tx-102', { exact: true })).toBeVisible();
+    await expect(page.locator('tbody tr[data-row-key]')).toHaveCount(2);
+    expect(requestedPages).toContain(11);
+  });
 
   // Flow 1: Student Tuition Checkout
   test('Flow 1: Student Tuition Checkout with VietQR / payOS', async ({ page }) => {

@@ -1,35 +1,24 @@
-const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTestPayouts, teacherName } = require("./helpers/financialFixtures");
 const payoutService = require("../src/services/payoutService");
 const settlementService = require("../src/services/settlementService");
 const Payout = require("../src/models/Payout");
-const User = require("../src/models/User");
 
 describe("Admin Teacher Payout Workflow V2 Test Suite", () => {
   let teacherDuc;
+  let approvedPayout;
   let adminUser;
 
   beforeAll(async () => {
-    const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(uri);
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    approvedPayout = await seedTestPayouts(actors.teacher);
 
-    teacherDuc = await User.findOne({
-      $or: [
-        { "teacherProfile.fullName": "Nguyễn Văn Đức" },
-        { email: "duc.nguyen@example.com" },
-      ],
-    });
-
-    adminUser = await User.findOne({ role: "ADMIN" });
+    teacherDuc = actors.teacher;
+    adminUser = actors.admin;
   });
 
-  afterAll(async () => {
-    // Keep connection intact for Jest runner
-  });
+  afterAll(disconnectDB);
 
   test("1. Tab AWAITING_TRANSFER retrieves approved payout 250k of teacher Duc", async () => {
     const result = await payoutService.adminListPayouts(
@@ -40,12 +29,12 @@ describe("Admin Teacher Payout Workflow V2 Test Suite", () => {
     expect(result).toBeDefined();
     expect(result.items.length).toBeGreaterThanOrEqual(1);
 
-    const payout250k = result.items.find((p) => String(p.id || p._id) === "6b007b2ed7739dadbda3cf5b");
+    const payout250k = result.items.find((p) => String(p.id || p._id) === String(approvedPayout._id));
     expect(payout250k).toBeDefined();
     expect(payout250k.status).toBe("APPROVED");
     expect(Number(payout250k.amount)).toBe(250000);
     expect(payout250k.isTestData).toBe(true);
-    expect(payout250k.teacherName).toBe("Nguyễn Văn Đức");
+    expect(payout250k.teacherName).toBe(teacherName);
   });
 
   test("2. Tab PENDING does NOT contain approved payout 250k", async () => {
@@ -54,7 +43,7 @@ describe("Admin Teacher Payout Workflow V2 Test Suite", () => {
       { page: 1, pageSize: 20, skip: 0 }
     );
 
-    const payout250k = result.items.find((p) => String(p.id || p._id) === "6b007b2ed7739dadbda3cf5b");
+    const payout250k = result.items.find((p) => String(p.id || p._id) === String(approvedPayout._id));
     expect(payout250k).toBeUndefined();
   });
 
@@ -62,7 +51,7 @@ describe("Admin Teacher Payout Workflow V2 Test Suite", () => {
     await expect(
       payoutService.rejectPayout(
         adminUser._id,
-        "6b007b2ed7739dadbda3cf5b",
+        String(approvedPayout._id),
         { note: "Thử từ chối đơn đã duyệt" }
       )
     ).rejects.toThrow("Chỉ có thể từ chối yêu cầu rút tiền đang ở trạng thái Chờ phê duyệt (PENDING)");
@@ -72,7 +61,7 @@ describe("Admin Teacher Payout Workflow V2 Test Suite", () => {
     await expect(
       payoutService.completePayout(
         adminUser._id,
-        "6b007b2ed7739dadbda3cf5b",
+        String(approvedPayout._id),
         { bankReference: "FT_TEST_12345678" },
         { skipWindowCheck: true }
       )

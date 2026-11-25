@@ -555,8 +555,9 @@ describe("Hostile query input on public search", () => {
   });
 
   it("finds a class by its literal name", async () => {
+    await Class.updateOne({ _id: data.classA._id }, { $set: { startDate: new Date(Date.now() + 86_400_000) } });
     const res = await request(app).get("/api/classes").query({ search: "giáo viên A" });
-    expect(res.body.data.total).toBeGreaterThan(0);
+    expect(res.body.data.items).toContainEqual(expect.objectContaining({ id: data.classA._id.toString() }));
   });
 
   it.each([

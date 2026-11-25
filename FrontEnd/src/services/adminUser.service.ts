@@ -5,18 +5,24 @@ import type {
   AdminUserDetail,
   UpdateUserStatusPayload,
   AdminUserListItem,
+  AdminUserSummary,
   UserStatusHistoryResponse,
   UserStatusHistoryParams,
 } from "../types/adminUser";
 
 export const adminUserKeys = {
   all: ["admin", "users"] as const,
+  summary: () => ["admin", "users", "summary"] as const,
   list: (params?: AdminUserListParams) => ["admin", "users", "list", params] as const,
   detail: (id: string) => ["admin", "users", "detail", id] as const,
   history: (id: string, params?: UserStatusHistoryParams) => ["admin", "users", "history", id, params] as const,
 };
 
 export class AdminUserService {
+  async getSummary(): Promise<AdminUserSummary> {
+    return apiClient<AdminUserSummary>("/admin/users/summary");
+  }
+
   async listUsers(params: AdminUserListParams = {}): Promise<AdminUserListResponse> {
     const searchParams = new URLSearchParams();
     if (params.search?.trim()) searchParams.set("search", params.search.trim());

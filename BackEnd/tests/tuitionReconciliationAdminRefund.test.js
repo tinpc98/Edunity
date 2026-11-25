@@ -1,33 +1,27 @@
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-const mongoose = require("mongoose");
-const request = require("supertest");
-const express = require("express");
-
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident, bankSnapshot } = require("./helpers/financialFixtures");
 const Payment = require("../src/models/Payment");
 const Enrollment = require("../src/models/Enrollment");
 const Class = require("../src/models/Class");
-const BankTransferEvent = require("../src/models/BankTransferEvent");
-const PaymentReconciliation = require("../src/models/PaymentReconciliation");
 const Transaction = require("../src/models/Transaction");
 const TeacherEarning = require("../src/models/TeacherEarning");
 const RefundCase = require("../src/models/RefundCase");
-const User = require("../src/models/User");
 
-const financeRoutes = require("../src/routes/financeRoutes");
 const refundService = require("../src/services/refundService");
 const enrollmentService = require("../src/services/enrollmentService");
 
 describe("EDUNITY-TUITION-RECONCILIATION-ADMIN-REFUND Integrity & Regression Suite", () => {
+  let incident;
+  let tuitionStudent;
+
   beforeAll(async () => {
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    incident = await seedTuitionIncident(actors);
+    tuitionStudent = actors.student;
   });
 
-  afterAll(async () => {
-    // Keep connection if other tests need it, or clean up if needed
-  });
+  afterAll(disconnectDB);
 
   test("1. Legitimate recovery invariant: Order 100000009 has Payment COMPLETED & Enrollment CONFIRMED", async () => {
     const payment = await Payment.findOne({ orderCode: 100000009 }).lean();
@@ -43,7 +37,7 @@ describe("EDUNITY-TUITION-RECONCILIATION-ADMIN-REFUND Integrity & Regression Sui
   });
 
   test("2. Capacity invariant: Class enrolledCount is exactly 1", async () => {
-    const targetClass = await Class.findById("6affb0d095b40d0635bf0ad6").lean();
+    const targetClass = await Class.findById(incident.cls._id).lean();
     expect(targetClass).toBeDefined();
     expect(targetClass.enrolledCount).toBe(1);
     expect(targetClass.status).toBe("OPEN");
@@ -94,9 +88,9 @@ describe("EDUNITY-TUITION-RECONCILIATION-ADMIN-REFUND Integrity & Regression Sui
     expect(refundCase.status).toBe("NEEDS_REVIEW");
     expect(refundCase.reason).toBe("OVERPAYMENT");
     expect(String(refundCase.eligibleAmount)).toBe("3000");
-    expect(refundCase.beneficiaryBankAccount.bankName).toBe("MBBank");
-    expect(refundCase.beneficiaryBankAccount.accountNumber).toBe("76828051998");
-    expect(refundCase.beneficiaryBankAccount.accountHolderName).toBe("PHAM CONG TIN");
+    expect(refundCase.beneficiaryBankAccount.bankName).toBe(bankSnapshot.bankName);
+    expect(refundCase.beneficiaryBankAccount.accountNumber).toBe(bankSnapshot.accountNumber);
+    expect(refundCase.beneficiaryBankAccount.accountHolderName).toBe(bankSnapshot.accountHolderName);
   });
 
   test("5. Service API check: listRefundCases returns the created refund case", async () => {
@@ -105,19 +99,19 @@ describe("EDUNITY-TUITION-RECONCILIATION-ADMIN-REFUND Integrity & Regression Sui
     expect(listResult.items.length).toBeGreaterThanOrEqual(1);
 
     const targetCase = listResult.items.find(
-      (c) => c.beneficiaryBankAccount?.accountNumber === "76828051998"
+      (c) => c.beneficiaryBankAccount?.accountNumber === bankSnapshot.accountNumber
     );
     expect(targetCase).toBeDefined();
     expect(targetCase.status).toBe("NEEDS_REVIEW");
   });
 
   test("6. Student access check: getMyEnrollments returns confirmed class for student", async () => {
-    const studentId = "6affad45c018a7f4729080cf";
+    const studentId = String(tuitionStudent._id);
     const myEnrollments = await enrollmentService.getMyEnrollments(studentId, 1, 10, true);
     expect(myEnrollments).toBeDefined();
 
     const confirmedItem = myEnrollments.items.find(
-      (e) => String(e._id) === "6affbd50cfd3c19ebc0a4d0c"
+      (e) => String(e._id) === String(incident.confirmed._id)
     );
     expect(confirmedItem).toBeDefined();
     expect(confirmedItem.enrollmentStatus).toBe("CONFIRMED");

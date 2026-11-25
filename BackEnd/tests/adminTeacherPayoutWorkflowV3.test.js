@@ -1,26 +1,19 @@
-const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident, seedTestPayouts } = require("./helpers/financialFixtures");
 const payoutService = require("../src/services/payoutService");
 const bankAccountService = require("../src/services/teacherBankAccountService");
 const { User, Payout, Payment, RefundCase } = require("../src/models");
 
 describe("Admin Teacher Payout & Bank Account Workflow V3", () => {
-  let dbConnected = false;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-      dbConnected = true;
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    await seedTuitionIncident(actors);
+    await seedTestPayouts(actors.teacher);
   });
 
-  afterAll(async () => {
-    if (dbConnected && mongoose.connection.readyState !== 0) {
-      await mongoose.disconnect();
-    }
-  });
+  afterAll(disconnectDB);
 
   it("1. adminListBankAccounts supports PENDING_REVIEW, VERIFIED, REJECTED, and ALL", async () => {
     const paging = { skip: 0, pageSize: 20, page: 1 };

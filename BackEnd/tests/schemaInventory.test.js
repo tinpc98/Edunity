@@ -8,6 +8,7 @@ const { createReview } = require("../src/services/reviewService");
 const EXPECTED_MODELS = [
   "User",
   "RefreshToken",
+  "TokenRevocationTask",
   "Category",
   "Subject",
   "Course",
@@ -97,7 +98,7 @@ describe("TASK G0-02: Mongoose Schema Inventory & Validation", () => {
   });
 
   describe("1. Registry, Exports and Constants Verification", () => {
-    test("G0-02.1.1: Models/index.js exports all expected Mongoose models (50 models)", () => {
+    test("G0-02.1.1: Models/index.js exports all expected Mongoose models", () => {
       expect(Object.keys(models)).toHaveLength(EXPECTED_MODELS.length);
       for (const modelName of EXPECTED_MODELS) {
         expect(models[modelName]).toBeDefined();
@@ -356,7 +357,7 @@ describe("TASK G0-02: Mongoose Schema Inventory & Validation", () => {
         paymentSource: "FREE",
       });
 
-      // Second CONFIRMED enrollment must be rejected by partial unique index
+      // A pending reservation for a student already enrolled must fail the unique index.
       await expect(
         models.Enrollment.create({
           studentId,
@@ -364,7 +365,8 @@ describe("TASK G0-02: Mongoose Schema Inventory & Validation", () => {
           courseId,
           teacherId,
           enrollmentStatus: "PENDING_PAYMENT",
-          paymentSource: "FREE",
+          paymentSource: "DIRECT_PAYMENT",
+          holdExpiresAt: new Date(Date.now() + 600_000),
         })
       ).rejects.toThrow(/E11000.*duplicate key/);
 
@@ -377,7 +379,8 @@ describe("TASK G0-02: Mongoose Schema Inventory & Validation", () => {
         courseId,
         teacherId,
         enrollmentStatus: "PENDING_PAYMENT",
-        paymentSource: "FREE",
+        paymentSource: "DIRECT_PAYMENT",
+        holdExpiresAt: new Date(Date.now() + 600_000),
       });
       expect(newEnrollment.enrollmentStatus).toBe("PENDING_PAYMENT");
     });

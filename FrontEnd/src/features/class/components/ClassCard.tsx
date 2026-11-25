@@ -8,7 +8,9 @@ import {
   CheckCircleOutlined,
 } from "@ant-design/icons";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
+import { getEnrollmentBlock } from "../../../utils/classEnrollmentWindow";
 import { useClassEnrollment } from "../hooks/useClassEnrollment";
+import { useEnrollmentBlock } from "../hooks/useEnrollmentBlock";
 
 interface ClassCardProps {
   item: ClassDiscoveryItem;
@@ -16,6 +18,7 @@ interface ClassCardProps {
 
 export default function ClassCard({ item }: ClassCardProps) {
   const navigate = useNavigate();
+  const enrollmentBlock = useEnrollmentBlock(item);
   const {
     handleEnrollClass,
     isEnrolling,
@@ -40,12 +43,10 @@ export default function ClassCard({ item }: ClassCardProps) {
     seatsLeft,
     capacity,
     isFull,
-    canEnroll,
     startDate,
     scheduleText,
     ratingAverage,
     ratingCount,
-    status,
   } = item;
 
   const isFree = classType === "FREE";
@@ -53,7 +54,7 @@ export default function ClassCard({ item }: ClassCardProps) {
 
   const handleRegister = (e: React.MouseEvent) => {
     e.stopPropagation();
-    handleEnrollClass(item);
+    handleEnrollClass({ ...item, canEnroll: getEnrollmentBlock(item, Date.now()) === null });
   };
 
   const handleViewDetail = () => {
@@ -213,7 +214,7 @@ export default function ClassCard({ item }: ClassCardProps) {
               >
                 Tiếp tục thanh toán
               </Button>
-            ) : canEnroll ? (
+            ) : !enrollmentBlock ? (
               <Button
                 type="primary"
                 size="small"
@@ -231,11 +232,7 @@ export default function ClassCard({ item }: ClassCardProps) {
                 disabled
                 className="flex-1 text-xs font-medium rounded h-8 bg-slate-100 text-slate-400 border-slate-200"
               >
-                {isFull
-                  ? "Đã đủ chỗ"
-                  : status === "COMPLETED"
-                    ? "Đã kết thúc"
-                    : "Đóng đăng ký"}
+                {enrollmentBlock}
               </Button>
             )}
           </div>

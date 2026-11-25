@@ -1,6 +1,5 @@
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-const mongoose = require("mongoose");
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident } = require("./helpers/financialFixtures");
 const request = require("supertest");
 const app = require("../src/app");
 const { signAccessToken } = require("../src/utils/jwt");
@@ -33,58 +32,18 @@ describe("EDUNITY-V3-SOFT-DELETE-ARCHITECTURE-V1 Test Suite", () => {
   let testCourse;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    await seedTuitionIncident(actors);
 
-    // 1. Ensure test users exist
-    adminUser = await User.findOne({ role: "ADMIN", status: "ACTIVE", ...NOT_DELETED });
-    if (!adminUser) {
-      adminUser = await User.create({
-        email: `test_admin_${Date.now()}@edunity.vn`,
-        passwordHash: "hash123",
-        role: "ADMIN",
-        status: "ACTIVE",
-      });
-    }
-
-    studentUser = await User.findOne({ role: "STUDENT", status: "ACTIVE", ...NOT_DELETED });
-    if (!studentUser) {
-      studentUser = await User.create({
-        email: `test_student_${Date.now()}@edunity.vn`,
-        passwordHash: "hash123",
-        role: "STUDENT",
-        status: "ACTIVE",
-      });
-    }
-
-    teacherUser = await User.findOne({ role: "TEACHER", status: "ACTIVE", ...NOT_DELETED });
-    if (!teacherUser) {
-      teacherUser = await User.create({
-        email: `test_teacher_${Date.now()}@edunity.vn`,
-        passwordHash: "hash123",
-        role: "TEACHER",
-        status: "ACTIVE",
-      });
-    }
+    ({ admin: adminUser, student: studentUser, teacher: teacherUser } = actors);
 
     adminToken = signAccessToken(adminUser);
     studentToken = signAccessToken(studentUser);
     teacherToken = signAccessToken(teacherUser);
   });
 
-  afterAll(async () => {
-    // Clean up test entities created during this run
-    if (testCategory) {
-      await Category.deleteMany({ _id: testCategory._id });
-    }
-    if (testSubject) {
-      await Subject.deleteMany({ _id: testSubject._id });
-    }
-    if (testCourse) {
-      await Course.deleteMany({ _id: testCourse._id });
-    }
-  });
+  afterAll(disconnectDB);
 
   test("1. Soft delete Category sets correct fields (isDeleted, deletedAt, deletedBy, deleteReason)", async () => {
     const slug = `test-softdel-cat-${Date.now()}`;
@@ -181,7 +140,7 @@ describe("EDUNITY-V3-SOFT-DELETE-ARCHITECTURE-V1 Test Suite", () => {
       .send({ reason: "Cố tình xóa danh mục đang có môn học" });
 
     expect(res.status).toBe(409);
-    expect(res.body.error).toBe("DEPENDENCY_CONFLICT");
+    expect(res.body.error).toBe("CATEGORY_HAS_SUBJECTS");
   });
 
   test("7. Dependency guard: Subject with active Course cannot be deleted", async () => {
@@ -201,7 +160,7 @@ describe("EDUNITY-V3-SOFT-DELETE-ARCHITECTURE-V1 Test Suite", () => {
       .set("Authorization", `Bearer ${adminToken}`);
 
     expect(res.status).toBe(409);
-    expect(res.body.error).toBe("DEPENDENCY_CONFLICT");
+    expect(res.body.error).toBe("SUBJECT_HAS_COURSES");
   });
 
   test("8. Dependency guard: Class with paid/confirmed Enrollment cannot be deleted", async () => {

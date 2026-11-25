@@ -109,6 +109,12 @@ export default function AdminUsersPage() {
         pageSize,
       }),
   });
+  const summaryQuery = useQuery({
+    queryKey: adminUserKeys.summary(),
+    queryFn: () => adminUserService.getSummary(),
+  });
+  const summary = summaryQuery.data;
+  const isRefreshing = isFetching || summaryQuery.isFetching;
 
   // Fetch single user detail
   const {
@@ -323,9 +329,9 @@ export default function AdminUsersPage() {
         description="Tra cứu, phân quyền, xác thực danh tính và kiểm soát quyền truy cập người dùng toàn hệ thống."
         extra={
           <Button
-            icon={<SyncOutlined spin={isFetching} />}
+            icon={<SyncOutlined spin={isRefreshing} />}
             onClick={() => queryClient.invalidateQueries({ queryKey: adminUserKeys.all })}
-            disabled={isFetching}
+            disabled={isRefreshing}
             className="rounded-xl"
           >
             Làm mới
@@ -337,40 +343,32 @@ export default function AdminUsersPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <AdminKpiCard
           title="Tổng người dùng"
-          value={data?.total ? data.total.toLocaleString("vi-VN") : "—"}
+          value={summary?.totalUsers.toLocaleString("vi-VN") ?? "—"}
           icon={<TeamOutlined />}
-          trend="+12%"
-          trendDirection="up"
-          trendSubtext="tháng này"
           variant="teal"
         />
         <AdminKpiCard
-          title="Giáo viên đối tác"
-          value="428"
+          title="Giáo viên"
+          value={summary?.teachers.toLocaleString("vi-VN") ?? "—"}
           icon={<IdcardOutlined />}
-          trend="98.4%"
-          trendDirection="up"
-          trendSubtext="định danh"
           variant="mint"
         />
         <AdminKpiCard
-          title="Học viên kích hoạt"
-          value="24.120"
+          title="Học viên đang hoạt động"
+          value={summary?.activeStudents.toLocaleString("vi-VN") ?? "—"}
           icon={<BookOutlined />}
-          trend="+18.5%"
-          trendDirection="up"
-          trendSubtext="tăng trưởng"
           variant="sky"
         />
         <AdminKpiCard
-          title="Hồ sơ cần xử lý"
-          value="16"
+          title="Hồ sơ giáo viên chờ duyệt"
+          value={summary?.verification.pending.toLocaleString("vi-VN") ?? "—"}
           icon={<AuditOutlined />}
-          trend="Cần duyệt trong ngày"
-          trendDirection="neutral"
           variant="amber"
         />
       </div>
+      {summaryQuery.isError && (
+        <Alert type="error" showIcon message="Không thể tải số liệu người dùng." />
+      )}
 
       {/* Main Data Table + Filter bar */}
       <AdminTableCard>
