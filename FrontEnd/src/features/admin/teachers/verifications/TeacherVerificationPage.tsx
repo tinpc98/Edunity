@@ -16,6 +16,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import dayjs from "dayjs";
 import { ROUTES } from "../../../../routes/routePaths";
 import { teacherVerificationService } from "../../../../services/teacherVerification.service";
+import { adminUserKeys, adminUserService } from "../../../../services/adminUser.service";
 import type {
   AdminTeacherVerificationListItem,
   VerificationStatus,
@@ -138,6 +139,12 @@ export default function TeacherVerificationPage() {
         currentPageSize
       ),
   });
+  const summaryQuery = useQuery({
+    queryKey: adminUserKeys.summary(),
+    queryFn: () => adminUserService.getSummary(),
+  });
+  const verification = summaryQuery.data?.verification;
+  const refresh = () => Promise.all([refetch(), summaryQuery.refetch()]);
 
   useEffect(() => {
     if (!isLoading && !isFetching && !isError && pagedVerifications && currentPage > 1) {
@@ -306,7 +313,7 @@ export default function TeacherVerificationPage() {
         crumb="Giáo viên"
         description="Kiểm tra hồ sơ pháp lý, bằng cấp học thuật và phê duyệt năng lực sư phạm của đối tác giảng dạy."
         extra={
-          <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching} className="rounded-xl">
+          <Button icon={<ReloadOutlined />} onClick={refresh} loading={isFetching || summaryQuery.isFetching} className="rounded-xl">
             Làm mới
           </Button>
         }
@@ -316,40 +323,32 @@ export default function TeacherVerificationPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <AdminKpiCard
           title="Tổng hồ sơ"
-          value={pagedVerifications?.total ? pagedVerifications.total.toLocaleString("vi-VN") : "—"}
+          value={verification?.submitted.toLocaleString("vi-VN") ?? "—"}
           icon={<FolderOpenOutlined />}
-          trend="+48 hồ sơ"
-          trendDirection="up"
-          trendSubtext="tháng này"
           variant="teal"
         />
         <AdminKpiCard
           title="Đã xác minh"
-          value="1.420"
+          value={verification?.verified.toLocaleString("vi-VN") ?? "—"}
           icon={<CheckCircleOutlined />}
-          trend="93.7%"
-          trendDirection="up"
-          trendSubtext="đạt chuẩn"
           variant="mint"
         />
         <AdminKpiCard
-          title="Chờ duyệt gấp"
-          value={activeStatus === "PENDING" && pagedVerifications ? pagedVerifications.total : "32"}
+          title="Chờ duyệt"
+          value={verification?.pending.toLocaleString("vi-VN") ?? "—"}
           icon={<ClockCircleOutlined />}
-          trend="Ưu tiên 48h"
-          trendDirection="neutral"
           variant="amber"
         />
         <AdminKpiCard
-          title="Từ chối / Bổ sung"
-          value="63"
+          title="Từ chối"
+          value={verification?.rejected.toLocaleString("vi-VN") ?? "—"}
           icon={<CloseCircleOutlined />}
-          trend="4.1%"
-          trendDirection="down"
-          trendSubtext="tỷ lệ từ chối"
           variant="rose"
         />
       </div>
+      {summaryQuery.isError && (
+        <Alert type="error" showIcon message="Không thể tải số liệu hồ sơ giáo viên." />
+      )}
 
       {/* Main Table */}
       {isError ? (

@@ -184,11 +184,15 @@ describe("TIN-FIN-PR1: Unified payOS Payment Intent Engine (TUITION + DONATION)"
   // 1. LUỒNG TUITION (Học sinh đóng học phí)
   // ============================================================================
   describe("1. TUITION Flow (Học sinh đóng học phí)", () => {
-    test("TUI-01: Tạo QR học phí hợp lệ cho lớp PAID với đúng amount, channel TUITION, hạn 15 phút khớp holdExpiresAt, không tự CONFIRMED Enrollment", async () => {
+    test("TUI-01: Tạo QR học phí hợp lệ với hạn giữ chỗ theo cấu hình, không tự CONFIRMED Enrollment", async () => {
+      const { getSetting } = require("../src/utils/settings");
+      const holdMs = getSetting("SEAT_HOLD_DURATION");
+      const beforeEnrollment = Date.now();
       const enrollRes = await request(app)
         .post(`/api/classes/${paidClass._id}/enrollments`)
         .set(as(student));
       expect(enrollRes.statusCode).toBe(201);
+      const afterEnrollment = Date.now();
       const enrollmentId = enrollRes.body.data.id;
 
       // Client cố tình truyền amount=1, channelKey="DONATION", accountNumber="9999" để thử phá bảo mật
@@ -218,8 +222,11 @@ describe("TIN-FIN-PR1: Unified payOS Payment Intent Engine (TUITION + DONATION)"
       expect(typeof data.checkoutUrl).toBe("string");
       expect(data.paymentStatus).toBe("PENDING");
       expect(new Date(data.expiredAt).getTime()).toBe(new Date(data.holdExpiresAt).getTime());
-      expect(data.remainingSeconds).toBeGreaterThan(800);
-      expect(data.remainingSeconds).toBeLessThanOrEqual(900);
+      const expiresAt = new Date(data.holdExpiresAt).getTime();
+      expect(expiresAt).toBeGreaterThanOrEqual(beforeEnrollment + holdMs);
+      expect(expiresAt).toBeLessThanOrEqual(afterEnrollment + holdMs);
+      expect(data.remainingSeconds).toBeGreaterThan(0);
+      expect(data.remainingSeconds).toBeLessThanOrEqual(holdMs / 1000);
 
       // Tạo QR tuyệt đối KHÔNG làm Enrollment chuyển sang CONFIRMED hay sinh TeacherEarning / Transaction
       const dbEnrollment = await Enrollment.findById(enrollmentId);

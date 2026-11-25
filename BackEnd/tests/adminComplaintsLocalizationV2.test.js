@@ -1,7 +1,5 @@
-const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident, seedTestPayouts } = require("./helpers/financialFixtures");
 const {
   Report,
   TeacherIncidentReport,
@@ -12,20 +10,15 @@ const {
 } = require("../src/models");
 
 describe("EDUNITY V3 — Admin Complaints & Incidents Localization V2", () => {
-  let dbConnected = false;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-      dbConnected = true;
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    await seedTuitionIncident(actors);
+    await seedTestPayouts(actors.teacher);
   });
 
-  afterAll(async () => {
-    if (dbConnected && mongoose.connection.readyState !== 0) {
-      await mongoose.disconnect();
-    }
-  });
+  afterAll(disconnectDB);
 
   it("1. Backend Report status and type enums remain intact", async () => {
     const reports = await Report.find({}).limit(10).lean();

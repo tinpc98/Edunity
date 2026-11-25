@@ -8,7 +8,7 @@ if (!process.env.STORAGE_DIR) {
 const mongoose = require("mongoose");
 const request = require("supertest");
 const app = require("../src/app");
-const { User, Category, Subject, Course, Class, Session, Enrollment, SessionAttendance } = require("../src/models");
+const { User, Category, Subject, Course, Class, Session, Enrollment, SessionAttendance, Payment } = require("../src/models");
 const studentService = require("../src/services/studentService");
 const { hashPassword } = require("../src/utils/password");
 const { connectDB, disconnectDB, clearDB, syncIndexes } = require("./helpers/db");
@@ -168,6 +168,105 @@ describe("TIN-04A: Catalog Search, Filtering, Pagination & Stable Sorting Test S
   });
 
   // CAT-04A-01: FREE + minPrice=0 + maxPrice=5000000. Expected: Chá»‰ cÃ³ lá»›p miá»…n phÃ­.
+  it("returns only timetable fields for public class sessions", async () => {
+    const startDatetime = new Date("2026-12-01T12:00:00Z");
+    const endDatetime = new Date("2026-12-01T13:00:00Z");
+    const session = await Session.create({
+      classId: classFree1._id,
+      className: classFree1.className,
+      teacherId: teacher._id,
+      title: "Intro timetable",
+      startDatetime,
+      endDatetime,
+      meetingRoomId: "test-room",
+      recording: { status: "AVAILABLE", storageKey: "test-main", providerRecordingId: "test-main-id" },
+      recordingSegments: [{ segmentIndex: 1, storageKey: "test-segment", providerRecordingId: "test-segment-id" }],
+      contents: [{ title: "Materials", type: "MATERIAL", order: 1, storageKey: "test-material" }],
+    });
+
+    const response = await request(app).get(`/api/classes/${classFree1._id}/sessions`);
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([{
+      _id: session._id.toString(),
+      id: session._id.toString(),
+      classId: classFree1._id.toString(),
+      className: classFree1.className,
+      teacherId: teacher._id.toString(),
+      title: "Intro timetable",
+      sessionNumber: null,
+      startDatetime: startDatetime.toISOString(),
+      endDatetime: endDatetime.toISOString(),
+      status: "SCHEDULED",
+    }]);
+    expect((await Session.findById(session._id)).recordingSegments[0].storageKey).toBe("test-segment");
+  });
+
+  it.each([{ status: "INACTIVE" }, { isDeleted: true }, null])("hides courses with unavailable categories from public endpoints %j", async (state) => {
+    if (state) await Category.updateOne({ _id: categoryIT._id }, { $set: state });
+    else await Category.deleteOne({ _id: categoryIT._id });
+    const publicList = await request(app).get("/api/courses").query({ categoryId: categoryIT._id.toString() });
+    expect(publicList.body.data.total).toBe(0);
+    expect((await request(app).get(`/api/courses/${courseNode._id}`)).status).toBe(404);
+    expect((await request(app).get(`/api/courses/${courseNode._id}/classes`)).status).toBe(404);
+    const syllabus = await request(app).get(`/api/courses/${courseNode._id}/syllabus`);
+    expect(syllabus.body.error).toBe("COURSE_NOT_FOUND");
+    const subjectUrl = `/api/subjects/${courseNode.subjectId}`;
+    const subject = await request(app).get(subjectUrl);
+    expect(subject.body.data.courses).toEqual([]);
+    const adminSubject = await request(app).get(subjectUrl).set(as(admin));
+    expect(adminSubject.body.data.courses).toContainEqual(expect.objectContaining({ title: courseNode.title }));
+    const filters = await request(app).get("/api/catalog/filters");
+    expect(filters.body.data.courses).not.toContainEqual(expect.objectContaining({ id: courseNode._id.toString() }));
+    expect((await request(app).get(`/api/admin/courses/${courseNode._id}`).set(as(admin))).status).toBe(200);
+    expect((await request(app).get(`/api/classes/${classFree1._id}`)).status).toBe(200);
+  });
+
+  it("paginates the student's complete tuition history and preserves the unpaged response", async () => {
+    const fixture = { classId: classFree1._id, teacherId: teacher._id, courseId: courseNode._id, studentId: student._id, enrollmentStatus: "EXPIRED", paymentSource: "DIRECT_PAYMENT", tuitionAmount: 100000 };
+    const enrollments = await Enrollment.insertMany(Array.from({ length: 102 }, () => fixture));
+    await Payment.insertMany(enrollments.map((enrollment, index) => ({
+      enrollmentId: enrollment._id, payerUserId: student._id, gateway: "SANDBOX",
+      gatewayReference: `history-${index}`, amount: 100000, paymentStatus: "FAILED",
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+    })));
+    const other = await User.create({ email: "other-history@example.test", passwordHash: hashPassword("password123"), role: "STUDENT" });
+    await Payment.create({ enrollmentId: enrollments[0]._id, payerUserId: other._id, gateway: "SANDBOX", gatewayReference: "other-history", amount: 100000 });
+    const list = (query) => request(app).get("/api/me/payments").set(as(student)).query(query);
+    const [one, two, legacy] = await Promise.all([list({ page: 1, pageSize: 100 }), list({ page: 2, pageSize: 100 }), list({})]);
+    for (const response of [one, two, legacy]) expect(response.status).toBe(200);
+    expect(one.body.data).toMatchObject({ total: 102, page: 1, totalPages: 2 });
+    expect(two.body.data.items).toHaveLength(2);
+    expect(two.body.data.items[0].className).toBe(classFree1.className);
+    expect([...one.body.data.items, ...two.body.data.items].map(({ _id }) => _id)).toEqual(legacy.body.data.map(({ _id }) => _id));
+    expect(new Set(legacy.body.data.map(({ _id }) => _id)).size).toBe(102);
+  });
+
+  it.each(["teacherId", "categoryId", "subjectId"])("shows a deleted class with a missing %s but blocks its restoration", async (field) => {
+    await Class.updateOne({ _id: classFree1._id }, { $set: { isDeleted: true, status: "CANCELLED", [field]: new mongoose.Types.ObjectId() } });
+    const url = `/api/admin/trash/CLASS/${classFree1._id}`;
+    const detail = await request(app).get(url).set(as(admin));
+    expect(detail.status).toBe(200);
+    expect(detail.body.data).toMatchObject({ canRestore: false, restoreBlockReason: expect.any(String) });
+    const restore = await request(app).post(`${url}/restore`).set(as(admin));
+    expect(restore.status).toBe(409);
+    expect(restore.body).toMatchObject({ error: "RESTORE_CONFLICT", details: { [field]: expect.any(String) } });
+    expect((await Class.findById(classFree1._id)).isDeleted).toBe(true);
+  });
+
+  it("uses midnight in Vietnam for the default schedule over a year boundary", async () => {
+    await Enrollment.create({ classId: classFree1._id, courseId: courseNode._id, teacherId: teacher._id, studentId: student._id, enrollmentStatus: "CONFIRMED", paymentSource: "FREE", tuitionAmount: 0 });
+    const common = { classId: classFree1._id, className: classFree1.className, teacherId: teacher._id, status: "COMPLETED" };
+    for (const [title, date] of [["Previous day", "2026-12-31T16:59:00Z"], ["January midnight", "2026-12-31T17:00:00Z"], ["January end of day", "2027-01-01T16:59:00Z"]]) {
+      const startDatetime = new Date(date);
+      await Session.create({ ...common, title, startDatetime, endDatetime: new Date(startDatetime.getTime() + 60000) });
+    }
+    const now = new Date("2026-12-31T17:01:00Z");
+    const result = await studentService.getMySessions(student._id, undefined, undefined, now);
+    expect(result.map(({ title }) => title)).toEqual(["January midnight", "January end of day"]);
+    const explicit = await studentService.getMySessions(student._id, "2027-01-01", "2027-01-01T23:59:00+07:00", now);
+    expect(explicit.map(({ title }) => title)).toEqual(["January midnight", "January end of day"]);
+  });
+
   it("lists inactive categories only in the admin catalog and leaves deleted categories in trash", async () => {
     const [inactive] = await Category.create([
       { name: "Former Program", slug: "former-program", createdBy: admin._id, status: "INACTIVE" },
@@ -660,7 +759,8 @@ describe("TIN-04A: Catalog Search, Filtering, Pagination & Stable Sorting Test S
       endDatetime: new Date(Date.now() - 10 * 60 * 1000),
     });
 
-    const mySessions2 = await request(app).get("/api/me/sessions").set(as(student));
+    const mySessions2 = await request(app).get("/api/me/sessions").set(as(student))
+      .query({ from: completedSession.startDatetime.toISOString() });
     const completedItem = mySessions2.body.data.find((s) => s._id === completedSession._id.toString());
     expect(completedItem.canJoin).toBe(false);
   });

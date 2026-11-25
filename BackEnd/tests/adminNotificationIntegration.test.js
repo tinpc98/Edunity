@@ -1,6 +1,6 @@
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident, caseNumber } = require("./helpers/financialFixtures");
 const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
 const notificationService = require("../src/services/notificationService");
 const { Notification, User, Payment, RefundCase } = require("../src/models");
@@ -9,15 +9,17 @@ describe("EDUNITY-ADMIN-NOTIFICATIONS-FIX-V1 Backend Integration Suite", () => {
   let adminUser;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
-    adminUser = await User.findOne({ role: "ADMIN" });
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    await seedTuitionIncident(actors);
+    adminUser = actors.admin;
+    await Notification.create([
+      { userId: adminUser._id, title: "Unread fixture" },
+      { userId: adminUser._id, title: "Read fixture", isRead: true },
+    ]);
   });
 
-  afterAll(async () => {
-    await mongoose.disconnect();
-  });
+  afterAll(disconnectDB);
 
   test("1. Admin user has valid notifications and getMyNotifications returns paginated real data", async () => {
     expect(adminUser).not.toBeNull();
@@ -76,7 +78,7 @@ describe("EDUNITY-ADMIN-NOTIFICATIONS-FIX-V1 Backend Integration Suite", () => {
     expect(payment100000009).not.toBeNull();
     expect(payment100000009.paymentStatus).toBe("COMPLETED");
 
-    const refundCase = await RefundCase.findOne({ caseNumber: "REF-20261120-F7304D" }).lean();
+    const refundCase = await RefundCase.findOne({ caseNumber: caseNumber }).lean();
     expect(refundCase).not.toBeNull();
     expect(refundCase.status).toBe("NEEDS_REVIEW");
   });

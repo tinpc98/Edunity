@@ -62,6 +62,44 @@ describe("TASK BE-USER-ALL: Admin User Management Complete Suite", () => {
     });
   });
 
+  describe("GET /api/admin/users/summary", () => {
+    it("shows zero for an installation with only administrator accounts", async () => {
+      await User.deleteMany({ role: { $ne: "ADMIN" } });
+
+      const response = await request(app).get("/api/admin/users/summary").set(as(admin));
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.data).toEqual({
+        totalUsers: 2,
+        teachers: 0,
+        activeStudents: 0,
+        verification: { submitted: 0, verified: 0, pending: 0, rejected: 0 },
+      });
+    });
+
+    it("counts re-verifications in the pending queue and ignores deleted accounts", async () => {
+      await User.updateOne({ _id: teacher._id }, { $set: { "teacherProfile.reverificationStatus": "PENDING" } });
+      await User.create([
+        { email: "summary-pending@example.test", passwordHash: "fixture", role: "TEACHER", teacherProfile: { fullName: "Pending Teacher", verificationStatus: "PENDING" } },
+        { email: "summary-rejected@example.test", passwordHash: "fixture", role: "TEACHER", teacherProfile: { fullName: "Rejected Teacher", verificationStatus: "REJECTED" } },
+        { email: "summary-unverified@example.test", passwordHash: "fixture", role: "TEACHER", teacherProfile: { fullName: "Unverified Teacher", verificationStatus: "UNVERIFIED" } },
+        { email: "summary-deleted@example.test", passwordHash: "fixture", role: "TEACHER", isDeleted: true, teacherProfile: { fullName: "Deleted Teacher", verificationStatus: "VERIFIED" } },
+        { email: "summary-suspended@example.test", passwordHash: "fixture", role: "STUDENT", status: "SUSPENDED" },
+      ]);
+      const url = "/api/admin/users/summary";
+      const response = await request(app).get(url).set(as(admin));
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.data).toEqual({
+        totalUsers: 9,
+        teachers: 4,
+        activeStudents: 1,
+        verification: { submitted: 3, verified: 1, pending: 2, rejected: 1 },
+      });
+      expect((await request(app).get(url).set(as(student))).statusCode).toBe(403);
+    });
+  });
+
   // ==========================================
   // 1. STATUS WORKFLOW (TC 1 - 8)
   // ==========================================

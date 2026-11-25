@@ -22,13 +22,15 @@ import { teacherSubjectAuthorizationService } from '../../../../services/teacher
 import { classService, classKeys } from '../../../../services/class.service';
 import { TeacherVerificationGateCard } from '../../../../components/guards/RequireVerifiedTeacher';
 import { useTeacherVerification } from '../../../../hooks/useTeacherVerification';
+import { useNow } from '../../../../hooks/useNow';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import { parsePrice, sessionPlanNotice } from '../../../../utils/classForm';
 import { GRADE_LEVEL_LABELS, SUPPORTED_GRADE_LEVELS } from '../../../../types/catalog';
 import type { Course, GradeLevel } from '../../../../types/catalog';
 import { formatDayOfWeek } from '../../../../types/class';
 import type { ScheduleEntry, CreateClassPayload } from '../../../../types/class';
-import ClassConfigForm, { classFormPayload, planBlocker, useClassPlan } from '../components/ClassConfigForm';
+import ClassConfigForm from '../components/ClassConfigForm';
+import { classFormPayload, planBlocker, useClassPlan } from '../components/classConfigFormLogic';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -72,7 +74,7 @@ export default function CreateTeacherClassPage() {
     queryFn: teacherContractService.listMine,
     enabled: isVerified,
   });
-  const nowMs = Date.now();
+  const nowMs = useNow(1000);
   const hasSignedContract = (contractsQuery.data ?? []).some(
     (contract) =>
       contract.status === 'ACTIVE' &&

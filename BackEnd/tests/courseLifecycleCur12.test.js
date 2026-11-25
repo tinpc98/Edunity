@@ -252,7 +252,9 @@ describe("TASK CHAU-COURSE-LIFECYCLE: CUR-04, CUR-12 & Course Safe Delete Suite"
       await expect(getCourse(courseId.toString())).rejects.toThrow("Course not found");
     });
 
-    test("CUR-04.7: Public searchCourses strictly limits results to ACTIVE status", async () => {
+    test("CUR-04.7: Public searchCourses limits results to active courses in active categories", async () => {
+      const categoryId = new mongoose.Types.ObjectId();
+      const distinct = jest.spyOn(Category, "distinct").mockResolvedValueOnce([categoryId]);
       let capturedFilter = null;
       jest.spyOn(Course, "find").mockImplementationOnce((filter) => {
         capturedFilter = filter;
@@ -270,6 +272,8 @@ describe("TASK CHAU-COURSE-LIFECYCLE: CUR-04, CUR-12 & Course Safe Delete Suite"
 
       await searchCourses({}, { skip: 0, pageSize: 20, page: 1 });
       expect(capturedFilter.status).toBe("ACTIVE");
+      expect(capturedFilter.categoryId).toEqual({ $in: [categoryId] });
+      expect(distinct).toHaveBeenCalledWith("_id", { status: "ACTIVE", isDeleted: { $ne: true } });
     });
 
     test("CUR-04.8: updateCourse reactivates INACTIVE course to ACTIVE when Subject is active", async () => {

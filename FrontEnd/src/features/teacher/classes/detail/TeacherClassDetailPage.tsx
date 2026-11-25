@@ -48,7 +48,8 @@ import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import { sessionPlanNotice } from '../../../../utils/classForm';
 import ClassReadinessCard from '../../../../components/common/ClassReadinessCard';
 import SessionMaterials from '../../../../components/common/SessionMaterials';
-import ClassConfigForm, { CLASS_FORM_DEFAULTS, classFormPayload, planBlocker, useClassPlan } from '../components/ClassConfigForm';
+import ClassConfigForm from '../components/ClassConfigForm';
+import { CLASS_FORM_DEFAULTS, classFormPayload, planBlocker, useClassPlan } from '../components/classConfigFormLogic';
 
 const { Title, Text, Paragraph } = Typography;
 

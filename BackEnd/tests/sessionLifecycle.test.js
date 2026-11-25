@@ -226,6 +226,7 @@ describe("TIN-05A: Session End Data Integrity, Idempotency & Lifecycle Test Suit
       studentId: student5._id,
       enrollmentStatus: "PENDING_PAYMENT",
       paymentSource: "DIRECT_PAYMENT",
+      holdExpiresAt: new Date(Date.now() + 600_000),
     });
 
     const res = await request(app).post(`/api/teacher/sessions/${session._id}/end`).set(as(teacher));

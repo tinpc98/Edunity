@@ -29,6 +29,7 @@ import { sessionKeys } from "../../services/session.service";
 import { gatewayPaymentService, paymentKeys } from "../../services/gatewayPayment.service";
 import { scholarshipService, scholarshipKeys } from "../../services/scholarship.service";
 import { usePaymentPolling, derivePaymentUiState } from "../../hooks/usePaymentPolling";
+import { useNow } from "../../hooks/useNow";
 import {
   PaymentQrPanel,
   PaymentInstructions,
@@ -97,8 +98,11 @@ export default function CheckoutPage() {
   });
 
   // Filter eligible scholarships matching class scope
+  const now = useNow(1000);
+  const courseId = enrollment?.courseId;
+  const subjectId = classDetail?.subjectId;
+  const categoryId = classDetail?.categoryId;
   const eligibleScholarships = useMemo(() => {
-    const now = Date.now();
     return myScholarships.filter((s) => {
       if (s.status !== "ACTIVE" || s.remainingAmount <= 0) return false;
       if (s.expiresAt && new Date(s.expiresAt).getTime() <= now) return false;
@@ -108,27 +112,26 @@ export default function CheckoutPage() {
       const hasSubjectScope = Array.isArray(scope.subjectIds) && scope.subjectIds.length > 0;
       const hasCategoryScope = Array.isArray(scope.categoryIds) && scope.categoryIds.length > 0;
       if (!hasCourseScope && !hasSubjectScope && !hasCategoryScope) return true;
-      if (hasCourseScope && enrollment?.courseId && scope.courseIds!.includes(enrollment.courseId)) {
+      if (hasCourseScope && courseId && scope.courseIds!.includes(courseId)) {
         return true;
       }
       if (
         hasSubjectScope &&
-        classDetail?.subjectId &&
-        scope.subjectIds!.includes(classDetail.subjectId)
+        subjectId &&
+        scope.subjectIds!.includes(subjectId)
       ) {
         return true;
       }
-      const detailCategoryId = classDetail?.categoryId;
       if (
         hasCategoryScope &&
-        detailCategoryId &&
-        scope.categoryIds!.includes(detailCategoryId)
+        categoryId &&
+        scope.categoryIds!.includes(categoryId)
       ) {
         return true;
       }
       return false;
     });
-  }, [myScholarships, enrollment?.courseId, classDetail]);
+  }, [myScholarships, now, courseId, subjectId, categoryId]);
 
   // 4. Create / reuse Unified TUITION Payment Intent mutation
   const createIntentMutation = useMutation({
@@ -142,23 +145,25 @@ export default function CheckoutPage() {
       }
     },
   });
+  const { mutate: createIntent } = createIntentMutation;
+  const pendingEnrollment = enrollment?.enrollmentStatus === "PENDING_PAYMENT" ? enrollment : null;
+  const pendingId = pendingEnrollment?.id;
+  const pendingPaymentSource = pendingEnrollment?.paymentSource;
+  const pendingHoldExpiry = pendingEnrollment?.holdExpiresAt;
 
   // Automatically create/retrieve Payment Intent when Enrollment is PENDING_PAYMENT
   useEffect(() => {
-    if (!enrollment || !enrollmentId) return;
-    if (enrollment.enrollmentStatus !== "PENDING_PAYMENT") return;
-    if (enrollment.paymentSource === "FREE" || enrollment.paymentSource === "SCHOLARSHIP") return;
+    if (!pendingId || !enrollmentId) return;
+    if (pendingPaymentSource === "FREE" || pendingPaymentSource === "SCHOLARSHIP") return;
 
-    const holdExpired =
-      enrollment.holdExpiresAt && new Date(enrollment.holdExpiresAt).getTime() <= Date.now();
-    if (holdExpired) return;
+    if (pendingHoldExpiry && new Date(pendingHoldExpiry).getTime() <= Date.now()) return;
 
-    const triggerKey = `${enrollment.id}:${enrollment.paymentSource}`;
+    const triggerKey = `${pendingId}:${pendingPaymentSource}`;
     if (autoIntentTriggeredRef.current === triggerKey) return;
     autoIntentTriggeredRef.current = triggerKey;
 
-    createIntentMutation.mutate(enrollment.id);
-  }, [enrollment?.id, enrollment?.enrollmentStatus, enrollment?.paymentSource]);
+    createIntent(pendingId);
+  }, [enrollmentId, pendingId, pendingPaymentSource, pendingHoldExpiry, createIntent]);
 
   // 5. Apply Scholarship mutation (100% full coverage OR partial MIXED co-pay)
   const applyScholarshipMutation = useMutation({

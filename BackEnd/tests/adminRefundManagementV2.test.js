@@ -1,6 +1,6 @@
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident, caseNumber } = require("./helpers/financialFixtures");
 const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
 const refundService = require("../src/services/refundService");
 const payoutService = require("../src/services/payoutService");
@@ -8,14 +8,12 @@ const { RefundCase, Payment, PaymentReconciliation, Payout } = require("../src/m
 
 describe("EDUNITY-ADMIN-REFUND-UI-FIX-V2 Backend Verification Suite", () => {
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    await seedTuitionIncident(actors);
   });
 
-  afterAll(async () => {
-    await mongoose.disconnect();
-  });
+  afterAll(disconnectDB);
 
   test("1. listRefundCases returns serialized numbers (not Decimal128 objects) for amounts", async () => {
     const result = await refundService.listRefundCases({});
@@ -23,7 +21,7 @@ describe("EDUNITY-ADMIN-REFUND-UI-FIX-V2 Backend Verification Suite", () => {
     expect(Array.isArray(result.items)).toBe(true);
     expect(result.items.length).toBeGreaterThan(0);
 
-    const targetCase = result.items.find((c) => c.caseNumber === "REF-20261120-F7304D");
+    const targetCase = result.items.find((c) => c.caseNumber === caseNumber);
     expect(targetCase).toBeDefined();
 
     // Verify types are standard JavaScript numbers
@@ -40,7 +38,7 @@ describe("EDUNITY-ADMIN-REFUND-UI-FIX-V2 Backend Verification Suite", () => {
   });
 
   test("2. getRefundCaseById returns serialized numbers for amounts", async () => {
-    const existing = await RefundCase.findOne({ caseNumber: "REF-20261120-F7304D" });
+    const existing = await RefundCase.findOne({ caseNumber: caseNumber });
     expect(existing).not.toBeNull();
 
     const detail = await refundService.getRefundCaseById(existing._id);
@@ -66,7 +64,7 @@ describe("EDUNITY-ADMIN-REFUND-UI-FIX-V2 Backend Verification Suite", () => {
   });
 
   test("4. Four-Eyes principle and state guard in approveRefundCase are intact", async () => {
-    const existing = await RefundCase.findOne({ caseNumber: "REF-20261120-F7304D" });
+    const existing = await RefundCase.findOne({ caseNumber: caseNumber });
     expect(existing).not.toBeNull();
     // Trying to approve an amount exceeding eligibleAmount must be rejected
     const fakeAdminId = new mongoose.Types.ObjectId();

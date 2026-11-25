@@ -445,14 +445,10 @@ const getTrashDetail = async (type, id) => {
     case "CLASS": {
       item = await Class.findOne({ _id: id, isDeleted: true }).populate("deletedBy", "email studentProfile teacherProfile").lean();
       if (!item) throw new AppError("Deleted class not found in trash", "NOT_FOUND", 404);
-      const parentCourse = await Course.findOne({ _id: item.courseId, ...NOT_DELETED });
-      const teacher = await User.findOne({ _id: item.teacherId, status: "ACTIVE", ...NOT_DELETED });
-      if (!parentCourse) {
+      const conflict = await adminClassService.getClassRestoreConflict(item);
+      if (conflict) {
         canRestore = false;
-        restoreBlockReason = "Khóa học của lớp này đã bị xóa. Cần khôi phục khóa học trước.";
-      } else if (!teacher) {
-        canRestore = false;
-        restoreBlockReason = "Tài khoản giáo viên phụ trách lớp đã bị tạm khóa hoặc xóa.";
+        restoreBlockReason = conflict.reason;
       }
       break;
     }

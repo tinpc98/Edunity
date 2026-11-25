@@ -38,6 +38,7 @@ router.patch("/admin/reports/:id", admin, controller.adminUpdateReport);
 // Admin — users and dashboard
 router.get("/admin/dashboard", admin, controller.getDashboard);
 router.get("/admin/users", admin, controller.listUsers);
+router.get("/admin/users/summary", admin, controller.getUserSummary);
 router.get("/admin/users/:id", admin, controller.getUser);
 router.get("/admin/users/:id/status-history", admin, controller.getUserStatusHistory);
 router.patch("/admin/users/:id/status", admin, controller.updateUserStatus);

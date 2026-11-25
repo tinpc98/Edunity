@@ -4,6 +4,18 @@ export type UserStatus = "ACTIVE" | "PENDING" | "SUSPENDED" | "BANNED";
 
 export type SettableUserStatus = "ACTIVE" | "SUSPENDED" | "BANNED";
 
+export interface AdminUserSummary {
+  totalUsers: number;
+  teachers: number;
+  activeStudents: number;
+  verification: {
+    submitted: number;
+    verified: number;
+    pending: number;
+    rejected: number;
+  };
+}
+
 export interface StatusChangedByInfo {
   id: string;
   email?: string | null;

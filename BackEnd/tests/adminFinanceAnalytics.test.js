@@ -1,7 +1,4 @@
-const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+const { connectDB, disconnectDB } = require("./helpers/db");
 const financeService = require("../src/services/financeService");
 const Transaction = require("../src/models/Transaction");
 const PaymentReconciliation = require("../src/models/PaymentReconciliation");
@@ -10,15 +7,10 @@ const TeacherEarning = require("../src/models/TeacherEarning");
 
 describe("Admin Finance Analytics API & Overview V2 Test Suite", () => {
   beforeAll(async () => {
-    const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(uri);
-    }
+    await connectDB();
   });
 
-  afterAll(async () => {
-    await mongoose.disconnect();
-  });
+  afterAll(disconnectDB);
 
   test("1. Returns structured analytics response with 6 KPI cards and metadata", async () => {
     const result = await financeService.getFinanceOverview({ period: "7d" });

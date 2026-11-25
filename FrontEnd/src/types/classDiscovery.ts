@@ -121,6 +121,8 @@ export interface ClassDiscoveryItem {
   pricingPolicySnapshot?: PricingPolicySnapshot | null;
   statusLabel: string;
   canEnroll: boolean;
+  enrollmentStart?: string | null;
+  enrollmentEnd?: string | null;
   startDate: string;
   endDate?: string;
   formattedEndDate?: string;

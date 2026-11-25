@@ -110,6 +110,20 @@ describe("Enrollment API on Real DB", () => {
       expect(res.body.error).toBe("CLASS_NOT_OPEN");
     });
 
+    it.each([
+      ["has not opened", { enrollmentStart: new Date("2100-01-01T00:00:00Z") }],
+      ["has closed", { enrollmentEnd: new Date("2000-01-01T00:00:00Z") }],
+    ])("rejects a direct request when registration %s", async (_, window) => {
+      const cls = await createClass("PAID", 100, "OPEN", 10);
+      await Class.updateOne({ _id: cls._id }, { $set: window });
+      const res = await request(app).post(`/api/classes/${cls._id}/enrollments`)
+        .set("x-user-id", student1._id.toString());
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error).toBe("ENROLLMENT_CLOSED");
+      expect(await Enrollment.countDocuments({ classId: cls._id })).toBe(0);
+      expect((await Class.findById(cls._id)).enrolledCount).toBe(0);
+    });
+
     it("should fail if role is not STUDENT", async () => {
       const cls = await createClass("PAID", 100, "OPEN", 10);
 
@@ -214,6 +228,18 @@ describe("Enrollment API on Real DB", () => {
   });
 
   describe("POST /api/enrollments/:id/cancel", () => {
+    it("requires an expiry on newly reserved seats", async () => {
+      const cls = await createClass("PAID", 100, "OPEN", 5);
+      await expect(Enrollment.create({
+        studentId: student1._id,
+        classId: cls._id,
+        courseId: course._id,
+        teacherId: teacher._id,
+        paymentSource: "DIRECT_PAYMENT",
+      })).rejects.toMatchObject({ errors: { holdExpiresAt: { kind: "required" } } });
+      expect(await Enrollment.countDocuments({ classId: cls._id })).toBe(0);
+    });
+
     it("should cancel PENDING_PAYMENT enrollment", async () => {
       const cls = await createClass("PAID", 100, "OPEN", 5);
       await Class.updateOne({ _id: cls._id }, { $inc: { enrolledCount: 1 } });
@@ -224,6 +250,7 @@ describe("Enrollment API on Real DB", () => {
         teacherId: teacher._id,
         enrollmentStatus: "PENDING_PAYMENT",
         paymentSource: "DIRECT_PAYMENT",
+        holdExpiresAt: new Date(Date.now() + 60_000),
         tuitionAmount: mongoose.Types.Decimal128.fromString("100"),
       });
 

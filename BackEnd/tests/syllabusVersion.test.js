@@ -879,9 +879,12 @@ describe("TASK CUR-02: SyllabusVersion & CurriculumUnit Suite", () => {
     });
 
     test("CUR-02.HTTP.3: Public GET /api/courses/:id/syllabus returns standardized envelope without auth", async () => {
+      const categoryId = new mongoose.Types.ObjectId();
+      const categoryLookup = jest.spyOn(Category, "exists").mockResolvedValue({ _id: categoryId });
       jest.spyOn(Course, "findOne").mockReturnValue(
         mockQuery({
           _id: courseId,
+          categoryId,
           title: "Toán 10",
           status: "ACTIVE",
           publishedSyllabusVersionId: versionId,
@@ -912,6 +915,7 @@ describe("TASK CUR-02: SyllabusVersion & CurriculumUnit Suite", () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.source).toBe("VERSIONED");
       expect(res.body.data.version.id).toBe(versionId.toString());
+      expect(categoryLookup).toHaveBeenCalledWith(expect.objectContaining({ _id: categoryId, status: "ACTIVE" }));
       expect(res.body.data.version.publishedBy).toBeUndefined();
     });
   });

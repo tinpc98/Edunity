@@ -43,7 +43,14 @@ const enrollmentSchema = new Schema(
     amountPaidViaScholarship: { type: Schema.Types.Decimal128, default: 0 },
 
     enrolledAt: { type: Date, default: Date.now },
-    holdExpiresAt: { type: Date, default: null }, // BR-38/39: created_at + 15 minutes while PENDING_PAYMENT
+    holdExpiresAt: {
+      type: Date,
+      default: null,
+      required() {
+        return this.enrollmentStatus === "PENDING_PAYMENT" &&
+          (this.isNew || this.isModified("enrollmentStatus") || this.isModified("holdExpiresAt"));
+      },
+    },
 
     // CUR-09: Snapshots copied from Class at Enrollment creation (populated by Tin in enrollmentService)
     syllabusVersionId: { type: Schema.Types.ObjectId, ref: "SyllabusVersion", default: null },

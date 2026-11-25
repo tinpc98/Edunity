@@ -14,6 +14,7 @@ import { useParams, Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
 import { teacherVerificationService } from '../../../../services/teacherVerification.service';
+import { adminUserKeys } from '../../../../services/adminUser.service';
 import { catalogKeys, catalogService } from '../../../../services/catalog.service';
 import PrivateDocumentCard from '../../../../components/common/PrivateDocumentCard';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
@@ -60,6 +61,7 @@ export default function TeacherVerificationDetailPage() {
       message.success('Đã phê duyệt và cấp chứng nhận giáo viên thành công!');
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verification', teacherId] });
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verifications'] });
+      queryClient.invalidateQueries({ queryKey: adminUserKeys.summary() });
       setIsApproveModalOpen(false);
     },
     onError: (err: any) => {
@@ -80,6 +82,7 @@ export default function TeacherVerificationDetailPage() {
       message.success('Đã từ chối hồ sơ xác minh.');
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verification', teacherId] });
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verifications'] });
+      queryClient.invalidateQueries({ queryKey: adminUserKeys.summary() });
       setIsRejectModalOpen(false);
       form.resetFields();
     },

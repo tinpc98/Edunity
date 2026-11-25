@@ -46,7 +46,7 @@ export interface PaymentQrPanelProps {
 /**
  * Check if a string is a direct image URL or data URI rather than an EMVCo payload string.
  */
-export function isImageSourceUrl(qrCode: string | null | undefined): boolean {
+function isImageSourceUrl(qrCode: string | null | undefined): boolean {
   if (!qrCode || typeof qrCode !== "string") return false;
   const trimmed = qrCode.trim();
   return (

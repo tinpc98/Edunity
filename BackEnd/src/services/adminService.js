@@ -66,6 +66,43 @@ const presentUser = (user) => ({
 
 // ---------- User management (FR-ADM-01) ----------
 
+const getUserSummary = async () => {
+  const buckets = await User.aggregate([
+    { $match: NOT_DELETED },
+    {
+      $group: {
+        _id: {
+          role: "$role",
+          status: "$status",
+          verification: "$teacherProfile.verificationStatus",
+          reverification: "$teacherProfile.reverificationStatus",
+        },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  const summary = {
+    totalUsers: 0,
+    teachers: 0,
+    activeStudents: 0,
+    verification: { submitted: 0, verified: 0, pending: 0, rejected: 0 },
+  };
+  const submittedStatuses = ["PENDING", "VERIFIED", "REJECTED"];
+  for (const { _id: { role, status, verification, reverification }, count } of buckets) {
+    summary.totalUsers += count;
+    if (role === "STUDENT" && status === "ACTIVE") summary.activeStudents += count;
+    if (role !== "TEACHER") continue;
+
+    summary.teachers += count;
+    if (submittedStatuses.includes(verification)) summary.verification.submitted += count;
+    if (verification === "VERIFIED") summary.verification.verified += count;
+    // The review queue includes re-verifications even while the original profile stays verified.
+    if (verification === "PENDING" || reverification === "PENDING") summary.verification.pending += count;
+    if (verification === "REJECTED") summary.verification.rejected += count;
+  }
+  return summary;
+};
+
 const listUsers = async (query, paging) => {
   const filter = { ...NOT_DELETED };
   if (query.role) {
@@ -533,4 +570,4 @@ const getDashboard = async () => {
   };
 };
 
-module.exports = { listUsers, getUser, updateUserStatus, getDashboard, getUserStatusHistory };
+module.exports = { getUserSummary, listUsers, getUser, updateUserStatus, getDashboard, getUserStatusHistory };

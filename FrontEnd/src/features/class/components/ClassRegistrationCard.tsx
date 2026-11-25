@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button, Progress, Alert, Popconfirm, Modal, message } from "antd";
 import {
@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ClassDiscoveryItem } from "../../../types/classDiscovery";
 import { useAuthStore } from "../../../stores/auth.store";
 import { enrollmentService, enrollmentKeys } from "../../../services/enrollment.service";
+import { useEnrollmentBlock } from "../hooks/useEnrollmentBlock";
 import { classKeys } from "../../../services/class.service";
 import { scholarshipService, scholarshipKeys } from "../../../services/scholarship.service";
 import { useHoldCountdown } from "../../../hooks/useHoldCountdown";
@@ -19,6 +20,7 @@ import { ROUTES } from "../../../routes/routePaths";
 import EnrollmentConfirmModal from "./EnrollmentConfirmModal";
 import { formatScheduleEntries } from "../../../api/classAdapters";
 import { checkScheduleConflicts, type ScheduleConflict } from "../../../utils/scheduleConflict";
+import { getEnrollmentBlock } from "../../../utils/classEnrollmentWindow";
 
 interface ClassRegistrationCardProps {
   item: ClassDiscoveryItem;
@@ -40,7 +42,7 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
   const [detectedConflicts, setDetectedConflicts] = useState<ScheduleConflict[]>([]);
 
   // 1. Fetch real class availability
-  const { data: availability } = useQuery({
+  const { data: availability, refetch: refetchAvailability } = useQuery({
     queryKey: enrollmentKeys.availability(item.id),
     queryFn: () => enrollmentService.getClassAvailability(item.id),
     enabled: Boolean(item.id),
@@ -99,7 +101,14 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
   const enrolledCount = availability ? availability.enrolledCount : item.enrolledCount;
   const seatsLeft = availability ? availability.remaining : item.seatsLeft;
   const isFull = seatsLeft <= 0;
-  const enrollmentOpen = availability ? availability.enrollmentOpen : item.canEnroll;
+  const enrollmentBlock = useEnrollmentBlock(item, isFull);
+  const enrollmentOpen = enrollmentBlock === null && (availability?.enrollmentOpen ?? true);
+
+  useEffect(() => {
+    if (enrollmentBlock === null && availability?.enrollmentOpen === false) {
+      void refetchAvailability();
+    }
+  }, [item.id, enrollmentBlock, availability?.enrollmentOpen, refetchAvailability]);
 
   const capacityPercent = Math.min(
     100,
@@ -183,6 +192,12 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
 
   // Pre-check for schedule conflicts before creating reservation
   const handleInitiateRegistration = () => {
+    const block = getEnrollmentBlock({ ...item, isFull }, Date.now());
+    if (block) {
+      message.warning(block);
+      return;
+    }
+
     // 1. Unauthenticated check -> redirect to login with return path
     if (!isAuthenticated || !user) {
       navigate(`/login?redirect=${encodeURIComponent(`/classes/${item.id}`)}`);
@@ -325,17 +340,7 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
             Tiếp tục thanh toán
           </Button>
         </div>
-      ) : !isAuthenticated ? (
-        <Button
-          type="primary"
-          size="large"
-          onClick={() => navigate(`/login?redirect=${encodeURIComponent(`/classes/${item.id}`)}`)}
-          icon={<LoginOutlined />}
-          className="font-bold text-sm h-12 rounded-xl w-full bg-[#0D9488] hover:bg-[#0B746C] border-none shadow-xs"
-        >
-          Đăng nhập để đăng ký
-        </Button>
-      ) : user?.role !== "STUDENT" ? (
+      ) : isAuthenticated && user?.role !== "STUDENT" ? (
         <Button
           size="large"
           disabled
@@ -357,7 +362,17 @@ export default function ClassRegistrationCard({ item, sessionCount }: ClassRegis
           disabled
           className="font-medium text-sm h-12 rounded-xl w-full bg-slate-100 text-slate-400"
         >
-          Chưa mở tuyển sinh
+          {enrollmentBlock ?? "Đóng đăng ký"}
+        </Button>
+      ) : !isAuthenticated ? (
+        <Button
+          type="primary"
+          size="large"
+          onClick={handleInitiateRegistration}
+          icon={<LoginOutlined />}
+          className="font-bold text-sm h-12 rounded-xl w-full bg-[#0D9488] hover:bg-[#0B746C] border-none shadow-xs"
+        >
+          Đăng nhập để đăng ký
         </Button>
       ) : (
         <Button
