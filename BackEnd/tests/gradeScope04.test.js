@@ -44,7 +44,7 @@ beforeEach(async () => {
   });
   await signContract(teacher._id, admin._id);
   // No grade group of its own, so only the platform rule limits the grade
-  category = await Category.create({ name: "Ngoại ngữ", slug: "ngoai-ngu", createdBy: admin._id });
+  category = await Category.create({ name: "Chương trình tổng hợp", slug: "chuong-trinh-tong-hop", createdBy: admin._id });
   subject = await Subject.create({
     name: "Tiếng Anh",
     slug: "tieng-anh",
@@ -98,7 +98,11 @@ const completeClass = async (gradeLevel) => {
     status: "APPROVED",
     createdBy: admin._id,
   });
-  const created = await newClass(course._id, {
+  return { id: await createScheduledClass(course._id), course };
+};
+
+const createScheduledClass = async (courseId) => {
+  const created = await newClass(courseId, {
     description: "Mô tả",
     enrollmentStart: inDays(-1),
     enrollmentEnd: inDays(2),
@@ -109,7 +113,7 @@ const completeClass = async (gradeLevel) => {
   expect(created.statusCode).toBe(201);
   const id = created.body.data.id;
   expect(created.body.data.sessionPlan.generatedCount).toBeGreaterThan(0); // planned from the weekly schedule
-  return { id, course };
+  return id;
 };
 
 // What a record saved before this rule looks like
@@ -120,6 +124,33 @@ const makeOlder = async ({ id, course }, gradeLevel) => {
 };
 
 describe("The offered grades", () => {
+  test("an ungraded language course needs the matching scope and can be opened under a verified teaching profile", async () => {
+    await Category.updateOne({ _id: category._id }, { $set: { name: "Ngoại ngữ", slug: "ngoai-ngu" } });
+    const issued = await call(admin, "post", "/admin/courses", {
+      subjectId: subject._id, title: "Tiếng Anh giao tiếp", level: "BEGINNER",
+    });
+    expect(issued.statusCode).toBe(201);
+    expect(issued.body.data.gradeLevel).toBeNull();
+    expect((await newClass(issued.body.data.id)).body.error).toBe("SUBJECT_AUTHORIZATION_REQUIRED");
+    expect((await propose(null)).statusCode).toBe(201);
+    const proposal = await CourseProposal.findOne();
+    expect((await call(admin, "post", `/admin/course-proposals/${proposal.id}/approve`, {})).body.data.course.gradeLevel).toBeNull();
+
+    await User.updateOne({ _id: teacher._id }, {
+      $set: { "teacherProfile.teachingProfile": { subjects: [subject.name], gradeLevels: [] } },
+    });
+    const classId = await createScheduledClass(issued.body.data.id);
+    expect((await call(teacher, "post", `/teacher/classes/${classId}/submit`)).statusCode).toBe(200);
+    const opened = await call(admin, "post", `/admin/classes/${classId}/approve`, {});
+    expect(opened.statusCode).toBe(200);
+    expect(opened.body.data.status).toBe("OPEN");
+    expect(JSON.stringify((await request(app).get("/api/classes")).body)).toContain(classId);
+    const grant = await TeacherSubjectAuthorization.findOne({ teacherId: teacher._id, subjectId: subject._id, gradeLevel: null });
+    expect(grant.status).toBe("APPROVED");
+    await TeacherSubjectAuthorization.updateOne({ _id: grant._id }, { $set: { status: "SUSPENDED" } });
+    expect((await newClass(issued.body.data.id)).body.error).toBe("SUBJECT_AUTHORIZATION_SUSPENDED");
+  });
+
   test.each(OFFERED)("%s works for registration, course, proposal and class", async (grade) => {
     const registered = await register(grade);
     expect(registered.statusCode).toBe(201);

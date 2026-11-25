@@ -7,12 +7,18 @@ import type {
   UpdateSessionPayload,
   PlannedSession,
   SessionAttendanceItem,
+  StudentAttendance,
+  AdminAttendanceCorrection,
+  AttendanceCorrectionStatus,
+  AttendanceReviewDecision,
+  CorrectableAttendanceStatus,
   JoinSessionResponse,
   SessionLiveStatusResponse,
   SubmitIncidentReportPayload,
   RequestReschedulePayload,
 } from "../types/session";
 import type { RecordingStatus } from "../types/classDiscovery";
+import type { PagedResult } from "../types/catalog";
 
 export interface SessionMaterial {
   id: string;
@@ -50,6 +56,8 @@ export const sessionKeys = {
   classSessions: (classId: string) => ["sessions", "class", classId] as const,
   teacherPlanned: (classId: string) => ["sessions", "teacher", "planned", classId] as const,
   attendance: (sessionId: string) => ["sessions", "attendance", sessionId] as const,
+  myAttendance: (sessionId?: string) => ["sessions", "myAttendance", sessionId] as const,
+  corrections: () => ["sessions", "attendanceCorrections"] as const,
   materials: (sessionId: string) => ["sessions", "materials", sessionId] as const,
   liveStatus: (sessionId: string) => ["sessions", "liveStatus", sessionId] as const,
   teacherDiscipline: () => ["sessions", "teacher", "discipline"] as const,
@@ -188,6 +196,31 @@ export const sessionService = {
    */
   async getSessionAttendance(sessionId: string): Promise<SessionAttendanceItem[]> {
     return apiClient<SessionAttendanceItem[]>(`/teacher/sessions/${sessionId}/attendance`);
+  },
+
+  requestAttendanceCorrection(sessionId: string, attendanceId: string, body: {
+    requestedStatus: CorrectableAttendanceStatus; reason: string;
+  }) {
+    return apiClient(`/teacher/sessions/${sessionId}/attendance/${attendanceId}/corrections`, {
+      method: "POST", body: JSON.stringify(body),
+    });
+  },
+
+  async getMyAttendance(sessionId: string) {
+    const result = await apiClient<{ attendance: StudentAttendance | null }>(`/student/sessions/${sessionId}/attendance`);
+    return result.attendance;
+  },
+
+  listAttendanceCorrections(status: AttendanceCorrectionStatus, page: number) {
+    return apiClient<PagedResult<AdminAttendanceCorrection>>(`/admin/attendance-corrections?status=${status}&page=${page}`);
+  },
+
+  reviewAttendanceCorrection(attendanceId: string, requestId: string, body: {
+    decision: AttendanceReviewDecision; attendanceStatus?: CorrectableAttendanceStatus; reviewNote: string;
+  }) {
+    return apiClient(`/admin/attendance-corrections/${attendanceId}/${requestId}/review`, {
+      method: "POST", body: JSON.stringify(body),
+    });
   },
 
   /**

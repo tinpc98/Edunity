@@ -6,6 +6,8 @@ const rateLimit = require("../middlewares/rateLimit");
 
 router.post("/register", rateLimit.register, devAuthController.register);
 router.post("/login", rateLimit.login, devAuthController.loginWithRefreshToken);
+router.post("/forgot-password", rateLimit.forgotPassword, devAuthController.forgotPassword);
+router.post("/reset-password", rateLimit.resetPassword, devAuthController.resetPassword);
 router.post("/refresh", rateLimit.refresh, devAuthController.refresh);
 router.post("/logout", devAuthController.logout);
 router.get("/me", authMiddleware, devAuthController.getMe);

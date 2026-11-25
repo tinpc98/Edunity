@@ -23,6 +23,8 @@ export const ROUTES = {
   CAMPAIGN_DETAIL: "/campaigns/:campaignId",
   AUTH: {
     LOGIN: "/login",
+    FORGOT_PASSWORD: "/forgot-password",
+    RESET_PASSWORD: "/reset-password",
     REGISTER: "/register",
     TEACHER_REGISTER: "/register/teacher",
     TEACHER_QUALIFICATION: "/register/teacher/qualification",
@@ -76,6 +78,7 @@ export const ROUTES = {
     TEACHER_VERIFICATIONS: "/admin/teachers/verifications",
     TEACHER_VERIFICATION_DETAIL: "/admin/teachers/verifications/:teacherId",
     SUBJECT_AUTHORIZATIONS: "/admin/subject-authorizations",
+    ATTENDANCE_CORRECTIONS: "/admin/attendance-corrections",
     CAMPAIGNS: "/admin/campaigns",
     CREATE_CAMPAIGN: "/admin/campaigns/create",
     CAMPAIGN_CREATE: "/admin/campaigns/create",

@@ -11,7 +11,7 @@ import { useAuthStore } from "../../stores/auth.store";
 import { useTeacherRegistrationStore } from "../../stores/teacherRegistration.store";
 import { ROUTES } from "../../routes/routePaths";
 import { TEACHER_DEGREE_LABELS, type SubmitVerificationRequest, type TeacherDegree } from "../../types/teacherVerification";
-import { GRADE_LEVEL_LABELS, SUPPORTED_GRADE_LEVELS, type GradeLevel } from "../../types/catalog";
+import { GRADE_LEVEL_LABELS, SUPPORTED_GRADE_LEVELS, isForeignLanguageCategory, type GradeLevel } from "../../types/catalog";
 import { getFriendlyErrorMessage } from "../../utils/apiErrorMap";
 import { AVATAR_ACCEPT, PRIVATE_DOCUMENT_ACCEPT, validateAvatar, validatePrivateDocument } from "../../utils/fileValidation";
 import { invalidateTeacherVerificationState } from "../../hooks/useTeacherVerification";
@@ -40,7 +40,7 @@ interface QualificationFormValues {
   achievements?: string;
   subjects?: string[];
   otherSubjects?: string;
-  gradeLevels: GradeLevel[];
+  gradeLevels?: GradeLevel[];
   studentNote?: string;
   yearsOfExperience: number;
 }
@@ -93,6 +93,14 @@ export default function TeacherQualificationPage() {
     enabled: isTeacher,
     staleTime: 10 * 60 * 1000,
   });
+  const { data: categories } = useQuery({
+    queryKey: catalogKeys.categories(),
+    queryFn: () => catalogService.getCategories(),
+    enabled: isTeacher,
+    staleTime: 5 * 60 * 1000,
+  });
+  const languageNames = new Set(categories?.find(isForeignLanguageCategory)?.subjects
+    .map((subject) => (subject.canonicalName ?? subject.name).trim().toLocaleLowerCase("vi")));
 
   const hasAvatar = Boolean(verification?.avatarUrl || user?.avatarUrl);
 
@@ -143,7 +151,7 @@ export default function TeacherQualificationPage() {
           certificates: (values.certificates ?? []).map((c) => ({ name: c.name.trim(), year: c.year ?? null })),
           achievements: values.achievements?.trim() || null,
           subjects: [...(values.subjects ?? []), ...splitOtherSubjects(values.otherSubjects)],
-          gradeLevels: values.gradeLevels,
+          gradeLevels: values.gradeLevels ?? [],
           studentNote: values.studentNote?.trim(),
           yearsOfExperience: values.yearsOfExperience,
         },
@@ -441,7 +449,16 @@ export default function TeacherQualificationPage() {
             </Section>
 
             <Section index={4} title="Cấp học & Đối tượng nhận dạy">
-              <Form.Item label="Cấp học bạn nhận dạy" name="gradeLevels" rules={[{ required: true, message: "Chọn ít nhất một cấp học." }]}>
+              <Form.Item label="Cấp học bạn nhận dạy" name="gradeLevels" dependencies={["subjects", "otherSubjects"]}
+                rules={[({ getFieldValue }) => ({
+                  validator: async (_, grades?: GradeLevel[]) => {
+                    const subjects = [...(getFieldValue("subjects") ?? []), ...splitOtherSubjects(getFieldValue("otherSubjects"))];
+                    if (!grades?.length && categories && subjects.some((name) => !languageNames.has(name.trim().toLocaleLowerCase("vi")))) {
+                      throw new Error("Hãy chọn ít nhất một khối cho các môn phổ thông.");
+                    }
+                  },
+                })]}
+                extra="Chọn ít nhất một khối khi đăng ký dạy môn phổ thông. Nếu chỉ dạy ngoại ngữ không theo khối, bạn có thể để trống.">
                 <Checkbox.Group className="flex flex-wrap gap-2">
                   {SUPPORTED_GRADE_LEVELS.map((grade) => (
                     <Checkbox key={grade} value={grade} className="rounded-full border border-slate-200 px-3 py-1">

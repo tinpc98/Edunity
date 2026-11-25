@@ -25,11 +25,12 @@ const assertAccountUsable = (user) => {
 };
 
 // The raw refresh token is only returned to the client; the database stores its hash
-const issueRefreshToken = async (userId, meta = {}) => {
+const issueRefreshToken = async (userId, meta = {}, tokenVersion) => {
   const token = crypto.randomBytes(48).toString("hex");
   const record = await RefreshToken.create({
     userId,
     tokenHash: hashToken(token),
+    tokenVersion,
     expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
     userAgent: meta.userAgent,
     ip: meta.ip,
@@ -46,6 +47,11 @@ const refresh = async (refreshToken, meta) => {
 
   const record = await RefreshToken.findOne({ tokenHash: hashToken(refreshToken) });
   if (!record) throw invalidRefreshToken();
+  let user;
+  if (record.tokenVersion != null) {
+    user = await User.findById(record.userId);
+    if (!user || record.tokenVersion !== (user.tokenVersion || 0)) throw invalidRefreshToken();
+  }
   if (record.revokedAt) {
     // A token that was already rotated is being replayed: assume it leaked and end every session.
     // Tokens revoked by logout / password change / suspension are simply refused.
@@ -56,12 +62,12 @@ const refresh = async (refreshToken, meta) => {
   }
   if (record.expiresAt <= new Date()) throw invalidRefreshToken();
 
-  const user = await User.findById(record.userId);
+  user ??= await User.findById(record.userId);
   assertAccountUsable(user);
 
   // The replacement is created before the token is claimed, so whoever loses a race below revokes it too:
   // a token presented twice at the same time is treated like any other replay.
-  const { token, record: replacement } = await issueRefreshToken(user._id, meta);
+  const { token, record: replacement } = await issueRefreshToken(user._id, meta, user.tokenVersion || 0);
   const claimed = await RefreshToken.updateOne(
     { _id: record._id, revokedAt: null },
     { $set: { revokedAt: new Date(), replacedByTokenId: replacement._id } }

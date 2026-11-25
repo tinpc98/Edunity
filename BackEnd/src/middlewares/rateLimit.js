@@ -31,6 +31,8 @@ const loginByAccount = limiter({
 });
 const register = limiter({ windowMs: 60 * MINUTE, max: 20 });
 const refresh = limiter({ windowMs: 15 * MINUTE, max: 100 });
+const forgotPassword = limiter({ windowMs: 15 * MINUTE, max: 10 });
+const resetPassword = limiter({ windowMs: 15 * MINUTE, max: 20 });
 const changePassword = limiter({
   windowMs: 15 * MINUTE,
   max: 10,
@@ -44,4 +46,6 @@ const uploads = byUser(60, 60 * MINUTE);
 const messages = byUser(60, MINUTE);
 const reports = byUser(20, 60 * MINUTE);
 
-module.exports = { login: [loginByIp, loginByAccount], register, refresh, changePassword, uploads, messages, reports };
+module.exports = {
+  login: [loginByIp, loginByAccount], register, refresh, forgotPassword, resetPassword, changePassword, uploads, messages, reports,
+};

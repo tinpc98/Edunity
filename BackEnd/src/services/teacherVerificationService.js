@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { User, VerificationDocument } = require("../models");
+const { Category, Subject, User, VerificationDocument } = require("../models");
 const { SUPPORTED_GRADE_LEVELS, TEACHER_DEGREES } = require("../models/constants");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { paged, validationError, isBlank, parseDate } = require("../utils/http");
@@ -9,6 +9,7 @@ const { notify, notifyOnce, notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
 const pii = require("../utils/pii");
 const ocrProvider = require("./ocrProvider");
+const { LANGUAGE_CATEGORY_SLUG } = require("../utils/gradeLevel");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const TEACHER_DOCUMENT_TYPES = ["IDENTITY", "QUALIFICATION"];
@@ -163,8 +164,8 @@ const parseTeachingProfile = (input, now = new Date()) => {
   const parsedSubjects = [...new Set(subjects.map((subject, index) => optionalString(subject, `teachingProfile.subjects[${index}]`, 60)).filter(Boolean))];
   if (parsedSubjects.length === 0) throw validationError("teachingProfile.subjects: choose 1 to 30 subjects");
 
-  const gradeLevels = input.gradeLevels;
-  if (!Array.isArray(gradeLevels) || gradeLevels.length === 0 || gradeLevels.some((grade) => !SUPPORTED_GRADE_LEVELS.includes(grade))) {
+  const gradeLevels = input.gradeLevels === undefined ? [] : input.gradeLevels;
+  if (!Array.isArray(gradeLevels) || gradeLevels.some((grade) => !SUPPORTED_GRADE_LEVELS.includes(grade))) {
     throw validationError("teachingProfile.gradeLevels is invalid");
   }
 
@@ -289,6 +290,16 @@ const submitVerification = async (teacherId, body) => {
   const documents = parseDocuments(body.documents);
   const identity = parseIdentity(body.identity);
   const teachingProfile = parseTeachingProfile(body.teachingProfile);
+  if (teachingProfile && !teachingProfile.gradeLevels.length) {
+    const language = await Category.findOne({ slug: LANGUAGE_CATEGORY_SLUG, status: "ACTIVE", ...NOT_DELETED }).select("_id").lean();
+    const subjects = language
+      ? await Subject.find({ categoryId: language._id, status: "ACTIVE", ...NOT_DELETED }).select("name").lean()
+      : [];
+    const languageNames = new Set(subjects.map(({ name }) => name.trim().toLocaleLowerCase("vi")));
+    if (!teachingProfile.subjects.every((name) => languageNames.has(name.toLocaleLowerCase("vi")))) {
+      throw new AppError("Teaching school subjects requires at least one grade", "GRADE_LEVEL_REQUIRED", 400);
+    }
+  }
   const declared = {
     fullName: identity.fullName,
     idNumber: String(body.identity.idNumber).trim(),

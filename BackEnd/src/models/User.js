@@ -119,6 +119,8 @@ const userSchema = new Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     tokenVersion: { type: Number, default: 0 }, // bumped to invalidate every access token already issued
+    passwordResetHash: { type: String, select: false },
+    passwordResetExpiresAt: { type: Date, select: false },
     role: { type: String, enum: ["STUDENT", "TEACHER", "SPONSOR", "ADMIN"], required: true },
     status: { type: String, enum: ["ACTIVE", "PENDING", "SUSPENDED", "BANNED"], default: "ACTIVE" },
     statusReason: { type: String, default: null },
@@ -136,6 +138,7 @@ const userSchema = new Schema(
 userSchema.plugin(softDeletePlugin); // Admin gỡ tài khoản gian lận nhưng vẫn giữ lịch sử Enrollment/Review liên quan
 
 userSchema.index({ role: 1, status: 1 });
+userSchema.index({ passwordResetHash: 1 }, { sparse: true });
 userSchema.index({ status: 1, statusChangedAt: -1 });
 userSchema.index({ "teacherProfile.verificationStatus": 1 });
 userSchema.index({ "teacherProfile.verificationStatus": 1, "teacherProfile.verifiedUntil": 1 });

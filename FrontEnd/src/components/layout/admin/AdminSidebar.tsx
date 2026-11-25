@@ -194,6 +194,12 @@ const navGroups: NavGroup[] = [
         path: ROUTES.ADMIN.REPORTS,
       },
       {
+        key: ROUTES.ADMIN.ATTENDANCE_CORRECTIONS,
+        label: "Điều chỉnh điểm danh",
+        icon: <FileDoneOutlined className="text-[17px]" />,
+        path: ROUTES.ADMIN.ATTENDANCE_CORRECTIONS,
+      },
+      {
         key: ROUTES.ADMIN.REVIEWS,
         label: "Đánh giá & Bình luận",
         icon: <CommentOutlined className="text-[17px]" />,

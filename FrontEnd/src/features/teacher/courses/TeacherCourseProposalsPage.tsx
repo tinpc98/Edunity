@@ -37,6 +37,7 @@ import type {
 import {
   SUPPORTED_GRADE_LEVELS,
   offeredGradeLevels,
+  isForeignLanguageCategory,
   GRADE_LEVEL_LABELS,
   COURSE_LEVELS,
   COURSE_LEVEL_LABELS,
@@ -163,7 +164,7 @@ export default function TeacherCourseProposalsPage() {
   };
 
   const handleSubmit = (values: ProposalFormValues) => {
-    const payload: CreateProposalPayload = values;
+    const payload: CreateProposalPayload = { ...values, gradeLevel: values.gradeLevel ?? null };
     if (mode === "create") {
       createMutation.mutate(payload);
     } else if (editingProposal) {
@@ -258,6 +259,7 @@ export default function TeacherCourseProposalsPage() {
 
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const allowedGradeLevels = offeredGradeLevels(selectedCategory);
+  const isLanguageProposal = isForeignLanguageCategory(selectedCategory);
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -384,11 +386,13 @@ export default function TeacherCourseProposalsPage() {
           </Form.Item>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-            <Form.Item name="gradeLevel" label="Khối lớp" rules={[{ required: true, message: "Vui lòng chọn khối lớp" }]}>
+            <Form.Item name="gradeLevel" label={isLanguageProposal ? "Khối lớp (tùy chọn)" : "Khối lớp"}
+              rules={[{ required: !isLanguageProposal, message: "Vui lòng chọn khối lớp" }]}>
               <Select
                 disabled={!selectedCategoryId || allowedGradeLevels.length === 0}
+                allowClear={isLanguageProposal}
                 placeholder={
-                  !selectedCategoryId
+                  isLanguageProposal ? "Không theo khối" : !selectedCategoryId
                     ? "Chọn danh mục trước"
                     : allowedGradeLevels.length === 0
                       ? "Danh mục ngoài phạm vi Lớp 6–12 và Ôn thi đại học"
