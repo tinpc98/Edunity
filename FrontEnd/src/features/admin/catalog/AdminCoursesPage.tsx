@@ -46,6 +46,7 @@ import type {
 import {
   GRADE_LEVELS,
   offeredGradeLevels,
+  isForeignLanguageCategory,
   GRADE_LEVEL_LABELS,
   COURSE_LEVELS,
   COURSE_LEVEL_LABELS,
@@ -196,8 +197,8 @@ export default function AdminCoursesPage() {
     const current = editingCourse?.gradeLevel;
     return current && !offered.includes(current) ? [current, ...offered] : offered;
   }, [categories, courseModalCategoryId, editingCourse]);
-  // Only a course saved without a grade may stay without one
-  const courseGradeRequired = !editingCourse || Boolean(editingCourse.gradeLevel);
+  const isLanguageCourse = isForeignLanguageCategory(categories.find((category) => category.id === courseModalCategoryId));
+  const courseGradeRequired = !isLanguageCourse && (!editingCourse || Boolean(editingCourse.gradeLevel));
 
   // Main Courses query using adminListCourses (supports ACTIVE & INACTIVE & status filter)
   const {

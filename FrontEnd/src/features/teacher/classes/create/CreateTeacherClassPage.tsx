@@ -25,7 +25,7 @@ import { useTeacherVerification } from '../../../../hooks/useTeacherVerification
 import { useNow } from '../../../../hooks/useNow';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import { parsePrice, sessionPlanNotice } from '../../../../utils/classForm';
-import { GRADE_LEVEL_LABELS, SUPPORTED_GRADE_LEVELS } from '../../../../types/catalog';
+import { COURSE_LEVEL_LABELS, GRADE_LEVEL_LABELS, SUPPORTED_GRADE_LEVELS, isForeignLanguageCategory } from '../../../../types/catalog';
 import type { Course, GradeLevel } from '../../../../types/catalog';
 import { formatDayOfWeek } from '../../../../types/class';
 import type { ScheduleEntry, CreateClassPayload } from '../../../../types/class';
@@ -34,8 +34,7 @@ import { classFormPayload, planBlocker, useClassPlan } from '../components/class
 
 const { Title, Text, Paragraph } = Typography;
 
-const isOffered = (course: Course) =>
-  course.status === 'ACTIVE' && SUPPORTED_GRADE_LEVELS.some((grade) => grade === course.gradeLevel);
+type GradeFilter = GradeLevel | 'LANGUAGES';
 
 const sameName = (a?: string | null, b?: string | null) =>
   (a ?? '').trim().toLocaleLowerCase('vi') === (b ?? '').trim().toLocaleLowerCase('vi');
@@ -49,7 +48,7 @@ export default function CreateTeacherClassPage() {
   
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(() => searchParams.get('courseId'));
   const [courseSearch, setCourseSearch] = useState<string>('');
-  const [gradeFilter, setGradeFilter] = useState<GradeLevel>();
+  const [gradeFilter, setGradeFilter] = useState<GradeFilter>();
   const [subjectFilter, setSubjectFilter] = useState<string>();
 
   // Schedule list
@@ -117,10 +116,14 @@ export default function CreateTeacherClassPage() {
     staleTime: 1000 * 60 * 2,
   });
 
-  // Only what the teacher may teach (the Backend refuses the rest): the approved teaching profile's subjects and grades,
-  // plus authorizations granted by Admin. A suspended (subject, grade) is never offered.
-  // The list is only final once the authorizations are known too
-  const isCoursesLoading = isCoursePagePending || authorizationsQuery.isPending;
+  const categoryQuery = useQuery({
+    queryKey: catalogKeys.categories(),
+    queryFn: () => catalogService.getCategories(),
+    enabled: isVerified && hasSignedContract,
+  });
+  const languageCategoryId = categoryQuery.data?.find(isForeignLanguageCategory)?.id;
+  const isUngradedLanguage = (course: Course) => Boolean(languageCategoryId && course.categoryId === languageCategoryId && !course.gradeLevel);
+  const isCoursesLoading = isCoursePagePending || authorizationsQuery.isPending || categoryQuery.isLoading;
   const teaching = verification?.teachingProfile;
   const { data: teachingSubjectOptions = [] } = useQuery({
     queryKey: catalogKeys.teachingSubjects(),
@@ -129,30 +132,38 @@ export default function CreateTeacherClassPage() {
   });
   const authorizations = authorizationsQuery.data ?? [];
   const authFor = (course: Course, status: string) =>
-    authorizations.some((a) => a.status === status && a.subjectId === course.subjectId && a.gradeLevel === course.gradeLevel);
+    authorizations.some((a) => a.status === status && a.subjectId === course.subjectId &&
+      (a.gradeLevel ?? null) === (course.gradeLevel ?? null));
   const isAllowed = (course: Course) =>
-    isOffered(course) &&
+    course.status === 'ACTIVE' &&
+    (isUngradedLanguage(course) || SUPPORTED_GRADE_LEVELS.some((grade) => grade === course.gradeLevel)) &&
     !authFor(course, 'SUSPENDED') &&
     (authFor(course, 'APPROVED') ||
       Boolean(
         teaching &&
-          teaching.gradeLevels.some((grade) => grade === course.gradeLevel) &&
+          (isUngradedLanguage(course) || teaching.gradeLevels.some((grade) => grade === course.gradeLevel)) &&
           teaching.subjects.some((name) => sameName(name, course.subjectName))
       ));
 
   const courses: Course[] = (coursesData?.items || []).filter(isAllowed);
   const allowedGrades = SUPPORTED_GRADE_LEVELS.filter((grade) => courses.some((course) => course.gradeLevel === grade));
+  const gradeOptions: { value: GradeFilter; label: string }[] = allowedGrades.map((grade) =>
+    ({ value: grade, label: GRADE_LEVEL_LABELS[grade] }));
+  if (courses.some(isUngradedLanguage)) gradeOptions.push({ value: 'LANGUAGES', label: 'Ngoại ngữ không theo khối' });
   const profileGrades = teaching ? SUPPORTED_GRADE_LEVELS.filter((grade) => teaching.gradeLevels.includes(grade)) : [];
   const matchedCourseInList = courses.find((c) => c.id === selectedCourseId);
 
-  const coursesOfGrade = courses.filter((course) => !gradeFilter || course.gradeLevel === gradeFilter);
+  const matchesGrade = (course: Course, grade?: GradeFilter) =>
+    !grade || (grade === 'LANGUAGES' ? isUngradedLanguage(course) : course.gradeLevel === grade);
+  const coursesOfGrade = courses.filter((course) => matchesGrade(course, gradeFilter));
   // Each subject names the grades it can be taught at
   const subjectOptions = [...new Map(coursesOfGrade.map((course) => [course.subjectId, formatSubjectLabel(course.subjectName, undefined, course.categoryName)]))]
     .map(([id, name]) => {
       const grades = SUPPORTED_GRADE_LEVELS.filter((grade) =>
         coursesOfGrade.some((course) => course.subjectId === id && course.gradeLevel === grade)
       );
-      return { value: id, label: `${name} (${grades.map((grade) => GRADE_LEVEL_LABELS[grade]).join(', ')})` };
+      const label = grades.length ? `${name} (${grades.map((grade) => GRADE_LEVEL_LABELS[grade]).join(', ')})` : name;
+      return { value: id, label };
     })
     .sort((a, b) => a.label.localeCompare(b.label, 'vi'));
   const keyword = courseSearch.trim().toLocaleLowerCase('vi');
@@ -165,9 +176,9 @@ export default function CreateTeacherClassPage() {
         .includes(keyword)
   );
 
-  const changeGradeFilter = (grade?: GradeLevel) => {
+  const changeGradeFilter = (grade?: GradeFilter) => {
     setGradeFilter(grade);
-    if (grade && !courses.some((course) => course.subjectId === subjectFilter && course.gradeLevel === grade)) {
+    if (grade && !courses.some((course) => course.subjectId === subjectFilter && matchesGrade(course, grade))) {
       setSubjectFilter(undefined);
     }
   };
@@ -307,7 +318,8 @@ export default function CreateTeacherClassPage() {
             <div>
               <div className="font-semibold">Khóa học theo hồ sơ giảng dạy của bạn</div>
               <div className="text-sm leading-6">
-                Môn: {teaching.subjects.map((name) => teachingSubjectOptions.find(({ value }) => value === name)?.label ?? name).join(', ')} · Cấp học: {profileGrades.map((grade) => GRADE_LEVEL_LABELS[grade]).join(', ')}.
+                Môn: {teaching.subjects.map((name) => teachingSubjectOptions.find(({ value }) => value === name)?.label ?? name).join(', ')}.
+                {profileGrades.length > 0 && ` Cấp học: ${profileGrades.map((grade) => GRADE_LEVEL_LABELS[grade]).join(', ')}.`}
                 Quyền giảng dạy được cấp tự động theo hồ sơ đã duyệt.
               </div>
             </div>
@@ -333,7 +345,7 @@ export default function CreateTeacherClassPage() {
             showIcon
             className="mb-6 rounded-xl"
             message="Course từ đường dẫn không khả dụng"
-            description="Khóa học không tồn tại, đã tạm ngưng, ngoài phạm vi Lớp 6–12 và Ôn thi đại học hoặc chưa tải được. Hãy chọn khóa học khác trong danh sách."
+            description="Hãy chọn một khóa đang hoạt động trong phạm vi giảng dạy đã được duyệt."
             action={
               <Button size="small" onClick={() => setSelectedCourseId(null)}>
                 Chọn lại
@@ -342,16 +354,20 @@ export default function CreateTeacherClassPage() {
           />
         )}
 
+        {categoryQuery.isError && (
+          <Alert type="warning" showIcon className="mb-3" title="Chưa tải được danh mục ngoại ngữ."
+            action={<Button size="small" onClick={() => categoryQuery.refetch()}>Thử lại</Button>} />
+        )}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mb-3">
-          <Select<GradeLevel>
-            aria-label="Lọc theo lớp"
-            placeholder="Tất cả các lớp"
+          <Select<GradeFilter>
+            aria-label="Lọc theo khối hoặc ngoại ngữ"
+            placeholder="Tất cả khối và ngoại ngữ"
            
             className="w-full"
             allowClear
             value={gradeFilter}
             onChange={changeGradeFilter}
-            options={allowedGrades.map((grade) => ({ value: grade, label: GRADE_LEVEL_LABELS[grade] }))}
+            options={gradeOptions}
           />
           <Select<string>
             aria-label="Lọc theo môn học"
@@ -442,6 +458,7 @@ export default function CreateTeacherClassPage() {
                             {GRADE_LEVEL_LABELS[course.gradeLevel]}
                           </span>
                         )}
+                        {isUngradedLanguage(course) && <Tag color="cyan">Ngoại ngữ{course.level ? ` · ${COURSE_LEVEL_LABELS[course.level]}` : ''}</Tag>}
                         {course.subjectName && (
                           <span className="text-sm text-slate-500">{formatSubjectLabel(course.subjectName, undefined, course.categoryName)}</span>
                         )}
@@ -490,7 +507,7 @@ export default function CreateTeacherClassPage() {
               <div className="flex justify-between">
                 <span className="text-gray-400 font-medium">Khối lớp:</span>
                 <span className="font-semibold text-gray-800">
-                  {selectedCourse?.gradeLevel ? GRADE_LEVEL_LABELS[selectedCourse.gradeLevel] : '-'}
+                  {selectedCourse?.gradeLevel ? GRADE_LEVEL_LABELS[selectedCourse.gradeLevel] : selectedCourse && isUngradedLanguage(selectedCourse) ? 'Không theo khối' : '-'}
                 </span>
               </div>
             </div>

@@ -1,6 +1,9 @@
 const { GRADE_LEVELS, SUPPORTED_GRADE_LEVELS } = require("../models/constants");
 const { AppError } = require("./errors");
 
+const LANGUAGE_CATEGORY_SLUG = "ngoai-ngu";
+const isForeignLanguageCategory = (category) => category?.slug === LANGUAGE_CATEGORY_SLUG;
+
 const range = (from, to) => {
   const levels = [];
   for (let grade = from; grade <= to; grade += 1) levels.push(`GRADE_${grade}`);
@@ -69,9 +72,10 @@ const assertSupportedGradeLevel = (gradeLevel) => {
   });
 };
 
-/** For new writes: a grade is required, must fit the Category and must be one that is offered. */
+/** School scopes require an offered grade. Language courses can use a subject-only scope. */
 const requireGradeLevel = (category, gradeLevel) => {
   if (gradeLevel === undefined || gradeLevel === null || gradeLevel === "") {
+    if (isForeignLanguageCategory(category)) return null;
     const allowed = allowedGradeLevelsForCategory(category);
     throw new AppError("gradeLevel is required", "GRADE_LEVEL_REQUIRED", 400, {
       allowedGradeLevels: SUPPORTED_GRADE_LEVELS.filter((level) => !allowed || allowed.includes(level)),
@@ -82,4 +86,11 @@ const requireGradeLevel = (category, gradeLevel) => {
   return resolved;
 };
 
-module.exports = { allowedGradeLevelsForCategory, resolveGradeLevel, requireGradeLevel, assertSupportedGradeLevel };
+module.exports = {
+  LANGUAGE_CATEGORY_SLUG,
+  isForeignLanguageCategory,
+  allowedGradeLevelsForCategory,
+  resolveGradeLevel,
+  requireGradeLevel,
+  assertSupportedGradeLevel,
+};

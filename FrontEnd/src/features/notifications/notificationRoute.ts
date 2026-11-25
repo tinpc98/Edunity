@@ -12,6 +12,11 @@ export function getNotificationRoute(type: string | undefined, role: Role): stri
 
   // Exact types first
   switch (t) {
+    case "ATTENDANCE_CORRECTION_REQUESTED":
+      return role === "ADMIN" ? ROUTES.ADMIN.ATTENDANCE_CORRECTIONS : ROUTES.NOTIFICATIONS;
+    case "ATTENDANCE_CORRECTION_REVIEWED":
+      if (role === "STUDENT") return ROUTES.STUDENT.CLASSES;
+      return role === "TEACHER" ? ROUTES.TEACHER.CLASSES : ROUTES.NOTIFICATIONS;
     case "NEW_MESSAGE":
       if (role === "STUDENT") return ROUTES.STUDENT.MESSAGES;
       return role === "TEACHER" ? ROUTES.TEACHER.MESSAGES : ROUTES.MESSAGES;
@@ -118,6 +123,7 @@ export function getNotificationRoute(type: string | undefined, role: Role): stri
 /** Short Vietnamese category shown next to a notification instead of its raw type code */
 export function getNotificationLabel(type: string | undefined): string {
   const t = type || "";
+  if (t.startsWith("ATTENDANCE_CORRECTION_")) return "Điểm danh";
   if (t === "NEW_MESSAGE") return "Tin nhắn";
   if (t.includes("RECORDING")) return "Bản ghi";
   if (t.includes("ENROLLMENT")) return "Đăng ký học";

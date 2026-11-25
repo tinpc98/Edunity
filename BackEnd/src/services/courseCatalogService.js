@@ -5,13 +5,12 @@ const { AppError } = require("../utils/errors");
 const { toPublic } = require("../utils/publicView");
 const { assertId, paged, validationError, escapeRegex, isBlank } = require("../utils/http");
 const { slugify, uniqueSlug } = require("../utils/slug");
-const { allowedGradeLevelsForCategory, requireGradeLevel } = require("../utils/gradeLevel");
+const { LANGUAGE_CATEGORY_SLUG, allowedGradeLevelsForCategory, requireGradeLevel } = require("../utils/gradeLevel");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const STATUSES = ["ACTIVE", "INACTIVE"];
 const COURSE_TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "curriculumReference"];
 const SCHOOL_AND_LANGUAGE_SCOPE = "school-and-languages";
-const LANGUAGE_CATEGORY_SLUG = "ngoai-ngu";
 const SCHOOL_CATEGORY_SLUGS = ["trung-hoc-co-so", "trung-hoc-pho-thong"];
 const SCHOOL_SUBJECT_SLUGS = [
   "toan-thcs", "ly-thcs", "hoa-thcs", "sinh-thcs", "su-thcs", "dia-thcs", "van-thcs", "anh-thcs",

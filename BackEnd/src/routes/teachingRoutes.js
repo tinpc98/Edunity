@@ -38,6 +38,10 @@ router.delete("/teacher/sessions/:id", teacher, controller.deleteSession);
 router.post("/teacher/sessions/:id/start", teacher, controller.startSession);
 router.post("/teacher/sessions/:id/end", teacher, controller.endSession);
 router.get("/teacher/sessions/:id/attendance", teacher, controller.getSessionAttendance);
+router.post("/teacher/sessions/:id/attendance/:attendanceId/corrections", teacher, controller.requestAttendanceCorrection);
+router.get("/student/sessions/:id/attendance", student, controller.getMyAttendance);
+router.get("/admin/attendance-corrections", admin, controller.listAttendanceCorrections);
+router.post("/admin/attendance-corrections/:attendanceId/:requestId/review", admin, controller.reviewAttendanceCorrection);
 
 // Student / Teacher — join the embedded classroom & live presence tracking (TIN-05D)
 router.post("/sessions/:id/join", classroomMember, controller.joinSession);

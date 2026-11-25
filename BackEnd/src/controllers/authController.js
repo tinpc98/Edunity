@@ -10,6 +10,7 @@ const {
 } = require("../utils/password");
 const { isBlank } = require("../utils/http");
 const authTokenService = require("../services/authTokenService");
+const passwordReset = require("../services/passwordResetService");
 const { getAccessTtl } = require("../utils/jwt");
 
 // FR-STU-01, FR-TEA-01, FR-SPO-01. ADMIN accounts are never self-registered.
@@ -58,6 +59,24 @@ const getProfile = (user) => {
 
 const validateEmail = (email) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+exports.forgotPassword = async (req, res, next) => {
+  try {
+    await passwordReset.requestReset(req.body?.email);
+    res.status(202).json({ success: true, data: { accepted: true } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.resetPassword = async (req, res, next) => {
+  try {
+    await passwordReset.resetPassword(req.body || {});
+    res.json({ success: true, data: { changed: true } });
+  } catch (error) {
+    next(error);
+  }
 };
 
 exports.register = async (req, res, next) => {
@@ -136,7 +155,7 @@ exports.loginWithRefreshToken = async (req, res, next) => {
     }
     authTokenService.assertAccountUsable(user);
 
-    const { token } = await authTokenService.issueRefreshToken(user._id, requestMeta(req));
+    const { token } = await authTokenService.issueRefreshToken(user._id, requestMeta(req), user.tokenVersion || 0);
     const profile = getProfile(user);
 
     res.status(200).json({

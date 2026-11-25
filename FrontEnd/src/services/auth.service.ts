@@ -23,6 +23,20 @@ export function loginUser(payload: LoginPayload): Promise<LoginResponse> {
   });
 }
 
+export function requestPasswordReset(email: string) {
+  return apiClient<{ accepted: boolean }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token: string, password: string) {
+  return apiClient<{ changed: boolean }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+}
+
 /**
  * POST /api/auth/register with role TEACHER. The backend only stores fullName/email/password here;
  * qualificationSummary and biography are submitted later with POST /api/teacher/verification.

@@ -21,7 +21,7 @@ const { resolveTzOffsetMinutes, isClassStartDateReached } = require("../utils/ap
 const auditService = require("./auditService");
 const { notifyAdmins } = require("./notificationService");
 const { withoutReviewer } = require("../utils/publicView");
-const { assertSupportedGradeLevel } = require("../utils/gradeLevel");
+const { assertSupportedGradeLevel, isForeignLanguageCategory } = require("../utils/gradeLevel");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const EDITABLE_STATUSES = ["DRAFT", "NEED_CHANGES"]; // BE-01: REJECTED is final terminal status
@@ -57,6 +57,11 @@ const classNotEditable = () =>
 // Every account, older ones included, opens classes only for a subject and grade it is authorized to teach
 const assertMayTeach = (teacherId, course) =>
   assertApprovedAuthorization({ teacherId, subjectId: course.subjectId, gradeLevel: course.gradeLevel || null });
+
+const assertOfferedCourse = (course, category) => {
+  if (!course.gradeLevel && isForeignLanguageCategory(category)) return;
+  assertSupportedGradeLevel(course.gradeLevel);
+};
 
 const getActiveCourse = async (courseId) => {
   if (!mongoose.isValidObjectId(courseId)) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
@@ -201,7 +206,8 @@ const createClass = async (teacherId, body = {}, options = {}) => {
   if (!mongoose.isObjectIdOrHexString(body.courseId)) throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
   // Checked before the transaction: a grant from the teaching profile is written by its own service
   const chosen = await getActiveCourse(body.courseId);
-  assertSupportedGradeLevel(chosen.gradeLevel);
+  const chosenCategory = chosen.gradeLevel ? null : (await assertCourseAlignment({ course: chosen })).category;
+  assertOfferedCourse(chosen, chosenCategory);
   await assertMayTeach(teacher._id, chosen);
 
   if (typeof mongoose.startSession !== "function") {
@@ -254,8 +260,11 @@ const createClass = async (teacherId, body = {}, options = {}) => {
       applyCourse(cls, course);
       applyClassInput(cls, body);
 
-      await assertCourseAlignment({ course, cls, body });
-      assertSupportedGradeLevel(course.gradeLevel);
+      const { category } = await assertCourseAlignment({ course, cls, body });
+      assertOfferedCourse(course, category);
+      if (String(course.subjectId) !== String(chosen.subjectId) || course.gradeLevel !== chosen.gradeLevel) {
+        throw new AppError("The course scope changed. Select the course again.", "COURSE_SCOPE_CHANGED", 409);
+      }
 
       const snapshots = await captureClassSnapshots({ course });
       Object.assign(cls, snapshots);
@@ -289,9 +298,9 @@ const updateClass = async (teacherId, classId, body = {}) => {
   }
   applyClassInput(cls, body);
 
-  await assertCourseAlignment({ course, cls, body });
+  const { category } = await assertCourseAlignment({ course, cls, body });
   if (switchingCourse) {
-    assertSupportedGradeLevel(course.gradeLevel);
+    assertOfferedCourse(course, category);
     await assertMayTeach(teacher._id, course);
   }
 
@@ -387,8 +396,9 @@ const evaluateClass = async (cls, options = {}) => {
       "COURSE",
       true,
       async () => {
-        ({ level } = await assertCourseAlignment({ course, cls }));
-        assertSupportedGradeLevel(course.gradeLevel); // so an older class can neither be submitted nor opened
+        const alignment = await assertCourseAlignment({ course, cls });
+        assertOfferedCourse(course, alignment.category);
+        level = alignment.level;
       },
     ],
     ["CLASS_INFORMATION", true, async () => assertClassInformation(cls, now)],

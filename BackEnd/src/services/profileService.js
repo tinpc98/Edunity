@@ -153,15 +153,22 @@ const changeMyPassword = async (userId, body, meta) => {
   }
   if (currentPassword === newPassword) throw validationError("newPassword must be different from the current password");
 
-  user.passwordHash = await hashPasswordAsync(newPassword);
-  user.tokenVersion = (user.tokenVersion || 0) + 1;
-  await user.save();
+  const updated = await User.findOneAndUpdate(
+    { _id: user._id, passwordHash: user.passwordHash, status: "ACTIVE", isDeleted: { $ne: true } },
+    {
+      $set: { passwordHash: await hashPasswordAsync(newPassword) },
+      $inc: { tokenVersion: 1 },
+      $unset: { passwordResetHash: "", passwordResetExpiresAt: "" },
+    },
+    { returnDocument: "after" }
+  );
+  if (!updated) throw new AppError("Account credentials have changed", "PASSWORD_CHANGE_CONFLICT", 409);
   await authTokenService.revokeAllForUser(user._id);
 
-  const { token } = await authTokenService.issueRefreshToken(user._id, meta);
+  const { token } = await authTokenService.issueRefreshToken(user._id, meta, updated.tokenVersion);
   return {
     changed: true,
-    accessToken: authTokenService.buildAccessToken(user),
+    accessToken: authTokenService.buildAccessToken(updated),
     expiresIn: getAccessTtl(),
     refreshToken: token,
   };

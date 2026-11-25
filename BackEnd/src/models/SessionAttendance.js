@@ -1,6 +1,21 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
+const attendanceStatuses = ["PRESENT", "ABSENT", "LATE", "EXCUSED", "NOT_EVALUATED"];
+const correctionSchema = new Schema({
+  status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], required: true },
+  requestedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  requestedAt: { type: Date, required: true },
+  reason: { type: String, required: true, maxlength: 1000 },
+  requestedStatus: { type: String, enum: attendanceStatuses, required: true },
+  reviewedBy: { type: Schema.Types.ObjectId, ref: "User" },
+  reviewedAt: Date,
+  reviewNote: { type: String, maxlength: 1000 },
+  method: { type: String, enum: ["MANUAL", "LIVEKIT"] },
+  before: { status: String, percent: Number },
+  after: { status: String, percent: Number },
+});
+
 const sessionAttendanceSchema = new Schema(
   {
     sessionId: { type: Schema.Types.ObjectId, ref: "Session", required: true },
@@ -10,7 +25,7 @@ const sessionAttendanceSchema = new Schema(
     leftAt: Date,
     attendanceStatus: {
       type: String,
-      enum: ["PRESENT", "ABSENT", "LATE", "EXCUSED", "NOT_EVALUATED"],
+      enum: attendanceStatuses,
       default: "ABSENT",
     },
 
@@ -44,10 +59,17 @@ const sessionAttendanceSchema = new Schema(
     },
     evaluationReason: { type: String, default: null },
     finalizedAt: { type: Date, default: null },
+    correctionRequest: { type: correctionSchema, default: undefined },
+    correctionHistory: { type: [correctionSchema], default: undefined, select: false },
+    correctionAppliedAt: Date,
   },
   { timestamps: true }
 );
 
 sessionAttendanceSchema.index({ sessionId: 1, studentId: 1 }, { unique: true });
+sessionAttendanceSchema.index(
+  { "correctionRequest.status": 1, "correctionRequest.requestedAt": -1 },
+  { partialFilterExpression: { "correctionRequest.status": { $exists: true } } }
+);
 
 module.exports = mongoose.model("SessionAttendance", sessionAttendanceSchema);

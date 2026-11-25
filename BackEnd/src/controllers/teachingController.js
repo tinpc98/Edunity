@@ -4,6 +4,7 @@ const sessions = require("../services/sessionService");
 const teacherSubjectAuths = require("../services/teacherSubjectAuthorizationService");
 const presenceService = require("../services/sessionPresenceService");
 const incidentService = require("../services/sessionIncidentService");
+const attendanceCorrections = require("../services/attendanceCorrectionService");
 const { handle, parsePaging } = require("../utils/http");
 
 const body = (req) => req.body || {};
@@ -73,6 +74,15 @@ exports.deleteSession = handle((req) => sessions.deleteSession(req.user.id, req.
 exports.startSession = handle((req) => sessions.startSession(req.user.id, req.params.id));
 exports.endSession = handle((req) => sessions.endSession(req.user.id, req.params.id));
 exports.getSessionAttendance = handle((req) => sessions.getSessionAttendance(req.user.id, req.params.id));
+exports.requestAttendanceCorrection = handle((req) =>
+  attendanceCorrections.requestCorrection(req.user.id, req.params.id, req.params.attendanceId, body(req)), 201);
+exports.listAttendanceCorrections = handle((req) =>
+  attendanceCorrections.listCorrections(req.query, parsePaging(req.query)));
+exports.reviewAttendanceCorrection = handle((req) =>
+  attendanceCorrections.reviewCorrection(req.user.id, req.params.attendanceId, req.params.requestId, body(req)));
+exports.getMyAttendance = handle(async (req) => ({
+  attendance: await attendanceCorrections.getStudentAttendance(req.user.id, req.params.id),
+}));
 
 // Student / Teacher — embedded classroom
 exports.joinSession = handle((req) => sessions.joinSession(req.user, req.params.id));

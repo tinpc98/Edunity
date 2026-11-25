@@ -112,6 +112,21 @@ test("approving the profile grants each subject at the profile's grades its cate
   );
 });
 
+test("a language-only dossier can be approved without assigning a school grade", async () => {
+  const { Category, Subject, TeacherSubjectAuthorization } = require("../src/models");
+  const category = await Category.create({ name: "Ngoại ngữ", slug: "ngoai-ngu", createdBy: admin._id });
+  const subject = await Subject.create({
+    name: "Tiếng Nhật", slug: "tieng-nhat", categoryId: category._id, categoryName: category.name, createdBy: admin._id,
+  });
+  const missingGrade = await submit(profile({ subjects: [subject.name, "Toán"], gradeLevels: [] }));
+  expect(missingGrade.body.error).toBe("GRADE_LEVEL_REQUIRED");
+  expect((await submit(profile({ subjects: [subject.name], gradeLevels: [] }))).status).toBe(201);
+  const approved = await request(app).post(`/api/admin/teacher-verifications/${teacher._id}/approve`).set(as(admin)).send({ reviewNote: "ok" });
+  expect(approved.status).toBe(200);
+  const grant = await TeacherSubjectAuthorization.findOne({ teacherId: teacher._id, subjectId: subject._id }).lean();
+  expect(grant).toMatchObject({ status: "APPROVED", gradeLevel: null });
+});
+
 describe("approving the dossier sends the teaching contract", () => {
   const { TeacherContract } = require("../src/models");
   const { signContract } = require("./helpers/contract");

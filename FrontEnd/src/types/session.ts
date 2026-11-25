@@ -108,6 +108,64 @@ export interface PlannedSession {
   endDatetime: string;
 }
 
+export type AttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED' | 'NOT_EVALUATED';
+export type CorrectableAttendanceStatus = Exclude<AttendanceStatus, 'NOT_EVALUATED'>;
+export type AttendanceCorrectionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type AttendanceReviewDecision = 'MANUAL' | 'LIVEKIT' | 'REJECT';
+
+export interface AttendanceCorrectionResult {
+  status: AttendanceCorrectionStatus;
+  method?: 'LIVEKIT' | 'MANUAL';
+  before?: { status: AttendanceStatus; percent?: number };
+  after?: { status: AttendanceStatus; percent?: number };
+  reviewedAt?: string;
+}
+
+export interface AttendanceCorrection extends AttendanceCorrectionResult {
+  _id: string;
+  requestedAt: string;
+  requestedStatus: CorrectableAttendanceStatus;
+  reason: string;
+  reviewNote?: string;
+  requestedBy?: { teacherProfile?: { fullName?: string } } | null;
+}
+
+export interface AdminAttendanceCorrection {
+  _id: string;
+  sessionId?: { title: string; startDatetime: string } | null;
+  classId?: { className: string } | null;
+  studentId?: { studentProfile?: { fullName?: string } } | null;
+  attendanceStatus: AttendanceStatus;
+  attendancePercentage?: number;
+  correctionRequest: AttendanceCorrection;
+  correctionHistory?: AttendanceCorrection[];
+}
+
+export interface StudentAttendance {
+  attendanceStatus: AttendanceStatus;
+  attendancePercentage?: number;
+  evaluationStatus: string;
+  correction?: AttendanceCorrectionResult;
+}
+
+export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
+  PRESENT: "Có mặt",
+  LATE: "Vào muộn",
+  ABSENT: "Vắng mặt",
+  EXCUSED: "Vắng có phép",
+  NOT_EVALUATED: "Không tính vắng",
+};
+
+export const ATTENDANCE_CORRECTION_STATUS_LABELS: Record<AttendanceCorrectionStatus, string> = {
+  PENDING: "Chờ duyệt",
+  APPROVED: "Đã điều chỉnh",
+  REJECTED: "Từ chối",
+};
+
+export const ATTENDANCE_CORRECTION_OPTIONS: { value: CorrectableAttendanceStatus; label: string }[] = (
+  ["PRESENT", "LATE", "ABSENT", "EXCUSED"] as const
+).map((value) => ({ value, label: ATTENDANCE_STATUS_LABELS[value] }));
+
 export interface SessionAttendanceItem {
   _id: string;
   sessionId: string;
@@ -120,7 +178,7 @@ export interface SessionAttendanceItem {
       avatarUrl?: string;
     };
   };
-  attendanceStatus: 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED' | 'NOT_EVALUATED';
+  attendanceStatus: AttendanceStatus;
   joinedAt?: string;
   leftAt?: string;
   hasVerifiedConnection?: boolean;
@@ -136,6 +194,8 @@ export interface SessionAttendanceItem {
   isLate?: boolean;
   evaluationStatus?: string;
   evaluationReason?: string | null;
+  canRequestCorrection?: boolean;
+  correctionRequest?: AttendanceCorrection;
 }
 
 export type VideoProviderType = 'LIVEKIT' | 'EDUNITY_DEV';

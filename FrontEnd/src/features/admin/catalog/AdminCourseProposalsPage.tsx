@@ -39,6 +39,7 @@ import type {
 } from "../../../types/catalog";
 import {
   offeredGradeLevels,
+  isForeignLanguageCategory,
   GRADE_LEVEL_LABELS,
   COURSE_LEVEL_LABELS,
   PROPOSAL_STATUSES,
@@ -56,7 +57,7 @@ const STATUS_CONFIG: Record<ProposalStatus, { color: string; label: string; icon
 type ReviewActionType = "approve" | "reject" | "request-changes";
 
 interface ReviewFormValues {
-  gradeLevel: GradeLevel;
+  gradeLevel?: GradeLevel;
   reviewNote?: string;
 }
 
@@ -247,6 +248,7 @@ export default function AdminCourseProposalsPage() {
     (c) => c.id === selectedProposal?.categoryId
   );
   const allowedProposalGradeLevels: readonly GradeLevel[] = offeredGradeLevels(selectedProposalCategory);
+  const isLanguageProposal = isForeignLanguageCategory(selectedProposalCategory);
 
   const handleExecuteAction = (values: ReviewFormValues) => {
     if (!selectedProposal || !actionType) return;
@@ -785,18 +787,19 @@ export default function AdminCourseProposalsPage() {
 
               <Form.Item
                 name="gradeLevel"
-                label="Xác nhận Khối lớp áp dụng (Admin có thể điều chỉnh)"
+                label={isLanguageProposal ? "Khối lớp áp dụng (tùy chọn)" : "Xác nhận khối lớp áp dụng"}
                 rules={[
                   {
-                    required: true,
+                    required: !isLanguageProposal,
                     message: "Chọn khối: Lớp 6–12 hoặc Ôn thi đại học.",
                   },
                 ]}
               >
                 <Select
+                  allowClear={isLanguageProposal}
                   disabled={allowedProposalGradeLevels.length === 0}
                   placeholder={
-                    allowedProposalGradeLevels.length === 0
+                    isLanguageProposal ? "Không theo khối" : allowedProposalGradeLevels.length === 0
                       ? "Danh mục ngoài phạm vi Lớp 6–12 và Ôn thi đại học"
                       : "Chọn khối lớp phù hợp"
                   }

@@ -1126,9 +1126,15 @@ const endSession = async (teacherId, sessionId) => {
 const getSessionAttendance = async (teacherId, sessionId) => {
   await getVerifiedTeacher(teacherId);
   const session = await getOwnSession(teacherId, sessionId);
-  return SessionAttendance.find({ sessionId: session._id })
+  const rows = await SessionAttendance.find({ sessionId: session._id })
+    .select("-correctionRequest.reviewedBy -correctionRequest.requestedBy")
     .populate("studentId", "email studentProfile.fullName studentProfile.avatarUrl")
     .lean();
+  const ended = session.status === "COMPLETED" || (session.status === "INTERRUPTED" && session.roomState === "ENDED");
+  return rows.map((row) => ({
+    ...row,
+    canRequestCorrection: ended && Boolean(session.attendanceFinalizedAt || row.finalizedAt),
+  }));
 };
 
 const handleLiveKitWebhook = async (event) => {
@@ -1164,6 +1170,7 @@ module.exports = {
   startSession,
   endSession,
   getSessionAttendance,
+  getOwnSession,
   handleLiveKitWebhook,
   assertNoTeacherOverlap,
   runInTeacherScheduleTx,

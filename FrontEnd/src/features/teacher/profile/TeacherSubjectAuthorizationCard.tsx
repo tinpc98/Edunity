@@ -5,7 +5,7 @@ import { Alert, App as AntdApp, Button, Form, Input, Modal, Select, Skeleton, Sp
 import { PlusOutlined } from "@ant-design/icons";
 import { teacherSubjectAuthorizationService } from "../../../services/teacherSubjectAuthorization.service";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
-import { GRADE_LEVEL_LABELS, COURSE_LEVELS, COURSE_LEVEL_LABELS, offeredGradeLevels } from "../../../types/catalog";
+import { GRADE_LEVEL_LABELS, COURSE_LEVELS, COURSE_LEVEL_LABELS, offeredGradeLevels, isForeignLanguageCategory } from "../../../types/catalog";
 import type {
   CreateTeacherSubjectAuthorizationPayload,
   TeacherSubjectAuthorization,
@@ -67,6 +67,7 @@ export default function TeacherSubjectAuthorizationCard() {
     onError: (error: unknown) => message.error(getFriendlyErrorMessage(error, "Không thể gửi yêu cầu đăng ký môn.")),
   });
   const requestCategory = categories.find((category) => category.id === requestCategoryId);
+  const isLanguageRequest = isForeignLanguageCategory(requestCategory);
   const requestGradeLevels = offeredGradeLevels(requestCategory);
 
   return (
@@ -98,7 +99,7 @@ export default function TeacherSubjectAuthorizationCard() {
           {authorizations.map((authorization: TeacherSubjectAuthorization) => (
             <Tag key={authorization.id} color={AUTH_STATUS[authorization.status].color} className="!m-0 px-2 py-1">
               {authorization.categoryName} · {formatSubjectLabel(authorization.subjectName, undefined, authorization.categoryName)}
-              {authorization.gradeLevel ? ` · ${GRADE_LEVEL_LABELS[authorization.gradeLevel]}` : ""}
+              {authorization.gradeLevel ? ` · ${GRADE_LEVEL_LABELS[authorization.gradeLevel]}` : " · Không theo khối"}
               {` · ${COURSE_LEVEL_LABELS[authorization.level]} · ${AUTH_STATUS[authorization.status].label}`}
               {authorization.reviewNote ? ` · ${authorization.reviewNote}` : ""}
             </Tag>
@@ -167,12 +168,13 @@ export default function TeacherSubjectAuthorizationCard() {
             )}
             <Form.Item
               name="gradeLevel"
-              label="Khối lớp"
-              rules={[{ required: true, message: "Chọn khối lớp cụ thể cho môn học." }]}
+              label={isLanguageRequest ? "Khối lớp (tùy chọn)" : "Khối lớp"}
+              rules={[{ required: !isLanguageRequest, message: "Chọn khối lớp cụ thể cho môn học." }]}
             >
               <Select
                 disabled={!requestCategoryId}
-                placeholder={requestCategoryId ? "Chọn khối lớp" : "Chọn danh mục trước"}
+                allowClear={isLanguageRequest}
+                placeholder={isLanguageRequest ? "Không theo khối" : requestCategoryId ? "Chọn khối lớp" : "Chọn danh mục trước"}
                 options={requestGradeLevels.map((grade) => ({ value: grade, label: GRADE_LEVEL_LABELS[grade] }))}
               />
             </Form.Item>

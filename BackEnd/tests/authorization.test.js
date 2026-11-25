@@ -35,6 +35,8 @@ const declaredRoutes = () =>
 const PUBLIC_ROUTES = new Set([
   "post /api/auth/register",
   "post /api/auth/login",
+  "post /api/auth/forgot-password", // the user does not have a current session
+  "post /api/auth/reset-password", // the single-use reset token is the credential
   "post /api/auth/refresh",
   "post /api/auth/logout",
   "post /api/auth/dev-login", // test-only; 404 elsewhere (security.test.js)

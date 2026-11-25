@@ -64,6 +64,7 @@ import AdminFinanceOverviewPage from "../features/admin/finance/AdminFinanceOver
 import AdminBankEventsPage from "../features/admin/finance/AdminBankEventsPage";
 import AdminReconciliationsPage from "../features/admin/finance/AdminReconciliationsPage";
 import { AdminReportsPage } from "../features/admin/reports/AdminReportsPage";
+import AdminAttendanceCorrectionsPage from "../features/admin/attendance/AdminAttendanceCorrectionsPage";
 import AdminReviewsPage from "../features/admin/reviews/AdminReviewsPage";
 import AdminTrashPage from "../features/admin/trash/AdminTrashPage";
 import AdminNotificationsPage from "../features/admin/notifications/AdminNotificationsPage";
@@ -72,6 +73,7 @@ import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
 import SponsorProfilePage from "../features/sponsor/profile/SponsorProfilePage";
 import SponsorContributionsPage from "../features/sponsor/contributions/SponsorContributionsPage";
 import LoginPage from "../features/auth/LoginPage";
+import PasswordRecoveryPage from "../features/auth/PasswordRecoveryPage";
 import RegisterPage from "../features/auth/RegisterPage";
 import TeacherRegisterPage from "../features/auth/TeacherRegisterPage";
 import TeacherQualificationPage from "../features/auth/TeacherQualificationPage";
@@ -166,6 +168,14 @@ const router = createBrowserRouter([
       {
         path: ROUTES.AUTH.LOGIN,
         element: <LoginPage />,
+      },
+      {
+        path: ROUTES.AUTH.FORGOT_PASSWORD,
+        element: <PasswordRecoveryPage />,
+      },
+      {
+        path: ROUTES.AUTH.RESET_PASSWORD,
+        element: <PasswordRecoveryPage reset />,
       },
       {
         path: ROUTES.AUTH.TEACHER_REGISTER,
@@ -436,6 +446,10 @@ const router = createBrowserRouter([
       {
         path: "reports",
         element: <AdminReportsPage />,
+      },
+      {
+        path: "attendance-corrections",
+        element: <AdminAttendanceCorrectionsPage />,
       },
       {
         path: "reviews",
