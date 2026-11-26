@@ -35,7 +35,7 @@ export const enrollmentService = {
    * Student: Create enrollment in a class.
    * POST /api/classes/:classId/enrollments
    * - FREE class: returns CONFIRMED immediately.
-   * - PAID class: returns PENDING_PAYMENT with 15-minute holdExpiresAt.
+   * - PAID class: returns PENDING_PAYMENT with the configured holdExpiresAt.
    */
   async createEnrollment(classId: string): Promise<Enrollment> {
     const data = await apiClient<ApiEnrollment>(`/classes/${classId}/enrollments`, {

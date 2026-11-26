@@ -297,7 +297,7 @@ export default function AdminPricingPoliciesPage() {
       title: "Trạng thái",
       dataIndex: "status",
       render: (status: PricingPolicyStatus) => (
-        <Tag color={POLICY_STATUS[status].color}>{POLICY_STATUS[status].label}</Tag>
+        <Tag color={POLICY_STATUS[status]?.color || "default"}>{POLICY_STATUS[status]?.label || status || "Chưa rõ"}</Tag>
       ),
     },
     {

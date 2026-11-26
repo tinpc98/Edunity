@@ -14,6 +14,7 @@ import { useParams, Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { ROUTES } from '../../../../routes/routePaths';
 import { teacherVerificationService } from '../../../../services/teacherVerification.service';
+import { adminUserKeys } from '../../../../services/adminUser.service';
 import { catalogKeys, catalogService } from '../../../../services/catalog.service';
 import PrivateDocumentCard from '../../../../components/common/PrivateDocumentCard';
 import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
@@ -56,10 +57,19 @@ export default function TeacherVerificationDetailPage() {
 
   const approveMutation = useMutation({
     mutationFn: (reviewNote?: string) => teacherVerificationService.adminApproveVerification(teacherId as string, reviewNote),
-    onSuccess: () => {
-      message.success('Đã phê duyệt và cấp chứng nhận giáo viên thành công!');
+    onSuccess: (res: any) => {
+      const cg = res?.contractGeneration;
+      if (cg?.status === 'CREATED') {
+        message.success(`Đã phê duyệt giáo viên và tự động khởi tạo hợp đồng điện tử ${cg.contractCode} (Chờ giáo viên ký)!`);
+      } else if (cg?.status === 'FAILED') {
+        message.warning('Đã phê duyệt giáo viên, nhưng tạo hợp đồng tự động gặp lỗi. Vui lòng nhấn Đồng bộ/Tạo hợp đồng ở mục Hợp đồng.');
+      } else {
+        message.success('Đã phê duyệt và cấp chứng nhận giáo viên thành công!');
+      }
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verification', teacherId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-teacher-contracts', teacherId] });
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verifications'] });
+      queryClient.invalidateQueries({ queryKey: adminUserKeys.summary() });
       setIsApproveModalOpen(false);
     },
     onError: (err: any) => {
@@ -80,6 +90,7 @@ export default function TeacherVerificationDetailPage() {
       message.success('Đã từ chối hồ sơ xác minh.');
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verification', teacherId] });
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verifications'] });
+      queryClient.invalidateQueries({ queryKey: adminUserKeys.summary() });
       setIsRejectModalOpen(false);
       form.resetFields();
     },

@@ -1,6 +1,7 @@
 const studentService = require("../services/studentService");
 const { serializeDecimal128 } = require("../utils/serialize");
 const { AppError } = require("../utils/errors");
+const { parsePaging } = require("../utils/http");
 
 exports.getMySessions = async (req, res, next) => {
   try {
@@ -29,7 +30,10 @@ exports.getMyPayments = async (req, res, next) => {
   try {
     if (req.user.role !== "STUDENT") throw new AppError("Only STUDENT can access", "FORBIDDEN", 403);
     
-    const result = await studentService.getMyPayments(req.user.id);
+    const paging = req.query.page !== undefined || req.query.pageSize !== undefined || req.query.limit !== undefined
+      ? parsePaging(req.query)
+      : undefined;
+    const result = await studentService.getMyPayments(req.user.id, paging);
     res.json({ success: true, data: serializeDecimal128(result) });
   } catch (err) {
     next(err);

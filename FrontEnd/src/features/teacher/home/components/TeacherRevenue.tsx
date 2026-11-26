@@ -65,7 +65,7 @@ export default function TeacherRevenue({
         <div className="flex flex-col">
           <Text type="secondary" className="text-[12px]">Phí nền tảng (Commission)</Text>
           <div className="mt-0.5 whitespace-nowrap">
-            <Text strong className="text-lg text-rose-600">-{formatVND(commission)}</Text>
+            <Text strong className="text-lg text-rose-600">{formatVND(commission ? -commission : 0)}</Text>
           </div>
         </div>
         <div className="flex flex-col">

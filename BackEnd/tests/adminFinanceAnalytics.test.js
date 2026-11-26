@@ -1,23 +1,40 @@
-const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+const { connectDB, disconnectDB } = require("./helpers/db");
 const financeService = require("../src/services/financeService");
 const Transaction = require("../src/models/Transaction");
 const PaymentReconciliation = require("../src/models/PaymentReconciliation");
 const RefundCase = require("../src/models/RefundCase");
 const TeacherEarning = require("../src/models/TeacherEarning");
+const { Types } = require("mongoose");
+const { getDashboard } = require("../src/services/adminService");
 
 describe("Admin Finance Analytics API & Overview V2 Test Suite", () => {
   beforeAll(async () => {
-    const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(uri);
-    }
+    await connectDB();
   });
 
-  afterAll(async () => {
-    await mongoose.disconnect();
+  afterAll(disconnectDB);
+
+  test("platform fees use recorded commission and the reporting dates in Vietnam", async () => {
+    const now = new Date();
+    const ict = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const monthStart = new Date(Date.UTC(ict.getUTCFullYear(), ict.getUTCMonth(), 1, -7));
+    const previousMonth = new Date(monthStart.getTime() - 1);
+    const base = { teacherId: new Types.ObjectId(), classId: new Types.ObjectId(), grossAmount: 100000, netAmount: 80000 };
+    const earnings = await TeacherEarning.create([
+      { ...base, enrollmentId: new Types.ObjectId(), createdAt: monthStart, commissionAmount: 20000, status: "AVAILABLE" },
+      { ...base, enrollmentId: new Types.ObjectId(), createdAt: monthStart, commissionAmount: 7000, status: "CANCELLED" },
+      { ...base, enrollmentId: new Types.ObjectId(), createdAt: previousMonth, commissionAmount: 3000, status: "PAID_OUT" },
+    ]);
+    try {
+      const report = await financeService.getFinanceOverview({ period: "custom", from: ict.toISOString().slice(0, 7) + "-01", to: ict.toISOString().slice(0, 10) });
+      expect(report.kpis.platformFee.value).toBe("20000");
+      expect(report.kpis.teacherPaidOut.value).toBe("0");
+      const dashboard = await getDashboard();
+      expect(dashboard.finance.commissionThisMonth.toString()).toBe("20000");
+      expect(dashboard.finance.commission.toString()).toBe("23000");
+    } finally {
+      await TeacherEarning.deleteMany({ _id: { $in: earnings.map((earning) => earning._id) } });
+    }
   });
 
   test("1. Returns structured analytics response with 6 KPI cards and metadata", async () => {

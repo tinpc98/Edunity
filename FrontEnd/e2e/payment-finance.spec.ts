@@ -1,8 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 // Helper to seed localStorage with authenticated user
-async function setupAuth(page: any, user: { id: string; email: string; fullName: string; role: string; status: string }) {
-  await page.addInitScript((authUser: any) => {
+async function setupAuth(page: Page, user: { id: string; userId?: string; email: string; fullName: string; role: string; status: string }) {
+  await page.addInitScript((authUser) => {
     window.localStorage.setItem(
       'edunity-auth',
       JSON.stringify({
@@ -20,6 +20,45 @@ async function setupAuth(page: any, user: { id: string; email: string; fullName:
 }
 
 test.describe('E2E Browser Test Suite: Payment, Finance & PayOS Gates', () => {
+  test('Payment history retries an error and fetches past the first 100 records', async ({ page }) => {
+    const user = { id: 'student-history', userId: 'student-history', email: 'history@example.test', fullName: 'History Student', role: 'STUDENT', status: 'ACTIVE' };
+    await setupAuth(page, user);
+    await page.route('**/api/auth/me', (route) => route.fulfill({ json: { success: true, data: user } }));
+    let returnError = true;
+    const requestedPages: number[] = [];
+    await page.route((url) => url.pathname === '/api/me/payments', async (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const current = Number(params.get('page'));
+      const pageSize = Number(params.get('pageSize'));
+      requestedPages.push(current);
+      if (returnError) {
+        await route.fulfill({ status: 500, json: { success: false, message: 'Temporary failure' } });
+        return;
+      }
+      const start = (current - 1) * pageSize;
+      const items = Array.from({ length: Math.min(pageSize, 102 - start) }, (_, index) => ({
+        _id: String(start + index + 1),
+        gatewayReference: `history-tx-${start + index + 1}`,
+        className: 'Toán 12',
+        gateway: 'PAYOS',
+        amount: '10000',
+        paymentStatus: 'COMPLETED',
+        createdAt: '2026-01-01T00:00:00Z',
+      }));
+      await route.fulfill({ json: { success: true, data: { items, page: current, pageSize, total: 102, totalPages: 11 } } });
+    });
+
+    await page.goto('/student/payments');
+    await expect(page.getByText('Lỗi tải dữ liệu')).toBeVisible();
+    await expect(page.getByText('Chưa có giao dịch nào')).toHaveCount(0);
+    returnError = false;
+    await page.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page.getByText('history-tx-1', { exact: true })).toBeVisible();
+    await page.getByTitle('11', { exact: true }).click();
+    await expect(page.getByText('history-tx-102', { exact: true })).toBeVisible();
+    await expect(page.locator('tbody tr[data-row-key]')).toHaveCount(2);
+    expect(requestedPages).toContain(11);
+  });
 
   // Flow 1: Student Tuition Checkout
   test('Flow 1: Student Tuition Checkout with VietQR / payOS', async ({ page }) => {
@@ -209,36 +248,60 @@ test.describe('E2E Browser Test Suite: Payment, Finance & PayOS Gates', () => {
     await expect(page).toHaveURL(/.*refunds.*/);
   });
 
-  // Flow 6: Teacher Earnings & Revenue Page
-  test('Flow 6: Teacher Revenue page displays earnings breakdown and platform fee', async ({ page }) => {
-    await setupAuth(page, {
+  test('Teacher overview and revenue show the recorded fee when the API omits the total', async ({ page }) => {
+    const teacher = {
       id: 'teacher-pr10',
+      userId: 'teacher-pr10',
       email: 'teacher@edunity.test',
       fullName: 'Teacher Minh',
       role: 'TEACHER',
       status: 'ACTIVE',
+    };
+    await setupAuth(page, teacher);
+    await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort());
+
+    const summary = { totalGross: 5000, totalNet: 4500, available: 4500 };
+    const item = {
+      id: 'earning-test',
+      className: 'Lớp kiểm thử học phí',
+      grossAmount: 5000,
+      commissionAmount: { $numberDecimal: '500' },
+      netAmount: 4500,
+      status: 'AVAILABLE',
+      createdAt: '2026-11-26T00:00:00.000Z',
+    };
+    const responses: Record<string, unknown> = {
+      '/api/auth/me': teacher,
+      '/api/teacher/verification': { verificationStatus: 'VERIFIED' },
+      '/api/teacher/classes': { items: [], page: 1, pageSize: 50, total: 0 },
+      '/api/teacher/earnings': {
+        summary,
+        items: [
+          item,
+          { ...item, id: 'refunded-earning', className: 'Lớp đã hoàn tiền', commissionAmount: '1000', status: 'CANCELLED' },
+        ],
+      },
+      '/api/teacher/settlements': { summary },
+      '/api/teacher/bank-account': {
+        bankName: 'VCB',
+        accountNumberMasked: '******1234',
+        accountHolderName: 'TEACHER MINH',
+        status: 'VERIFIED',
+        payoutLockedUntil: '2026-01-01T00:00:00.000Z',
+      },
+    };
+    await page.route((url) => url.pathname.startsWith('/api/'), (route) => {
+      const { pathname } = new URL(route.request().url());
+      return route.fulfill({ json: { success: true, data: responses[pathname] ?? [] } });
     });
 
-    await page.route('**/api/teacher/revenue**', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: {
-            totalGross: 10000000,
-            platformFeeRate: 0.1,
-            totalPlatformFee: 1000000,
-            totalNet: 9000000,
-            availableBalance: 9000000,
-            pendingBalance: 0,
-          },
-        }),
-      });
-    });
+    await page.goto('/teacher');
+    await expect(page.getByText('-500 đ', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /Xem chi tiết doanh thu/ }).click();
 
-    await page.goto('/teacher/revenue');
-    await expect(page).toHaveURL(/.*revenue.*/);
+    const feeSummary = page.locator('.ant-statistic').filter({ hasText: 'Phí nền tảng' });
+    await expect(feeSummary.locator('.ant-statistic-content-value')).toHaveText('500 đ');
+    await expect(page.getByRole('row', { name: /Lớp kiểm thử học phí/ })).toContainText('-500 đ');
   });
 
   // Flow 7: Teacher Withdrawal Request (Settlement Window)

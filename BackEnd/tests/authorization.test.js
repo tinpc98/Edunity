@@ -35,6 +35,8 @@ const declaredRoutes = () =>
 const PUBLIC_ROUTES = new Set([
   "post /api/auth/register",
   "post /api/auth/login",
+  "post /api/auth/forgot-password", // the user does not have a current session
+  "post /api/auth/reset-password", // the single-use reset token is the credential
   "post /api/auth/refresh",
   "post /api/auth/logout",
   "post /api/auth/dev-login", // test-only; 404 elsewhere (security.test.js)
@@ -66,6 +68,7 @@ const PUBLIC_ROUTES = new Set([
   "post /api/payments/webhooks/payos/tuition", // signed by payOS TUITION checksumKey
   "post /api/payments/webhooks/payos/donation", // signed by payOS DONATION checksumKey
   "post /api/sessions/livekit-webhook", // signed by LiveKit (security.test.js)
+  "get /api/contracts/verify/:code", // public safe contract verification (no PII)
   "post /api/contracts/econtract-webhook", // HMAC-signed by the e-contract provider (teacherContract.test.js)
 ]);
 
@@ -555,8 +558,9 @@ describe("Hostile query input on public search", () => {
   });
 
   it("finds a class by its literal name", async () => {
+    await Class.updateOne({ _id: data.classA._id }, { $set: { startDate: new Date(Date.now() + 86_400_000) } });
     const res = await request(app).get("/api/classes").query({ search: "giáo viên A" });
-    expect(res.body.data.total).toBeGreaterThan(0);
+    expect(res.body.data.items).toContainEqual(expect.objectContaining({ id: data.classA._id.toString() }));
   });
 
   it.each([

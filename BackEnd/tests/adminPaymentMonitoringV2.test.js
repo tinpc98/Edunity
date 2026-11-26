@@ -1,20 +1,12 @@
-const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog } = require("./helpers/financialFixtures");
 const financeService = require("../src/services/financeService");
 const BankTransferEvent = require("../src/models/BankTransferEvent");
 const PaymentReconciliation = require("../src/models/PaymentReconciliation");
 const Payment = require("../src/models/Payment");
-const Enrollment = require("../src/models/Enrollment");
 const Class = require("../src/models/Class");
-const Course = require("../src/models/Course");
-const Category = require("../src/models/Category");
-const Subject = require("../src/models/Subject");
-const User = require("../src/models/User");
 
 describe("Admin Payment Monitoring V2 (Theo dõi xử lý thanh toán) Test Suite", () => {
-  let adminUser;
   let studentUser;
   let teacherUser;
   let testClass;
@@ -23,65 +15,10 @@ describe("Admin Payment Monitoring V2 (Theo dõi xử lý thanh toán) Test Suit
   let testSubject;
 
   beforeAll(async () => {
-    const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(uri);
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
 
-    adminUser = await User.findOne({ role: "ADMIN" });
-    if (!adminUser) {
-      adminUser = await User.create({
-        email: "testadmin_pm_v2@edunity.test",
-        password: "hashedPassword123",
-        role: "ADMIN",
-        fullName: "Test Admin PM V2",
-      });
-    }
-
-    studentUser = await User.findOne({ role: "STUDENT" });
-    if (!studentUser) {
-      studentUser = await User.create({
-        email: "teststudent_pm_v2@edunity.test",
-        password: "hashedPassword123",
-        role: "STUDENT",
-        studentProfile: { fullName: "Test Student PM V2" },
-      });
-    }
-
-    teacherUser = await User.findOne({ role: "TEACHER" });
-    if (!teacherUser) {
-      teacherUser = await User.create({
-        email: "testteacher_pm_v2@edunity.test",
-        password: "hashedPassword123",
-        role: "TEACHER",
-        teacherProfile: { fullName: "Test Teacher PM V2" },
-      });
-    }
-
-    testCategory = await Category.findOne();
-    if (!testCategory) {
-      testCategory = await Category.create({ name: "Toán học PM", code: `MATH_PM_${Date.now()}` });
-    }
-
-    testSubject = await Subject.findOne();
-    if (!testSubject) {
-      testSubject = await Subject.create({
-        name: "Toán 12 PM",
-        code: `MATH12_PM_${Date.now()}`,
-        categoryId: testCategory._id,
-      });
-    }
-
-    testCourse = await Course.findOne();
-    if (!testCourse) {
-      testCourse = await Course.create({
-        title: "Khóa luyện thi THPT PM",
-        courseCode: `CRS_PM_${Date.now()}`,
-        teacherId: teacherUser._id,
-        categoryId: testCategory._id,
-        subjectId: testSubject._id,
-      });
-    }
+    ({ student: studentUser, teacher: teacherUser, category: testCategory, subject: testSubject, course: testCourse } = actors);
 
     testClass = await Class.create({
       courseId: testCourse._id,
@@ -99,11 +36,7 @@ describe("Admin Payment Monitoring V2 (Theo dõi xử lý thanh toán) Test Suit
     });
   });
 
-  afterAll(async () => {
-    if (testClass) {
-      await Class.deleteOne({ _id: testClass._id });
-    }
-  });
+  afterAll(disconnectDB);
 
   test("1. getAdminBankEvents returns correct pagination and attaches reconciliation linkage", async () => {
     const orderCode = Math.floor(100000000 + Math.random() * 800000000);

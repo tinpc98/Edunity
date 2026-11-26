@@ -1,5 +1,4 @@
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
+const { connectDB, disconnectDB } = require("./helpers/db");
 const mongoose = require("mongoose");
 const request = require("supertest");
 const app = require("../src/app");
@@ -32,9 +31,7 @@ describe("EDUNITY-ADMIN-REVIEW-COMMENT-MODERATION-V1 Test Suite", () => {
   let testReview;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
+    await connectDB();
 
     // 1. Users
     adminUser = await User.create({
@@ -115,15 +112,7 @@ describe("EDUNITY-ADMIN-REVIEW-COMMENT-MODERATION-V1 Test Suite", () => {
     await User.updateOne({ _id: teacherUser._id }, { $set: { "teacherProfile.ratingAverage": 4, "teacherProfile.ratingCount": 1 } });
   });
 
-  afterAll(async () => {
-    if (adminUser) await User.deleteOne({ _id: adminUser._id });
-    if (teacherUser) await User.deleteOne({ _id: teacherUser._id });
-    if (studentUser) await User.deleteOne({ _id: studentUser._id });
-    if (testReview) await Review.deleteMany({ _id: testReview._id });
-    if (testEnrollment) await Enrollment.deleteMany({ _id: testEnrollment._id });
-    if (testClass) await Class.deleteMany({ _id: testClass._id });
-    if (testCategory) await Category.deleteMany({ _id: testCategory._id });
-  });
+  afterAll(disconnectDB);
 
   test("1. Unauthorized user (Student) cannot access Admin Review moderation API", async () => {
     const res = await request(app)

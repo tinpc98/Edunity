@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
-const { Class, Course, Session, User } = require("../models");
+const { Category, Class, Course, Session, Subject, User } = require("../models");
 const { AppError, CLASS_NOT_FOUND } = require("../utils/errors");
-const { paged } = require("../utils/http");
+const { escapeRegex, paged } = require("../utils/http");
 const auditService = require("./auditService");
 const notificationService = require("./notificationService");
 const audit = (...args) => auditService.audit(...args);
@@ -10,6 +10,33 @@ const { evaluateClass, getReadiness, runInTransaction } = require("./teacherClas
 const { captureClassSnapshots, throwFailedChecks } = require("./classCreationGateService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
+
+const listClasses = async (query, paging) => {
+  const filter = { ...NOT_DELETED };
+  if (query.status !== undefined) {
+    if (!Class.schema.path("status").enumValues.includes(query.status)) {
+      throw validationError("Invalid class status");
+    }
+    filter.status = query.status;
+  }
+  if (query.classType !== undefined) {
+    if (!Class.schema.path("classType").enumValues.includes(query.classType)) {
+      throw validationError("classType must be FREE or PAID");
+    }
+    filter.classType = query.classType;
+  }
+  const search = typeof query.search === "string" ? query.search.trim().slice(0, 100) : "";
+  if (search) {
+    const pattern = { $regex: escapeRegex(search), $options: "i" };
+    filter.$or = [{ className: pattern }, { courseTitle: pattern }, { teacherName: pattern }];
+  }
+
+  const [items, total] = await Promise.all([
+    Class.find(filter).sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
+    Class.countDocuments(filter),
+  ]);
+  return paged(items, total, paging);
+};
 
 // UC-ADM-07 bước 1
 const listPendingClasses = async (paging) => {
@@ -369,32 +396,29 @@ const deleteClass = async (adminId, classId, reason = null) => {
   return { success: true, message: "Class soft-deleted successfully", classId: cls._id };
 };
 
+const getClassRestoreConflict = async (cls) => {
+  const [course, teacher, category, subject] = await Promise.all([
+    Course.exists({ _id: cls.courseId ?? null, ...NOT_DELETED }),
+    User.exists({ _id: cls.teacherId ?? null, role: "TEACHER", status: "ACTIVE", ...NOT_DELETED }),
+    Category.exists({ _id: cls.categoryId ?? null, ...NOT_DELETED }),
+    Subject.exists({ _id: cls.subjectId ?? null, ...NOT_DELETED }),
+  ]);
+  if (!course) return { field: "courseId", reason: "Không tìm thấy khóa học của lớp hoặc khóa học đã bị xóa." };
+  if (!teacher) return { field: "teacherId", reason: "Tài khoản giáo viên phụ trách lớp không tồn tại hoặc không còn hoạt động." };
+  if (!category) return { field: "categoryId", reason: "Không tìm thấy danh mục của lớp hoặc danh mục đã bị xóa." };
+  if (!subject) return { field: "subjectId", reason: "Không tìm thấy môn học của lớp hoặc môn học đã bị xóa." };
+  return null;
+};
+
 const restoreClass = async (adminId, classId) => {
   if (!mongoose.isValidObjectId(classId)) throw CLASS_NOT_FOUND();
   const cls = await Class.findById(classId);
   if (!cls) throw CLASS_NOT_FOUND();
   if (!cls.isDeleted) return cls.toObject();
 
-  // 1. Parent Course check
-  const course = await Course.findOne({ _id: cls.courseId, ...NOT_DELETED });
-  if (!course) {
-    throw new AppError(
-      "Cannot restore class: parent course is deleted or missing.",
-      "RESTORE_CONFLICT",
-      409,
-      { courseId: cls.courseId }
-    );
-  }
-
-  // 2. Teacher check
-  const teacher = await User.findOne({ _id: cls.teacherId, status: "ACTIVE", ...NOT_DELETED });
-  if (!teacher) {
-    throw new AppError(
-      "Cannot restore class: teacher account is inactive or deleted.",
-      "RESTORE_CONFLICT",
-      409,
-      { teacherId: cls.teacherId }
-    );
+  const conflict = await getClassRestoreConflict(cls);
+  if (conflict) {
+    throw new AppError(conflict.reason, "RESTORE_CONFLICT", 409, { [conflict.field]: cls[conflict.field] ?? null });
   }
 
   // 3. Restore to safe lifecycle state: DRAFT
@@ -420,6 +444,7 @@ const restoreClass = async (adminId, classId) => {
 };
 
 module.exports = {
+  listClasses,
   listPendingClasses,
   getClassForReview,
   getClassReadiness,
@@ -429,5 +454,6 @@ module.exports = {
   requestChanges,
   requestClassChanges: requestChanges,
   deleteClass,
+  getClassRestoreConflict,
   restoreClass,
 };

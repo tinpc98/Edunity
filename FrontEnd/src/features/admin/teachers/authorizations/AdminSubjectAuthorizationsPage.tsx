@@ -162,11 +162,11 @@ export default function AdminSubjectAuthorizationsPage() {
               ),
             },
             { title: "Khối lớp", render: (_, item) => gradeText(item) },
-            { title: "Cấp độ", render: (_, item) => COURSE_LEVEL_LABELS[item.level] },
+            { title: "Cấp độ", render: (_, item) => (item.level ? COURSE_LEVEL_LABELS[item.level] : "Mọi cấp độ") },
             { title: "Gửi lúc", render: (_, item) => dayjs(item.requestedAt).format("DD/MM/YYYY HH:mm") },
             {
               title: "Trạng thái",
-              render: (_, item) => <Tag color={STATUS[item.status].color}>{STATUS[item.status].label}</Tag>,
+              render: (_, item) => <Tag color={STATUS[item.status]?.color || "default"}>{STATUS[item.status]?.label || item.status || "Chưa rõ"}</Tag>,
             },
             {
               title: "Thao tác",
@@ -208,7 +208,7 @@ export default function AdminSubjectAuthorizationsPage() {
               <Descriptions.Item label="Danh mục">{action.item.categoryName}</Descriptions.Item>
               <Descriptions.Item label="Môn học">{formatSubjectLabel(action.item.subjectName, undefined, action.item.categoryName)}</Descriptions.Item>
               <Descriptions.Item label="Khối lớp">{gradeText(action.item)}</Descriptions.Item>
-              <Descriptions.Item label="Cấp độ">{COURSE_LEVEL_LABELS[action.item.level]}</Descriptions.Item>
+              <Descriptions.Item label="Cấp độ">{action.item.level ? COURSE_LEVEL_LABELS[action.item.level] : "Mọi cấp độ"}</Descriptions.Item>
               {action.item.requestNote && (
                 <Descriptions.Item label="Ghi chú">{action.item.requestNote}</Descriptions.Item>
               )}

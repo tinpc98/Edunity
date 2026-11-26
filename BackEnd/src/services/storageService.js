@@ -16,7 +16,7 @@ const { getSecret } = require("../utils/secrets");
 const getRoot = () => path.resolve(process.env.STORAGE_DIR || path.join(__dirname, "../../storage"));
 const getPublicDir = () => path.join(getRoot(), "public");
 
-// What clients may upload. Recording keys are only ever created by the backend when a session starts.
+// What clients may upload. Recording and contract keys are only ever created by the backend.
 const PRIVATE_PURPOSES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF", "INCIDENT_EVIDENCE", "SESSION_MATERIAL"];
 const PUBLIC_PURPOSES = ["AVATAR", "COVER_IMAGE"];
 const MAX_PRIVATE_SIZE = 10 * 1024 * 1024;
@@ -106,6 +106,24 @@ const savePrivateFile = async (userId, purpose, file) => {
   const storageKey = `private/${userId}/${purpose}/${crypto.randomUUID()}.${extension}`;
   await write(storageKey, file.buffer);
   return { storageKey, mimeType: file.mimetype, size: file.buffer.length, originalName: file.originalname };
+};
+
+/**
+ * Saves a backend-generated contract PDF under the teacher's private storage space.
+ * Each generated PDF receives a fresh UUID storageKey so initial and signed PDFs never overwrite each other.
+ */
+const saveContractPdf = async (teacherId, buffer, fileName = "contract.pdf") => {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw validationError("Contract PDF buffer is required");
+  }
+  const storageKey = `private/${teacherId}/TEACHER_CONTRACT/${crypto.randomUUID()}.pdf`;
+  await write(storageKey, buffer);
+  return {
+    storageKey,
+    fileName,
+    mimeType: "application/pdf",
+    size: buffer.length,
+  };
 };
 
 const savePublicFile = async (purpose, file) => {
@@ -214,6 +232,7 @@ module.exports = {
   MAX_UPLOAD_SIZE,
   getPublicDir,
   savePrivateFile,
+  saveContractPdf,
   savePublicFile,
   parsePrivateKey,
   assertOwnedKeys,

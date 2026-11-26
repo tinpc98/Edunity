@@ -5,13 +5,12 @@ const { AppError } = require("../utils/errors");
 const { toPublic } = require("../utils/publicView");
 const { assertId, paged, validationError, escapeRegex, isBlank } = require("../utils/http");
 const { slugify, uniqueSlug } = require("../utils/slug");
-const { allowedGradeLevelsForCategory, requireGradeLevel } = require("../utils/gradeLevel");
+const { LANGUAGE_CATEGORY_SLUG, allowedGradeLevelsForCategory, requireGradeLevel } = require("../utils/gradeLevel");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
 const STATUSES = ["ACTIVE", "INACTIVE"];
 const COURSE_TEXT_FIELDS = ["description", "learningObjectives", "syllabus", "prerequisites", "curriculumReference"];
 const SCHOOL_AND_LANGUAGE_SCOPE = "school-and-languages";
-const LANGUAGE_CATEGORY_SLUG = "ngoai-ngu";
 const SCHOOL_CATEGORY_SLUGS = ["trung-hoc-co-so", "trung-hoc-pho-thong"];
 const SCHOOL_SUBJECT_SLUGS = [
   "toan-thcs", "ly-thcs", "hoa-thcs", "sinh-thcs", "su-thcs", "dia-thcs", "van-thcs", "anh-thcs",
@@ -351,9 +350,10 @@ const adminListSubjects = async (scope) => {
   return subjects.map(toPublic);
 };
 
-const getSubject = async (subjectId) => {
+const getSubject = async (subjectId, { admin = false } = {}) => {
   const subject = await getSubjectOrThrow(subjectId);
-  const courses = await Course.find({ subjectId: subject._id, status: "ACTIVE", ...NOT_DELETED })
+  const filter = admin ? { status: "ACTIVE", ...NOT_DELETED } : await getPublicCourseFilter();
+  const courses = await Course.find({ ...filter, subjectId: subject._id })
     .select("title slug level gradeLevel")
     .sort({ title: 1 })
     .lean();
@@ -594,8 +594,14 @@ const restoreSubject = async (adminId, subjectId) => {
 
 // ---------- Courses ----------
 
+const getPublicCourseFilter = async () => ({
+  status: "ACTIVE",
+  ...NOT_DELETED,
+  categoryId: { $in: await Category.distinct("_id", { status: "ACTIVE", ...NOT_DELETED }) },
+});
+
 const searchCourses = async (query, paging) => {
-  const filter = { status: "ACTIVE", ...NOT_DELETED };
+  const filter = await getPublicCourseFilter();
 
   if (query.search) {
     const pattern = { $regex: escapeRegex(query.search), $options: "i" };
@@ -604,7 +610,8 @@ const searchCourses = async (query, paging) => {
   for (const field of ["categoryId", "subjectId"]) {
     if (query[field]) {
       if (!mongoose.isValidObjectId(query[field])) throw validationError(`${field} is invalid`);
-      filter[field] = query[field];
+      if (field === "categoryId") filter.$and = [{ categoryId: query.categoryId }];
+      else filter[field] = query[field];
     }
   }
   if (query.gradeLevel) {
@@ -626,16 +633,24 @@ const searchCourses = async (query, paging) => {
   return paged(items.map(toPublic), total, paging);
 };
 
-const getCourse = async (courseId) => {
+const getPublicCourseOrThrow = async (courseId) => {
   const course = await getCourseOrThrow(courseId);
-  if (course.status !== "ACTIVE") throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
+  if (course.status !== "ACTIVE" ||
+      !await Category.exists({ _id: course.categoryId, status: "ACTIVE", ...NOT_DELETED })) {
+    throw new AppError("Course not found", "COURSE_NOT_FOUND", 404);
+  }
+  return course;
+};
+
+const getCourse = async (courseId) => {
+  const course = await getPublicCourseOrThrow(courseId);
   const openClassCount = await Class.countDocuments({ courseId: course._id, status: "OPEN", ...NOT_DELETED });
   return { ...toPublic(course.toObject()), openClassCount };
 };
 
 // FR-STU-11: only classes approved by Admin and OPEN are available to students
 const getCourseClasses = async (courseId, paging) => {
-  const course = await getCourseOrThrow(courseId);
+  const course = await getPublicCourseOrThrow(courseId);
   const filter = { courseId: course._id, status: "OPEN", ...NOT_DELETED };
   const [items, total] = await Promise.all([
     Class.find(filter).sort({ startDate: 1, createdAt: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
@@ -1124,6 +1139,8 @@ module.exports = {
   deleteSubject,
   restoreSubject,
   searchCourses,
+  getPublicCourseFilter,
+  getPublicCourseOrThrow,
   getCourse,
   getCourseClasses,
   insertCourse,

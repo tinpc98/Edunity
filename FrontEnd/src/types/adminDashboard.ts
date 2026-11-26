@@ -34,6 +34,7 @@ export interface AdminDashboardMonthlyFinance {
 export interface AdminDashboardFinance {
   revenue: number;
   commission: number;
+  commissionThisMonth: number;
   revenueThisMonth: number;
   transactions: number;
   refunds: number;

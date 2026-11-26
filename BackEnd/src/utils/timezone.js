@@ -256,6 +256,7 @@ module.exports = {
   DAY_MS,
   validateTimeZone,
   getZonedParts,
+  addCalendarDays,
   zonedWallTimeToUtc,
   parseDateTimeInZone,
   computePlannedOccurrences,

@@ -16,7 +16,7 @@ export interface PaymentStatusBadgeProps {
   className?: string;
 }
 
-export function getPaymentStatusDisplayLabel(
+function getPaymentStatusDisplayLabel(
   uiState: PaymentUiState,
   purpose: PaymentPurpose = "TUITION"
 ): string {

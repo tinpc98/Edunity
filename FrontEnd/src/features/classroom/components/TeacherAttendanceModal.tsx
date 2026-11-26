@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Modal,
   Table,
@@ -10,6 +11,10 @@ import {
   Alert,
   Spin,
   Progress,
+  Form,
+  Input,
+  Select,
+  App as AntdApp,
 } from "antd";
 import {
   UserOutlined,
@@ -22,6 +27,8 @@ import {
 } from "@ant-design/icons";
 import { sessionService, sessionKeys } from "../../../services/session.service";
 import type { SessionAttendanceItem } from "../../../types/session";
+import { ATTENDANCE_CORRECTION_OPTIONS, ATTENDANCE_CORRECTION_STATUS_LABELS } from "../../../types/session";
+import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 
 const { Text, Title } = Typography;
 
@@ -29,6 +36,7 @@ interface TeacherAttendanceModalProps {
   open: boolean;
   sessionId: string;
   isSessionActive: boolean;
+  sessionTitle?: string;
   onClose: () => void;
 }
 
@@ -36,8 +44,22 @@ export default function TeacherAttendanceModal({
   open,
   sessionId,
   isSessionActive,
+  sessionTitle,
   onClose,
 }: TeacherAttendanceModalProps) {
+  const { message } = AntdApp.useApp();
+  const [selectedAttendance, setSelectedAttendance] = useState<SessionAttendanceItem | null>(null);
+  const correction = useMutation({
+    mutationFn: ({
+      attendanceId, ...values
+    }: { attendanceId: string; requestedStatus: (typeof ATTENDANCE_CORRECTION_OPTIONS)[number]["value"]; reason: string }) =>
+      sessionService.requestAttendanceCorrection(sessionId, attendanceId, values),
+    onSuccess: async () => {
+      setSelectedAttendance(null);
+      message.success("Đã gửi yêu cầu điều chỉnh điểm danh.");
+      await refetch();
+    },
+  });
   const {
     data: attendanceList = [],
     isLoading,
@@ -89,7 +111,7 @@ export default function TeacherAttendanceModal({
       ),
     },
     {
-      title: "Trạng thái (Ngưỡng 70%)",
+      title: "Kết quả",
       dataIndex: "attendanceStatus",
       key: "attendanceStatus",
       width: 165,
@@ -135,7 +157,7 @@ export default function TeacherAttendanceModal({
                 icon={<ExclamationCircleOutlined />}
                 className="rounded-md font-medium px-2 py-0.5"
               >
-                Được miễn (Học bù)
+                Vắng có phép
               </Tag>
             );
           case "NOT_EVALUATED":
@@ -153,7 +175,7 @@ export default function TeacherAttendanceModal({
       },
     },
     {
-      title: "Thời lượng thực học",
+      title: "Thời lượng ghi nhận",
       key: "duration",
       width: 170,
       render: (_: any, record: SessionAttendanceItem) => {
@@ -219,9 +241,32 @@ export default function TeacherAttendanceModal({
         </Text>
       ),
     },
+    ...(!isSessionActive ? [{
+      title: "Điều chỉnh",
+      key: "correction",
+      width: 170,
+      render: (_: unknown, record: SessionAttendanceItem) => (
+        <Space orientation="vertical" size={4}>
+          {record.correctionRequest && (
+            <Tag color={record.correctionRequest.status === "APPROVED" ? "green" : "default"}>
+              {ATTENDANCE_CORRECTION_STATUS_LABELS[record.correctionRequest.status]}
+            </Tag>
+          )}
+          {record.canRequestCorrection && record.correctionRequest?.status !== "PENDING" && (
+            <Button size="small" onClick={() => {
+              correction.reset();
+              setSelectedAttendance(record);
+            }}>
+              Yêu cầu điều chỉnh
+            </Button>
+          )}
+        </Space>
+      ),
+    }] : []),
   ];
 
   return (
+    <>
     <Modal
       open={open}
       onCancel={onClose}
@@ -243,7 +288,7 @@ export default function TeacherAttendanceModal({
             </div>
             <div>
               <Title level={5} className="!m-0 text-gray-900">
-                Danh sách điểm danh buổi học (Chuẩn 70% thời lượng)
+                {sessionTitle ? `Điểm danh · ${sessionTitle}` : "Danh sách điểm danh buổi học"}
               </Title>
               <Text className="text-gray-400 text-xs">
                 {isSessionActive
@@ -262,7 +307,7 @@ export default function TeacherAttendanceModal({
           </Button>
         </div>
       }
-      width={780}
+      width={isSessionActive ? 780 : 960}
       centered
       className="rounded-2xl overflow-hidden"
     >
@@ -279,7 +324,7 @@ export default function TeacherAttendanceModal({
           </div>
           <div>
             <Text className="text-emerald-600 text-[11px] block uppercase font-bold">
-              Có mặt (≥70%)
+              Có mặt
             </Text>
             <Text className="text-base font-bold text-emerald-600">
               {presentCount}
@@ -287,7 +332,7 @@ export default function TeacherAttendanceModal({
           </div>
           <div>
             <Text className="text-amber-600 text-[11px] block uppercase font-bold">
-              Vào muộn (&gt;5p)
+              Vào muộn
             </Text>
             <Text className="text-base font-bold text-amber-600">
               {lateCount}
@@ -295,7 +340,7 @@ export default function TeacherAttendanceModal({
           </div>
           <div>
             <Text className="text-rose-600 text-[11px] block uppercase font-bold">
-              Vắng (&lt;70%)
+              Vắng mặt
             </Text>
             <Text className="text-base font-bold text-rose-600">
               {absentCount}
@@ -324,6 +369,7 @@ export default function TeacherAttendanceModal({
             rowKey="_id"
             pagination={{ pageSize: 8, showSizeChanger: false }}
             size="middle"
+            scroll={{ x: isSessionActive ? 670 : 840 }}
             locale={{
               emptyText: "Chưa có học viên nào điểm danh cho buổi học này.",
             }}
@@ -332,5 +378,27 @@ export default function TeacherAttendanceModal({
         )}
       </div>
     </Modal>
+    <Modal
+      open={Boolean(selectedAttendance)}
+      title={`Điều chỉnh điểm danh · ${selectedAttendance?.studentId?.studentProfile?.fullName || "Học viên"}`}
+      onCancel={() => !correction.isPending && setSelectedAttendance(null)}
+      footer={null}
+      destroyOnHidden
+    >
+      {selectedAttendance && (
+        <Form layout="vertical" onFinish={(values) => correction.mutate({ attendanceId: selectedAttendance._id, ...values })}>
+          {correction.isError && <Alert type="error" showIcon className="mb-4"
+            title={getFriendlyErrorMessage(correction.error, "Không thể gửi yêu cầu điều chỉnh.")} />}
+          <Form.Item name="requestedStatus" label="Kết quả đề xuất" rules={[{ required: true, message: "Chọn kết quả đề xuất." }]}>
+            <Select options={ATTENDANCE_CORRECTION_OPTIONS} />
+          </Form.Item>
+          <Form.Item name="reason" label="Lý do" rules={[{ required: true, whitespace: true, max: 1000, message: "Nhập lý do điều chỉnh." }]}>
+            <Input.TextArea rows={3} maxLength={1000} />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={correction.isPending}>Gửi yêu cầu</Button>
+        </Form>
+      )}
+    </Modal>
+    </>
   );
 }

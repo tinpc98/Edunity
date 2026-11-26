@@ -40,6 +40,7 @@ export const adminDashboardService = {
       finance: {
         revenue: parseFloat(String(raw?.finance?.revenue || 0)),
         commission: parseFloat(String(raw?.finance?.commission || 0)),
+        commissionThisMonth: parseFloat(String(raw?.finance?.commissionThisMonth || 0)),
         revenueThisMonth: parseFloat(String(raw?.finance?.revenueThisMonth || 0)),
         transactions: Number(raw?.finance?.transactions || 0),
         refunds: Number(raw?.finance?.refunds || 0),

@@ -26,7 +26,9 @@ export const SUPPORTED_GRADE_LEVELS: readonly GradeLevel[] = [
 export const offeredGradeLevels = (category?: { allowedGradeLevels: GradeLevel[] | null }): readonly GradeLevel[] =>
   SUPPORTED_GRADE_LEVELS.filter((grade) => category?.allowedGradeLevels?.includes(grade) ?? true);
 
-export const COURSE_LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED"] as const;
+export const isForeignLanguageCategory = (category?: { slug: string } | null) => category?.slug === "ngoai-ngu";
+
+export const COURSE_LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED", "ALL_AGES"] as const;
 export type CourseLevel = (typeof COURSE_LEVELS)[number];
 
 export const CATALOG_STATUSES = ["ACTIVE", "INACTIVE"] as const;
@@ -67,6 +69,7 @@ export const COURSE_LEVEL_LABELS: Record<CourseLevel, string> = {
   BEGINNER: "Cơ bản",
   INTERMEDIATE: "Trung cấp",
   ADVANCED: "Nâng cao",
+  ALL_AGES: "Mọi lứa tuổi",
 };
 
 // ─── RAW API DTOs (shape returned by Backend) ────────────────

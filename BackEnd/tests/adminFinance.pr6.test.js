@@ -156,7 +156,10 @@ describe("PR6: Admin Finance & Payment Reconciliation Dashboard (TIN-FIN-PR6)", 
       expect(res.body.data).toHaveProperty("reconciliations");
       expect(res.body.data).toHaveProperty("bankEvents");
       expect(res.body.data).toHaveProperty("outboxWorker");
-      expect(res.body.data).toHaveProperty("disclaimer");
+      expect(res.body.data.operationsSummary).toMatchObject({
+        isRunning: expect.any(Boolean),
+        processedCount: expect.any(Number),
+      });
     });
 
     test("2.2. Confirmed tuition revenue aggregates only COMPLETED ENROLLMENT_PAYMENT", async () => {

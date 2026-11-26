@@ -77,6 +77,51 @@ async function refreshSession(expiredToken: string | null): Promise<string | nul
   }
 }
 
+/**
+ * Safely unwrap API response envelope.
+ * Standard backend response: { success: boolean, data?: T, message?: string }
+ */
+export function unwrapApiResponse<T = any>(data: any): T {
+  // If null, undefined, primitive, or array, return as is
+  if (data === null || data === undefined || typeof data !== "object" || Array.isArray(data)) {
+    return data as T;
+  }
+
+  // Check if this is a standard API wrapper envelope.
+  // Standard Edunity envelopes have a boolean `success` property and a `data` property.
+  const hasSuccess = "success" in data && typeof data.success === "boolean";
+  const hasData = "data" in data;
+
+  if (hasSuccess && hasData) {
+    const allKeys = Object.keys(data);
+    const metaKeys = allKeys.filter(
+      (k) => k !== "success" && k !== "data" && k !== "message" && k !== "error"
+    );
+
+    // If there is no extra metadata at the envelope root, return data.data (including null, false, 0, [], etc.)
+    if (metaKeys.length === 0) {
+      return data.data as T;
+    }
+
+    // If data.data is an object and all metaKeys are already present inside data.data
+    // (e.g. res.json({ success: true, data: result, ...result })), return data.data
+    if (data.data && typeof data.data === "object" && !Array.isArray(data.data)) {
+      const dataKeys = new Set(Object.keys(data.data));
+      const hasUniqueMeta = metaKeys.some((k) => !dataKeys.has(k));
+      if (!hasUniqueMeta) {
+        return data.data as T;
+      }
+    }
+
+    // There is extra metadata alongside data (e.g. { success: true, data: [...], pagination: { ... } })
+    // Do NOT discard metadata! Return the response object.
+    return data as T;
+  }
+
+  // If there is no `success` boolean wrapper, this is a business payload (even if it has a `data` property)
+  return data as T;
+}
+
 export async function apiClient<T>(
   endpoint: string,
   options: RequestInit = {},
@@ -138,7 +183,7 @@ export async function apiClient<T>(
     }
 
     // Backend responds with { success: true, data: T }
-    return data?.data ?? data;
+    return unwrapApiResponse<T>(data);
   } catch (error) {
     if (error instanceof FetchError) {
       throw error;

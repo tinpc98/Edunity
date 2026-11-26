@@ -19,6 +19,7 @@ export interface PublicTeacherDetail extends PublicTeacherListItem {
 export interface PublicSubject {
   id: string;
   name: string;
+  canonicalName?: string;
   slug: string;
 }
 
@@ -75,6 +76,7 @@ class CatalogService {
       subjects: (category.subjects || []).map((subject) => ({
         id: subject.id,
         name: formatSubjectLabel(subject.name, subject.slug),
+        canonicalName: subject.name,
         slug: subject.slug,
       })),
     }));

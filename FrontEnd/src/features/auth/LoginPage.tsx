@@ -131,9 +131,9 @@ export default function LoginPage() {
                 <Form.Item name="rememberMe" valuePropName="checked" noStyle>
                   <Checkbox>Ghi nhớ đăng nhập</Checkbox>
                 </Form.Item>
-                <a href="#forgot-password" className="shrink-0 text-sm font-semibold text-[#0D9488] hover:text-[#0F766E]">
+                <Link to={ROUTES.AUTH.FORGOT_PASSWORD} className="shrink-0 text-sm font-semibold text-[#0D9488] hover:text-[#0F766E]">
                   Quên mật khẩu?
-                </a>
+                </Link>
               </div>
 
               <Button type="primary" htmlType="submit" loading={loginMutation.isPending} disabled={loginMutation.isPending} block size="large" className="h-12 rounded-lg bg-[#0D9488] font-bold shadow-sm shadow-teal-900/10 hover:bg-[#0B746C] border-none">

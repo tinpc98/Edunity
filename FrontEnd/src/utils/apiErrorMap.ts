@@ -217,10 +217,22 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       return "Danh mục hoặc môn học của đề xuất đã tạm ngưng hoạt động.";
     }
     if (err.code === "GRADE_LEVEL_REQUIRED") {
-      return "Vui lòng chọn khối lớp: Lớp 6–12 hoặc Ôn thi đại học.";
+      return "Các môn theo chương trình phổ thông cần chọn khối lớp.";
     }
     if (err.code === "GRADE_LEVEL_NOT_SUPPORTED") {
-      return "Edunity chỉ nhận khóa học và lớp học thuộc Lớp 6–12 hoặc Ôn thi đại học.";
+      return "Chọn khối được hỗ trợ hoặc chọn khóa ngoại ngữ không theo khối.";
+    }
+    if (err.code === "ATTENDANCE_CORRECTION_CONFLICT") {
+      return "Yêu cầu đã thay đổi. Vui lòng làm mới danh sách rồi thử lại.";
+    }
+    if (err.code === "ATTENDANCE_NOT_FINALIZED") {
+      return "Chỉ có thể điều chỉnh sau khi buổi học kết thúc và điểm danh được chốt.";
+    }
+    if (err.code === "COURSE_SCOPE_CHANGED") {
+      return "Phạm vi khóa học vừa được cập nhật. Vui lòng chọn lại khóa.";
+    }
+    if (err.code === "PASSWORD_CHANGE_CONFLICT") {
+      return "Thông tin đăng nhập vừa thay đổi. Vui lòng đăng nhập lại và thử lại.";
     }
     if (err.code === "COURSE_PROPOSAL_NOT_EDITABLE") {
       return "Đề xuất khóa học này hiện không thể chỉnh sửa.";

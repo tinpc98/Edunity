@@ -51,7 +51,7 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
   const [form] = Form.useForm<PayoutRequestPayload>();
 
   const {
-    data: payouts = [],
+    data: rawPayouts,
     isLoading: payoutsLoading,
     isError: payoutsError,
     refetch: refetchPayouts,
@@ -59,6 +59,12 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
     queryKey: financeKeys.teacherPayouts(),
     queryFn: () => financeService.getMyPayouts(),
   });
+
+  const payouts: Payout[] = Array.isArray(rawPayouts)
+    ? rawPayouts
+    : Array.isArray((rawPayouts as any)?.items)
+    ? (rawPayouts as any).items
+    : [];
 
   const {
     data: settlementData,
@@ -77,7 +83,21 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
     "Cổng rút tiền mở vào Thứ Hai hàng tuần từ 08:00 đến 17:00 (GMT+7)";
 
   const { data: bankAccount } = useQuery({ queryKey: TEACHER_BANK_ACCOUNT_KEY, queryFn: teacherBankAccountService.getMine });
-  const bankReady = bankAccount?.status === "VERIFIED" && !dayjs(bankAccount.payoutLockedUntil).isAfter(dayjs());
+  
+  // Fail-safe: Tài khoản phải được duyệt VÀ thời gian khóa phải hợp lệ, đã kết thúc
+  const isVerified = Boolean(
+    bankAccount &&
+    bankAccount.bankName &&
+    (bankAccount.status === "VERIFIED" || bankAccount.status === "APPROVED")
+  );
+  const isLockActive = Boolean(
+    bankAccount?.payoutLockedUntil &&
+    (
+      !dayjs(bankAccount.payoutLockedUntil).isValid() ||
+      dayjs(bankAccount.payoutLockedUntil).isAfter(dayjs())
+    )
+  );
+  const bankReady = isVerified && !isLockActive;
 
   const hasOpenRequest = payouts.some((p) =>
     ["PENDING", "PROCESSING", "APPROVED", "SCHEDULED", "PENDING_BANK_TRANSFER"].includes(p.status)
@@ -131,8 +151,10 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
         >
           {payoutDataUnavailable
             ? "Không thể tải thông tin rút tiền"
-            : !bankReady
+            : !isVerified
             ? "Cần tài khoản nhận tiền đã duyệt"
+            : isLockActive
+            ? "Tài khoản đang tạm khóa rút tiền"
             : hasOpenRequest
             ? "Đang có yêu cầu chờ xử lý"
             : !isMonday
@@ -227,16 +249,19 @@ export default function TeacherPayoutSection({ available }: TeacherPayoutSection
           {
             title: "Tài khoản nhận",
             dataIndex: "bankAccountSnapshot",
-            render: (b: Payout["bankAccountSnapshot"]) => (
-              <div className="text-xs">
-                <span className="font-semibold text-slate-700">{b.bankName}</span>
-                <span className="text-slate-400 mx-1">•</span>
-                <span className="font-mono text-slate-600">
-                  {maskBankAccountNumber(b?.accountNumber)}
-                </span>
-                <div className="text-slate-500 uppercase text-[11px]">{b.accountHolderName}</div>
-              </div>
-            ),
+            render: (b?: Payout["bankAccountSnapshot"]) =>
+              b ? (
+                <div className="text-xs">
+                  <span className="font-semibold text-slate-700">{b.bankName || "—"}</span>
+                  <span className="text-slate-400 mx-1">•</span>
+                  <span className="font-mono text-slate-600">
+                    {maskBankAccountNumber(b?.accountNumber)}
+                  </span>
+                  <div className="text-slate-500 uppercase text-[11px]">{b.accountHolderName || "—"}</div>
+                </div>
+              ) : (
+                <span className="text-slate-400 text-xs">—</span>
+              ),
           },
           {
             title: "Trạng thái",

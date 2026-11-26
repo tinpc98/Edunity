@@ -124,7 +124,10 @@ export const financeService = {
 
   /** Teacher: payout requests. GET /api/teacher/payouts */
   async getMyPayouts(): Promise<Payout[]> {
-    return apiClient<Payout[]>(`/teacher/payouts`);
+    const raw = await apiClient<any>(`/teacher/payouts`);
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object" && Array.isArray(raw.items)) return raw.items;
+    return [];
   },
 
   /** Teacher: settlements & withdrawal window. GET /api/teacher/settlements */

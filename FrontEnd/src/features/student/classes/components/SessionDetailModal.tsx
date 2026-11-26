@@ -1,9 +1,12 @@
-import { Modal, Button, App as AntdApp } from "antd";
+import { Modal, Button, Alert, Tag, App as AntdApp } from "antd";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { CloseOutlined, CaretRightOutlined, VideoCameraOutlined } from "@ant-design/icons";
 import type { SessionEntity, SessionStatus } from "../../../../types/classDiscovery";
 import { isSessionLive } from "../../../../utils/sessionLive";
 import SessionMaterials from "../../../../components/common/SessionMaterials";
+import { sessionService, sessionKeys } from "../../../../services/session.service";
+import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_CORRECTION_STATUS_LABELS } from "../../../../types/session";
 
 export interface SessionWithNumber extends SessionEntity {
   sessionNumber: number;
@@ -62,6 +65,12 @@ export default function SessionDetailModal({
   onWatchRecording,
 }: SessionDetailModalProps) {
   const { notification } = AntdApp.useApp();
+  const ended = session?.status === "COMPLETED" || session?.roomState === "ENDED";
+  const attendance = useQuery({
+    queryKey: sessionKeys.myAttendance(session?._id),
+    queryFn: () => sessionService.getMyAttendance(session!._id),
+    enabled: open && Boolean(session) && ended,
+  });
 
   if (!session) return null;
 
@@ -133,6 +142,25 @@ export default function SessionDetailModal({
 
         {/* ================= 3. SUBTLE DIVIDER ================= */}
         <div className="h-px bg-slate-100 mb-5" />
+
+        {ended && (
+          <div className="mb-5 rounded-xl border border-slate-200 p-3">
+            <h3 className="mb-2 text-sm font-semibold text-slate-800">Điểm danh của bạn</h3>
+            {attendance.isLoading && <span className="text-sm text-slate-500">Đang tải kết quả điểm danh…</span>}
+            {attendance.isError && <Alert type="error" showIcon title="Không thể tải điểm danh." action={
+              <Button size="small" onClick={() => attendance.refetch()}>Thử lại</Button>
+            } />}
+            {attendance.isSuccess && !attendance.data && <span className="text-sm text-slate-500">Chưa có kết quả điểm danh.</span>}
+            {attendance.data && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Tag color="cyan">{ATTENDANCE_STATUS_LABELS[attendance.data.attendanceStatus]}</Tag>
+                {attendance.data.correction && <Tag>{ATTENDANCE_CORRECTION_STATUS_LABELS[attendance.data.correction.status]}</Tag>}
+                {attendance.data.correction?.status === "APPROVED" && attendance.data.correction.before &&
+                  <span className="text-slate-500">Trước điều chỉnh: {ATTENDANCE_STATUS_LABELS[attendance.data.correction.before.status]}</span>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Live Classroom CTA if SCHEDULED or IN_PROGRESS */}
         {(session.status === "SCHEDULED" || session.status === "IN_PROGRESS") && (

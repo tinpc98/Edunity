@@ -18,7 +18,7 @@ exports.restoreCategory = handle((req) => catalog.restoreCategory(req.user.id, r
 // Subjects
 exports.listSubjectsByCategory = handle((req) => catalog.listSubjectsByCategory(req.params.id));
 exports.adminListSubjects = handle((req) => catalog.adminListSubjects(req.query.scope));
-exports.getSubject = handle((req) => catalog.getSubject(req.params.id));
+exports.getSubject = handle((req) => catalog.getSubject(req.params.id, { admin: req.user?.role === "ADMIN" }));
 exports.createSubject = handle((req) => catalog.createSubject(req.user.id, body(req)), 201);
 exports.updateSubject = handle((req) => catalog.updateSubject(req.user.id, req.params.id, body(req)));
 exports.deleteSubject = handle((req) => catalog.deleteSubject(req.user.id, req.params.id, body(req).reason));
@@ -48,7 +48,10 @@ exports.rejectProposal = handle((req) => proposals.rejectProposal(req.user.id, r
 exports.requestProposalChanges = handle((req) => proposals.requestProposalChanges(req.user.id, req.params.id, body(req)));
 
 // Syllabus Versions & Curriculum Units (CUR-02, CUR-12)
-exports.getCoursePublishedSyllabus = handle((req) => syllabusService.getPublishedSyllabus(req.params.id));
+exports.getCoursePublishedSyllabus = handle(async (req) => {
+  await catalog.getPublicCourseOrThrow(req.params.id);
+  return syllabusService.getPublishedSyllabus(req.params.id);
+});
 exports.getClassSyllabus = handle((req) => syllabusService.getClassSyllabus(req.params.id, req.user));
 exports.listSyllabusVersions = handle((req) => syllabusService.listVersions(req.params.id));
 exports.createSyllabusVersion = handle((req) => syllabusService.createDraftVersion(req.user.id, req.params.id, body(req)), 201);

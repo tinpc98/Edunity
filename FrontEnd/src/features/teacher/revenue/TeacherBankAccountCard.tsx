@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App as AntdApp, Button, Form, Input, Modal, Skeleton, Tag } from "antd";
 import { BankOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { BANK_STATUS_META, TEACHER_BANK_ACCOUNT_KEY, teacherBankAccountService } from "../../../services/teacherBankAccount.service";
+import { getBankStatusMeta, TEACHER_BANK_ACCOUNT_KEY, teacherBankAccountService } from "../../../services/teacherBankAccount.service";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 
 /** The single payout account (BAO-09): payouts always go here, never to an account typed at request time. */
@@ -29,19 +29,28 @@ export default function TeacherBankAccountCard() {
   if (isPending) return <Skeleton active paragraph={{ rows: 1 }} />;
   if (isError) return <Alert type="error" showIcon message="Không tải được tài khoản nhận tiền." />;
 
-  const locked = account && dayjs(account.payoutLockedUntil).isAfter(dayjs());
+  const hasAccount = Boolean(account && account.bankName);
+  const statusMeta = getBankStatusMeta(account?.status);
+  const locked = Boolean(
+    hasAccount &&
+    account?.payoutLockedUntil &&
+    (
+      !dayjs(account.payoutLockedUntil).isValid() ||
+      dayjs(account.payoutLockedUntil).isAfter(dayjs())
+    )
+  );
 
   return (
     <div className="rounded-xl border border-slate-200 p-4 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div className="flex items-start gap-3">
         <BankOutlined className="text-teal-600 text-xl mt-1" />
-        {account ? (
+        {hasAccount && account ? (
           <div className="text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-slate-800">
-                {account.bankName} · {account.accountNumberMasked}
+                {account.bankName} · {account.accountNumberMasked || (account.accountNumber ? `••••${account.accountNumber.slice(-4)}` : "••••")}
               </span>
-              <Tag color={BANK_STATUS_META[account.status].color} className="!m-0">{BANK_STATUS_META[account.status].label}</Tag>
+              <Tag color={statusMeta.color} className="!m-0">{statusMeta.label}</Tag>
             </div>
             <div className="text-xs text-slate-500 mt-1">Chủ tài khoản: {account.accountHolderName}</div>
             {account.status === "REJECTED" && account.reviewNote && (
@@ -59,7 +68,7 @@ export default function TeacherBankAccountCard() {
           </div>
         )}
       </div>
-      <Button onClick={() => setOpen(true)}>{account ? "Đổi tài khoản" : "Đăng ký tài khoản"}</Button>
+      <Button onClick={() => setOpen(true)}>{hasAccount ? "Đổi tài khoản" : "Đăng ký tài khoản"}</Button>
 
       <Modal
         title="Tài khoản nhận tiền"

@@ -176,10 +176,13 @@ const resolvePayoutAccount = async (teacherId, now = new Date()) => {
   if (!account || account.status !== "VERIFIED") {
     throw new AppError("Register a bank account and wait for Edunity to verify it before requesting a payout", "BANK_ACCOUNT_NOT_VERIFIED", 409);
   }
-  if (new Date(account.payoutLockedUntil) > now) {
-    const err = new AppError("Payouts are paused after a bank account change", "BANK_ACCOUNT_RECENTLY_CHANGED", 409);
-    err.details = { payoutLockedUntil: account.payoutLockedUntil };
-    throw err;
+  if (account.payoutLockedUntil) {
+    const lockTime = new Date(account.payoutLockedUntil).getTime();
+    if (Number.isNaN(lockTime) || lockTime > now.getTime()) {
+      const err = new AppError("Payouts are paused after a bank account change", "BANK_ACCOUNT_RECENTLY_CHANGED", 409);
+      err.details = { payoutLockedUntil: account.payoutLockedUntil };
+      throw err;
+    }
   }
   return { bankName: account.bankName, accountNumber: pii.decrypt(account.accountNumberEnc), accountHolderName: account.accountHolderName };
 };

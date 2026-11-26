@@ -85,7 +85,9 @@ export default function GuardianConsentCard({ campaignId }: { campaignId: string
         <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 mb-3 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{current.guardian.fullName}</span>
-            <Tag color={GUARDIAN_CONSENT_STATUS_META[current.status].color} className="!m-0">{GUARDIAN_CONSENT_STATUS_META[current.status].label}</Tag>
+            <Tag color={GUARDIAN_CONSENT_STATUS_META[current.status]?.color || "default"} className="!m-0">
+              {GUARDIAN_CONSENT_STATUS_META[current.status]?.label || current.status || "Chưa rõ"}
+            </Tag>
             {current.allowPublicStory && <Tag className="!m-0">Cho phép chia sẻ câu chuyện ẩn danh</Tag>}
           </div>
           {current.status === "REJECTED" && current.reviewNote && <div className="text-xs text-rose-700 mt-1">Lý do: {current.reviewNote}</div>}

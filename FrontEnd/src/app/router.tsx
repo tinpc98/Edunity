@@ -64,6 +64,7 @@ import AdminFinanceOverviewPage from "../features/admin/finance/AdminFinanceOver
 import AdminBankEventsPage from "../features/admin/finance/AdminBankEventsPage";
 import AdminReconciliationsPage from "../features/admin/finance/AdminReconciliationsPage";
 import { AdminReportsPage } from "../features/admin/reports/AdminReportsPage";
+import AdminAttendanceCorrectionsPage from "../features/admin/attendance/AdminAttendanceCorrectionsPage";
 import AdminReviewsPage from "../features/admin/reviews/AdminReviewsPage";
 import AdminTrashPage from "../features/admin/trash/AdminTrashPage";
 import AdminNotificationsPage from "../features/admin/notifications/AdminNotificationsPage";
@@ -72,6 +73,7 @@ import SponsorHomePage from "../features/sponsor/home/SponsorHomePage";
 import SponsorProfilePage from "../features/sponsor/profile/SponsorProfilePage";
 import SponsorContributionsPage from "../features/sponsor/contributions/SponsorContributionsPage";
 import LoginPage from "../features/auth/LoginPage";
+import PasswordRecoveryPage from "../features/auth/PasswordRecoveryPage";
 import RegisterPage from "../features/auth/RegisterPage";
 import TeacherRegisterPage from "../features/auth/TeacherRegisterPage";
 import TeacherQualificationPage from "../features/auth/TeacherQualificationPage";
@@ -83,11 +85,13 @@ import CoursesPage from "../features/course/CoursesPage";
 import CourseDetailPage from "../features/course/CourseDetailPage";
 import CampaignsPage from "../features/campaign/CampaignsPage";
 import PublicCampaignDetailPage from "../features/campaign/CampaignDetailPage";
+import ContractVerificationPage from "../features/contracts/ContractVerificationPage";
 import ClassroomPage from "../features/classroom/ClassroomPage";
 import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { MessagesPage } from "../features/messages/MessagesPage";
 import { MyReportsPage } from "../features/reports/MyReportsPage";
 import NotFoundPage from "../components/common/NotFoundPage";
+import RouteErrorBoundary from "../components/common/RouteErrorBoundary";
 import AboutPage from "../features/about/AboutPage";
 import SupportPage from "../features/support/SupportPage";
 import VerifierScholarshipApplicationsPage from "../features/verifier/VerifierScholarshipApplicationsPage";
@@ -95,6 +99,7 @@ import VerifierScholarshipApplicationsPage from "../features/verifier/VerifierSc
 const router = createBrowserRouter([
   {
     element: <PublicLayout />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         path: ROUTES.HOME,
@@ -169,6 +174,14 @@ const router = createBrowserRouter([
         element: <LoginPage />,
       },
       {
+        path: ROUTES.AUTH.FORGOT_PASSWORD,
+        element: <PasswordRecoveryPage />,
+      },
+      {
+        path: ROUTES.AUTH.RESET_PASSWORD,
+        element: <PasswordRecoveryPage reset />,
+      },
+      {
         path: ROUTES.AUTH.TEACHER_REGISTER,
         element: <TeacherRegisterPage />,
       },
@@ -193,6 +206,10 @@ const router = createBrowserRouter([
         element: <PublicCampaignDetailPage />,
       },
       {
+        path: ROUTES.CONTRACT_VERIFY,
+        element: <ContractVerificationPage />,
+      },
+      {
         path: ROUTES.NOTIFICATIONS,
         element: <NotificationsPage />,
       },
@@ -209,6 +226,7 @@ const router = createBrowserRouter([
   {
     path: ROUTES.STUDENT.HOME,
     element: <StudentLayout />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         index: true,
@@ -263,6 +281,7 @@ const router = createBrowserRouter([
   {
     path: ROUTES.TEACHER.HOME,
     element: <TeacherLayout />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         index: true,
@@ -329,6 +348,7 @@ const router = createBrowserRouter([
   {
     path: ROUTES.ADMIN.HOME,
     element: <AdminLayout />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         index: true,
@@ -439,6 +459,10 @@ const router = createBrowserRouter([
         element: <AdminReportsPage />,
       },
       {
+        path: "attendance-corrections",
+        element: <AdminAttendanceCorrectionsPage />,
+      },
+      {
         path: "reviews",
         element: <AdminReviewsPage />,
       },
@@ -455,6 +479,7 @@ const router = createBrowserRouter([
   {
     path: ROUTES.SPONSOR.HOME,
     element: <SponsorLayout />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         index: true,
@@ -473,10 +498,12 @@ const router = createBrowserRouter([
   {
     path: ROUTES.VERIFIER.SCHOLARSHIP_APPLICATIONS,
     element: <Jade><VerifierScholarshipApplicationsPage /></Jade>,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: ROUTES.CLASSROOM,
     element: <Jade><ClassroomPage /></Jade>,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: "*",

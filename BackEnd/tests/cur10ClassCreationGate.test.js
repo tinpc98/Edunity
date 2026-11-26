@@ -144,7 +144,7 @@ describe("TASK CUR-10: Teacher Class Creation, Update & Submit Gate Suite", () =
   // =========================================================================
   test("CUR-10.1: Class schema adds nullable level aligned with COURSE_LEVELS; dependencies fail closed by default", async () => {
     expect(Class.schema.paths.level).toBeDefined();
-    expect(Class.schema.paths.level.options.enum).toEqual(["BEGINNER", "INTERMEDIATE", "ADVANCED"]);
+    expect(Class.schema.paths.level.options.enum).toEqual(["BEGINNER", "INTERMEDIATE", "ADVANCED", "ALL_AGES"]);
     expect(Class.schema.paths.level.options.default).toBeNull();
 
     const docNull = Class.hydrate({

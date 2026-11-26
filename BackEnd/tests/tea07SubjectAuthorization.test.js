@@ -107,7 +107,7 @@ describe("TASK TEA-07: Teacher Subject Authorization Suite", () => {
       expect(paths.subjectId.isRequired).toBe(true);
       expect(paths.categoryId.isRequired).toBe(true);
       expect(paths.gradeLevel).toBeDefined();
-      expect(paths.level.options.enum).toEqual(["BEGINNER", "INTERMEDIATE", "ADVANCED"]);
+      expect(paths.level.options.enum).toEqual(["BEGINNER", "INTERMEDIATE", "ADVANCED", "ALL_AGES"]);
       expect(paths.status.options.enum).toEqual(["PENDING", "APPROVED", "SUSPENDED"]);
       expect(paths.status.options.default).toBe("PENDING");
       expect(paths.approvedBy).toBeDefined();
@@ -182,7 +182,7 @@ describe("TASK TEA-07: Teacher Subject Authorization Suite", () => {
       ).rejects.toMatchObject({ code: "GRADE_LEVEL_CATEGORY_MISMATCH", statusCode: 400 });
     });
 
-    test("TEA-07.REQ.3: Normalizes BASIC->BEGINNER, requires a grade for open categories too, redacts admin fields", async () => {
+    test("TEA-07.REQ.3: Normalizes BASIC->BEGINNER, accepts an ungraded language scope and redacts admin fields", async () => {
       stubActiveTeacher();
       jest.spyOn(Subject, "findOne").mockImplementation(() =>
         mockQuery({ _id: subEng, categoryId: catLang, name: "IELTS", status: "ACTIVE" })
@@ -202,19 +202,14 @@ describe("TASK TEA-07: Teacher Subject Authorization Suite", () => {
       jest.spyOn(Subject, "find").mockReturnValue(mockQuery([{ _id: subEng, name: "IELTS" }]));
       jest.spyOn(Category, "find").mockReturnValue(mockQuery([{ _id: catLang, name: "Ngoại ngữ" }]));
 
-      await expect(
-        teacherSubjectAuthService.requestAuthorization(teacherA, { subjectId: subEng.toString(), level: "BASIC" })
-      ).rejects.toMatchObject({ code: "GRADE_LEVEL_REQUIRED", statusCode: 400 });
-
       const res = await teacherSubjectAuthService.requestAuthorization(teacherA, {
         subjectId: subEng.toString(),
-        gradeLevel: "UNIVERSITY_EXAM_PREP",
         level: "BASIC",
         requestNote: "Có chứng chỉ IELTS 8.0",
       });
 
       expect(capturedDoc.level).toBe("BEGINNER");
-      expect(capturedDoc.gradeLevel).toBe("UNIVERSITY_EXAM_PREP");
+      expect(capturedDoc.gradeLevel).toBeNull();
       expect(capturedDoc.status).toBe("PENDING");
       expect(res.level).toBe("BEGINNER");
       expect(res.status).toBe("PENDING");

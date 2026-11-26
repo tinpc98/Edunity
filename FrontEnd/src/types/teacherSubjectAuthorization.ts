@@ -18,7 +18,8 @@ export interface TeacherSubjectAuthorization {
   categoryId: string;
   categoryName: string | null;
   gradeLevel: GradeLevel | null;
-  level: CourseLevel;
+  /** null for grants auto-created from an approved teacher profile (any course level). */
+  level: CourseLevel | null;
   status: TeacherSubjectAuthorizationStatus;
   requestNote?: string | null;
   reviewedAt?: string | null;

@@ -1,26 +1,20 @@
-const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident, seedTestPayouts } = require("./helpers/financialFixtures");
+const { verifiedBankAccount } = require("./helpers/bankAccount");
 const payoutService = require("../src/services/payoutService");
 const bankAccountService = require("../src/services/teacherBankAccountService");
 const { User, Payout, Payment, RefundCase } = require("../src/models");
 
 describe("Admin Teacher Payout & Bank Account Workflow V3", () => {
-  let dbConnected = false;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-      dbConnected = true;
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    await seedTuitionIncident(actors);
+    await seedTestPayouts(actors.teacher);
   });
 
-  afterAll(async () => {
-    if (dbConnected && mongoose.connection.readyState !== 0) {
-      await mongoose.disconnect();
-    }
-  });
+  afterAll(disconnectDB);
 
   it("1. adminListBankAccounts supports PENDING_REVIEW, VERIFIED, REJECTED, and ALL", async () => {
     const paging = { skip: 0, pageSize: 20, page: 1 };
@@ -91,5 +85,74 @@ describe("Admin Teacher Payout & Bank Account Workflow V3", () => {
     testPayouts.forEach((tp) => {
       expect(tp.isTestData).toBe(true);
     });
+  });
+
+  it("5. resolvePayoutAccount fail-safe: blocks unverified, future lock, and invalid lock dates", async () => {
+    const teacher = await User.findOne({ role: "TEACHER" });
+    expect(teacher).toBeDefined();
+
+    // Case A: Unverified bank account
+    await User.updateOne(
+      { _id: teacher._id },
+      {
+        $set: {
+          "teacherProfile.bankAccount": {
+            ...verifiedBankAccount("TEST TEACHER"),
+            status: "PENDING_REVIEW",
+          },
+        },
+      }
+    );
+    await expect(bankAccountService.resolvePayoutAccount(teacher._id)).rejects.toThrow(
+      "Register a bank account and wait for Edunity to verify it before requesting a payout"
+    );
+
+    // Case B: Future lock
+    const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await User.updateOne(
+      { _id: teacher._id },
+      {
+        $set: {
+          "teacherProfile.bankAccount": {
+            ...verifiedBankAccount("TEST TEACHER"),
+            payoutLockedUntil: futureDate,
+          },
+        },
+      }
+    );
+    await expect(bankAccountService.resolvePayoutAccount(teacher._id)).rejects.toThrow(
+      "Payouts are paused after a bank account change"
+    );
+
+    // Case C: Invalid lock date (fail-safe test: must NOT bypass lock check)
+    await User.collection.updateOne(
+      { _id: teacher._id },
+      {
+        $set: {
+          "teacherProfile.bankAccount": {
+            ...verifiedBankAccount("TEST TEACHER"),
+            payoutLockedUntil: "INVALID_CORRUPTED_DATE",
+          },
+        },
+      }
+    );
+    await expect(bankAccountService.resolvePayoutAccount(teacher._id)).rejects.toThrow(
+      "Payouts are paused after a bank account change"
+    );
+
+    // Case D: Past lock (valid and expired) -> resolves successfully
+    await User.updateOne(
+      { _id: teacher._id },
+      {
+        $set: {
+          "teacherProfile.bankAccount": verifiedBankAccount("TEST TEACHER"),
+        },
+      }
+    );
+    const resolved = await bankAccountService.resolvePayoutAccount(teacher._id);
+    expect(resolved).toBeDefined();
+    expect(resolved.bankName).toBe("Vietcombank");
+    expect(resolved.accountNumber).toBe("0123456789");
+    expect(resolved.accountHolderName).toBe("TEST TEACHER");
   });
 });

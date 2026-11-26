@@ -1,5 +1,5 @@
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident } = require("./helpers/financialFixtures");
 const mongoose = require("mongoose");
 const request = require("supertest");
 const app = require("../src/app");
@@ -36,9 +36,9 @@ describe("EDUNITY-V3-SOFT-DELETE-FINAL-V2 Comprehensive Test Suite", () => {
   let testClass;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    await seedTuitionIncident(actors);
 
     // 1. Create / Find Super Admin (has PERMANENT_DELETE permission)
     const superAdminEmail = `super_admin_perm_${Date.now()}@edunity.vn`;
@@ -82,15 +82,7 @@ describe("EDUNITY-V3-SOFT-DELETE-FINAL-V2 Comprehensive Test Suite", () => {
     studentToken = signAccessToken(studentUser);
   });
 
-  afterAll(async () => {
-    // Clean up created test entities
-    if (superAdminUser) await User.deleteOne({ _id: superAdminUser._id });
-    if (normalAdminUser) await User.deleteOne({ _id: normalAdminUser._id });
-    if (testCategory) await Category.deleteMany({ _id: testCategory._id });
-    if (testSubject) await Subject.deleteMany({ _id: testSubject._id });
-    if (testCourse) await Course.deleteMany({ _id: testCourse._id });
-    if (testClass) await Class.deleteMany({ _id: testClass._id });
-  });
+  afterAll(disconnectDB);
 
   test("1. Unauthorized users (Student) cannot access Admin Trash or delete records", async () => {
     const res = await request(app)

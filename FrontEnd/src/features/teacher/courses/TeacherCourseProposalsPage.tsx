@@ -37,6 +37,7 @@ import type {
 import {
   SUPPORTED_GRADE_LEVELS,
   offeredGradeLevels,
+  isForeignLanguageCategory,
   GRADE_LEVEL_LABELS,
   COURSE_LEVELS,
   COURSE_LEVEL_LABELS,
@@ -51,7 +52,7 @@ const { TextArea } = Input;
 
 type ProposalFormValues = Pick<
   CreateProposalPayload,
-  "categoryId" | "subjectId" | "title" | "gradeLevel" | "level" | "description" | "learningObjectives" | "syllabus" | "prerequisites"
+  "categoryId" | "subjectId" | "title" | "gradeLevel" | "level" | "description" | "learningObjectives" | "prerequisites"
 >;
 
 const STATUS_CONFIG: Record<ProposalStatus, { color: string; label: string; icon: React.ReactNode }> = {
@@ -154,7 +155,6 @@ export default function TeacherCourseProposalsPage() {
       title: proposal.title,
       description: proposal.description,
       learningObjectives: proposal.learningObjectives,
-      syllabus: proposal.syllabus,
       level: proposal.level,
       gradeLevel: SUPPORTED_GRADE_LEVELS.find((grade) => grade === proposal.gradeLevel), // an older one is chosen again
       prerequisites: proposal.prerequisites,
@@ -163,7 +163,7 @@ export default function TeacherCourseProposalsPage() {
   };
 
   const handleSubmit = (values: ProposalFormValues) => {
-    const payload: CreateProposalPayload = values;
+    const payload: CreateProposalPayload = { ...values, gradeLevel: values.gradeLevel ?? null };
     if (mode === "create") {
       createMutation.mutate(payload);
     } else if (editingProposal) {
@@ -258,6 +258,7 @@ export default function TeacherCourseProposalsPage() {
 
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const allowedGradeLevels = offeredGradeLevels(selectedCategory);
+  const isLanguageProposal = isForeignLanguageCategory(selectedCategory);
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -384,11 +385,13 @@ export default function TeacherCourseProposalsPage() {
           </Form.Item>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-            <Form.Item name="gradeLevel" label="Khối lớp" rules={[{ required: true, message: "Vui lòng chọn khối lớp" }]}>
+            <Form.Item name="gradeLevel" label={isLanguageProposal ? "Khối lớp (tùy chọn)" : "Khối lớp"}
+              rules={[{ required: !isLanguageProposal, message: "Vui lòng chọn khối lớp" }]}>
               <Select
                 disabled={!selectedCategoryId || allowedGradeLevels.length === 0}
+                allowClear={isLanguageProposal}
                 placeholder={
-                  !selectedCategoryId
+                  isLanguageProposal ? "Không theo khối" : !selectedCategoryId
                     ? "Chọn danh mục trước"
                     : allowedGradeLevels.length === 0
                       ? "Danh mục ngoài phạm vi Lớp 6–12 và Ôn thi đại học"
@@ -398,10 +401,10 @@ export default function TeacherCourseProposalsPage() {
               />
             </Form.Item>
 
-            <Form.Item name="level" label="Cấp độ (tùy chọn)">
+            <Form.Item name="level" label="Trình độ (tùy chọn)">
               <Select
                 allowClear
-                placeholder="Chọn cấp độ"
+                placeholder="Chọn trình độ"
                 options={COURSE_LEVELS.map((l) => ({ value: l, label: COURSE_LEVEL_LABELS[l] }))}
               />
             </Form.Item>
@@ -418,10 +421,6 @@ export default function TeacherCourseProposalsPage() {
 
           <Form.Item name="learningObjectives" label="Mục tiêu học tập">
             <TextArea rows={2} placeholder="Học viên sẽ đạt được những kiến thức gì..." />
-          </Form.Item>
-
-          <Form.Item name="syllabus" label="Khung giáo trình (Syllabus)">
-            <TextArea rows={3} placeholder="Tóm tắt các chủ đề hoặc bài học..." />
           </Form.Item>
 
           <Form.Item name="prerequisites" label="Yêu cầu tiên quyết">

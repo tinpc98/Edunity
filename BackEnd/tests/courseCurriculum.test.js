@@ -214,6 +214,8 @@ describe("TASK CUR-01: Course Grade Level, Curriculum Reference & Hierarchy Suit
     });
 
     test("CUR-01.SVC.2: searchCourses filters by curriculumReference with case-insensitive regex", async () => {
+      const categoryId = new mongoose.Types.ObjectId();
+      jest.spyOn(Category, "distinct").mockResolvedValueOnce([categoryId]);
       let capturedFilter = null;
       jest.spyOn(Course, "find").mockImplementationOnce((filter) => {
         capturedFilter = filter;
@@ -224,6 +226,7 @@ describe("TASK CUR-01: Course Grade Level, Curriculum Reference & Hierarchy Suit
                 lean: async () => [
                   {
                     _id: new mongoose.Types.ObjectId(),
+                    categoryId,
                     title: "Toán 7 - Cánh Diều",
                     curriculumReference: "Cánh Diều",
                   },
@@ -248,6 +251,7 @@ describe("TASK CUR-01: Course Grade Level, Curriculum Reference & Hierarchy Suit
     });
 
     test("CUR-01.SVC.3: searchCourses general search ($or) includes curriculumReference", async () => {
+      jest.spyOn(Category, "distinct").mockResolvedValueOnce([]);
       let capturedFilter = null;
       jest.spyOn(Course, "find").mockImplementationOnce((filter) => {
         capturedFilter = filter;

@@ -6,7 +6,6 @@ import type {
   WebhookResult,
 } from "../types/payment";
 import { adaptPayment, adaptPayments } from "../api/paymentAdapters";
-import { enrollmentService } from "./enrollment.service";
 
 export const paymentKeys = {
   all: ["payments"] as const,
@@ -14,6 +13,7 @@ export const paymentKeys = {
   intent: (id: string) => ["payments", "intent", id] as const,
   byEnrollment: (enrollmentId: string) => ["payments", "enrollment", enrollmentId] as const,
   myPayments: (userId: string) => ["payments", "my", userId] as const,
+  myPaymentPage: (userId: string, page: number) => ["payments", "my", userId, page] as const,
 };
 
 export const gatewayPaymentService = {
@@ -76,34 +76,18 @@ export const gatewayPaymentService = {
   },
 
   /**
-   * Student: Aggregate payment history across all of the student's enrollments.
+   * Student: read the authenticated student's tuition payments.
    */
   async getMyPayments(): Promise<Payment[]> {
-    const enrollmentsRes = await enrollmentService.getMyEnrollments(1, 100, "class");
-    const enrollments = enrollmentsRes.items;
-    if (enrollments.length === 0) return [];
+    return adaptPayments(await apiClient<ApiPayment[]>("/me/payments"));
+  },
 
-    const results = await Promise.allSettled(
-      enrollments.map(async (enr) => {
-        const payments = await this.getPaymentHistory(enr.id);
-        return payments.map((p) => ({
-          ...p,
-          classId: enr.classId,
-          className: enr.class?.className || `Lớp #${enr.classId.slice(-6)}`,
-        }));
-      })
+  async getMyPaymentPage(page: number, pageSize = 10) {
+    const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    const result = await apiClient<{ items: ApiPayment[]; total: number; page: number; pageSize: number; totalPages: number }>(
+      `/me/payments?${query}`
     );
-
-    const allPayments: Payment[] = [];
-    for (const res of results) {
-      if (res.status === "fulfilled") {
-        allPayments.push(...res.value);
-      }
-    }
-
-    return allPayments.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    return { ...result, items: result.items.map(adaptPayment) };
   },
 
   /**

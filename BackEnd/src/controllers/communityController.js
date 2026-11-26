@@ -29,6 +29,7 @@ exports.adminGetReport = handle((req) => reports.adminGetReport(req.params.id));
 exports.adminUpdateReport = handle((req) => reports.adminUpdateReport(req.user.id, req.params.id, body(req)));
 
 // Admin — users and dashboard
+exports.getUserSummary = handle(() => admin.getUserSummary());
 exports.listUsers = handle((req) => admin.listUsers(req.query, parsePaging(req.query)));
 exports.getUser = handle((req) => admin.getUser(req.params.id));
 exports.getUserStatusHistory = handle((req) => admin.getUserStatusHistory(req.params.id, parsePaging(req.query)));

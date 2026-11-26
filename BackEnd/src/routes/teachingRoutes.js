@@ -38,6 +38,10 @@ router.delete("/teacher/sessions/:id", teacher, controller.deleteSession);
 router.post("/teacher/sessions/:id/start", teacher, controller.startSession);
 router.post("/teacher/sessions/:id/end", teacher, controller.endSession);
 router.get("/teacher/sessions/:id/attendance", teacher, controller.getSessionAttendance);
+router.post("/teacher/sessions/:id/attendance/:attendanceId/corrections", teacher, controller.requestAttendanceCorrection);
+router.get("/student/sessions/:id/attendance", student, controller.getMyAttendance);
+router.get("/admin/attendance-corrections", admin, controller.listAttendanceCorrections);
+router.post("/admin/attendance-corrections/:attendanceId/:requestId/review", admin, controller.reviewAttendanceCorrection);
 
 // Student / Teacher — join the embedded classroom & live presence tracking (TIN-05D)
 router.post("/sessions/:id/join", classroomMember, controller.joinSession);
@@ -65,6 +69,7 @@ router.post("/admin/subject-authorizations/:id/approve", admin, controller.appro
 router.post("/admin/subject-authorizations/:id/suspend", admin, controller.suspendSubjectAuthorization);
 
 // Admin — class approval & Smart Classroom / Incident / Discipline / Reschedule / Refund review (TIN-05E)
+router.get("/admin/classes", admin, controller.adminListClasses);
 router.get("/admin/classes/pending", admin, controller.listPendingClasses);
 router.get("/admin/classes/:id", admin, controller.getClassForReview);
 router.get("/admin/classes/:id/readiness", admin, controller.getClassReadiness);

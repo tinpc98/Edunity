@@ -30,10 +30,8 @@ import { sessionService, sessionKeys } from '../../../../services/session.servic
 import type { UpdateClassPayload, ClassStudentRosterItem, PaymentSourceType, ScheduleEntry } from '../../../../types/class';
 import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../../types/class';
 import { deriveScheduleText } from '../../../../api/classAdapters';
-import type {
-  Session,
-  SessionAttendanceItem 
-} from '../../../../types/session';
+import type { Session } from '../../../../types/session';
+import TeacherAttendanceModal from '../../../classroom/components/TeacherAttendanceModal';
 import { 
   SESSION_STATUS_LABELS, 
   SESSION_STATUS_COLORS 
@@ -48,7 +46,8 @@ import { getFriendlyErrorMessage } from '../../../../utils/apiErrorMap';
 import { sessionPlanNotice } from '../../../../utils/classForm';
 import ClassReadinessCard from '../../../../components/common/ClassReadinessCard';
 import SessionMaterials from '../../../../components/common/SessionMaterials';
-import ClassConfigForm, { CLASS_FORM_DEFAULTS, classFormPayload, planBlocker, useClassPlan } from '../components/ClassConfigForm';
+import ClassConfigForm from '../components/ClassConfigForm';
+import { CLASS_FORM_DEFAULTS, classFormPayload, planBlocker, useClassPlan } from '../components/classConfigFormLogic';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -112,10 +111,7 @@ export default function TeacherClassDetailPage() {
   // Session management state
 
   // Attendance state
-  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
-  const [attendanceData, setAttendanceData] = useState<SessionAttendanceItem[]>([]);
-  const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
-  const [attendanceSessionTitle, setAttendanceSessionTitle] = useState('');
+  const [attendanceSession, setAttendanceSession] = useState<Session | null>(null);
 
   // 1. Fetch Class Detail via React Query
   const { 
@@ -278,21 +274,6 @@ export default function TeacherClassDetailPage() {
     }
     const payload: UpdateClassPayload = classFormPayload(editForm, editSchedule, editPlan);
     updateMutation.mutate(payload);
-  };
-
-  // Handle view attendance
-  const handleViewAttendance = async (session: Session) => {
-    setAttendanceSessionTitle(session.title);
-    setIsAttendanceModalOpen(true);
-    setIsLoadingAttendance(true);
-    try {
-      const list = await sessionService.getSessionAttendance(session.id);
-      setAttendanceData(list);
-    } catch (err: unknown) {
-      message.error(getFriendlyErrorMessage(err, "Không thể tải danh sách điểm danh"));
-    } finally {
-      setIsLoadingAttendance(false);
-    }
   };
 
   // ---------------- Tab 1: Overview ----------------
@@ -613,12 +594,11 @@ export default function TeacherClassDetailPage() {
                       </Button>
                     )}
 
-                    {/* Attendance button if IN_PROGRESS or COMPLETED */}
-                    {isVerified && (isInProgress || isCompleted) && (
+                    {isVerified && (isInProgress || isCompleted || session.roomState === 'ENDED') && (
                       <Button
                         size="small"
                         icon={<TeamOutlined />}
-                        onClick={() => handleViewAttendance(session)}
+                        onClick={() => setAttendanceSession(session)}
                         className="rounded-lg text-xs"
                       >
                         Điểm danh
@@ -1003,71 +983,15 @@ export default function TeacherClassDetailPage() {
         {materialsSession && <SessionMaterials sessionId={materialsSession.id} canManage={canManageMaterials} />}
       </Modal>
 
-      {/* Attendance List Modal */}
-      <Modal
-        title={
-          <div className="flex items-center gap-2">
-            <TeamOutlined className="text-teal-600" />
-            <span>Danh sách điểm danh: {attendanceSessionTitle}</span>
-          </div>
-        }
-        open={isAttendanceModalOpen}
-        onCancel={() => setIsAttendanceModalOpen(false)}
-        footer={[
-          <Button key="close" type="primary" onClick={() => setIsAttendanceModalOpen(false)} className="bg-teal-600">
-            Đóng
-          </Button>
-        ]}
-        width={650}
-      >
-        <div className="py-2">
-          {isLoadingAttendance ? (
-            <Skeleton active paragraph={{ rows: 4 }} />
-          ) : attendanceData.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <UserOutlined className="text-3xl text-gray-300 mb-2 block" />
-              Chưa có dữ liệu điểm danh cho buổi học này.
-            </div>
-          ) : (
-            <Table
-              dataSource={attendanceData}
-              rowKey="_id"
-              pagination={false}
-              size="small"
-              columns={[
-                {
-                  title: 'Học viên',
-                  key: 'student',
-                  render: (_, record) => (
-                    <div>
-                      <div className="font-semibold text-gray-900">
-                        {record.studentId?.studentProfile?.fullName || 'Học viên'}
-                      </div>
-                      <div className="text-xs text-gray-400">{record.studentId?.email}</div>
-                    </div>
-                  ),
-                },
-                {
-                  title: 'Trạng thái',
-                  dataIndex: 'attendanceStatus',
-                  key: 'status',
-                  render: (st: string) => {
-                    const color = st === 'PRESENT' ? 'green' : st === 'LATE' ? 'gold' : 'red';
-                    const text = st === 'PRESENT' ? 'Có mặt' : st === 'LATE' ? 'Đi muộn' : 'Vắng mặt';
-                    return <Tag color={color} className="font-bold">{text}</Tag>;
-                  },
-                },
-                {
-                  title: 'Thời gian tham gia',
-                  dataIndex: 'joinedAt',
-                  key: 'joinedAt',
-                  render: (d: string) => d ? new Date(d).toLocaleTimeString('vi-VN') : '-',
-                },
-              ]}
-            />
-          )}
-        </div>
-      </Modal>
+      {attendanceSession && (
+        <TeacherAttendanceModal
+          open
+          sessionId={attendanceSession.id}
+          sessionTitle={attendanceSession.title}
+          isSessionActive={attendanceSession.status === 'IN_PROGRESS'}
+          onClose={() => setAttendanceSession(null)}
+        />
+      )}
     </div>
   );
 }

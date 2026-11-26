@@ -18,7 +18,7 @@ router.post("/admin/categories/:id/restore", admin, controller.restoreCategory);
 
 // Subjects
 router.get("/categories/:id/subjects", controller.listSubjectsByCategory);
-router.get("/subjects/:id", controller.getSubject);
+router.get("/subjects/:id", optionalAuth, controller.getSubject);
 router.get("/admin/subjects", admin, controller.adminListSubjects);
 router.post("/admin/subjects", admin, controller.createSubject);
 router.patch("/admin/subjects/:id", admin, controller.updateSubject);

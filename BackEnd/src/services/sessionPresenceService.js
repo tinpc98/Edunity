@@ -729,11 +729,7 @@ const recordParticipantConnected = async ({
       updateDoc.$inc = { reconnectionCount: 1 };
     }
 
-    await SessionAttendance.findOneAndUpdate(
-      { sessionId: session._id, studentId: userId },
-      updateDoc,
-      { upsert: true, returnDocument: "after" }
-    );
+    await writeAutomaticAttendance({ sessionId: session._id, studentId: userId }, updateDoc);
   } else if (normalizedRole === "TEACHER") {
     const tp = session.teacherPresence || {};
     tp.isCurrentlyConnected = true;
@@ -895,7 +891,7 @@ const recordParticipantDisconnected = async ({
 
   if (!isTeacher) {
     await SessionAttendance.updateOne(
-      { sessionId: session._id, studentId: userId },
+      { sessionId: session._id, studentId: userId, correctionAppliedAt: null },
       {
         $set: {
           lastVerifiedDisconnect: disconnectTime,
@@ -964,14 +960,29 @@ const computeTeacherPresenceMetrics = async (session, referenceNow = new Date())
   };
 };
 
-/**
- * Computes and updates a single student's attendance metrics from SessionPresenceInterval records.
- */
-const calculateAndPersistStudentAttendance = async (
+const writeAutomaticAttendance = async (key, update) => {
+  const filter = { ...key, correctionAppliedAt: null };
+  try {
+    return await SessionAttendance.findOneAndUpdate(
+      filter, update, { upsert: true, returnDocument: "after" }
+    ).lean();
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    const existing = await SessionAttendance.findOne(key).lean();
+    if (existing?.correctionAppliedAt) return existing;
+    const updated = await SessionAttendance.findOneAndUpdate(filter, update, { returnDocument: "after" }).lean();
+    if (updated) return updated;
+    return SessionAttendance.findOne(key).lean();
+  }
+};
+
+/** Computes one student's metrics from the stored presence intervals. */
+const computeStudentAttendance = async (
   session,
   studentId,
   referenceNow = new Date(),
-  finalize = false
+  finalize = false,
+  trustedOnly = false
 ) => {
   const startMs = new Date(session.startDatetime).getTime();
   const endMs = new Date(session.endDatetime).getTime();
@@ -980,7 +991,11 @@ const calculateAndPersistStudentAttendance = async (
   const scheduledDurationSeconds = Math.max(1, Math.round((endMs - startMs) / 1000));
 
   const [studentDocs, teacherMetrics, existingAttendance] = await Promise.all([
-    SessionPresenceInterval.find({ sessionId: session._id, userId: studentId })
+    SessionPresenceInterval.find({
+      sessionId: session._id,
+      userId: studentId,
+      ...(trustedOnly ? { source: { $in: TRUSTED_PRESENCE_SOURCES } } : {}),
+    })
       .sort({ connectedAt: 1 })
       .lean(),
     computeTeacherPresenceMetrics(session, referenceNow),
@@ -1072,13 +1087,15 @@ const calculateAndPersistStudentAttendance = async (
     }
   }
 
-  const updated = await SessionAttendance.findOneAndUpdate(
-    { sessionId: session._id, studentId },
-    { $set: updateFields },
-    { upsert: true, returnDocument: "after" }
-  ).lean();
+  const hasClosedTeachingIntervals = scheduledOnlineSeconds > 0 &&
+    studentDocs.every((interval) => interval.disconnectedAt);
+  return { updateFields, existingAttendance, hasClosedTeachingIntervals };
+};
 
-  return updated;
+const calculateAndPersistStudentAttendance = async (session, studentId, referenceNow = new Date(), finalize = false) => {
+  const { updateFields, existingAttendance } = await computeStudentAttendance(session, studentId, referenceNow, finalize);
+  if (existingAttendance?.correctionAppliedAt) return existingAttendance;
+  return writeAutomaticAttendance({ sessionId: session._id, studentId }, { $set: updateFields });
 };
 
 /**
@@ -1138,6 +1155,10 @@ const finalizeSessionAttendance = async (sessionId, options = {}) => {
   for (const enrollment of enrollments) {
     const studentIdStr = enrollment.studentId.toString();
     const existing = existingMap.get(studentIdStr);
+    if (existing?.correctionAppliedAt) {
+      results.push(existing);
+      continue;
+    }
 
     if (useIntervalEngine) {
       const studentIntervalCount = await SessionPresenceInterval.countDocuments({
@@ -1178,7 +1199,7 @@ const finalizeSessionAttendance = async (sessionId, options = {}) => {
           attendanceStatus = isLate ? "LATE" : "PRESENT";
         }
 
-        const updated = await SessionAttendance.findOneAndUpdate(
+        const updated = await writeAutomaticAttendance(
           { sessionId: session._id, studentId: enrollment.studentId },
           {
             $set: {
@@ -1194,15 +1215,14 @@ const finalizeSessionAttendance = async (sessionId, options = {}) => {
               finalizedAt: now,
               isCurrentlyConnected: false,
             },
-          },
-          { upsert: true, returnDocument: "after" }
-        ).lean();
+          }
+        );
         results.push(updated);
         continue;
       }
     } else if (existing && existing.joinedAt) {
       // Legacy test compatibility when no intervals were used
-      const updated = await SessionAttendance.findOneAndUpdate(
+      const updated = await writeAutomaticAttendance(
         { sessionId: session._id, studentId: enrollment.studentId },
         {
           $set: {
@@ -1211,9 +1231,8 @@ const finalizeSessionAttendance = async (sessionId, options = {}) => {
             finalizedAt: now,
             isCurrentlyConnected: false,
           },
-        },
-        { returnDocument: "after" }
-      ).lean();
+        }
+      );
       results.push(updated);
       continue;
     }
@@ -1227,7 +1246,7 @@ const finalizeSessionAttendance = async (sessionId, options = {}) => {
         : "EXCUSED"
       : "ABSENT";
 
-    const updated = await SessionAttendance.findOneAndUpdate(
+    const updated = await writeAutomaticAttendance(
       { sessionId: session._id, studentId: enrollment.studentId },
       {
         $set: {
@@ -1240,9 +1259,8 @@ const finalizeSessionAttendance = async (sessionId, options = {}) => {
           finalizedAt: now,
           isCurrentlyConnected: false,
         },
-      },
-      { upsert: true, returnDocument: "after" }
-    ).lean();
+      }
+    );
     results.push(updated);
   }
 
@@ -2042,6 +2060,7 @@ module.exports = {
   recordParticipantDisconnected,
   computeTeacherPresenceMetrics,
   calculateAndPersistStudentAttendance,
+  computeStudentAttendance,
   closeAllOpenIntervalsForSession,
   finalizeSessionAttendance,
   handleLiveKitEvent,

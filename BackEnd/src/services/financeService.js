@@ -715,6 +715,7 @@ exports.getFinanceOverview = async (query = {}) => {
     // Period-filtered revenue & disbursements
     tuitionPeriod,
     donationPeriod,
+    platformFeePeriod,
     payoutPeriod,
     refundCompletedPeriod,
     unappliedPeriod,
@@ -768,6 +769,10 @@ exports.getFinanceOverview = async (query = {}) => {
       status: "COMPLETED",
       createdAt: { $gte: fromUtc, $lt: toUtc },
     }),
+    sumAmounts(TeacherEarning, {
+      status: { $ne: "CANCELLED" },
+      createdAt: { $gte: fromUtc, $lt: toUtc },
+    }, "commissionAmount"),
     sumAmounts(Transaction, {
       transactionType: "TEACHER_PAYOUT",
       status: "COMPLETED",
@@ -1196,6 +1201,10 @@ exports.getFinanceOverview = async (query = {}) => {
         trendLabel: payoutDelta.label,
         subtext: "Giải ngân thành công trong kỳ",
         variant: "emerald",
+      },
+      platformFee: {
+        title: "Phí nền tảng",
+        value: platformFeePeriod,
       },
     },
 

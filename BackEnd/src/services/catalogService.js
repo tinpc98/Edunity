@@ -3,6 +3,7 @@ const { Class, Session, Subject, Course, Category, User } = require("../models")
 const { AppError } = require("../utils/errors");
 const { toPublic } = require("../utils/publicView");
 const { escapeRegex } = require("../utils/http");
+const { getPublicCourseFilter } = require("./courseCatalogService");
 
 // Class chua duoc Admin duyet (DRAFT, PENDING_APPROVAL, REJECTED) khong duoc hien thi cong khai
 const PUBLIC_CLASS_STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
@@ -49,9 +50,10 @@ class CatalogService {
   }
 
   async getFilters() {
+    const courseFilter = await getPublicCourseFilter();
     const [subjects, courses] = await Promise.all([
       Subject.find({ status: "ACTIVE", ...NOT_DELETED }).select("name slug").lean(),
-      Course.find({ status: "ACTIVE", ...NOT_DELETED }).select("title slug subjectId").lean(),
+      Course.find(courseFilter).select("title slug subjectId").lean(),
     ]);
     
     // Simplification for counts and minMax
@@ -226,9 +228,9 @@ class CatalogService {
   async getClassSessions(classId) {
     const visible = await Class.exists({ _id: classId, status: { $in: PUBLIC_CLASS_STATUSES }, ...NOT_DELETED });
     if (!visible) throw new AppError("Class not found", "CLASS_NOT_FOUND", 404);
-    // meetingRoomId and recording locations stay private: joining and playback go through authenticated endpoints
+    // Public timetable. Joining and recording playback use separate authorized endpoints.
     return await Session.find({ classId })
-      .select("-meetingRoomId -recording.storageKey -recording.providerRecordingId -contents.storageKey")
+      .select("_id classId className teacherId title description sessionNumber startDatetime endDatetime status")
       .sort({ startDatetime: 1 })
       .lean();
   }

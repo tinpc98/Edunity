@@ -1,13 +1,10 @@
-const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident, caseNumber } = require("./helpers/financialFixtures");
 const financeService = require("../src/services/financeService");
 const PaymentReconciliation = require("../src/models/PaymentReconciliation");
 const RefundCase = require("../src/models/RefundCase");
 const Payment = require("../src/models/Payment");
 const Enrollment = require("../src/models/Enrollment");
-const User = require("../src/models/User");
 const BankTransferEvent = require("../src/models/BankTransferEvent");
 
 describe("Admin Reconciliation Queue V2 & Workflow Guards Test Suite", () => {
@@ -19,31 +16,11 @@ describe("Admin Reconciliation Queue V2 & Workflow Guards Test Suite", () => {
   let fakeEvent2;
 
   beforeAll(async () => {
-    const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(uri);
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    await seedTuitionIncident(actors);
 
-    // Find or create admin and student
-    adminUser = await User.findOne({ role: "ADMIN" });
-    if (!adminUser) {
-      adminUser = await User.create({
-        email: "testadmin_recon_v2@edunity.test",
-        password: "hashedPassword123",
-        role: "ADMIN",
-        fullName: "Test Admin Recon V2",
-      });
-    }
-
-    studentUser = await User.findOne({ role: "STUDENT" });
-    if (!studentUser) {
-      studentUser = await User.create({
-        email: "teststudent_recon_v2@edunity.test",
-        password: "hashedPassword123",
-        role: "STUDENT",
-        studentProfile: { fullName: "Test Student Recon V2" },
-      });
-    }
+    ({ admin: adminUser, student: studentUser } = actors);
 
     // Create isolated test event & recon for needs review
     fakeEvent1 = await BankTransferEvent.create({
@@ -102,22 +79,7 @@ describe("Admin Reconciliation Queue V2 & Workflow Guards Test Suite", () => {
     });
   });
 
-  afterAll(async () => {
-    // Clean up test reconciliations created specifically by this test
-    if (testReconNeedsReview) {
-      await PaymentReconciliation.deleteOne({ _id: testReconNeedsReview._id });
-    }
-    if (fakeEvent1) {
-      await BankTransferEvent.deleteOne({ _id: fakeEvent1._id });
-    }
-    if (testReconResolved) {
-      await PaymentReconciliation.deleteOne({ _id: testReconResolved._id });
-    }
-    if (fakeEvent2) {
-      await BankTransferEvent.deleteOne({ _id: fakeEvent2._id });
-    }
-    await mongoose.disconnect();
-  });
+  afterAll(disconnectDB);
 
   test("1. Tab filtering correctly separates NEEDS_REVIEW, IN_REVIEW, RESOLVED, and ALL", async () => {
     const [needsReviewRes, inReviewRes, resolvedRes, allRes] = await Promise.all([
@@ -237,7 +199,7 @@ describe("Admin Reconciliation Queue V2 & Workflow Guards Test Suite", () => {
     const detail = await financeService.getAdminReconciliationById(recon1008._id.toString());
     expect(detail).toHaveProperty("refundCase");
     expect(detail.refundCase).toHaveProperty("caseNumber");
-    expect(detail.refundCase.caseNumber).toBe("REF-20261120-F7304D");
+    expect(detail.refundCase.caseNumber).toBe(caseNumber);
 
     // Ensure RefundCase remains NEEDS_REVIEW (pending refund liability, not paid out)
     expect(detail.refundCase.status).toBe("NEEDS_REVIEW");

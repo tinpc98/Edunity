@@ -66,6 +66,43 @@ const presentUser = (user) => ({
 
 // ---------- User management (FR-ADM-01) ----------
 
+const getUserSummary = async () => {
+  const buckets = await User.aggregate([
+    { $match: NOT_DELETED },
+    {
+      $group: {
+        _id: {
+          role: "$role",
+          status: "$status",
+          verification: "$teacherProfile.verificationStatus",
+          reverification: "$teacherProfile.reverificationStatus",
+        },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  const summary = {
+    totalUsers: 0,
+    teachers: 0,
+    activeStudents: 0,
+    verification: { submitted: 0, verified: 0, pending: 0, rejected: 0 },
+  };
+  const submittedStatuses = ["PENDING", "VERIFIED", "REJECTED"];
+  for (const { _id: { role, status, verification, reverification }, count } of buckets) {
+    summary.totalUsers += count;
+    if (role === "STUDENT" && status === "ACTIVE") summary.activeStudents += count;
+    if (role !== "TEACHER") continue;
+
+    summary.teachers += count;
+    if (submittedStatuses.includes(verification)) summary.verification.submitted += count;
+    if (verification === "VERIFIED") summary.verification.verified += count;
+    // The review queue includes re-verifications even while the original profile stays verified.
+    if (verification === "PENDING" || reverification === "PENDING") summary.verification.pending += count;
+    if (verification === "REJECTED") summary.verification.rejected += count;
+  }
+  return summary;
+};
+
 const listUsers = async (query, paging) => {
   const filter = { ...NOT_DELETED };
   if (query.role) {
@@ -403,8 +440,13 @@ const countBy = async (Model, match, field) => {
 
 const getDashboard = async () => {
   const now = new Date();
+  const vietnamOffsetMs = 7 * 60 * 60 * 1000;
+  const vietnamNow = new Date(now.getTime() + vietnamOffsetMs);
+  const vietnamMonthStart = (offset) =>
+    Date.UTC(vietnamNow.getUTCFullYear(), vietnamNow.getUTCMonth() - offset, 1);
   const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const sixMonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
+  const financeMonthStart = new Date(vietnamMonthStart(0) - vietnamOffsetMs);
+  const sixMonthsAgo = new Date(vietnamMonthStart(5) - vietnamOffsetMs);
 
   const [
     usersByRole,
@@ -444,17 +486,17 @@ const getDashboard = async () => {
     Enrollment.countDocuments({ enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] } }),
     // Revenue = tuition of confirmed paid enrollments, whatever the payment source (payment, scholarship, mixed)
     sumDecimal(TeacherEarning, {}, "grossAmount"),
-    sumDecimal(TeacherEarning, {}, "commissionAmount"),
-    sumDecimal(TeacherEarning, { createdAt: { $gte: startOfMonth } }, "grossAmount"),
+    sumDecimal(TeacherEarning, { status: { $ne: "CANCELLED" } }, "commissionAmount"),
+    sumDecimal(TeacherEarning, { createdAt: { $gte: financeMonthStart } }, "grossAmount"),
     Transaction.countDocuments({ status: "COMPLETED" }),
     Transaction.countDocuments({ transactionType: "REFUND" }),
     TeacherEarning.aggregate([
       { $match: { createdAt: { $gte: sixMonthsAgo } } },
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+          _id: { $dateToString: { format: "%Y-%m", date: "$createdAt", timezone: "+07:00" } },
           revenue: { $sum: "$grossAmount" },
-          commission: { $sum: "$commissionAmount" },
+          commission: { $sum: { $cond: [{ $eq: ["$status", "CANCELLED"] }, 0, "$commissionAmount"] } },
         },
       },
     ]),
@@ -470,7 +512,7 @@ const getDashboard = async () => {
   const monthlyMap = new Map(monthlyRows.map((row) => [row._id, row]));
   const monthly = [];
   for (let offset = 5; offset >= 0; offset -= 1) {
-    const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1)).toISOString().slice(0, 7);
+    const month = new Date(vietnamMonthStart(offset)).toISOString().slice(0, 7);
     const row = monthlyMap.get(month);
     monthly.push({ month, revenue: toDec(row ? toNum(row.revenue) : 0), commission: toDec(row ? toNum(row.commission) : 0) });
   }
@@ -508,6 +550,7 @@ const getDashboard = async () => {
     finance: {
       revenue: toDec(revenue),
       commission: toDec(commission),
+      commissionThisMonth: monthly[monthly.length - 1].commission,
       revenueThisMonth: toDec(revenueThisMonth),
       transactions: completedTransactions,
       refunds,
@@ -533,4 +576,4 @@ const getDashboard = async () => {
   };
 };
 
-module.exports = { listUsers, getUser, updateUserStatus, getDashboard, getUserStatusHistory };
+module.exports = { getUserSummary, listUsers, getUser, updateUserStatus, getDashboard, getUserStatusHistory };

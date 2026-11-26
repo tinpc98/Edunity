@@ -3,7 +3,7 @@ const { TeacherSubjectAuthorization, Category, Subject, User } = require("../mod
 const { TEACHER_SUBJECT_AUTH_STATUSES, GRADE_LEVELS } = require("../models/constants");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { assertId, paged, validationError, isBlank } = require("../utils/http");
-const { requireGradeLevel, allowedGradeLevelsForCategory } = require("../utils/gradeLevel");
+const { requireGradeLevel, allowedGradeLevelsForCategory, isForeignLanguageCategory } = require("../utils/gradeLevel");
 const { withoutReviewer } = require("../utils/publicView");
 const catalog = require("./courseCatalogService");
 const { audit } = require("./auditService");
@@ -101,7 +101,7 @@ const validateAuthorizationScope = async (body = {}) => {
 
   const level = catalog.resolveLevel(body.level);
   if (!level) {
-    throw validationError("level is required and must be BEGINNER, INTERMEDIATE, or ADVANCED");
+    throw validationError("level is required");
   }
 
   const gradeLevel = requireGradeLevel(category, body.gradeLevel);
@@ -514,14 +514,13 @@ const suspendAuthorization = async (adminId, authId, body = {}) => {
 const sameName = (a, b) => String(a || "").trim().toLocaleLowerCase("vi") === String(b || "").trim().toLocaleLowerCase("vi");
 
 // The approved teaching profile is the authorization: a subject (by name) and a grade the Admin saw and verified
-const profileCovers = (teacher, subject, gradeLevel) => {
+const profileCovers = (teacher, subject, gradeLevel, category) => {
   const profile = teacher && teacher.teacherProfile;
   const teaching = profile && profile.teachingProfile;
   return Boolean(
-    gradeLevel &&
-      profile.verificationStatus === "VERIFIED" &&
+    profile?.verificationStatus === "VERIFIED" &&
       teaching &&
-      (teaching.gradeLevels || []).includes(gradeLevel) &&
+      (gradeLevel ? (teaching.gradeLevels || []).includes(gradeLevel) : isForeignLanguageCategory(category)) &&
       (teaching.subjects || []).some((name) => sameName(name, subject.name))
   );
 };
@@ -567,9 +566,11 @@ const grantAllFromProfile = async (teacher, actorId) => {
   let granted = 0;
   for (const subject of subjects) {
     const category = categories.get(String(subject.categoryId));
-    const allowed = category ? allowedGradeLevelsForCategory(category) : null;
-    for (const gradeLevel of teaching.gradeLevels || []) {
-      if (allowed && !allowed.includes(gradeLevel)) continue;
+    if (!category || category.isDeleted || category.status !== "ACTIVE") continue;
+    const allowed = allowedGradeLevelsForCategory(category);
+    const profileGrades = (teaching.gradeLevels || []).filter((grade) => !allowed || allowed.includes(grade));
+    const scopes = isForeignLanguageCategory(category) ? [null, ...profileGrades] : profileGrades;
+    for (const gradeLevel of scopes) {
       if (await TeacherSubjectAuthorization.exists({ teacherId: teacher._id, subjectId: subject._id, gradeLevel })) continue;
       await grantFromProfile({ teacher, subject, gradeLevel, actorId });
       granted++;
@@ -593,7 +594,10 @@ const assertApprovedAuthorization = async ({ teacherId, subjectId, gradeLevel })
   if (approved) return approved;
 
   const [teacher, subject] = await Promise.all([User.findById(teacherId).lean(), Subject.findById(subjectId).lean()]);
-  if (subject && profileCovers(teacher, subject, normalizedGrade)) {
+  const category = subject && !normalizedGrade
+    ? await Category.findOne({ _id: subject.categoryId, status: "ACTIVE", isDeleted: { $ne: true } }).select("slug").lean()
+    : null;
+  if (subject && subject.status === "ACTIVE" && !subject.isDeleted && profileCovers(teacher, subject, normalizedGrade, category)) {
     return grantFromProfile({ teacher, subject, gradeLevel: normalizedGrade, actorId: teacher.teacherProfile.reviewedBy || teacher._id });
   }
 

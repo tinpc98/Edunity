@@ -280,6 +280,7 @@ describe("TIN-03A: Session Join, canJoin status & GET side effect regression sui
       studentId: student2._id,
       enrollmentStatus: "PENDING_PAYMENT",
       paymentSource: "DIRECT_PAYMENT",
+      holdExpiresAt: new Date(Date.now() + 600_000),
     });
 
     const session = await Session.create({

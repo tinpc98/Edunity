@@ -1,25 +1,17 @@
-const mongoose = require("mongoose");
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+const { connectDB, disconnectDB } = require("./helpers/db");
+const { seedActorsAndCatalog, seedTuitionIncident, studentName, studentEmail, teacherName, className, caseNumber, bankSnapshot } = require("./helpers/financialFixtures");
 const financeService = require("../src/services/financeService");
 const Payment = require("../src/models/Payment");
-const Enrollment = require("../src/models/Enrollment");
 const Class = require("../src/models/Class");
-const RefundCase = require("../src/models/RefundCase");
-const User = require("../src/models/User");
 
 describe("Admin Tuition Payments V2 (Thanh toán học phí) Test Suite", () => {
   beforeAll(async () => {
-    const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(uri);
-    }
+    await connectDB();
+    const actors = await seedActorsAndCatalog();
+    await seedTuitionIncident(actors);
   });
 
-  afterAll(async () => {
-    // Keep DB connection intact for subsequent runs or disconnect cleanly
-  });
+  afterAll(disconnectDB);
 
   test("1. PENDING elimination invariant: Default getAdminPayments filters out PENDING payments", async () => {
     const result = await financeService.getAdminPayments(1, 50);
@@ -85,10 +77,10 @@ describe("Admin Tuition Payments V2 (Thanh toán học phí) Test Suite", () => 
 
     expect(order9.paymentStatus).toBe("COMPLETED");
     expect(Number(order9.amount)).toBe(3000);
-    expect(order9.studentName).toBe("Công Tin Phạm");
-    expect(order9.studentEmail).toBe("quangtin98hg@gmail.com");
-    expect(order9.className).toBe("TEST PAYOS 3K - Toán 12 THPT");
-    expect(order9.teacherName).toBe("Nguyễn Văn Đức");
+    expect(order9.studentName).toBe(studentName);
+    expect(order9.studentEmail).toBe(studentEmail);
+    expect(order9.className).toBe(className);
+    expect(order9.teacherName).toBe(teacherName);
     expect(order9.enrollmentStatus).toBe("CONFIRMED");
     expect(order9.isRefundPending).toBe(false);
     expect(order9.refundCase).toBeNull();
@@ -105,28 +97,28 @@ describe("Admin Tuition Payments V2 (Thanh toán học phí) Test Suite", () => 
 
     expect(order8.paymentStatus).toBe("COMPLETED");
     expect(Number(order8.amount)).toBe(3000);
-    expect(order8.studentName).toBe("Công Tin Phạm");
-    expect(order8.studentEmail).toBe("quangtin98hg@gmail.com");
-    expect(order8.className).toBe("TEST PAYOS 3K - Toán 12 THPT");
+    expect(order8.studentName).toBe(studentName);
+    expect(order8.studentEmail).toBe(studentEmail);
+    expect(order8.className).toBe(className);
     expect(order8.enrollmentStatus).toBe("EXPIRED");
     expect(order8.isRefundPending).toBe(true);
 
     expect(order8.refundCase).toBeDefined();
-    expect(order8.refundCase.caseNumber).toBe("REF-20261120-F7304D");
+    expect(order8.refundCase.caseNumber).toBe(caseNumber);
     expect(order8.refundCase.status).toBe("NEEDS_REVIEW");
     expect(order8.refundCase.reason).toBe("OVERPAYMENT");
     expect(order8.refundCase.eligibleAmount).toBe("3000");
-    expect(order8.refundCase.beneficiaryBankAccount.accountHolderName).toBe("PHAM CONG TIN");
+    expect(order8.refundCase.beneficiaryBankAccount.accountHolderName).toBe(bankSnapshot.accountHolderName);
   });
 
   test("6. Search by Student Email invariant", async () => {
     const result = await financeService.getAdminPayments({
-      search: "quangtin98hg@gmail.com",
+      search: studentEmail,
     });
 
     expect(result.items.length).toBeGreaterThanOrEqual(2);
     for (const item of result.items) {
-      expect(item.studentEmail).toBe("quangtin98hg@gmail.com");
+      expect(item.studentEmail).toBe(studentEmail);
     }
   });
 });
