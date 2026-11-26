@@ -14,12 +14,14 @@ const { Title, Text } = Typography;
 
 interface TodayScheduleProps {
   todaySessions: Session[];
+  onEnterLiveClass: (session: Session) => void;
   isVerified?: boolean;
   verificationMessage?: string;
 }
 
 export default function TodaySchedule({
   todaySessions = [],
+  onEnterLiveClass,
   isVerified = false,
   verificationMessage = VERIFICATION_REQUIRED_MESSAGE,
 }: TodayScheduleProps) {
@@ -135,7 +137,7 @@ export default function TodaySchedule({
                       <Button 
                         type="primary" 
                         disabled={!isVerified}
-                        onClick={() => isVerified && navigate(`/classroom/${session.id}`)}
+                        onClick={() => onEnterLiveClass(session)}
                         className="bg-teal-600 shadow-md shadow-teal-600/25 rounded-[10px] border-0 h-9 px-3.5 flex items-center text-[13px] font-semibold cursor-pointer"
                       >
                         <LoginOutlined className="mr-1" /> Vào lớp Live

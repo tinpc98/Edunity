@@ -9,15 +9,10 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
-import type { AdminDashboardFinance } from "../../../../types/adminDashboard";
 import type { FinancePeriodType } from "../../../../types/payment";
 import { financeService, financeKeys } from "../../../../services/finance.service";
 import { formatVND } from "../../../../types/payment";
 import AdminSectionCard from "../../../../components/admin/AdminSectionCard";
-
-interface AdminFinanceOverviewProps {
-  finance?: AdminDashboardFinance;
-}
 
 const PERIOD_OPTIONS: Array<{ key: FinancePeriodType; label: string }> = [
   { key: "yesterday", label: "Hôm qua" },
@@ -27,7 +22,7 @@ const PERIOD_OPTIONS: Array<{ key: FinancePeriodType; label: string }> = [
   { key: "custom", label: "Tùy chọn" },
 ];
 
-export default function AdminFinanceOverview({ finance: initialFinance }: AdminFinanceOverviewProps) {
+export default function AdminFinanceOverview() {
   const [activePeriod, setActivePeriod] = useState<FinancePeriodType>("7d");
   const [customRange, setCustomRange] = useState<[string | null, string | null]>([null, null]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -74,25 +69,13 @@ export default function AdminFinanceOverview({ finance: initialFinance }: AdminF
     setModalOpen(false);
   };
 
-  // Extract metrics from live backend data or fallback to initial props
   const periodLabel = data?.period?.label || "7 ngày gần nhất";
   const revenueTimeSeries = data?.charts?.revenueTimeSeries || [];
-  const maxRevenue = Math.max(
-    ...revenueTimeSeries.map((pt) => pt.total),
-    initialFinance?.monthly ? Math.max(...initialFinance.monthly.map((m) => m.revenue), 1000000) : 1000000
-  );
-
-  const tuitionInflowVal = data?.kpis?.tuitionRevenue?.value
-    ? parseFloat(data.kpis.tuitionRevenue.value)
-    : (data?.revenue?.confirmedTuitionRevenue ? parseFloat(data.revenue.confirmedTuitionRevenue) : (initialFinance?.revenueThisMonth ? initialFinance.revenueThisMonth * 0.8 : 0));
-
-  const totalInflowVal = data?.kpis?.tuitionRevenue?.value && data?.kpis?.donationRevenue?.value
-    ? parseFloat(data.kpis.tuitionRevenue.value) + parseFloat(data.kpis.donationRevenue.value)
-    : (initialFinance?.revenueThisMonth || 0);
-
-  const teacherPayoutsVal = data?.kpis?.teacherPaidOut?.value
-    ? parseFloat(data.kpis.teacherPaidOut.value)
-    : (initialFinance?.commission || 0);
+  const maxRevenue = Math.max(1000000, ...revenueTimeSeries.map((pt) => pt.total));
+  const tuitionInflowVal = Number(data?.kpis?.tuitionRevenue?.value ?? 0);
+  const totalInflowVal = tuitionInflowVal + Number(data?.kpis?.donationRevenue?.value ?? 0);
+  const platformFeeVal = Number(data?.kpis?.platformFee?.value ?? 0);
+  const teacherPayoutsVal = Number(data?.kpis?.teacherPaidOut?.value ?? 0);
 
   const completedRefundsVal = data?.revenue?.completedRefunds
     ? parseFloat(data.revenue.completedRefunds)
@@ -175,7 +158,6 @@ export default function AdminFinanceOverview({ finance: initialFinance }: AdminF
           </div>
         ) : (
           <>
-            {/* 4 Summary KPI Cards */}
             <Row gutter={[12, 12]} className="mb-6">
               <Col xs={12} sm={6}>
                 <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-center h-full">
@@ -194,6 +176,16 @@ export default function AdminFinanceOverview({ finance: initialFinance }: AdminF
                   </span>
                   <div className="font-extrabold text-[#0F766E] text-sm sm:text-base mt-1 whitespace-nowrap">
                     {formatVND(tuitionInflowVal)}
+                  </div>
+                </div>
+              </Col>
+              <Col xs={12} sm={6}>
+                <div className="p-3.5 rounded-xl bg-[#F0F8F6] border border-[#D6E5E2] flex flex-col justify-center h-full">
+                  <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#0F766E]">
+                    Phí nền tảng
+                  </span>
+                  <div className="font-extrabold text-[#0F766E] text-sm sm:text-base mt-1 whitespace-nowrap">
+                    {formatVND(platformFeeVal)}
                   </div>
                 </div>
               </Col>

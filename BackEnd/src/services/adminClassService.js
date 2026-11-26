@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const { Category, Class, Course, Session, Subject, User } = require("../models");
 const { AppError, CLASS_NOT_FOUND } = require("../utils/errors");
-const { paged } = require("../utils/http");
+const { escapeRegex, paged } = require("../utils/http");
 const auditService = require("./auditService");
 const notificationService = require("./notificationService");
 const audit = (...args) => auditService.audit(...args);
@@ -10,6 +10,33 @@ const { evaluateClass, getReadiness, runInTransaction } = require("./teacherClas
 const { captureClassSnapshots, throwFailedChecks } = require("./classCreationGateService");
 
 const NOT_DELETED = { isDeleted: { $ne: true } };
+
+const listClasses = async (query, paging) => {
+  const filter = { ...NOT_DELETED };
+  if (query.status !== undefined) {
+    if (!Class.schema.path("status").enumValues.includes(query.status)) {
+      throw validationError("Invalid class status");
+    }
+    filter.status = query.status;
+  }
+  if (query.classType !== undefined) {
+    if (!Class.schema.path("classType").enumValues.includes(query.classType)) {
+      throw validationError("classType must be FREE or PAID");
+    }
+    filter.classType = query.classType;
+  }
+  const search = typeof query.search === "string" ? query.search.trim().slice(0, 100) : "";
+  if (search) {
+    const pattern = { $regex: escapeRegex(search), $options: "i" };
+    filter.$or = [{ className: pattern }, { courseTitle: pattern }, { teacherName: pattern }];
+  }
+
+  const [items, total] = await Promise.all([
+    Class.find(filter).sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.pageSize).lean(),
+    Class.countDocuments(filter),
+  ]);
+  return paged(items, total, paging);
+};
 
 // UC-ADM-07 bước 1
 const listPendingClasses = async (paging) => {
@@ -417,6 +444,7 @@ const restoreClass = async (adminId, classId) => {
 };
 
 module.exports = {
+  listClasses,
   listPendingClasses,
   getClassForReview,
   getClassReadiness,

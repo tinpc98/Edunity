@@ -444,6 +444,7 @@ export interface FinanceOverviewKpis {
   refundLiability: FinanceAnalyticsKpi;
   teacherPendingPayout: FinanceAnalyticsKpi;
   teacherPaidOut: FinanceAnalyticsKpi;
+  platformFee: FinanceAnalyticsKpi;
 }
 
 export interface RevenueTimeSeriesPoint {

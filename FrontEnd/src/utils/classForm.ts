@@ -26,21 +26,31 @@ export const classPriceRule: FormRule = {
 
 export const INVALID_SLOT_MESSAGE = "Ca học chưa hợp lệ: giờ bắt đầu phải trước giờ kết thúc và các ca không được trùng giờ nhau.";
 
-/** Why each weekly slot is invalid (null when it is fine): an empty or reversed time range, or a clash with another slot. */
-export const slotErrors = (schedule: ScheduleEntry[] = []): (string | null)[] =>
-  schedule.map((slot, index) => {
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** A row must be complete and valid before it can conflict with another row. */
+export const slotErrors = (schedule: ScheduleEntry[] = []): (string | null)[] => {
+  const fieldErrors = schedule.map((slot) => {
+    if (!Number.isInteger(slot.dayOfWeek) || slot.dayOfWeek < 0 || slot.dayOfWeek > 6) return "Chọn ngày học trong tuần.";
     if (!slot.startTime || !slot.endTime) return "Chọn đủ giờ bắt đầu và giờ kết thúc.";
+    if (!TIME_PATTERN.test(slot.startTime) || !TIME_PATTERN.test(slot.endTime)) return "Nhập giờ theo định dạng HH:mm.";
     if (slot.startTime >= slot.endTime) return "Giờ bắt đầu phải trước giờ kết thúc.";
+    return null;
+  });
+
+  return schedule.map((slot, index) => {
+    if (fieldErrors[index]) return fieldErrors[index];
     const clash = schedule.findIndex(
       (other, j) =>
         j !== index &&
+        !fieldErrors[j] &&
         other.dayOfWeek === slot.dayOfWeek &&
-        Boolean(other.startTime && other.endTime) &&
         other.startTime < slot.endTime &&
         slot.startTime < other.endTime
     );
     return clash >= 0 ? `Trùng giờ với Ca ${clash + 1} trong cùng ngày.` : null;
   });
+};
 
 export const hasInvalidSlot = (schedule: ScheduleEntry[] = []) => slotErrors(schedule).some(Boolean);
 

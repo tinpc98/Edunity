@@ -17,6 +17,7 @@ interface TeacherWelcomeHeroProps {
   teacherName: string;
   nextSession?: Session;
   todaySessionsCount: number;
+  onEnterLiveClass: (session: Session) => void;
   isVerified?: boolean;
   verificationMessage?: string;
 }
@@ -25,6 +26,7 @@ export default function TeacherWelcomeHero({
   teacherName,
   nextSession,
   todaySessionsCount,
+  onEnterLiveClass,
   isVerified = false,
   verificationMessage = VERIFICATION_REQUIRED_MESSAGE,
 }: TeacherWelcomeHeroProps) {
@@ -80,7 +82,7 @@ export default function TeacherWelcomeHero({
         
         {nextSession ? (
           <div className="flex w-full flex-col gap-3 rounded-[16px] bg-teal-50/50 p-4 lg:max-w-[400px] border border-teal-50 max-w-full overflow-hidden">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wider ${
                 nextSession.status === "IN_PROGRESS" 
                   ? "bg-rose-100 text-rose-700" 
@@ -91,6 +93,8 @@ export default function TeacherWelcomeHero({
               </span>
               <Text type="secondary" className="text-[13px] font-medium flex items-center gap-1">
                 <ClockCircleOutlined className="text-[14px]" />
+                {new Date(nextSession.startDatetime).toLocaleDateString("vi-VN")}
+                {" · "}
                 {formatSessionTimeRange(nextSession.startDatetime, nextSession.endDatetime) || "Theo lịch"}
               </Text>
             </div>
@@ -111,7 +115,7 @@ export default function TeacherWelcomeHero({
                   type="primary" 
                   size="middle" 
                   disabled={!isVerified}
-                  onClick={() => isVerified && navigate(`/classroom/${nextSession.id}`)}
+                  onClick={() => onEnterLiveClass(nextSession)}
                   icon={<VideoCameraOutlined />} 
                   className="bg-teal-600 shadow-sm shadow-teal-600/20 rounded-xl px-5 font-semibold cursor-pointer"
                 >
