@@ -2,8 +2,6 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Typography,
-  Card,
   Table,
   Tag,
   Progress,
@@ -22,17 +20,22 @@ import {
   StopOutlined,
   SafetyCertificateOutlined,
   RocketOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
 import { campaignService, campaignKeys } from "../../../services/campaign.service";
 import type { ScholarshipCampaign, CampaignStatus } from "../../../types/campaign";
 import {
   CAMPAIGN_STATUS_LABELS,
   CAMPAIGN_STATUS_COLORS,
+  FUNDING_STATUS_LABELS,
+  FUNDING_STATUS_COLORS,
+  APPLICATION_STATUS_LABELS,
+  APPLICATION_STATUS_COLORS,
 } from "../../../types/campaign";
 import { formatVND } from "../../../types/payment";
 import { ROUTES } from "../../../routes/routePaths";
+import { AdminPageHero, AdminFilterBar, AdminFilterField, AdminTableCard } from "../../../components/admin";
 
-const { Title, Text } = Typography;
 
 export default function AdminCampaignsPage() {
   const navigate = useNavigate();
@@ -68,7 +71,12 @@ export default function AdminCampaignsPage() {
       queryClient.invalidateQueries({ queryKey: campaignKeys.all });
     },
     onError: (err: any) => {
-      message.error(err.message || "Không thể phát hành chiến dịch.");
+      const missingDates = err.details?.missing as string[] | undefined;
+      message.error(
+        missingDates?.length
+          ? "Cần cấu hình đủ lịch vận động và lịch nhận hồ sơ trước khi phát hành."
+          : err.message || "Không thể phát hành chiến dịch."
+      );
     },
   });
 
@@ -83,12 +91,23 @@ export default function AdminCampaignsPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => campaignService.deleteCampaign(id),
+    onSuccess: () => {
+      message.success("Đã xóa chiến dịch nháp thành công.");
+      queryClient.invalidateQueries({ queryKey: campaignKeys.all });
+    },
+    onError: (err: any) => {
+      message.error(err.message || "Không thể xóa chiến dịch nháp.");
+    },
+  });
+
   const columns: ColumnsType<ScholarshipCampaign> = [
     {
       title: "Chiến dịch",
       dataIndex: "title",
       key: "title",
-      width: "30%",
+      width: "28%",
       render: (text: string, record) => (
         <div>
           <Link
@@ -117,7 +136,7 @@ export default function AdminCampaignsPage() {
     {
       title: "Đã huy động",
       key: "fundedAmount",
-      width: "20%",
+      width: "18%",
       render: (_, record) => {
         const percent = record.fundingProgress;
         return (
@@ -147,10 +166,22 @@ export default function AdminCampaignsPage() {
       dataIndex: "status",
       key: "status",
       align: "center",
-      render: (status: CampaignStatus) => (
-        <Tag color={CAMPAIGN_STATUS_COLORS[status]} className="font-semibold">
-          {CAMPAIGN_STATUS_LABELS[status] || status}
-        </Tag>
+      render: (status: CampaignStatus, record) => (
+        <div className="flex flex-col items-center gap-1">
+          <Tag color={CAMPAIGN_STATUS_COLORS[status]} className="font-semibold m-0">
+            {CAMPAIGN_STATUS_LABELS[status] || status}
+          </Tag>
+          {status !== "DRAFT" && record.fundingStatus && (
+            <Tag color={FUNDING_STATUS_COLORS[record.fundingStatus]} className="text-[11px] m-0">
+              Gây quỹ: {FUNDING_STATUS_LABELS[record.fundingStatus] || record.fundingStatus}
+            </Tag>
+          )}
+          {status !== "DRAFT" && record.applicationStatus && (
+            <Tag color={APPLICATION_STATUS_COLORS[record.applicationStatus]} className="text-[11px] m-0">
+              Hồ sơ: {APPLICATION_STATUS_LABELS[record.applicationStatus] || record.applicationStatus}
+            </Tag>
+          )}
+        </div>
       ),
     },
     {
@@ -169,29 +200,56 @@ export default function AdminCampaignsPage() {
           </Button>
 
           {record.status === "DRAFT" && (
-            <Popconfirm
-              title="Phát hành chiến dịch?"
-              description="Chiến dịch sẽ được chuyển sang trạng thái OPEN_FOR_FUNDING và công khai để nhận tài trợ."
-              onConfirm={() => publishMutation.mutate(record.id)}
-              okText="Phát hành"
-              cancelText="Hủy"
-            >
-              <Button
-                type="primary"
-                size="small"
-                icon={<RocketOutlined />}
-                loading={publishMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-500 border-none"
+            <>
+              <Popconfirm
+                title="Phát hành chiến dịch?"
+                description="Chiến dịch cần có lịch vận động và lịch nhận hồ sơ. Nếu còn thiếu, hệ thống sẽ mở trang chi tiết để cấu hình trước khi phát hành."
+                onConfirm={() => {
+                  const scheduleComplete = Boolean(record.fundingStart && record.fundingEnd && record.applicationStart && record.applicationEnd);
+                  if (!scheduleComplete) {
+                    navigate(`/admin/campaigns/${record.id}`);
+                    return;
+                  }
+                  publishMutation.mutate(record.id);
+                }}
+                okText="Phát hành"
+                cancelText="Hủy"
               >
-                Phát hành
-              </Button>
-            </Popconfirm>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<RocketOutlined />}
+                  loading={publishMutation.isPending}
+                  className="bg-emerald-600 hover:bg-emerald-500 border-none"
+                >
+                  Phát hành
+                </Button>
+              </Popconfirm>
+
+              <Popconfirm
+                title="Xóa chiến dịch nháp?"
+                description="Bạn có chắc chắn muốn xóa chiến dịch nháp này không? Hành động này không thể hoàn tác."
+                onConfirm={() => deleteMutation.mutate(record.id)}
+                okText="Xóa"
+                cancelText="Hủy"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  danger
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  loading={deleteMutation.isPending}
+                >
+                  Xóa
+                </Button>
+              </Popconfirm>
+            </>
           )}
 
           {record.status === "OPEN_FOR_FUNDING" && (
             <Popconfirm
               title="Đóng chiến dịch?"
-              description="Chiến dịch sẽ ngừng tiếp nhận tài trợ từ các nhà hảo tâm."
+              description="Hành động này sẽ đóng chính thức toàn bộ chiến dịch, bao gồm cả cổng gây quỹ và tiếp nhận hồ sơ."
               onConfirm={() => closeMutation.mutate(record.id)}
               okText="Đóng"
               cancelText="Hủy"
@@ -213,62 +271,61 @@ export default function AdminCampaignsPage() {
   ];
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <Title level={3} className="!mb-1 !text-slate-900 font-bold flex items-center gap-2">
-            <SafetyCertificateOutlined className="text-teal-700" /> Quản lý Chiến dịch Học bổng
-          </Title>
-          <Text type="secondary" className="text-sm">
-            Tạo lập, phát hành và giám sát tiến độ gây quỹ các chương trình học bổng trên toàn hệ thống.
-          </Text>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Button
-            icon={<ReloadOutlined spin={isFetching} />}
-            onClick={() => refetch()}
-            disabled={isLoading}
-            className="rounded-xl border-[#D6E5E2] text-[#163B40] font-medium"
-          >
-            Làm mới
-          </Button>
-          <Link to={ROUTES.ADMIN.CREATE_CAMPAIGN}>
+    <div className="flex flex-col gap-5 w-full pb-10">
+      <AdminPageHero
+        icon={<SafetyCertificateOutlined />}
+        title="Quản lý Chiến dịch Học bổng"
+        crumb="Chiến dịch"
+        description="Tạo lập, phát hành và giám sát tiến độ gây quỹ các chương trình học bổng trên toàn hệ thống."
+        extra={
+          <div className="flex items-center gap-2">
             <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              className="bg-[#0D9488] hover:bg-[#0B746C] rounded-xl font-bold shadow-xs"
+              icon={<ReloadOutlined spin={isFetching} />}
+              onClick={() => refetch()}
+              disabled={isLoading}
+              className="rounded-xl"
             >
-              Tạo chiến dịch mới
+              Làm mới
             </Button>
-          </Link>
-        </div>
-      </div>
+            <Link to={ROUTES.ADMIN.CREATE_CAMPAIGN}>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                className="bg-[#0D9488] hover:bg-[#0B746C] rounded-xl font-bold shadow-xs"
+              >
+                Tạo chiến dịch mới
+              </Button>
+            </Link>
+          </div>
+        }
+      />
 
-      {/* Filter Bar */}
-      <Card className="rounded-xl border-slate-200/80 shadow-2xs">
-        <div className="flex items-center gap-4">
-          <span className="text-xs font-semibold text-slate-600 uppercase">Trạng thái:</span>
-          <Select
-            value={statusFilter}
-            onChange={(val) => {
-              setStatusFilter(val);
-              setPage(1);
-            }}
-            style={{ width: 220 }}
-            options={[
-              { value: "ALL", label: "Tất cả trạng thái" },
-              { value: "DRAFT", label: "Bản nháp (DRAFT)" },
-              { value: "OPEN_FOR_FUNDING", label: "Đang gây quỹ (OPEN_FOR_FUNDING)" },
-              { value: "CLOSED", label: "Đã đóng (CLOSED)" },
-            ]}
-          />
-        </div>
-      </Card>
+      {/* Main Data Table + Filter bar */}
+      <AdminTableCard>
+        <AdminFilterBar
+          title="Bộ lọc chiến dịch"
+          gridClassName="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
+          onReset={() => { setStatusFilter("ALL"); setPage(1); }}
+          hasFilter={statusFilter !== "ALL"}
+        >
+          <AdminFilterField label="Trạng thái">
+            <Select
+              value={statusFilter}
+              onChange={(val) => {
+                setStatusFilter(val);
+                setPage(1);
+              }}
+              className="w-full rounded-xl"
+              options={[
+                { value: "ALL", label: "Tất cả trạng thái" },
+                { value: "DRAFT", label: "Bản nháp (DRAFT)" },
+                { value: "OPEN_FOR_FUNDING", label: "Đang gây quỹ (OPEN_FOR_FUNDING)" },
+                { value: "CLOSED", label: "Đã đóng (CLOSED)" },
+              ]}
+            />
+          </AdminFilterField>
+        </AdminFilterBar>
 
-      {/* Table */}
-      <Card className="rounded-2xl border-slate-200/80 shadow-xs overflow-hidden">
         {isLoading ? (
           <div className="p-6 space-y-4">
             <Skeleton active paragraph={{ rows: 6 }} />
@@ -279,25 +336,28 @@ export default function AdminCampaignsPage() {
             description="Chưa có chiến dịch nào phù hợp với bộ lọc."
           />
         ) : (
-          <Table<ScholarshipCampaign>
-            columns={columns}
-            dataSource={campaigns}
-            rowKey="id"
-            pagination={{
-              current: page,
-              pageSize: pageSize,
-              total: total,
-              showSizeChanger: true,
-              pageSizeOptions: ["10", "20", "50"],
-              onChange: (p, ps) => {
-                setPage(p);
-                setPageSize(ps);
-              },
-              showTotal: (t) => `Tổng cộng ${t} chiến dịch`,
-            }}
-          />
+          <div className="overflow-x-auto">
+            <Table<ScholarshipCampaign>
+              columns={columns}
+              dataSource={campaigns}
+              rowKey="id"
+              pagination={{
+                current: page,
+                pageSize: pageSize,
+                total: total,
+                showSizeChanger: true,
+                pageSizeOptions: ["10", "20", "50"],
+                onChange: (p, ps) => {
+                  setPage(p);
+                  setPageSize(ps);
+                },
+                showTotal: (t) => `Tổng cộng ${t} chiến dịch`,
+              }}
+              className="border-t border-slate-100"
+            />
+          </div>
         )}
-      </Card>
+      </AdminTableCard>
     </div>
   );
 }

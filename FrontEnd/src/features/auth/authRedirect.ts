@@ -6,6 +6,7 @@ export function getRoleHome(role: UserRole): string {
   if (role === "TEACHER") return ROUTES.TEACHER.HOME;
   if (role === "ADMIN") return ROUTES.ADMIN.HOME;
   if (role === "SPONSOR") return ROUTES.SPONSOR.HOME;
+  if (role === "VERIFIER") return ROUTES.VERIFIER.SCHOLARSHIP_APPLICATIONS;
   return ROUTES.STUDENT.HOME;
 }
 
@@ -21,6 +22,7 @@ const ROLE_PREFIXES: Record<UserRole, string> = {
   TEACHER: "/teacher",
   ADMIN: "/admin",
   SPONSOR: "/sponsor",
+  VERIFIER: "/verifier",
 };
 
 function isRedirectAllowed(path: string, role: UserRole): boolean {

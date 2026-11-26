@@ -29,7 +29,13 @@ export function adaptCampaign(raw: ApiScholarshipCampaign): ScholarshipCampaign 
   const allocatedAmount = parseDecimal(raw.allocatedAmount);
   const usedAmount = parseDecimal(raw.usedAmount);
   const awardAmountPerStudent = parseDecimal(raw.awardAmountPerStudent);
-  const availableFund = parseDecimal(raw.availableFund, fundedAmount - allocatedAmount);
+  const refundedFund = parseDecimal((raw as any).refundedFund || (raw as any).refundedAmount);
+  const approvedPendingRefund = parseDecimal((raw as any).approvedPendingRefund);
+  const pendingFund = parseDecimal((raw as any).pendingFund);
+  const netEligibleFund = parseDecimal((raw as any).netEligibleFund, Math.max(0, fundedAmount - refundedFund - approvedPendingRefund));
+  const availableFund = parseDecimal(raw.availableFund, Math.max(0, netEligibleFund - allocatedAmount));
+  const standardSlotValue = parseDecimal((raw as any).standardSlotValue, awardAmountPerStudent);
+  const standardSlotsAvailable = standardSlotValue > 0 ? Math.floor(availableFund / standardSlotValue) : 0;
 
   // Derived funding progress percentage
   const fundingProgress =
@@ -47,12 +53,28 @@ export function adaptCampaign(raw: ApiScholarshipCampaign): ScholarshipCampaign 
     description: raw.description || "",
     eligibilityCriteria: raw.eligibilityCriteria || "",
     scope: raw.scope || {},
+    priorityCriteria: raw.priorityCriteria || [],
+    priorityPolicyVersion: Number((raw as any).priorityPolicyVersion ?? 0),
     targetBudget,
     fundedAmount,
     allocatedAmount,
     usedAmount,
+    receivedFund: fundedAmount,
+    confirmedFund: fundedAmount,
+    pendingFund,
+    refundedFund,
+    netEligibleFund,
+    standardSlotValue,
+    standardSlotsAvailable,
+    resultPublicationDate: (raw as any).resultPublicationDate || null,
     expectedSlots: raw.expectedSlots || 0,
     awardAmountPerStudent,
+    allowSlotExpansion: Boolean((raw as any).allowSlotExpansion),
+    paperDeliveryGraceDays: Number((raw as any).paperDeliveryGraceDays ?? 5),
+    projectedSlots: Number((raw as any).projectedSlots ?? 0),
+    officialSlotCount: (raw as any).officialSlotCount ?? null,
+    officialEligibleFunding: parseDecimal((raw as any).officialEligibleFunding, null as any),
+    fundingReconciledAt: (raw as any).fundingReconciledAt || null,
     fundingStart: raw.fundingStart || null,
     fundingEnd: raw.fundingEnd || null,
     applicationStart: raw.applicationStart || null,
@@ -61,9 +83,21 @@ export function adaptCampaign(raw: ApiScholarshipCampaign): ScholarshipCampaign 
     createdAt: raw.createdAt || new Date().toISOString(),
     updatedAt: raw.updatedAt,
     availableFund,
+    approvedPendingRefund,
     fundingProgress,
     isAcceptingFunding: Boolean(raw.isAcceptingFunding),
     isAcceptingApplications: Boolean(raw.isAcceptingApplications),
+    isFundingPaused: Boolean(raw.isFundingPaused),
+    fundingClosed: Boolean(raw.fundingClosed),
+    fundingClosedAt: raw.fundingClosedAt || null,
+    fundingPauseReason: raw.fundingPauseReason || null,
+    isApplicationPaused: Boolean(raw.isApplicationPaused),
+    applicationClosed: Boolean(raw.applicationClosed),
+    applicationClosedAt: raw.applicationClosedAt || null,
+    applicationPauseReason: raw.applicationPauseReason || null,
+    fundingStatus: raw.fundingStatus || "NOT_STARTED",
+    applicationStatus: raw.applicationStatus || "NOT_STARTED",
+    lifecycleHistory: raw.lifecycleHistory || [],
     scopeDetail: raw.scopeDetail,
     awardedScholarshipCount: raw.awardedScholarshipCount || 0,
     contributionCount: raw.contributionCount || 0,

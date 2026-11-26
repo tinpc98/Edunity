@@ -83,6 +83,8 @@ const paperDossierReceiptSchema = new Schema(
     receivedAt: { type: Date, required: true, default: Date.now },
     receivingLocation: { type: String, trim: true, default: "Central Admission Office" },
     intakeNote: { type: String, trim: true, default: null },
+    proofStorageKey: { type: String, default: null },
+    proofPhotos: { type: [String], default: [] },
 
     status: {
       type: String,

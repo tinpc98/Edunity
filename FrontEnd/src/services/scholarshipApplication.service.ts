@@ -2,6 +2,7 @@ import { apiClient } from "../api/apiClient";
 import type {
   ApiScholarshipApplication,
   ScholarshipApplication,
+  VerifierScholarshipApplicationDetail,
   ApplyScholarshipPayload,
   CreateScholarshipDossierPayload,
   PaperDossierReceipt,
@@ -111,6 +112,14 @@ export const scholarshipApplicationService = {
     return adaptScholarshipApplication(raw);
   },
 
+  async declarePaperDispatch(id: string, payload: { sentAt: string; carrier: string; trackingNumber?: string; proofStorageKey?: string }): Promise<ScholarshipApplication> {
+    const raw = await apiClient<ApiScholarshipApplication>(`/me/scholarship-applications/${id}/paper-dispatch`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return adaptScholarshipApplication(raw);
+  },
+
   /**
    * Admin: List scholarship applications with filters
    * GET /api/admin/scholarship-applications?status=...&campaignId=...&page=...&pageSize=...
@@ -118,6 +127,19 @@ export const scholarshipApplicationService = {
   async adminListApplications(params?: {
     status?: string;
     campaignId?: string;
+    submissionMode?: string;
+    search?: string;
+    province?: string;
+    residenceProvince?: string;
+    schoolName?: string;
+    gradeLevel?: string;
+    hasPovertyCertificate?: string;
+    isDisadvantaged?: string;
+    hardshipCategory?: string;
+    paperStatus?: string;
+    minPriorityScore?: number;
+    maxPriorityScore?: number;
+    sortByPriority?: boolean;
     page?: number;
     pageSize?: number;
   }): Promise<{
@@ -126,10 +148,32 @@ export const scholarshipApplicationService = {
     page: number;
     pageSize: number;
     totalPages: number;
+    counts?: {
+      all: number;
+      submitted: number;
+      needMoreInfo: number;
+      dossierVerified: number;
+      approved: number;
+      rejected: number;
+      withdrawn: number;
+    };
   }> {
     const query = new URLSearchParams();
     if (params?.status && params.status !== "ALL") query.set("status", params.status);
-    if (params?.campaignId) query.set("campaignId", params.campaignId);
+    if (params?.campaignId && params.campaignId !== "ALL") query.set("campaignId", params.campaignId);
+    if (params?.submissionMode && params.submissionMode !== "ALL") query.set("submissionMode", params.submissionMode);
+    if (params?.search) query.set("search", params.search);
+    if (params?.province) query.set("province", params.province);
+    if (params?.residenceProvince) query.set("residenceProvince", params.residenceProvince);
+    if (params?.schoolName) query.set("schoolName", params.schoolName);
+    if (params?.gradeLevel) query.set("gradeLevel", params.gradeLevel);
+    if (params?.hasPovertyCertificate) query.set("hasPovertyCertificate", params.hasPovertyCertificate);
+    if (params?.isDisadvantaged) query.set("isDisadvantaged", params.isDisadvantaged);
+    if (params?.hardshipCategory) query.set("hardshipCategory", params.hardshipCategory);
+    if (params?.paperStatus) query.set("paperStatus", params.paperStatus);
+    if (params?.minPriorityScore !== undefined) query.set("minPriorityScore", String(params.minPriorityScore));
+    if (params?.maxPriorityScore !== undefined) query.set("maxPriorityScore", String(params.maxPriorityScore));
+    if (params?.sortByPriority) query.set("sortByPriority", "true");
     if (params?.page) query.set("page", String(params.page));
     if (params?.pageSize) query.set("pageSize", String(params.pageSize));
 
@@ -140,6 +184,15 @@ export const scholarshipApplicationService = {
       page: number;
       pageSize: number;
       totalPages: number;
+      counts?: {
+        all: number;
+        submitted: number;
+        needMoreInfo: number;
+        dossierVerified: number;
+        approved: number;
+        rejected: number;
+        withdrawn: number;
+      };
     }>(`/admin/scholarship-applications${qs ? `?${qs}` : ""}`);
 
     return {
@@ -148,6 +201,7 @@ export const scholarshipApplicationService = {
       page: data.page || 1,
       pageSize: data.pageSize || 20,
       totalPages: data.totalPages || 1,
+      counts: data.counts,
     };
   },
 
@@ -193,6 +247,11 @@ export const scholarshipApplicationService = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+
+  /** Admin: create paper dossier receipt (alias for adminIntakePaperDossier). */
+  async adminCreatePaperReceipt(payload: PaperDossierReceiptPayload): Promise<PaperDossierReceipt> {
+    return this.adminIntakePaperDossier(payload);
   },
 
   async adminLinkPaperDossier(id: string, payload: { applicationId?: string; applicationCode?: string; note?: string }): Promise<PaperDossierReceipt> {
@@ -264,6 +323,21 @@ export const scholarshipApplicationService = {
   },
 
   /**
+   * Admin: Review and verify/reject individual document
+   * PATCH /api/admin/scholarship-applications/:id/documents/:documentId/review
+   */
+  async adminReviewDocument(
+    applicationId: string,
+    documentId: string,
+    payload: { status: 'APPROVED' | 'REJECTED'; reviewNote?: string }
+  ): Promise<any> {
+    return apiClient(`/admin/scholarship-applications/${applicationId}/documents/${documentId}/review`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
    * Upload private verification document
    * POST /api/uploads/private (purpose: SCHOLARSHIP_PROOF)
    */
@@ -285,6 +359,97 @@ export const scholarshipApplicationService = {
     }>("/uploads/private", {
       method: "POST",
       body: formData,
+    });
+  },
+
+  /** Admin: Screen application (Layer 1 + Layer 2) and optionally assign verifier */
+  async adminScreenApplication(id: string, payload: {
+    layer1Passed: boolean;
+    notes?: string;
+    assignedVerifierId?: string;
+  }): Promise<ScholarshipApplication> {
+    const raw = await apiClient<ApiScholarshipApplication>(`/admin/scholarship-applications/${id}/screen`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return adaptScholarshipApplication(raw);
+  },
+
+  /** Admin: Assign a verifier to application */
+  async adminAssignVerifier(
+    id: string,
+    payload: { verifierId: string; note?: string } | string
+  ): Promise<ScholarshipApplication> {
+    const body = typeof payload === "string" ? { verifierId: payload } : payload;
+    const raw = await apiClient<ApiScholarshipApplication>(`/admin/scholarship-applications/${id}/assign-verifier`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    return adaptScholarshipApplication(raw);
+  },
+
+  /** Admin: List eligible verifiers */
+  async adminListVerifiers(): Promise<{ id: string; email: string; role: string; name: string }[]> {
+    return apiClient("/admin/verifiers");
+  },
+
+  /** Verifier: Submit field/dossier verification report */
+  async verifierSubmitResult(id: string, payload: {
+    status: "VERIFIED_MATCHED" | "DISCREPANCY" | "SUPPLEMENT_REQUIRED" | "UNABLE_TO_VERIFY";
+    notes?: string;
+  }): Promise<ScholarshipApplication> {
+    const raw = await apiClient<ApiScholarshipApplication>(`/verifier/scholarship-applications/${id}/verify`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return adaptScholarshipApplication(raw);
+  },
+
+  /** Verifier: List applications assigned for verification */
+  async getVerifierApplications(params?: { status?: string; page?: number; pageSize?: number }): Promise<{
+    items: ScholarshipApplication[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set("status", params.status);
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+    const qs = query.toString();
+    const data = await apiClient<{
+      items: ApiScholarshipApplication[];
+      total: number;
+      page: number;
+      pageSize: number;
+      totalPages: number;
+    }>(`/verifier/scholarship-applications${qs ? `?${qs}` : ""}`);
+
+    return {
+      items: adaptScholarshipApplications(data.items || []),
+      total: data.total || 0,
+      page: data.page || 1,
+      pageSize: data.pageSize || 20,
+      totalPages: data.totalPages || 1,
+    };
+  },
+
+  /** Verifier: Open only a dossier assigned to the current verifier. */
+  async verifierGetApplication(id: string): Promise<VerifierScholarshipApplicationDetail> {
+    return apiClient<VerifierScholarshipApplicationDetail>(`/verifier/scholarship-applications/${id}`);
+  },
+
+  /** Student: Toggle or revoke public transparency consent */
+  async setPublicConsent(id: string, consented: boolean): Promise<{
+    applicationId: string;
+    consented: boolean;
+    consentedAt?: string | null;
+    revokedAt?: string | null;
+  }> {
+    return apiClient(`/me/scholarship-applications/${id}/public-consent`, {
+      method: "POST",
+      body: JSON.stringify({ consented }),
     });
   },
 };

@@ -1,5 +1,5 @@
 const storage = require("../services/storageService");
-const { User } = require("../models");
+const { User, ScholarshipApplication } = require("../models");
 const { getVerifiedTeacher } = require("../services/teacherClassService");
 const { AppError, FORBIDDEN } = require("../utils/errors");
 const { handle, validationError } = require("../utils/http");
@@ -66,21 +66,47 @@ exports.uploadPublic = handle(async (req) => {
   return storage.savePublicFile(purpose, req.file);
 }, 201);
 
-// POST /api/files/signed-url { storageKey } — only the owner of the file or an Admin (NFR-04)
+// POST /api/files/signed-url { storageKey } — only the owner of the file, an Admin, or assigned Verifier (NFR-04)
 exports.createSignedUrl = handle(async (req) => {
   const { storageKey } = req.body || {};
   const parsed = storage.parsePrivateKey(storageKey);
-  if (!parsed || (req.user.role !== "ADMIN" && parsed.ownerId !== req.user.id.toString())) {
+  if (!parsed) {
     throw new AppError("File not found", "FILE_NOT_FOUND", 404);
   }
+
+  let isAllowed = false;
+  if (req.user.role === "ADMIN" || parsed.ownerId === req.user.id.toString()) {
+    isAllowed = true;
+  } else if (req.user.role === "VERIFIER" && parsed.purpose === "SCHOLARSHIP_PROOF") {
+    const isAssigned = await ScholarshipApplication.exists({
+      assignedVerifierId: req.user.id,
+      studentId: parsed.ownerId,
+    });
+    if (isAssigned) {
+      isAllowed = true;
+    }
+  }
+
+  if (!isAllowed) {
+    throw new AppError("File not found", "FILE_NOT_FOUND", 404);
+  }
+
   if (req.user.role === "TEACHER" && parsed.purpose === "RECORDING") {
     await getVerifiedTeacher(req.user.id);
   }
-  // BAO-04: an Admin opening someone else's private file (CCCD, diplomas, proofs) leaves a trace
+  // BAO-04: an Admin or Verifier opening someone else's private file leaves an audit trace
   if (req.user.role === "ADMIN" && parsed.ownerId !== req.user.id.toString()) {
     await audit({
       actorAdminId: req.user.id,
       action: "PRIVATE_FILE_ACCESSED",
+      targetType: "User",
+      targetId: parsed.ownerId,
+      afterState: { storageKey, purpose: parsed.purpose },
+    });
+  } else if (req.user.role === "VERIFIER") {
+    await audit({
+      actorAdminId: req.user.id,
+      action: "VERIFIER_FILE_ACCESSED",
       targetType: "User",
       targetId: parsed.ownerId,
       afterState: { storageKey, purpose: parsed.purpose },

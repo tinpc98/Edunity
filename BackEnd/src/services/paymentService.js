@@ -715,15 +715,42 @@ const getPaymentById = async (user, paymentId) => {
     }
 
     if (payment.purpose === "DONATION") {
-      const { providerMetadata: dMeta, ...safeDonation } = payment;
-      const donationExpiredAt = payment.expiredAt || null;
+      let currentPayment = payment;
+
+      // Active polling sync with payOS when DONATION payment is PENDING
+      if (
+        currentPayment.paymentStatus === "PENDING" &&
+        currentPayment.provider === "PAYOS" &&
+        currentPayment.orderCode
+      ) {
+        const channelKey = currentPayment.channelKey || "DONATION";
+        const isEnabled = payosService.isPayosEnabled(channelKey);
+        if (isEnabled) {
+          try {
+            const info = await payosService.getPaymentLinkInfo(channelKey, currentPayment.orderCode);
+            if (info && info.status === "PAID" && Array.isArray(info.transactions) && info.transactions.length > 0) {
+              const payosWebhookService = require("./payosWebhookService");
+              await payosWebhookService.settleVerifiedProviderQuery(channelKey, info, {
+                paymentId: currentPayment._id,
+              });
+              const updatedP = await Payment.findById(paymentId).lean();
+              if (updatedP) currentPayment = updatedP;
+            }
+          } catch (syncErr) {
+            // Swallow query error to allow normal read path
+          }
+        }
+      }
+
+      const { providerMetadata: dMeta, ...safeDonation } = currentPayment;
+      const donationExpiredAt = currentPayment.expiredAt || null;
       return {
         ...safeDonation,
-        paymentId: payment._id,
+        paymentId: currentPayment._id,
         purpose: "DONATION",
-        channelKey: payment.channelKey || "DONATION",
-        provider: payment.provider || "PAYOS",
-        currency: payment.currency || "VND",
+        channelKey: currentPayment.channelKey || "DONATION",
+        provider: currentPayment.provider || "PAYOS",
+        currency: currentPayment.currency || "VND",
         remainingSeconds: computeRemainingSeconds(donationExpiredAt),
       };
     }
@@ -773,7 +800,10 @@ const getPaymentById = async (user, paymentId) => {
 
     let reconciliation = null;
     if (mongoose.connection && mongoose.connection.readyState === 1) {
-      reconciliation = await PaymentReconciliation.findOne({ paymentId: currentPayment._id })
+      reconciliation = await PaymentReconciliation.findOne({
+        paymentId: currentPayment._id,
+        status: { $ne: "RESOLVED" },
+      })
         .sort({ createdAt: -1 })
         .select("reason status")
         .lean()
@@ -821,11 +851,36 @@ const getPaymentById = async (user, paymentId) => {
 
   // Fallback sang SponsorContribution cho luồng DONATION (tránh duplicate record trong collection payments)
   if (mongoose.connection && mongoose.connection.readyState === 1) {
-    const contribution = await SponsorContribution.findById(paymentId).lean();
+    let contribution = await SponsorContribution.findById(paymentId).lean();
     if (
       contribution &&
       (user.role === "ADMIN" || contribution.sponsorId.toString() === user.id.toString())
     ) {
+      // Active polling sync with payOS when contribution is PENDING
+      if (
+        contribution.contributionStatus === "PENDING" &&
+        (contribution.provider === "PAYOS" || contribution.channelKey === "DONATION") &&
+        contribution.orderCode
+      ) {
+        const channelKey = contribution.channelKey || "DONATION";
+        const isEnabled = payosService.isPayosEnabled(channelKey);
+        if (isEnabled) {
+          try {
+            const info = await payosService.getPaymentLinkInfo(channelKey, contribution.orderCode);
+            if (info && info.status === "PAID" && Array.isArray(info.transactions) && info.transactions.length > 0) {
+              const payosWebhookService = require("./payosWebhookService");
+              await payosWebhookService.settleVerifiedProviderQuery(channelKey, info, {
+                contributionId: contribution._id,
+              });
+              const updatedC = await SponsorContribution.findById(paymentId).lean();
+              if (updatedC) contribution = updatedC;
+            }
+          } catch (syncErr) {
+            // Swallow query error to allow normal read path
+          }
+        }
+      }
+
       const { providerMetadata, sponsorId, ...safeContrib } = contribution;
       const expiredAt = contribution.expiredAt || null;
       const [campaign, reconciliation] = await Promise.all([
@@ -835,7 +890,10 @@ const getPaymentById = async (user, paymentId) => {
               .lean()
               .catch(() => null)
           : null,
-        PaymentReconciliation.findOne({ contributionId: contribution._id })
+        PaymentReconciliation.findOne({
+          contributionId: contribution._id,
+          status: { $ne: "RESOLVED" },
+        })
           .sort({ createdAt: -1 })
           .select("reason status")
           .lean()
@@ -884,6 +942,51 @@ const getPaymentHistory = async (studentId, enrollmentId) => {
   return payments;
 };
 
+const adminSyncProviderOrder = async (adminId, orderCodeInput) => {
+  const orderCode = Number(orderCodeInput);
+  if (!Number.isSafeInteger(orderCode) || orderCode <= 0) {
+    throw new AppError("orderCode must be a positive integer", "VALIDATION_ERROR", 400);
+  }
+
+  const [contribution, payment] = await Promise.all([
+    SponsorContribution.findOne({ orderCode }),
+    Payment.findOne({ orderCode }),
+  ]);
+
+  const channelKey = contribution ? "DONATION" : (payment?.channelKey || "DONATION");
+  const isEnabled = payosService.isPayosEnabled(channelKey);
+  if (!isEnabled) {
+    throw new AppError(`PayOS is not enabled for channel ${channelKey}`, "PAYMENT_PROVIDER_DISABLED", 503);
+  }
+
+  const info = await payosService.getPaymentLinkInfo(channelKey, orderCode);
+  if (!info) {
+    throw new AppError("Payment link info not found on PayOS", "PAYMENT_NOT_FOUND", 404);
+  }
+
+  const payosWebhookService = require("./payosWebhookService");
+  const syncResult = await payosWebhookService.settleVerifiedProviderQuery(channelKey, info, {
+    paymentId: payment?._id,
+    contributionId: contribution?._id,
+    adminId,
+    allowReevaluation: true,
+  });
+
+  const [updatedContribution, updatedPayment] = await Promise.all([
+    contribution ? SponsorContribution.findById(contribution._id).lean() : null,
+    payment ? Payment.findById(payment._id).lean() : null,
+  ]);
+
+  return {
+    orderCode,
+    channelKey,
+    payosStatus: info.status,
+    syncResult,
+    contribution: updatedContribution,
+    payment: updatedPayment,
+  };
+};
+
 module.exports = {
   allocateOrderCode,
   computeRemainingSeconds,
@@ -894,4 +997,5 @@ module.exports = {
   processWebhook,
   getPaymentHistory,
   getPaymentById,
+  adminSyncProviderOrder,
 };

@@ -202,6 +202,21 @@ const createPayosChannelWebhookHandler = (channelKey) => async (req, res, next) 
 const processPayosTuitionWebhook = createPayosChannelWebhookHandler("TUITION");
 const processPayosDonationWebhook = createPayosChannelWebhookHandler("DONATION");
 
+const adminSyncProviderOrder = async (req, res, next) => {
+  try {
+    const adminId = req.user.id;
+    const orderCode = req.params.orderCode || req.body.orderCode;
+    const result = await paymentService.adminSyncProviderOrder(adminId, orderCode);
+    return res.status(200).json({
+      success: true,
+      message: "Đồng bộ giao dịch với PayOS thành công",
+      data: serializeDecimal128(result),
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   createSandboxPayment,
   createPaymentIntent: createSandboxPayment,
@@ -210,5 +225,6 @@ module.exports = {
   processPayosTuitionWebhook,
   processPayosDonationWebhook,
   getPaymentById,
-  getPaymentHistory
+  getPaymentHistory,
+  adminSyncProviderOrder,
 };

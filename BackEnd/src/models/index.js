@@ -23,6 +23,7 @@ module.exports = {
   Payout: require("./Payout"),
   Review: require("./Review"),
   ScholarshipCampaign: require("./ScholarshipCampaign"),
+  ScholarshipFundingReconciliation: require("./ScholarshipFundingReconciliation"),
   SponsorContribution: require("./SponsorContribution"),
   ScholarshipApplication: require("./ScholarshipApplication"),
   PaperDossierReceipt: require("./PaperDossierReceipt"),

@@ -1,206 +1,265 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Typography,
-  Card,
   Row,
   Col,
-  Statistic,
   Button,
   Tag,
   Progress,
   Skeleton,
+  Table,
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import {
   HeartOutlined,
   DollarOutlined,
   SafetyCertificateOutlined,
   ArrowRightOutlined,
-  CalendarOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import { sponsorContributionService, contributionKeys } from "../../../services/sponsorContribution.service";
 import { campaignService, campaignKeys } from "../../../services/campaign.service";
 import { useAuthStore } from "../../../stores/auth.store";
 import { formatVND } from "../../../types/payment";
 import {
-  CONTRIBUTION_STATUS_LABELS,
-  CONTRIBUTION_STATUS_COLORS,
+  type SponsorContribution,
 } from "../../../types/campaign";
 import { ROUTES } from "../../../routes/routePaths";
+import {
+  AdminPageHero,
+  AdminKpiCard,
+  AdminTableCard,
+} from "../../../components/admin";
 
-const { Title, Paragraph } = Typography;
+const VIETNAMESE_STATUS_MAP: Record<string, { label: string; color: string }> = {
+  PENDING: { label: "Chờ thanh toán", color: "orange" },
+  PROCESSING: { label: "Đang xử lý", color: "processing" },
+  COMPLETED: { label: "Thành công", color: "success" },
+  RECONCILIATION_REQUIRED: { label: "Chờ đối soát", color: "warning" },
+  FAILED: { label: "Đã hủy", color: "default" },
+  REFUNDED: { label: "Đã hoàn tiền", color: "purple" },
+};
 
 export default function SponsorHomePage() {
   const { user } = useAuthStore();
 
   const { data: myContributionsData, isLoading: isLoadingContributions } = useQuery({
-    queryKey: contributionKeys.myList({ page: 1, pageSize: 5 }),
-    queryFn: () => sponsorContributionService.getMyContributions({ page: 1, pageSize: 5 }),
+    queryKey: contributionKeys.myList({ page: 1, pageSize: 20 }),
+    queryFn: () => sponsorContributionService.getMyContributions({ page: 1, pageSize: 20 }),
   });
 
   const { data: campaignsData, isLoading: isLoadingCampaigns } = useQuery({
-    queryKey: campaignKeys.list({ page: 1, pageSize: 3, status: "OPEN_FOR_FUNDING" }),
-    queryFn: () => campaignService.listCampaigns({ page: 1, pageSize: 3, status: "OPEN_FOR_FUNDING" }),
+    queryKey: campaignKeys.list({ page: 1, pageSize: 4, status: "OPEN_FOR_FUNDING" }),
+    queryFn: () => campaignService.listCampaigns({ page: 1, pageSize: 4, status: "OPEN_FOR_FUNDING" }),
   });
 
+  const allContributions = myContributionsData?.items || [];
   const totalContributed = myContributionsData?.totalContributed || 0;
-  const totalContributionsCount = myContributionsData?.total || 0;
-  const recentContributions = myContributionsData?.items || [];
+  const recentContributions = allContributions.slice(0, 5);
   const openCampaigns = campaignsData?.items || [];
 
-  return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8">
-      {/* Welcome Banner */}
-      <div className="rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white p-8 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2 max-w-2xl">
-          <Tag color="cyan" className="font-semibold uppercase text-xs border-0 px-3 py-0.5">
-            Cổng Thông tin Nhà Tài Trợ
-          </Tag>
-          <Title level={2} className="!text-white !mb-1 font-black tracking-tight text-2xl md:text-3xl">
-            Xin chào, {user?.fullName || "Quý Nhà tài trợ"}!
-          </Title>
-          <Paragraph className="!text-indigo-100 text-sm leading-relaxed !mb-0">
-            Cảm ơn sự đồng hành và đóng góp quý báu của bạn trong việc nâng bước học sinh, sinh viên hiếu học trên khắp cả nước.
-          </Paragraph>
-        </div>
+  // Metrics derived from actual backend contributions data
+  const completedContributions = allContributions.filter(
+    (c) => c.contributionStatus === "COMPLETED"
+  );
+  const pendingContributions = allContributions.filter(
+    (c) => c.contributionStatus === "PENDING"
+  );
+  const uniqueCampaigns = new Set(
+    allContributions.map((c) => c.campaignId).filter(Boolean)
+  );
 
-        <Link to="/campaigns">
-          <Button
-            type="primary"
-            size="large"
-            icon={<HeartOutlined />}
-            className="bg-white text-indigo-900 hover:!bg-indigo-50 font-bold rounded-xl border-0 h-12 px-6"
-          >
-            Tài trợ chiến dịch mới
-          </Button>
+  const recentColumns: ColumnsType<SponsorContribution> = [
+    {
+      title: "Mã giao dịch",
+      dataIndex: "paymentReference",
+      key: "paymentReference",
+      width: 140,
+      render: (ref: string, record) => (
+        <span className="font-mono text-xs font-semibold text-slate-700">
+          {ref || (record.orderCode ? `CONTRIB-${record.orderCode}` : `#${record.id.slice(-6)}`)}
+        </span>
+      ),
+    },
+    {
+      title: "Chiến dịch",
+      dataIndex: "campaignTitle",
+      key: "campaignTitle",
+      render: (title: string, record) => (
+        <Link
+          to={`/campaigns/${record.campaignId}`}
+          className="font-medium text-slate-800 hover:text-teal-700 text-xs line-clamp-1"
+        >
+          {title || "Chiến dịch học bổng"}
         </Link>
+      ),
+    },
+    {
+      title: "Số tiền",
+      dataIndex: "amount",
+      key: "amount",
+      align: "right",
+      render: (val: number) => (
+        <span className="font-bold text-teal-700 text-xs">{formatVND(val)}</span>
+      ),
+    },
+    {
+      title: "Trạng thái",
+      dataIndex: "contributionStatus",
+      key: "contributionStatus",
+      align: "center",
+      render: (status: string) => {
+        const conf = VIETNAMESE_STATUS_MAP[status] || { label: status, color: "default" };
+        return (
+          <Tag color={conf.color} className="text-[10px] font-semibold m-0">
+            {conf.label}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: "Thời gian",
+      dataIndex: "contributedAt",
+      key: "contributedAt",
+      align: "right",
+      render: (dateStr: string) => (
+        <span className="text-[11px] text-slate-500">
+          {dateStr ? new Date(dateStr).toLocaleDateString("vi-VN") : "—"}
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6 w-full pb-10">
+      {/* AdminPageHero */}
+      <AdminPageHero
+        icon={<HeartOutlined />}
+        title={`Xin chào, ${user?.fullName || "Quý Nhà tài trợ"}!`}
+        crumb="Tổng quan"
+        description="Theo dõi toàn diện các khoản đóng góp và đồng hành cùng các chiến dịch học bổng Edunity trên toàn quốc."
+        extra={
+          <Link to={ROUTES.CAMPAIGNS}>
+            <Button
+              type="primary"
+              size="large"
+              icon={<HeartOutlined />}
+              className="bg-[#0D9488] hover:bg-[#0B746C] rounded-xl font-bold shadow-xs h-11 px-5"
+            >
+              Tài trợ chiến dịch mới
+            </Button>
+          </Link>
+        }
+      />
+
+      {/* 4 Standardized Admin KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <AdminKpiCard
+          title="Tổng tiền đã tài trợ"
+          value={formatVND(totalContributed)}
+          icon={<DollarOutlined />}
+          variant="teal"
+        />
+        <AdminKpiCard
+          title="Lượt tài trợ thành công"
+          value={`${completedContributions.length} lượt`}
+          icon={<CheckCircleOutlined />}
+          variant="mint"
+        />
+        <AdminKpiCard
+          title="Chiến dịch đã đóng góp"
+          value={`${uniqueCampaigns.size} chiến dịch`}
+          icon={<SafetyCertificateOutlined />}
+          variant="sky"
+        />
+        <AdminKpiCard
+          title="Đang xử lý / Chờ đối soát"
+          value={`${pendingContributions.length} giao dịch`}
+          icon={<ClockCircleOutlined />}
+          variant="amber"
+        />
       </div>
 
-      {/* Metrics Row */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={8}>
-          <Card className="rounded-2xl border-slate-200/80 shadow-xs bg-emerald-50/40 border-emerald-200">
-            <Statistic
-              title={<span className="text-xs font-semibold text-emerald-800 uppercase">Tổng tiền đã đóng góp</span>}
-              value={totalContributed}
-              formatter={(val) => formatVND(Number(val))}
-              prefix={<DollarOutlined className="text-emerald-600 text-xl mr-2" />}
-              valueStyle={{ color: "#059669", fontWeight: "bold" }}
-            />
-            <div className="mt-2 text-xs text-emerald-600/80">
-              Đã ghi nhận thành công vào các quỹ học bổng
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={8}>
-          <Card className="rounded-2xl border-slate-200/80 shadow-xs">
-            <Statistic
-              title={<span className="text-xs font-semibold text-slate-500 uppercase">Lượt tài trợ</span>}
-              value={totalContributionsCount}
-              prefix={<HeartOutlined className="text-indigo-500 text-xl mr-2" />}
-              valueStyle={{ color: "#1e293b", fontWeight: "bold" }}
-            />
-            <div className="mt-2 text-xs text-slate-400">
-              Số lần tham gia đóng góp chiến dịch
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={8}>
-          <Card className="rounded-2xl border-slate-200/80 shadow-xs">
-            <Statistic
-              title={<span className="text-xs font-semibold text-slate-500 uppercase">Chiến dịch đang mở</span>}
-              value={campaignsData?.total || 0}
-              prefix={<SafetyCertificateOutlined className="text-blue-500 text-xl mr-2" />}
-              valueStyle={{ color: "#1e293b", fontWeight: "bold" }}
-            />
-            <div className="mt-2 text-xs text-slate-400">
-              Chương trình đang tiếp nhận nguồn tài trợ mới
-            </div>
-          </Card>
-        </Col>
-      </Row>
-
       {/* Main Content Grid */}
-      <Row gutter={[24, 24]}>
-        {/* Left: Recent Contributions */}
-        <Col xs={24} lg={12}>
-          <Card
-            className="rounded-2xl border-slate-200/80 shadow-xs h-full"
-            title={
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-900">Giao dịch tài trợ gần đây</span>
-                <Link to={ROUTES.SPONSOR.CONTRIBUTIONS} className="text-xs text-indigo-600 font-semibold">
-                  Xem tất cả
-                </Link>
+      <Row gutter={[20, 20]}>
+        {/* Left: Recent Contributions Table */}
+        <Col xs={24} lg={13}>
+          <AdminTableCard>
+            <div className="p-4 sm:px-6 border-b border-[#D6E5E2] bg-[#F5FAF9] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HeartOutlined className="text-[#0D9488]" />
+                <span className="font-bold text-[#163B40] text-sm">Giao dịch tài trợ gần đây</span>
               </div>
-            }
-          >
+              <Link
+                to={ROUTES.SPONSOR.CONTRIBUTIONS}
+                className="text-xs text-[#0D9488] hover:text-[#0B746C] font-semibold"
+              >
+                Xem tất cả
+              </Link>
+            </div>
+
             {isLoadingContributions ? (
-              <Skeleton active paragraph={{ rows: 4 }} />
+              <div className="p-6">
+                <Skeleton active paragraph={{ rows: 5 }} />
+              </div>
             ) : recentContributions.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 text-xs">
-                Bạn chưa thực hiện khoản tài trợ nào.
+              <div className="py-16 text-center text-slate-400 text-xs">
+                Bạn chưa có giao dịch tài trợ nào được ghi nhận.
               </div>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {recentContributions.map((item) => (
-                  <div key={item.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-slate-800 text-sm line-clamp-1">
-                        {item.campaignTitle || "Chiến dịch học bổng"}
-                      </div>
-                      <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                        <CalendarOutlined /> {new Date(item.contributedAt).toLocaleDateString("vi-VN")}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-emerald-600 text-sm">
-                        {formatVND(item.amount)}
-                      </div>
-                      <Tag color={CONTRIBUTION_STATUS_COLORS[item.contributionStatus]} className="mt-0.5 text-[10px]">
-                        {CONTRIBUTION_STATUS_LABELS[item.contributionStatus] || item.contributionStatus}
-                      </Tag>
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <Table<SponsorContribution>
+                  columns={recentColumns}
+                  dataSource={recentContributions}
+                  rowKey="id"
+                  pagination={false}
+                  size="small"
+                />
               </div>
             )}
-          </Card>
+          </AdminTableCard>
         </Col>
 
         {/* Right: Active Campaigns */}
-        <Col xs={24} lg={12}>
-          <Card
-            className="rounded-2xl border-slate-200/80 shadow-xs h-full"
-            title={
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-900">Chiến dịch đang gây quỹ</span>
-                <Link to="/campaigns" className="text-xs text-indigo-600 font-semibold">
-                  Khám phá thêm
-                </Link>
+        <Col xs={24} lg={11}>
+          <AdminTableCard>
+            <div className="p-4 sm:px-6 border-b border-[#D6E5E2] bg-[#F5FAF9] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <SafetyCertificateOutlined className="text-[#0D9488]" />
+                <span className="font-bold text-[#163B40] text-sm">Chiến dịch đang gây quỹ</span>
               </div>
-            }
-          >
+              <Link
+                to={ROUTES.CAMPAIGNS}
+                className="text-xs text-[#0D9488] hover:text-[#0B746C] font-semibold"
+              >
+                Khám phá thêm
+              </Link>
+            </div>
+
             {isLoadingCampaigns ? (
-              <Skeleton active paragraph={{ rows: 4 }} />
+              <div className="p-6">
+                <Skeleton active paragraph={{ rows: 5 }} />
+              </div>
             ) : openCampaigns.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 text-xs">
-                Hiện tại không có chiến dịch nào đang mở.
+              <div className="py-16 text-center text-slate-400 text-xs">
+                Hiện không có chiến dịch nào đang mở gây quỹ.
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="p-4 space-y-3.5">
                 {openCampaigns.map((camp) => (
-                  <div key={camp.id} className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2">
+                  <div
+                    key={camp.id}
+                    className="p-3.5 rounded-xl border border-[#D6E5E2] bg-white hover:border-[#0D9488] transition-all space-y-2 shadow-xs"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <Link
                         to={`/campaigns/${camp.id}`}
-                        className="font-semibold text-slate-900 hover:text-indigo-600 text-sm line-clamp-1"
+                        className="font-bold text-slate-900 hover:text-teal-700 text-sm line-clamp-1"
                       >
                         {camp.title}
                       </Link>
-                      <span className="font-bold text-indigo-600 text-xs shrink-0">
+                      <span className="font-bold text-[#0D9488] text-xs shrink-0">
                         {camp.fundingProgress}%
                       </span>
                     </div>
@@ -209,15 +268,19 @@ export default function SponsorHomePage() {
                       percent={camp.fundingProgress}
                       showInfo={false}
                       size="small"
-                      strokeColor="#4f46e5"
+                      strokeColor="#0D9488"
                     />
 
-                    <div className="flex justify-between items-center text-xs pt-1">
+                    <div className="flex justify-between items-center text-xs pt-0.5">
                       <span className="text-slate-500">
-                        Đã góp: <strong className="text-slate-800">{formatVND(camp.fundedAmount)}</strong>
+                        Đã góp: <strong className="text-teal-800">{formatVND(camp.fundedAmount)}</strong> / {formatVND(camp.targetBudget)}
                       </span>
                       <Link to={`/campaigns/${camp.id}`}>
-                        <Button type="link" size="small" className="text-xs p-0 text-indigo-600">
+                        <Button
+                          type="link"
+                          size="small"
+                          className="text-xs p-0 text-[#0D9488] hover:text-[#0B746C] font-bold"
+                        >
                           Tài trợ <ArrowRightOutlined />
                         </Button>
                       </Link>
@@ -226,7 +289,7 @@ export default function SponsorHomePage() {
                 ))}
               </div>
             )}
-          </Card>
+          </AdminTableCard>
         </Col>
       </Row>
     </div>

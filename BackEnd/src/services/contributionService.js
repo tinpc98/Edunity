@@ -108,6 +108,18 @@ const processWebhook = async (gatewayReference, status) => {
       applied = updated.modifiedCount === 1;
       if (!applied || targetStatus !== "COMPLETED") return;
 
+      const campaign = await ScholarshipCampaign.findById(contribution.campaignId).session(session);
+      if (!campaign || campaign.isDeleted || campaign.status === "DRAFT" || campaign.fundingReconciledAt) {
+        console.warn(JSON.stringify({
+          event: "CAMPAIGN_NOT_ACCEPTING_FUNDING_RECON_REQUIRED",
+          contributionId: contribution._id.toString(),
+          campaignId: contribution.campaignId.toString(),
+          reason: campaign?.fundingReconciledAt ? "ALREADY_RECONCILED" : "CAMPAIGN_CLOSED_OR_DRAFT",
+          timestamp: new Date().toISOString(),
+        }));
+        return;
+      }
+
       await ScholarshipCampaign.updateOne(
         { _id: contribution.campaignId },
         { $inc: { fundedAmount: contribution.amount } },

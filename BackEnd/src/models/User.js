@@ -119,7 +119,7 @@ const userSchema = new Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     tokenVersion: { type: Number, default: 0 }, // bumped to invalidate every access token already issued
-    role: { type: String, enum: ["STUDENT", "TEACHER", "SPONSOR", "ADMIN"], required: true },
+    role: { type: String, enum: ["STUDENT", "TEACHER", "SPONSOR", "ADMIN", "VERIFIER"], required: true },
     status: { type: String, enum: ["ACTIVE", "PENDING", "SUSPENDED", "BANNED"], default: "ACTIVE" },
     statusReason: { type: String, default: null },
     statusChangedAt: { type: Date, default: null },

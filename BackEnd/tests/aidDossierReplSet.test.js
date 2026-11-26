@@ -201,6 +201,7 @@ describe("Stage 3 Integration & Concurrency Tests (AID-01 + AID-04 on MongoMemor
           fundingEnd: new Date(NOW + 20 * DAY).toISOString(),
           applicationStart: new Date(NOW - DAY).toISOString(),
           applicationEnd: new Date(NOW + 20 * DAY).toISOString(),
+          eligibilityCriteria: "Dành cho học sinh hiếu học",
         });
       expect(draftRes.statusCode).toBe(201);
       const campaignId = draftRes.body.data.id;
@@ -357,28 +358,25 @@ describe("Stage 3 Integration & Concurrency Tests (AID-01 + AID-04 on MongoMemor
         documents: [{ checklistItemCode: "HOC_BA", files: [{ storageKey: k }] }],
       });
 
-      // Without AID-08 consent verifier -> fail-closed 503 CONSENT_DEPENDENCY_BLOCKED
-      const blockedByConsent = await request(app)
+      // Theo nghiệp vụ mới: Không còn chặn học sinh nộp hồ sơ vì thiếu giấy đồng thuận (kể cả khi bật requireGuardianConsentForMinor)
+      // Nộp hồ sơ đầu tiên thành công 201 với consentSnapshot.status = "NOT_REQUIRED"
+      const firstSubmission = await request(app)
         .post(`/api/campaigns/${campaignId}/dossiers`)
         .set(as("student1"))
         .send(payload(key1));
-      expect(blockedByConsent.statusCode).toBe(503);
-      expect(blockedByConsent.body.error).toBe("CONSENT_DEPENDENCY_BLOCKED");
+      expect(firstSubmission.statusCode).toBe(201);
+      expect(firstSubmission.body.data.consentSnapshot.status).toBe("NOT_REQUIRED");
 
-      // Register AID-08 verifier approving student1
-      const consentRecordId = new mongoose.Types.ObjectId();
-      setConsentVerifier(async () => ({ verified: true, consentRecordId }));
-
-      // Fire two concurrent dossier submissions for the same student+campaign
-      const [r1, r2] = await Promise.all([
-        request(app).post(`/api/campaigns/${campaignId}/dossiers`).set(as("student1")).send(payload(key1)),
-        request(app).post(`/api/campaigns/${campaignId}/dossiers`).set(as("student1")).send(payload(key2)),
-      ]);
-      const statuses = [r1.statusCode, r2.statusCode].sort();
-      expect(statuses).toEqual([201, 409]);
+      // Nộp trùng lặp cho cùng một học sinh và chiến dịch -> bị chặn 409 DUPLICATE_APPLICATION
+      const duplicateSubmission = await request(app)
+        .post(`/api/campaigns/${campaignId}/dossiers`)
+        .set(as("student1"))
+        .send(payload(key2));
+      expect(duplicateSubmission.statusCode).toBe(409);
+      expect(duplicateSubmission.body.error).toBe("DUPLICATE_APPLICATION");
       expect(await ScholarshipApplication.countDocuments({ studentId: student1._id, campaignId })).toBe(1);
 
-      const createdId = r1.statusCode === 201 ? r1.body.data.id : r2.body.data.id;
+      const createdId = firstSubmission.body.data.id;
 
       // Withdraw application cleanly, allowing fresh submission afterwards
       const withdrawn = await request(app)
@@ -388,13 +386,13 @@ describe("Stage 3 Integration & Concurrency Tests (AID-01 + AID-04 on MongoMemor
       expect(withdrawn.statusCode).toBe(200);
       expect(withdrawn.body.data.status).toBe("WITHDRAWN");
 
+      // Re-applying after WITHDRAWN is blocked to preserve historical record
       const reapplied = await request(app)
         .post(`/api/campaigns/${campaignId}/dossiers`)
         .set(as("student1"))
         .send(payload(key2));
-      expect(reapplied.statusCode).toBe(201);
-      expect(reapplied.body.data.consentSnapshot.status).toBe("VERIFIED");
-      expect(reapplied.body.data.consentSnapshot.consentRecordId).toBe(consentRecordId.toString());
+      expect(reapplied.statusCode).toBe(409);
+      expect(reapplied.body.error).toBe("DUPLICATE_APPLICATION");
     });
   });
 

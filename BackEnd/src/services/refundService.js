@@ -33,11 +33,94 @@ const generateCaseNumber = () => {
   return `REF-${dateStr}-${rand}`;
 };
 
+const handleContributionRefundSettlement = async (
+  relatedContributionId,
+  refAmt,
+  session,
+) => {
+  if (!relatedContributionId) return;
+  const contrib = await SponsorContribution.findById(
+    relatedContributionId,
+  ).session(session);
+  if (!contrib || !contrib.campaignId) return;
+
+  const currentRefunded = toNum(contrib.refundedAmount || 0);
+  const totalAmount = toNum(contrib.amount);
+  const newRefunded = currentRefunded + refAmt;
+  const newStatus =
+    newRefunded >= totalAmount ? "REFUNDED" : "PARTIALLY_REFUNDED";
+
+  await ScholarshipCampaign.updateOne(
+    { _id: contrib.campaignId },
+    { $inc: { refundedAmount: toDec(refAmt) } },
+    { session },
+  );
+
+  await SponsorContribution.updateOne(
+    { _id: relatedContributionId },
+    {
+      $set: {
+        contributionStatus: newStatus,
+        refundedAmount: toDec(newRefunded),
+      },
+    },
+    { session },
+  );
+};
+
 /**
  * Calculate eligible refund amount for a Payment / Contribution.
  * Distinguishes direct student tuition, MIXED co-payments, and full scholarships.
  */
-const calculateEligibleRefundAmount = async (paymentId, enrollmentId) => {
+const calculateEligibleRefundAmount = async (
+  paymentId,
+  enrollmentId,
+  contributionId = null,
+) => {
+  if (contributionId) {
+    const contribution = await SponsorContribution.findById(contributionId);
+    if (!contribution) {
+      return {
+        eligibleAmount: 0,
+        originalAmount: 0,
+        alreadyRefunded: 0,
+        isFullScholarship: false,
+        isMixed: false,
+      };
+    }
+    const originalAmountNum = toNum(contribution.amount);
+    const existingRefunds = await RefundCase.find({
+      relatedContributionId: contribution._id,
+      status: {
+        $in: [
+          "NEEDS_REVIEW",
+          "IN_REVIEW",
+          "APPROVED",
+          "PENDING_BANK_TRANSFER",
+          "AWAITING_BANK_VERIFICATION",
+          "COMPLETED",
+        ],
+      },
+    });
+    const alreadyRefunded = existingRefunds.reduce((sum, r) => {
+      const amt = r.approvedAmount
+        ? toNum(r.approvedAmount)
+        : toNum(r.eligibleAmount);
+      return sum + amt;
+    }, 0);
+    const eligibleAmount = Math.max(0, originalAmountNum - alreadyRefunded);
+    return {
+      eligibleAmount,
+      originalAmount: originalAmountNum,
+      alreadyRefunded,
+      isFullScholarship: false,
+      isMixed: false,
+      tuitionAmount: originalAmountNum,
+      paidViaPayment: originalAmountNum,
+      paidViaScholarship: 0,
+    };
+  }
+
   let payment = null;
   if (paymentId) {
     payment = await Payment.findById(paymentId);
@@ -72,7 +155,9 @@ const calculateEligibleRefundAmount = async (paymentId, enrollmentId) => {
         originalAmount: toNum(payment.amount),
         isFullScholarship: false,
         isMixed: false,
-        tuitionAmount: enrollment ? toNum(enrollment.tuitionAmount) : toNum(payment.amount),
+        tuitionAmount: enrollment
+          ? toNum(enrollment.tuitionAmount)
+          : toNum(payment.amount),
         paidViaPayment: 0,
         paidViaScholarship: 0,
         alreadyRefunded: 0,
@@ -84,11 +169,20 @@ const calculateEligibleRefundAmount = async (paymentId, enrollmentId) => {
     // Sum already approved/completed refunds for this payment
     const existingRefunds = await RefundCase.find({
       sourcePaymentId: payment._id,
-      status: { $in: ["APPROVED", "PENDING_BANK_TRANSFER", "AWAITING_BANK_VERIFICATION", "COMPLETED"] },
+      status: {
+        $in: [
+          "APPROVED",
+          "PENDING_BANK_TRANSFER",
+          "AWAITING_BANK_VERIFICATION",
+          "COMPLETED",
+        ],
+      },
     });
 
     const alreadyRefunded = existingRefunds.reduce((sum, r) => {
-      const amt = r.approvedAmount ? toNum(r.approvedAmount) : toNum(r.eligibleAmount);
+      const amt = r.approvedAmount
+        ? toNum(r.approvedAmount)
+        : toNum(r.eligibleAmount);
       return sum + amt;
     }, 0);
 
@@ -99,9 +193,14 @@ const calculateEligibleRefundAmount = async (paymentId, enrollmentId) => {
       originalAmount: originalAmountNum,
       isFullScholarship: false,
       isMixed: enrollment ? enrollment.paymentSource === "MIXED" : false,
-      tuitionAmount: enrollment ? toNum(enrollment.tuitionAmount) : originalAmountNum,
+      tuitionAmount: enrollment
+        ? toNum(enrollment.tuitionAmount)
+        : originalAmountNum,
       paidViaPayment: originalAmountNum,
-      paidViaScholarship: enrollment && enrollment.amountPaidViaScholarship ? toNum(enrollment.amountPaidViaScholarship) : 0,
+      paidViaScholarship:
+        enrollment && enrollment.amountPaidViaScholarship
+          ? toNum(enrollment.amountPaidViaScholarship)
+          : 0,
       alreadyRefunded,
     };
   }
@@ -131,7 +230,11 @@ const createRefundCase = async (data = {}, options = {}) => {
   } = data;
 
   if (isBlank(reason)) {
-    throw new AppError("Lý do hoàn tiền (reason) là bắt buộc", "VALIDATION_ERROR", 400);
+    throw new AppError(
+      "Lý do hoàn tiền (reason) là bắt buộc",
+      "VALIDATION_ERROR",
+      400,
+    );
   }
 
   if (
@@ -143,7 +246,7 @@ const createRefundCase = async (data = {}, options = {}) => {
     throw new AppError(
       "Thông tin tài khoản ngân hàng thụ hưởng (bankName, accountNumber, accountHolderName) là bắt buộc",
       "BENEFICIARY_ACCOUNT_REQUIRED",
-      400
+      400,
     );
   }
 
@@ -156,7 +259,11 @@ const createRefundCase = async (data = {}, options = {}) => {
   if (sourcePaymentId) {
     payment = await Payment.findById(sourcePaymentId);
     if (!payment) {
-      throw new AppError("Không tìm thấy giao dịch thanh toán gốc", "PAYMENT_NOT_FOUND", 404);
+      throw new AppError(
+        "Không tìm thấy giao dịch thanh toán gốc",
+        "PAYMENT_NOT_FOUND",
+        404,
+      );
     }
     purpose = payment.purpose || "TUITION";
     channelKey = payment.channelKey || "TUITION";
@@ -164,7 +271,11 @@ const createRefundCase = async (data = {}, options = {}) => {
   } else if (relatedContributionId) {
     contribution = await SponsorContribution.findById(relatedContributionId);
     if (!contribution) {
-      throw new AppError("Không tìm thấy khoản tài trợ gốc", "CONTRIBUTION_NOT_FOUND", 404);
+      throw new AppError(
+        "Không tìm thấy khoản tài trợ gốc",
+        "CONTRIBUTION_NOT_FOUND",
+        404,
+      );
     }
     purpose = "DONATION";
     channelKey = "DONATION";
@@ -177,27 +288,24 @@ const createRefundCase = async (data = {}, options = {}) => {
     throw new AppError(
       "Phải cung cấp sourcePaymentId hoặc relatedContributionId hoặc recipientUserId",
       "VALIDATION_ERROR",
-      400
+      400,
     );
   }
 
   // Calculate eligible amount
-  const {
-    eligibleAmount,
-    originalAmount,
-    isFullScholarship,
-    alreadyRefunded,
-  } = await calculateEligibleRefundAmount(
-    sourcePaymentId,
-    relatedEnrollmentId || (payment ? payment.enrollmentId : null)
-  );
+  const { eligibleAmount, originalAmount, isFullScholarship, alreadyRefunded } =
+    await calculateEligibleRefundAmount(
+      sourcePaymentId,
+      relatedEnrollmentId || (payment ? payment.enrollmentId : null),
+      relatedContributionId,
+    );
 
   // BR: Full scholarship cannot be refunded as cash
   if (isFullScholarship) {
     throw new AppError(
       "Học bổng toàn phần không được phép hoàn tiền mặt cho học sinh. Chỉ hoàn nguyên suất học bổng về quỹ.",
       "CASH_REFUND_NOT_PERMITTED",
-      400
+      400,
     );
   }
 
@@ -206,7 +314,7 @@ const createRefundCase = async (data = {}, options = {}) => {
     throw new AppError(
       `Khoản thanh toán đã được hoàn tất hoặc không còn số dư đủ điều kiện hoàn (Đã hoàn: ${alreadyRefunded.toLocaleString("vi-VN")}đ)`,
       "NO_ELIGIBLE_REFUND_AMOUNT",
-      400
+      400,
     );
   }
 
@@ -221,7 +329,7 @@ const createRefundCase = async (data = {}, options = {}) => {
       throw new AppError(
         `Số tiền yêu cầu (${reqNum.toLocaleString("vi-VN")}đ) vượt quá số tiền đủ điều kiện hoàn (${eligibleAmount.toLocaleString("vi-VN")}đ)`,
         "AMOUNT_EXCEEDS_ELIGIBLE",
-        400
+        400,
       );
     }
     finalRequested = reqNum;
@@ -231,7 +339,15 @@ const createRefundCase = async (data = {}, options = {}) => {
   if (sourcePaymentId) {
     const existingActive = await RefundCase.findOne({
       sourcePaymentId,
-      status: { $in: ["NEEDS_REVIEW", "IN_REVIEW", "APPROVED", "PENDING_BANK_TRANSFER", "AWAITING_BANK_VERIFICATION"] },
+      status: {
+        $in: [
+          "NEEDS_REVIEW",
+          "IN_REVIEW",
+          "APPROVED",
+          "PENDING_BANK_TRANSFER",
+          "AWAITING_BANK_VERIFICATION",
+        ],
+      },
     });
     if (existingActive) {
       return existingActive;
@@ -246,17 +362,21 @@ const createRefundCase = async (data = {}, options = {}) => {
     channelKey,
     sourcePaymentId: payment ? payment._id : null,
     relatedContributionId: contribution ? contribution._id : null,
-    relatedBankEventId: relatedBankEventId || (payment ? payment.relatedBankEventId : null),
+    relatedBankEventId:
+      relatedBankEventId || (payment ? payment.relatedBankEventId : null),
     relatedReconciliationId: relatedReconciliationId || null,
-    relatedEnrollmentId: relatedEnrollmentId || (payment ? payment.enrollmentId : null),
+    relatedEnrollmentId:
+      relatedEnrollmentId || (payment ? payment.enrollmentId : null),
     recipientUserId,
     beneficiaryBankAccount: {
       bankName: String(beneficiaryBankAccount.bankName).trim(),
       accountNumber: String(beneficiaryBankAccount.accountNumber).trim(),
-      accountHolderName: String(beneficiaryBankAccount.accountHolderName).trim().toUpperCase(),
+      accountHolderName: String(beneficiaryBankAccount.accountHolderName)
+        .trim()
+        .toUpperCase(),
     },
     originalAmount: toDec(originalAmount),
-    eligibleAmount: toDec(eligibleAmount),
+    eligibleAmount: toDec(finalRequested),
     approvedAmount: null,
     currency: "VND",
     reason: reason.trim(),
@@ -304,13 +424,17 @@ const reviewRefundCase = async (adminId, refundCaseId, data = {}) => {
         },
       },
     },
-    { returnDocument: "after" }
+    { returnDocument: "after" },
   );
 
   if (!refundCase) {
     const existing = await RefundCase.findById(refundCaseId);
     if (!existing) throw refundCaseNotFound();
-    throw new AppError("Hồ sơ hoàn tiền không ở trạng thái chờ xem xét", "INVALID_STATUS", 400);
+    throw new AppError(
+      "Hồ sơ hoàn tiền không ở trạng thái chờ xem xét",
+      "INVALID_STATUS",
+      400,
+    );
   }
 
   return refundCase;
@@ -323,7 +447,12 @@ const reviewRefundCase = async (adminId, refundCaseId, data = {}) => {
  * - Creates/attaches Transaction (type: REFUND, status: PENDING) as a payable obligation.
  * - Handles Enrollment cancellation, TeacherEarning adjustments, and Scholarship reverts atomically.
  */
-const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {}) => {
+const approveRefundCase = async (
+  adminId,
+  refundCaseId,
+  data = {},
+  options = {},
+) => {
   if (!mongoose.isValidObjectId(refundCaseId)) throw refundCaseNotFound();
   const now = options.now instanceof Date ? options.now : new Date();
 
@@ -333,8 +462,15 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
     await session.withTransaction(async () => {
       const existing = await RefundCase.findById(refundCaseId).session(session);
       if (!existing) throw refundCaseNotFound();
-      if (existing.status !== "NEEDS_REVIEW" && existing.status !== "IN_REVIEW") {
-        throw new AppError("Hồ sơ hoàn tiền không ở trạng thái có thể phê duyệt", "INVALID_STATUS", 400);
+      if (
+        existing.status !== "NEEDS_REVIEW" &&
+        existing.status !== "IN_REVIEW"
+      ) {
+        throw new AppError(
+          "Hồ sơ hoàn tiền không ở trạng thái có thể phê duyệt",
+          "INVALID_STATUS",
+          400,
+        );
       }
 
       const eligibleNum = toNum(existing.eligibleAmount);
@@ -345,10 +481,89 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
           throw new AppError(
             `Số tiền duyệt (${parsed.toLocaleString("vi-VN")}đ) không hợp lệ hoặc vượt quá số tiền đủ điều kiện (${eligibleNum.toLocaleString("vi-VN")}đ)`,
             "INVALID_APPROVED_AMOUNT",
-            400
+            400,
           );
         }
         approvedNum = parsed;
+      }
+
+      // Concurrency & limit guard: ensure total committed + approved refunds do not exceed source amount
+      if (existing.relatedContributionId) {
+        // Atomic document write lock on parent contribution to prevent write skew / concurrent approval races
+        await SponsorContribution.updateOne(
+          { _id: existing.relatedContributionId },
+          { $set: { updatedAt: now } },
+          { session },
+        );
+
+        const contrib = await SponsorContribution.findById(
+          existing.relatedContributionId,
+        ).session(session);
+        if (contrib) {
+          const totalContributionAmount = toNum(contrib.amount);
+          const activeRefunds = await RefundCase.find({
+            relatedContributionId: existing.relatedContributionId,
+            _id: { $ne: existing._id },
+            status: {
+              $in: [
+                "APPROVED",
+                "PENDING_BANK_TRANSFER",
+                "AWAITING_BANK_VERIFICATION",
+                "COMPLETED",
+              ],
+            },
+          }).session(session);
+
+          const alreadyCommitted = activeRefunds.reduce((sum, r) => {
+            return sum + toNum(r.approvedAmount || r.eligibleAmount || 0);
+          }, 0);
+
+          if (alreadyCommitted + approvedNum > totalContributionAmount) {
+            throw new AppError(
+              `Tổng số tiền hoàn và cam kết hoàn (${(alreadyCommitted + approvedNum).toLocaleString("vi-VN")}đ) vượt quá giá trị khoản đóng góp gốc (${totalContributionAmount.toLocaleString("vi-VN")}đ)`,
+              "CONTRIBUTION_REFUND_LIMIT_EXCEEDED",
+              409,
+            );
+          }
+        }
+      } else if (existing.sourcePaymentId) {
+        // Atomic document write lock on parent payment to prevent write skew / concurrent approval races
+        await Payment.updateOne(
+          { _id: existing.sourcePaymentId },
+          { $set: { updatedAt: now } },
+          { session },
+        );
+
+        const payment = await Payment.findById(
+          existing.sourcePaymentId,
+        ).session(session);
+        if (payment) {
+          const totalPaymentAmount = toNum(payment.amount);
+          const activeRefunds = await RefundCase.find({
+            sourcePaymentId: existing.sourcePaymentId,
+            _id: { $ne: existing._id },
+            status: {
+              $in: [
+                "APPROVED",
+                "PENDING_BANK_TRANSFER",
+                "AWAITING_BANK_VERIFICATION",
+                "COMPLETED",
+              ],
+            },
+          }).session(session);
+
+          const alreadyCommitted = activeRefunds.reduce((sum, r) => {
+            return sum + toNum(r.approvedAmount || r.eligibleAmount || 0);
+          }, 0);
+
+          if (alreadyCommitted + approvedNum > totalPaymentAmount) {
+            throw new AppError(
+              `Tổng số tiền hoàn và cam kết hoàn (${(alreadyCommitted + approvedNum).toLocaleString("vi-VN")}đ) vượt quá giá trị thanh toán gốc (${totalPaymentAmount.toLocaleString("vi-VN")}đ)`,
+              "PAYMENT_REFUND_LIMIT_EXCEEDED",
+              409,
+            );
+          }
+        }
       }
 
       // Step 1: Create or find PENDING REFUND Transaction (Payable obligation)
@@ -371,13 +586,15 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
               status: "PENDING",
             },
           ],
-          { session }
+          { session },
         );
       }
 
       // Step 2: Handle Enrollment & TeacherEarning adjustments if linked
       if (existing.relatedEnrollmentId) {
-        const enrollment = await Enrollment.findById(existing.relatedEnrollmentId).session(session);
+        const enrollment = await Enrollment.findById(
+          existing.relatedEnrollmentId,
+        ).session(session);
         if (enrollment) {
           // If enrollment not completed, mark as CANCELLED
           if (enrollment.enrollmentStatus !== "COMPLETED") {
@@ -402,9 +619,13 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
 
               // Revert remainingAmount on Scholarship
               if (usage.scholarshipId && revertNum > 0) {
-                const sc = await Scholarship.findById(usage.scholarshipId).session(session);
+                const sc = await Scholarship.findById(
+                  usage.scholarshipId,
+                ).session(session);
                 if (sc) {
-                  sc.remainingAmount = toDec(toNum(sc.remainingAmount) + revertNum);
+                  sc.remainingAmount = toDec(
+                    toNum(sc.remainingAmount) + revertNum,
+                  );
                   await sc.save({ session });
 
                   const campId = usage.campaignId || sc.campaignId;
@@ -412,7 +633,7 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
                     await ScholarshipCampaign.updateOne(
                       { _id: campId },
                       { $inc: { usedAmount: -revertNum } },
-                      { session }
+                      { session },
                     );
                   }
                 }
@@ -426,10 +647,13 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
           }).session(session);
 
           if (earning) {
-            if (earning.status === "PENDING" || earning.status === "AVAILABLE") {
+            if (
+              earning.status === "PENDING" ||
+              earning.status === "AVAILABLE"
+            ) {
               earning.status = "CANCELLED";
               earning.settlementBlockers.push(
-                `ENROLLMENT_REFUNDED: Khoản ghi danh đã được duyệt hoàn tiền #${existing.caseNumber}`
+                `ENROLLMENT_REFUNDED: Khoản ghi danh đã được duyệt hoàn tiền #${existing.caseNumber}`,
               );
               if (earning.settlementAuditTrail) {
                 earning.settlementAuditTrail.push({
@@ -444,7 +668,7 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
                 await TeacherSettlement.updateOne(
                   { earningId: earning._id },
                   { $set: { status: "HELD" } },
-                  { session }
+                  { session },
                 );
               }
             } else if (earning.status === "PAID_OUT") {
@@ -462,7 +686,7 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
                       },
                     },
                   },
-                  { session }
+                  { session },
                 );
               }
             }
@@ -491,7 +715,7 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
             },
           },
         },
-        { session, returnDocument: "after" }
+        { session, returnDocument: "after" },
       );
     });
   } finally {
@@ -502,7 +726,7 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
     updatedCase.recipientUserId,
     "Yêu cầu hoàn tiền đã được phê duyệt",
     `Hồ sơ #${updatedCase.caseNumber} đã được phê duyệt số tiền ${toNum(updatedCase.approvedAmount).toLocaleString("vi-VN")}đ và đang chờ ngân hàng chuyển khoản.`,
-    "REFUND_APPROVED"
+    "REFUND_APPROVED",
   );
 
   return updatedCase;
@@ -514,13 +738,19 @@ const approveRefundCase = async (adminId, refundCaseId, data = {}, options = {})
 const rejectRefundCase = async (adminId, refundCaseId, data = {}) => {
   if (!mongoose.isValidObjectId(refundCaseId)) throw refundCaseNotFound();
   if (isBlank(data.rejectionNote)) {
-    throw new AppError("Lý do từ chối (rejectionNote) là bắt buộc", "REJECTION_NOTE_REQUIRED", 400);
+    throw new AppError(
+      "Lý do từ chối (rejectionNote) là bắt buộc",
+      "REJECTION_NOTE_REQUIRED",
+      400,
+    );
   }
 
   const refundCase = await RefundCase.findOneAndUpdate(
     {
       _id: refundCaseId,
-      status: { $in: ["NEEDS_REVIEW", "IN_REVIEW"] },
+      status: {
+        $in: ["NEEDS_REVIEW", "IN_REVIEW", "APPROVED", "PENDING_BANK_TRANSFER"],
+      },
     },
     {
       $set: {
@@ -534,25 +764,36 @@ const rejectRefundCase = async (adminId, refundCaseId, data = {}) => {
           action: "REJECTED",
           actorId: adminId,
           actorRole: "ADMIN",
-          note: `Từ chối hoàn tiền: ${data.rejectionNote.trim()}`,
+          note: `Từ chối/hủy yêu cầu hoàn tiền: ${data.rejectionNote.trim()}`,
           timestamp: new Date(),
         },
       },
     },
-    { returnDocument: "after" }
+    { returnDocument: "after" },
   );
 
   if (!refundCase) {
     const existing = await RefundCase.findById(refundCaseId);
     if (!existing) throw refundCaseNotFound();
-    throw new AppError("Hồ sơ không ở trạng thái có thể từ chối", "INVALID_STATUS", 400);
+    throw new AppError(
+      "Hồ sơ không ở trạng thái có thể từ chối",
+      "INVALID_STATUS",
+      400,
+    );
+  }
+
+  if (refundCase.obligationTransactionId) {
+    await Transaction.updateOne(
+      { _id: refundCase.obligationTransactionId },
+      { $set: { status: "CANCELLED" } },
+    );
   }
 
   await notify(
     refundCase.recipientUserId,
     "Yêu cầu hoàn tiền bị từ chối",
     `Hồ sơ #${refundCase.caseNumber} bị từ chối. Lý do: ${data.rejectionNote.trim()}`,
-    "REFUND_REJECTED"
+    "REFUND_REJECTED",
   );
 
   return refundCase;
@@ -563,7 +804,12 @@ const rejectRefundCase = async (adminId, refundCaseId, data = {}) => {
  * Validates reference uniqueness against existing refunds and payouts.
  * Transitions to AWAITING_BANK_VERIFICATION (or COMPLETED if auto-verification allowed).
  */
-const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options = {}) => {
+const submitRefundProof = async (
+  adminId,
+  refundCaseId,
+  proofData = {},
+  options = {},
+) => {
   if (!mongoose.isValidObjectId(refundCaseId)) throw refundCaseNotFound();
   const now = options.now instanceof Date ? options.now : new Date();
 
@@ -572,7 +818,7 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
     throw new AppError(
       "Mã tham chiếu ngân hàng (bankReference) là bắt buộc để nộp chứng từ hoàn tiền",
       "BANK_TRANSFER_PROOF_REQUIRED",
-      400
+      400,
     );
   }
 
@@ -591,7 +837,7 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
     throw new AppError(
       `Mã giao dịch ngân hàng ${trimmedRef} đã được sử dụng cho hồ sơ hoàn tiền #${duplicateRefund.caseNumber}. Không được trùng.`,
       "DUPLICATE_BANK_REFERENCE",
-      400
+      400,
     );
   }
 
@@ -607,7 +853,7 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
     throw new AppError(
       `Mã giao dịch ngân hàng ${trimmedRef} đã được sử dụng cho khoản chi trả #${duplicatePayout._id}. Không được trùng.`,
       "DUPLICATE_BANK_REFERENCE",
-      400
+      400,
     );
   }
 
@@ -620,19 +866,34 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
     await session.withTransaction(async () => {
       const existing = await RefundCase.findById(refundCaseId).session(session);
       if (!existing) throw refundCaseNotFound();
-      if (existing.status !== "PENDING_BANK_TRANSFER" && existing.status !== "APPROVED" && existing.status !== "AWAITING_BANK_VERIFICATION") {
-        throw new AppError("Hồ sơ hoàn tiền không ở trạng thái chờ chuyển khoản", "INVALID_STATUS", 400);
+      if (
+        existing.status !== "PENDING_BANK_TRANSFER" &&
+        existing.status !== "APPROVED" &&
+        existing.status !== "AWAITING_BANK_VERIFICATION"
+      ) {
+        throw new AppError(
+          "Hồ sơ hoàn tiền không ở trạng thái chờ chuyển khoản",
+          "INVALID_STATUS",
+          400,
+        );
       }
 
       // Claim bankReference in BankProofRegistry across all channels
       await claimBankProof({
         bankReference: trimmedRef,
-        bankName: (proofData.beneficiaryBank || existing.beneficiaryBankAccount?.bankName || "UNKNOWN"),
+        bankName:
+          proofData.beneficiaryBank ||
+          existing.beneficiaryBankAccount?.bankName ||
+          "UNKNOWN",
         entityType: "REFUND",
         entityId: refundCaseId,
         amount: existing.approvedAmount || existing.eligibleAmount,
-        accountNumber: proofData.beneficiaryAccount || existing.beneficiaryBankAccount?.accountNumber,
-        accountHolderName: proofData.beneficiaryName || existing.beneficiaryBankAccount?.accountHolderName,
+        accountNumber:
+          proofData.beneficiaryAccount ||
+          existing.beneficiaryBankAccount?.accountNumber,
+        accountHolderName:
+          proofData.beneficiaryName ||
+          existing.beneficiaryBankAccount?.accountHolderName,
         adminId,
         session,
         isVerified: autoVerify,
@@ -647,18 +908,24 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
             bankTransferProof: {
               referenceNumber: trimmedRef,
               bankReference: trimmedRef,
-              transferredAt: proofData.transferredAt ? new Date(proofData.transferredAt) : now,
+              transferredAt: proofData.transferredAt
+                ? new Date(proofData.transferredAt)
+                : now,
               transferProofImage: proofData.transferProofImage || null,
               submittedBy: adminId,
               submittedAt: now,
               verifiedBy: options.autoVerify ? adminId : null,
               verifiedAt: options.autoVerify ? now : null,
-              notes: proofData.notes || "Chứng từ chuyển khoản hoàn tiền đã nộp",
+              notes:
+                proofData.notes || "Chứng từ chuyển khoản hoàn tiền đã nộp",
             },
           },
           $push: {
             auditLogs: {
-              action: targetStatus === "COMPLETED" ? "PROOF_VERIFIED_COMPLETED" : "PROOF_SUBMITTED",
+              action:
+                targetStatus === "COMPLETED"
+                  ? "PROOF_VERIFIED_COMPLETED"
+                  : "PROOF_SUBMITTED",
               actorId: adminId,
               actorRole: "ADMIN",
               note: `Nộp chứng từ hoàn tiền với mã GD: ${trimmedRef}. Trạng thái: ${targetStatus}`,
@@ -666,7 +933,7 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
             },
           },
         },
-        { session, returnDocument: "after" }
+        { session, returnDocument: "after" },
       );
 
       // If auto-verified, update Transaction to COMPLETED
@@ -675,7 +942,7 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
           await Transaction.updateOne(
             { _id: updated.obligationTransactionId },
             { $set: { status: "COMPLETED" } },
-            { session }
+            { session },
           );
         } else {
           const [settleTx] = await Transaction.create(
@@ -689,10 +956,22 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
                 status: "COMPLETED",
               },
             ],
-            { session }
+            { session },
           );
           updated.settlementTransactionId = settleTx._id;
           await updated.save({ session });
+        }
+
+        // If linked to SponsorContribution, adjust campaign fund and mark REFUNDED / PARTIALLY_REFUNDED
+        if (existing.relatedContributionId) {
+          const refAmt = toNum(
+            existing.approvedAmount || existing.eligibleAmount,
+          );
+          await handleContributionRefundSettlement(
+            existing.relatedContributionId,
+            refAmt,
+            session,
+          );
         }
 
         // If linked to PaymentReconciliation, resolve it
@@ -707,7 +986,7 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
                 resolutionNote: `Đã hoàn tiền theo hồ sơ #${updated.caseNumber} với mã GD: ${trimmedRef}`,
               },
             },
-            { session }
+            { session },
           );
         }
       }
@@ -726,7 +1005,12 @@ const submitRefundProof = async (adminId, refundCaseId, proofData = {}, options 
  * - Transitions status to COMPLETED.
  * - Updates Transaction to COMPLETED.
  */
-const verifyAndCompleteRefund = async (verifierAdminId, refundCaseId, data = {}, options = {}) => {
+const verifyAndCompleteRefund = async (
+  verifierAdminId,
+  refundCaseId,
+  data = {},
+  options = {},
+) => {
   if (!mongoose.isValidObjectId(refundCaseId)) throw refundCaseNotFound();
   const now = options.now instanceof Date ? options.now : new Date();
 
@@ -740,33 +1024,58 @@ const verifyAndCompleteRefund = async (verifierAdminId, refundCaseId, data = {},
         updated = existing;
         return;
       }
-      if (existing.status !== "AWAITING_BANK_VERIFICATION" && existing.status !== "PENDING_BANK_TRANSFER") {
-        throw new AppError("Hồ sơ hoàn tiền không ở trạng thái chờ xác minh ngân hàng", "INVALID_STATUS", 400);
+      if (
+        existing.status !== "AWAITING_BANK_VERIFICATION" &&
+        existing.status !== "PENDING_BANK_TRANSFER"
+      ) {
+        throw new AppError(
+          "Hồ sơ hoàn tiền không ở trạng thái chờ xác minh ngân hàng",
+          "INVALID_STATUS",
+          400,
+        );
       }
 
       // Validation of verifier identity & active admin role (PR10 Hardening)
       if (!verifierAdminId || !mongoose.isValidObjectId(verifierAdminId)) {
-        throw new AppError("Người xác minh không hợp lệ (INVALID_VERIFIER_IDENTITY)", "INVALID_VERIFIER_IDENTITY", 400);
+        throw new AppError(
+          "Người xác minh không hợp lệ (INVALID_VERIFIER_IDENTITY)",
+          "INVALID_VERIFIER_IDENTITY",
+          400,
+        );
       }
       const verifier = await User.findById(verifierAdminId).session(session);
-      if (!verifier || verifier.role !== "ADMIN" || verifier.status !== "ACTIVE") {
-        throw new AppError("Người xác minh phải là Quản trị viên đang hoạt động", "FORBIDDEN_VERIFIER", 403);
+      if (
+        !verifier ||
+        verifier.role !== "ADMIN" ||
+        verifier.status !== "ACTIVE"
+      ) {
+        throw new AppError(
+          "Người xác minh phải là Quản trị viên đang hoạt động",
+          "FORBIDDEN_VERIFIER",
+          403,
+        );
       }
 
-      const bankRef = data.bankReference || existing.bankTransferProof.referenceNumber;
+      const bankRef =
+        data.bankReference || existing.bankTransferProof.referenceNumber;
       if (!bankRef) {
-        throw new AppError("Mã tham chiếu ngân hàng là bắt buộc", "BANK_TRANSFER_PROOF_REQUIRED", 400);
+        throw new AppError(
+          "Mã tham chiếu ngân hàng là bắt buộc",
+          "BANK_TRANSFER_PROOF_REQUIRED",
+          400,
+        );
       }
 
       // Check approver / submitter identity: must not be missing (fail-closed)
       const approverId = existing.approvedBy;
-      const submitterId = existing.bankTransferProof && existing.bankTransferProof.submittedBy;
+      const submitterId =
+        existing.bankTransferProof && existing.bankTransferProof.submittedBy;
 
       if (!approverId && !submitterId) {
         throw new AppError(
           "Không xác định được danh tính người phê duyệt hoặc nộp chứng từ (MISSING_APPROVER_IDENTITY). Không thể xác minh.",
           "MISSING_APPROVER_IDENTITY",
-          400
+          400,
         );
       }
 
@@ -784,7 +1093,7 @@ const verifyAndCompleteRefund = async (verifierAdminId, refundCaseId, data = {},
         throw new AppError(
           "Người xác minh chứng từ ngân hàng phải độc lập với người phê duyệt hoàn tiền (Four-Eyes Principle).",
           "DUAL_VERIFICATION_REQUIRED",
-          403
+          403,
         );
       }
 
@@ -833,7 +1142,7 @@ const verifyAndCompleteRefund = async (verifierAdminId, refundCaseId, data = {},
             },
           },
         },
-        { session, returnDocument: "after" }
+        { session, returnDocument: "after" },
       );
 
       // Complete Transaction
@@ -841,7 +1150,7 @@ const verifyAndCompleteRefund = async (verifierAdminId, refundCaseId, data = {},
         await Transaction.updateOne(
           { _id: updated.obligationTransactionId },
           { $set: { status: "COMPLETED" } },
-          { session }
+          { session },
         );
       } else {
         const [settleTx] = await Transaction.create(
@@ -855,10 +1164,22 @@ const verifyAndCompleteRefund = async (verifierAdminId, refundCaseId, data = {},
               status: "COMPLETED",
             },
           ],
-          { session }
+          { session },
         );
         updated.settlementTransactionId = settleTx._id;
         await updated.save({ session });
+      }
+
+      // If linked to SponsorContribution, adjust campaign fund and mark REFUNDED / PARTIALLY_REFUNDED
+      if (existing.relatedContributionId) {
+        const refAmt = toNum(
+          existing.approvedAmount || existing.eligibleAmount,
+        );
+        await handleContributionRefundSettlement(
+          existing.relatedContributionId,
+          refAmt,
+          session,
+        );
       }
 
       // If linked to PaymentReconciliation, resolve it
@@ -873,7 +1194,7 @@ const verifyAndCompleteRefund = async (verifierAdminId, refundCaseId, data = {},
               resolutionNote: `Đã hoàn tiền theo hồ sơ #${updated.caseNumber} với mã GD: ${trimmedRef}`,
             },
           },
-          { session }
+          { session },
         );
       }
     });
@@ -885,7 +1206,7 @@ const verifyAndCompleteRefund = async (verifierAdminId, refundCaseId, data = {},
     updated.recipientUserId,
     "Tiền hoàn đã được chuyển thành công",
     `Khoản hoàn tiền ${toNum(updated.approvedAmount || updated.eligibleAmount).toLocaleString("vi-VN")}đ đã được chuyển vào tài khoản ngân hàng của bạn (Mã GD: ${data.bankReference || updated.bankTransferProof.referenceNumber}).`,
-    "REFUND_COMPLETED"
+    "REFUND_COMPLETED",
   );
 
   return updated;
@@ -904,7 +1225,10 @@ const serializeRefundCase = (doc) => {
     res.approvedAmount = toNum(res.approvedAmount);
   }
   if (res.sourcePaymentId && typeof res.sourcePaymentId === "object") {
-    if (res.sourcePaymentId.amount !== undefined && res.sourcePaymentId.amount !== null) {
+    if (
+      res.sourcePaymentId.amount !== undefined &&
+      res.sourcePaymentId.amount !== null
+    ) {
       res.sourcePaymentId.amount = toNum(res.sourcePaymentId.amount);
     }
   }
@@ -932,7 +1256,12 @@ const listRefundCases = async (query = {}) => {
     const s = String(query.search).trim();
     filter.$or = [
       { caseNumber: { $regex: s, $options: "i" } },
-      { "beneficiaryBankAccount.accountHolderName": { $regex: s, $options: "i" } },
+      {
+        "beneficiaryBankAccount.accountHolderName": {
+          $regex: s,
+          $options: "i",
+        },
+      },
       { "beneficiaryBankAccount.accountNumber": { $regex: s, $options: "i" } },
       { "bankTransferProof.referenceNumber": { $regex: s, $options: "i" } },
     ];
@@ -948,7 +1277,10 @@ const listRefundCases = async (query = {}) => {
       .skip(skip)
       .limit(limit)
       .populate("recipientUserId", "email fullName role")
-      .populate("sourcePaymentId", "orderCode amount paymentStatus transactionId createdAt")
+      .populate(
+        "sourcePaymentId",
+        "orderCode amount paymentStatus transactionId createdAt",
+      )
       .populate("relatedClassId", "title code")
       .populate("assignedTo", "email fullName")
       .populate("approvedBy", "email fullName")
@@ -999,4 +1331,3 @@ module.exports = {
   getRefundCaseById,
   calculateEligibleRefundAmount,
 };
-

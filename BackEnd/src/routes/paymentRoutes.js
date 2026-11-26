@@ -1,8 +1,10 @@
 const express = require("express");
 const paymentController = require("../controllers/paymentController");
 const authMiddleware = require("../middlewares/authMiddleware");
+const requireRole = require("../middlewares/requireRole");
 
 const router = express.Router();
+const admin = [authMiddleware, requireRole("ADMIN")];
 
 // The sandbox webhook confirms a payment for whoever calls it: strictly isolated to test/dev when sandbox is explicitly enabled
 const sandboxOnly = (req, res, next) => {
@@ -27,6 +29,7 @@ router.post("/payments/sandbox/webhook", sandboxOnly, paymentController.processW
 router.post("/payments/webhook", paymentController.processGatewayWebhook);
 router.post("/payments/webhooks/payos/tuition", paymentController.processPayosTuitionWebhook);
 router.post("/payments/webhooks/payos/donation", paymentController.processPayosDonationWebhook);
+router.post("/admin/payments/sync-provider/:orderCode", admin, paymentController.adminSyncProviderOrder);
 router.get("/payments/:id", authMiddleware, paymentController.getPaymentById);
 
 module.exports = router;

@@ -26,21 +26,30 @@ const scholarshipUnavailable = (message, code = "SCHOLARSHIP_NOT_USABLE") => new
  * hết hạn sớm nhất của học viên có Campaign scope bao trùm Class.
  */
 const resolveScholarship = async (studentId, scholarshipId, cls, now) => {
-  const usable = { studentId, status: "ACTIVE", validFrom: { $lte: now }, expiresAt: { $gt: now }, remainingAmount: { $gt: 0 } };
+  const usable = {
+    studentId,
+    status: "ACTIVE",
+    validFrom: { $lte: now },
+    remainingAmount: { $gt: 0 },
+    $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+  };
 
   if (scholarshipId) {
-    if (!mongoose.isValidObjectId(scholarshipId)) throw new AppError("Scholarship not found", "SCHOLARSHIP_NOT_FOUND", 404);
-    const scholarship = await Scholarship.findOne({ _id: scholarshipId, studentId });
+    const isObjectId = mongoose.isValidObjectId(scholarshipId);
+    const lookupQuery = isObjectId
+      ? { _id: scholarshipId, studentId }
+      : { code: String(scholarshipId).trim().toUpperCase(), studentId };
+    const scholarship = await Scholarship.findOne(lookupQuery);
     if (!scholarship) throw new AppError("Scholarship not found", "SCHOLARSHIP_NOT_FOUND", 404);
     // BR-23 / BR-25
     if (scholarship.status !== "ACTIVE") throw scholarshipUnavailable("Scholarship is not active");
-    if (scholarship.expiresAt <= now || scholarship.validFrom > now) {
+    if ((scholarship.expiresAt && scholarship.expiresAt <= now) || scholarship.validFrom > now) {
       throw scholarshipUnavailable("Scholarship is expired or not valid yet", "SCHOLARSHIP_EXPIRED");
     }
     if (toNum(scholarship.remainingAmount) <= 0) throw scholarshipUnavailable("Scholarship has no remaining balance");
 
     const campaign = await ScholarshipCampaign.findById(scholarship.campaignId);
-    if (!campaign || !isClassInCampaignScope(campaign, cls)) {
+    if (!campaign || (scholarship.benefitScope !== "ALL_COURSES" && !isClassInCampaignScope(campaign, cls))) {
       throw new AppError("Class is outside the scholarship campaign scope", "CLASS_OUT_OF_SCHOLARSHIP_SCOPE", 409);
     }
     return { scholarship, campaign };
@@ -49,7 +58,9 @@ const resolveScholarship = async (studentId, scholarshipId, cls, now) => {
   const candidates = await Scholarship.find(usable).sort({ expiresAt: 1 });
   for (const scholarship of candidates) {
     const campaign = await ScholarshipCampaign.findById(scholarship.campaignId);
-    if (campaign && isClassInCampaignScope(campaign, cls)) return { scholarship, campaign };
+    if (campaign && (scholarship.benefitScope === "ALL_COURSES" || isClassInCampaignScope(campaign, cls))) {
+      return { scholarship, campaign };
+    }
   }
   throw new AppError("No usable scholarship for this class", "NO_ELIGIBLE_SCHOLARSHIP", 409);
 };

@@ -1,5 +1,5 @@
 import { formatSubjectLabel } from "../../utils/subjectLabel";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,6 +24,7 @@ import {
 import {
   CalendarOutlined,
   CheckCircleOutlined,
+  CheckCircleFilled,
   HeartOutlined,
   ArrowLeftOutlined,
   WalletOutlined,
@@ -34,6 +35,7 @@ import {
   ShareAltOutlined,
   CopyOutlined,
   FacebookOutlined,
+  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { campaignService, campaignKeys } from "../../services/campaign.service";
 import {
@@ -104,6 +106,13 @@ export default function PublicCampaignDetailPage() {
     enabled: Boolean(campaignId),
   });
 
+  // Fetch public recipients for campaign transparency
+  const { data: publicRecipientsData, isLoading: isLoadingRecipients } = useQuery({
+    queryKey: ['campaignPublicRecipients', campaignId],
+    queryFn: () => (campaignId ? campaignService.getPublicRecipients(campaignId) : null),
+    enabled: Boolean(campaignId),
+  });
+
   // Poll active donation payment status every 3s when modal is open
   const activePaymentId = pendingContribution?.paymentId || null;
   const {
@@ -140,12 +149,18 @@ export default function PublicCampaignDetailPage() {
     return "PENDING";
   }, [polledDonation, polledUiState, pendingContribution, isClientTimerZero]);
 
+  const hasNotifiedSuccessRef = useRef(false);
+
   // Only refresh campaign fundedAmount from Backend AFTER webhook confirms COMPLETED
   useEffect(() => {
     if (
       effectiveUiState === "COMPLETED" ||
       effectiveUiState === "RECONCILIATION_REQUIRED"
     ) {
+      if (effectiveUiState === "COMPLETED" && !hasNotifiedSuccessRef.current) {
+        hasNotifiedSuccessRef.current = true;
+        message.success("Quyên góp thành công! Cảm ơn bạn đã đồng hành cùng quỹ học bổng Edunity.");
+      }
       queryClient.invalidateQueries({ queryKey: campaignKeys.all });
       queryClient.invalidateQueries({ queryKey: contributionKeys.all });
       queryClient.invalidateQueries({ queryKey: paymentKeys.all });
@@ -168,6 +183,7 @@ export default function PublicCampaignDetailPage() {
       });
     },
     onSuccess: (data) => {
+      hasNotifiedSuccessRef.current = false;
       setPendingContribution(data);
       setIsClientTimerZero(false);
       setIsModalOpen(true);
@@ -382,30 +398,63 @@ export default function PublicCampaignDetailPage() {
               size={["100%", 12]}
             />
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-[#99F6E4]/50 text-xs">
-              <div>
-                <div className="text-slate-500">Đã cấp học bổng</div>
+            {/* 6 Core Financial Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-4 border-t border-[#99F6E4]/50 text-xs">
+              <div className="bg-white/80 p-2.5 rounded-xl border border-teal-100/70 shadow-2xs">
+                <div className="text-slate-500 text-[11px] font-medium">1. Đã nhận thực tế</div>
+                <div className="font-bold text-[#163B40] text-sm mt-0.5">
+                  {formatVND(campaign.receivedFund ?? campaign.fundedAmount)}
+                </div>
+              </div>
+              <div className="bg-white/80 p-2.5 rounded-xl border border-teal-100/70 shadow-2xs">
+                <div className="text-slate-500 text-[11px] font-medium">2. Đã xác nhận & đủ ĐK</div>
+                <div className="font-bold text-[#0F766E] text-sm mt-0.5">
+                  {formatVND(campaign.confirmedFund ?? campaign.fundedAmount)}
+                </div>
+              </div>
+              <div className="bg-white/80 p-2.5 rounded-xl border border-amber-100/70 shadow-2xs">
+                <div className="text-slate-500 text-[11px] font-medium">3. Chờ đối soát</div>
+                <div className="font-bold text-amber-700 text-sm mt-0.5">
+                  {formatVND(campaign.pendingFund ?? 0)}
+                </div>
+              </div>
+              <div className="bg-white/80 p-2.5 rounded-xl border border-rose-100/70 shadow-2xs">
+                <div className="text-slate-500 text-[11px] font-medium">4. Đã hoàn trả</div>
+                <div className="font-bold text-rose-600 text-sm mt-0.5">
+                  {formatVND(campaign.refundedFund ?? 0)}
+                </div>
+              </div>
+              <div className="bg-white/80 p-2.5 rounded-xl border border-teal-100/70 shadow-2xs">
+                <div className="text-slate-500 text-[11px] font-medium">5. Đã cấp học bổng</div>
                 <div className="font-bold text-[#163B40] text-sm mt-0.5">
                   {formatVND(campaign.allocatedAmount)}
                 </div>
               </div>
-              <div>
-                <div className="text-slate-500">Đã giải ngân học phí</div>
+              <div className="bg-white/80 p-2.5 rounded-xl border border-teal-100/70 shadow-2xs">
+                <div className="text-slate-500 text-[11px] font-medium">6. Đã dùng học phí</div>
                 <div className="font-bold text-[#163B40] text-sm mt-0.5">
                   {formatVND(campaign.usedAmount)}
                 </div>
               </div>
-              <div>
-                <div className="text-slate-500">Quỹ còn khả dụng</div>
-                <div className="font-bold text-[#0D9488] text-sm mt-0.5">
+            </div>
+
+            {/* Available fund & slot summary */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 bg-white/60 p-3 rounded-xl border border-teal-200/60 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700">Quỹ khả dụng để cấp mới:</span>
+                <span className="font-extrabold text-base text-[#0D9488]">
                   {formatVND(campaign.availableFund)}
-                </div>
+                </span>
               </div>
-              <div>
-                <div className="text-slate-500">Tổng suất học bổng</div>
-                <div className="font-bold text-[#0F766E] text-sm mt-0.5">
-                  {campaign.expectedSlots} suất
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-600">Suất dự kiến còn có thể cấp ({formatVND(campaign.awardAmountPerStudent)}/suất):</span>
+                <Tag color="cyan" className="font-bold text-xs px-2.5 py-0.5 !m-0 rounded-full border-0">
+                  {campaign.standardSlotsAvailable ?? (campaign.awardAmountPerStudent > 0 ? Math.floor(campaign.availableFund / campaign.awardAmountPerStudent) : 0)} suất
+                </Tag>
+              </div>
+              <div className="w-full text-[11px] text-slate-500 pt-1">
+                Suất dự kiến thay đổi theo tài trợ đủ điều kiện. Số suất chính thức chỉ được chốt sau khi kết thúc và đối soát chiến dịch.
+                {campaign.officialSlotCount !== null && campaign.officialSlotCount !== undefined && ` Số suất chính thức: ${campaign.officialSlotCount}.`}
               </div>
             </div>
           </div>
@@ -433,6 +482,26 @@ export default function PublicCampaignDetailPage() {
                   {campaign.eligibilityCriteria ||
                     "Áp dụng theo quy chế xét duyệt học bổng chung của Edunity."}
                 </Paragraph>
+              </Card>
+
+              <Card
+                className="rounded-2xl border-slate-200/80 shadow-xs"
+                title="Xếp hạng ưu tiên"
+              >
+                {campaign.priorityCriteria?.filter((criterion) => criterion.enabled !== false).length ? (
+                  <>
+                    <Paragraph className="text-xs text-slate-500">Áp dụng phiên bản {campaign.priorityPolicyVersion || 0}. Điểm hỗ trợ sắp xếp hồ sơ; hội đồng vẫn xác minh và quyết định thủ công.</Paragraph>
+                    <div className="space-y-2">
+                      {campaign.priorityCriteria.filter((criterion) => criterion.enabled !== false).map((criterion) => (
+                        <div key={criterion.code} className="flex justify-between gap-3 text-sm border-b border-slate-100 pb-2">
+                          <span>{criterion.label}</span><strong>{criterion.points} điểm</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <Paragraph className="text-sm text-slate-500 !mb-0">Chiến dịch chưa công bố bộ điểm ưu tiên. Hồ sơ được xét theo điều kiện và quy trình xác minh đã nêu.</Paragraph>
+                )}
               </Card>
 
               {campaign.scopeDetail && (
@@ -491,6 +560,75 @@ export default function PublicCampaignDetailPage() {
                   </div>
                 </Card>
               )}
+
+              {/* Public Transparency: Awarded Recipients */}
+              <Card
+                className="rounded-2xl border-slate-200/80 shadow-xs"
+                title={
+                  <span className="font-bold flex items-center gap-2 text-slate-800">
+                    <SafetyCertificateOutlined className="text-teal-600" /> Danh sách học sinh nhận học bổng (Minh bạch cộng đồng)
+                  </span>
+                }
+              >
+                {isLoadingRecipients ? (
+                  <Skeleton active paragraph={{ rows: 3 }} />
+                ) : !publicRecipientsData?.isPublished ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="Danh sách nhận học bổng chưa đến ngày công bố"
+                    description={
+                      publicRecipientsData?.resultPublicationDate
+                        ? `Kết quả xét duyệt sẽ được công khai tự động sau ngày ${new Date(publicRecipientsData.resultPublicationDate).toLocaleDateString('vi-VN')} theo quy chế công khai minh bạch.`
+                        : 'Hội đồng xét duyệt đang thẩm định hồ sơ. Kết quả sẽ được công khai sau ngày công bố kết quả chiến dịch.'
+                    }
+                    className="rounded-xl text-xs"
+                  />
+                ) : ((publicRecipientsData?.items || (publicRecipientsData as any)?.recipients || []).length === 0) ? (
+                  <div className="text-center py-6 text-slate-400 text-xs">
+                    Chưa có hồ sơ được công bố hoặc các em học sinh chưa kích hoạt chia sẻ thông tin công khai.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-3">Mã hồ sơ</th>
+                          <th className="py-2.5 px-3">Học sinh</th>
+                          <th className="py-2.5 px-3">Trường học</th>
+                          <th className="py-2.5 px-3">Tỉnh/Thành</th>
+                          <th className="py-2.5 px-3 text-right">Định mức</th>
+                          <th className="py-2.5 px-3 text-right">Ngày cấp</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(publicRecipientsData?.items || (publicRecipientsData as any)?.recipients || []).map((rec: any, i: number) => (
+                          <tr key={rec.id || rec.applicationId || i} className="hover:bg-teal-50/30">
+                            <td className="py-2.5 px-3 font-mono font-semibold text-teal-800">
+                              {rec.applicationCode || (rec.id || rec.applicationId || '').slice(-6).toUpperCase()}
+                            </td>
+                            <td className="py-2.5 px-3 font-medium text-slate-800">
+                              {rec.displayName || rec.studentNameMasked}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600">
+                              {rec.schoolName || '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600">
+                              {rec.province || '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-teal-700">
+                              {formatVND(rec.awardAmount ?? campaign.awardAmountPerStudent)}
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-slate-500">
+                              {rec.awardedAt ? new Date(rec.awardedAt).toLocaleDateString('vi-VN') : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
             </div>
           </Col>
 
@@ -544,11 +682,11 @@ export default function PublicCampaignDetailPage() {
                         </span>
                       </div>
                       <div className="text-xs text-slate-600">
-                        Chiến dịch hỗ trợ suất học bổng trị giá{" "}
+                        Mỗi suất ghi có số dư học bổng{" "}
                         <strong className="text-[#0F766E] text-sm">
                           {formatVND(campaign.awardAmountPerStudent)}
                         </strong>{" "}
-                        để chi trả học phí các lớp học.
+                        vào tài khoản học sinh. Số dư dùng để thanh toán mọi khóa học EDUNITY; phần chưa dùng vẫn còn và không hết hạn.
                       </div>
                       {campaign.isAcceptingApplications ? (
                         <Button
@@ -760,8 +898,8 @@ export default function PublicCampaignDetailPage() {
         {/* Unified VietQR Donation Modal */}
         <Modal
           title={
-            <div className="flex items-center gap-2 text-base font-bold text-slate-800">
-              <WalletOutlined className="text-indigo-600" />
+            <div className="flex items-center gap-2 text-base font-bold text-[#163B40]">
+              <WalletOutlined className="text-[#0D9488]" />
               <span>Thanh toán Tài trợ Quỹ Học Bổng (VietQR)</span>
             </div>
           }
@@ -773,8 +911,75 @@ export default function PublicCampaignDetailPage() {
         >
           {activeDonation && (
             <div className="py-3 space-y-4" data-testid="donation-qr-modal">
-              {effectiveUiState === "COMPLETED" ||
-              effectiveUiState === "RECONCILIATION_REQUIRED" ? (
+              {effectiveUiState === "COMPLETED" ? (
+                <div className="text-center py-6 px-4 space-y-5" data-testid="donation-thank-you-popup">
+                  <div className="w-20 h-20 mx-auto rounded-full bg-teal-50 border-2 border-teal-200 flex items-center justify-center">
+                    <CheckCircleFilled className="text-5xl text-teal-600" />
+                  </div>
+                  <div className="space-y-2">
+                    <Tag color="cyan" className="font-bold text-xs uppercase px-3 py-1 rounded-full border-teal-200 bg-teal-50 text-teal-700">
+                      Quyên góp thành công
+                    </Tag>
+                    <Title level={2} className="!mb-1 !text-2xl font-black text-[#163B40]">
+                      Cảm ơn bạn đã góp sức!
+                    </Title>
+                    <Paragraph className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
+                      Sự đóng góp của bạn đang giúp các em học sinh tiến gần hơn đến ước mơ học tập.
+                    </Paragraph>
+                  </div>
+
+                  <div className="bg-[#F5FAF9] border border-[#D6E5E2] rounded-2xl p-4 text-xs space-y-2.5 text-left max-w-md mx-auto">
+                    <div className="flex justify-between items-center py-1 border-b border-[#D6E5E2]">
+                      <span className="text-slate-500 font-medium">Số tiền quyên góp:</span>
+                      <span className="font-extrabold text-base text-teal-700">
+                        {formatVND(activeDonation.amount)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-b border-[#D6E5E2]">
+                      <span className="text-slate-500 font-medium">Chiến dịch học bổng:</span>
+                      <span className="font-bold text-slate-800 text-right truncate max-w-[220px]" title={campaign.title}>
+                        {campaign.title}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-b border-[#D6E5E2]">
+                      <span className="text-slate-500 font-medium">Mã giao dịch:</span>
+                      <span className="font-mono font-bold text-slate-700">
+                        {activeDonation.orderCode ? `CONTRIB-${activeDonation.orderCode}` : activeDonation.gatewayReference || "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-slate-500 font-medium">Thời gian thanh toán:</span>
+                      <span className="text-slate-700 font-medium">
+                        {new Date().toLocaleString("vi-VN")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex flex-col sm:flex-row items-center gap-3 max-w-md mx-auto">
+                    <Button
+                      type="primary"
+                      size="large"
+                      onClick={() => {
+                        setIsModalOpen(false);
+                        refetchCampaign();
+                      }}
+                      className="flex-1 w-full rounded-xl font-bold bg-[#0D9488] hover:bg-[#0B746C] h-11 text-sm shadow-sm"
+                    >
+                      Hoàn tất
+                    </Button>
+                    <Button
+                      size="large"
+                      onClick={() => {
+                        setIsModalOpen(false);
+                        navigate(ROUTES.SPONSOR.CONTRIBUTIONS);
+                      }}
+                      className="flex-1 w-full rounded-xl font-semibold border-[#D6E5E2] text-slate-700 hover:text-teal-700 h-11 text-sm"
+                    >
+                      Xem lịch sử tài trợ
+                    </Button>
+                  </div>
+                </div>
+              ) : effectiveUiState === "RECONCILIATION_REQUIRED" ? (
                 <PaymentResult
                   payment={{
                     ...(activeDonation as any),

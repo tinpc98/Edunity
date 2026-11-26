@@ -175,10 +175,10 @@ export default function SponsorProfilePage() {
   const isOrg = profile.sponsorType === "ORGANIZATION";
 
   return (
-    <div className="max-w-4xl mx-auto pb-12">
+    <div className="flex flex-col gap-6 w-full pb-12">
       {/* Header Banner & Avatar Card */}
-      <Card className="rounded-2xl border-slate-200/80 shadow-sm overflow-hidden mb-6 bg-white p-0">
-        <div className="h-32 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 relative" />
+      <Card className="rounded-2xl border-[#D6E5E2] shadow-xs overflow-hidden mb-2 bg-white p-0">
+        <div className="h-32 bg-gradient-to-r from-[#0F766E] via-[#0D9488] to-[#14B8A6] relative" />
         <div className="px-6 pb-6 pt-0 relative flex flex-col md:flex-row md:items-end justify-between gap-4 -mt-14">
           <div className="flex flex-col md:flex-row items-center md:items-end gap-5">
             <div className="relative group">
@@ -206,10 +206,10 @@ export default function SponsorProfilePage() {
 
             <div className="text-center md:text-left">
               <div className="flex items-center gap-2 justify-center md:justify-start">
-                <h2 className="text-2xl font-bold text-slate-900 mb-0">
+                <h2 className="text-2xl font-bold text-[#163B40] mb-0">
                   {profile.fullName || profile.representativeName || "Nhà tài trợ"}
                 </h2>
-                <Tag color={isOrg ? "cyan" : "gold"} className="font-semibold m-0">
+                <Tag color={isOrg ? "cyan" : "teal"} className="font-semibold m-0">
                   {isOrg ? <><BankOutlined className="mr-1" /> Tổ chức</> : <><UserOutlined className="mr-1" /> Cá nhân</>}
                 </Tag>
               </div>
@@ -224,14 +224,14 @@ export default function SponsorProfilePage() {
                   type="primary"
                   icon={<EditOutlined />}
                   onClick={() => setIsEditing(true)}
-                  className="rounded-xl bg-amber-600 hover:bg-amber-700"
+                  className="rounded-xl bg-[#0D9488] hover:bg-[#0B746C] font-semibold shadow-xs"
                 >
                   Chỉnh sửa hồ sơ
                 </Button>
                 <Button
                   icon={<LockOutlined />}
                   onClick={() => setIsPasswordModalVisible(true)}
-                  className="rounded-xl"
+                  className="rounded-xl font-medium border-[#D6E5E2] text-slate-700 hover:text-teal-700"
                 >
                   Đổi mật khẩu
                 </Button>
@@ -243,7 +243,7 @@ export default function SponsorProfilePage() {
                   icon={<SaveOutlined />}
                   onClick={handleSaveProfile}
                   loading={updateProfileMutation.isPending}
-                  className="rounded-xl bg-amber-600 hover:bg-amber-700"
+                  className="rounded-xl bg-[#0D9488] hover:bg-[#0B746C] font-semibold shadow-xs"
                 >
                   Lưu thay đổi
                 </Button>
@@ -264,7 +264,7 @@ export default function SponsorProfilePage() {
       </Card>
 
       {/* Main Content Card */}
-      <Card className="rounded-2xl border-slate-200/80 shadow-sm bg-white p-6">
+      <Card className="rounded-2xl border-[#D6E5E2] shadow-xs bg-white p-6">
         {!isEditing ? (
           <div>
             <h3 className="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">
@@ -379,7 +379,7 @@ export default function SponsorProfilePage() {
                   type="primary"
                   onClick={handleSaveProfile}
                   loading={updateProfileMutation.isPending}
-                  className="rounded-xl bg-amber-600 hover:bg-amber-700"
+                  className="rounded-xl bg-[#0D9488] hover:bg-[#0B746C] font-semibold"
                 >
                   Lưu thay đổi
                 </Button>

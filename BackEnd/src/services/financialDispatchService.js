@@ -757,7 +757,16 @@ const dispatchDonationWithinTransaction = async (eventDoc, session, options = {}
   }
 
   // Late arrival after QR expiredAt
-  if (contribution.expiredAt && new Date(contribution.expiredAt) <= now) {
+  const txTime = eventDoc.metadata?.transactionDateTime
+    ? new Date(eventDoc.metadata.transactionDateTime)
+    : null;
+  const isActuallyExpired =
+    !options.allowReevaluation &&
+    eventDoc.metadata?.provenance !== "SERVER_PROVIDER_QUERY" &&
+    contribution.expiredAt &&
+    (txTime ? txTime > new Date(contribution.expiredAt) : new Date(contribution.expiredAt) <= now);
+
+  if (isActuallyExpired) {
     const recon = await ensureReconciliationInSession(session, {
       eventDoc,
       reason: "EXPIRED_PAYMENT",
@@ -786,7 +795,7 @@ const dispatchDonationWithinTransaction = async (eventDoc, session, options = {}
   }
 
   const campaign = await ScholarshipCampaign.findById(contribution.campaignId).session(session);
-  if (!campaign || campaign.isDeleted || !campaignService.isAcceptingFunding(campaign, now)) {
+  if (!campaign || campaign.isDeleted || campaign.status === "DRAFT" || campaign.fundingReconciledAt) {
     const recon = await ensureReconciliationInSession(session, {
       eventDoc,
       reason: "CAMPAIGN_NOT_ACCEPTING_FUNDING",
@@ -794,12 +803,16 @@ const dispatchDonationWithinTransaction = async (eventDoc, session, options = {}
       campaignId: contribution.campaignId,
       expectedAmount: contribution.amount,
       receivedAmount: eventDoc.amount,
-      note: "ScholarshipCampaign is closed, deleted, or outside funding window when transfer arrived",
+      note: campaign?.fundingReconciledAt
+        ? "Transfer arrived after campaign funding was already officially reconciled"
+        : "ScholarshipCampaign is draft, deleted, or not found when transfer arrived",
       now,
     });
     eventDoc.eventStatus = "NEEDS_REVIEW";
     eventDoc.dispatchStatus = "RECONCILIATION_REQUIRED";
-    eventDoc.normalizedError = "Campaign is no longer accepting funding";
+    eventDoc.normalizedError = campaign?.fundingReconciledAt
+      ? "Campaign funding already officially reconciled"
+      : "Campaign is no longer accepting funding";
     eventDoc.dispatchLeaseOwner = null;
     eventDoc.dispatchLeaseUntil = null;
     await eventDoc.save({ session });
@@ -867,14 +880,14 @@ const dispatchDonationWithinTransaction = async (eventDoc, session, options = {}
     });
   }
 
-  // Step 2: Atomically increment ScholarshipCampaign.fundedAmount
+  // Step 2: Atomically increment ScholarshipCampaign.fundedAmount (cho phép cả khi campaign CLOSED trước đó, nếu chưa đối soát)
   const updatedCampaign = await ScholarshipCampaign.findOneAndUpdate(
-    { _id: campaign._id, isDeleted: { $ne: true }, status: "OPEN_FOR_FUNDING" },
+    { _id: campaign._id, isDeleted: { $ne: true }, status: { $in: ["OPEN_FOR_FUNDING", "CLOSED"] } },
     { $inc: { fundedAmount: updatedContribution.amount } },
     { session, returnDocument: "after" }
   );
   if (!updatedCampaign) {
-    throw new AppError("ScholarshipCampaign closed concurrently during dispatch", "CONFLICT", 409);
+    throw new AppError("ScholarshipCampaign modified concurrently during dispatch", "CONFLICT", 409);
   }
 
   if (typeof options.simulateErrorAfterStep === "function") {
@@ -955,24 +968,42 @@ const dispatchBankTransferEvent = async (eventId, options = {}) => {
       throw new AppError("BankTransferEvent not found", "EVENT_NOT_FOUND", 404);
     }
 
+    let isActuallyCompleted = true;
     if (
       initialEvent.eventStatus === "DISPATCHED" ||
       initialEvent.dispatchStatus === "DISPATCHED"
     ) {
-      return {
-        dispatched: false,
-        idempotent: true,
-        reconciliationRequired: false,
-        reason: "ALREADY_DISPATCHED",
-        eventId: initialEvent._id,
-        eventStatus: "DISPATCHED",
-        dispatchStatus: "DISPATCHED",
-      };
+      if (initialEvent.purpose === "DONATION") {
+        const checkContrib = await SponsorContribution.findOne({
+          $or: [{ _id: initialEvent.contributionId }, { orderCode: initialEvent.orderCode }],
+        }).lean();
+        if (checkContrib && checkContrib.contributionStatus === "PENDING") {
+          isActuallyCompleted = false;
+        }
+      }
+      if (isActuallyCompleted) {
+        return {
+          dispatched: false,
+          idempotent: true,
+          reconciliationRequired: false,
+          reason: "ALREADY_DISPATCHED",
+          eventId: initialEvent._id,
+          eventStatus: "DISPATCHED",
+          dispatchStatus: "DISPATCHED",
+        };
+      }
     }
 
+    const allowedEventStatuses = isActuallyCompleted
+      ? ELIGIBLE_EVENT_STATUSES
+      : [...ELIGIBLE_EVENT_STATUSES, "DISPATCHED"];
+    const allowedDispatchStatuses = isActuallyCompleted
+      ? ELIGIBLE_DISPATCH_STATUSES
+      : [...ELIGIBLE_DISPATCH_STATUSES, "DISPATCHED"];
+
     if (
-      !ELIGIBLE_EVENT_STATUSES.includes(initialEvent.eventStatus) ||
-      initialEvent.dispatchStatus === "RECONCILIATION_REQUIRED"
+      !allowedEventStatuses.includes(initialEvent.eventStatus) ||
+      (initialEvent.dispatchStatus === "RECONCILIATION_REQUIRED" && !options.allowReevaluation)
     ) {
       const existingRecon = await PaymentReconciliation.findOne({ eventId: initialEvent._id }).lean();
       return {
@@ -992,8 +1023,8 @@ const dispatchBankTransferEvent = async (eventId, options = {}) => {
     const claimedEvent = await BankTransferEvent.findOneAndUpdate(
       {
         _id: initialEvent._id,
-        eventStatus: { $in: ELIGIBLE_EVENT_STATUSES },
-        dispatchStatus: { $in: ELIGIBLE_DISPATCH_STATUSES },
+        eventStatus: { $in: allowedEventStatuses },
+        dispatchStatus: { $in: allowedDispatchStatuses },
         $or: [
           { dispatchLeaseUntil: null },
           { dispatchLeaseUntil: { $lte: now } },
@@ -1012,7 +1043,11 @@ const dispatchBankTransferEvent = async (eventId, options = {}) => {
 
     if (!claimedEvent) {
       const current = await BankTransferEvent.findById(eventId).lean();
-      if (current && (current.eventStatus === "DISPATCHED" || current.dispatchStatus === "DISPATCHED")) {
+      if (
+        current &&
+        (current.eventStatus === "DISPATCHED" || current.dispatchStatus === "DISPATCHED") &&
+        isActuallyCompleted
+      ) {
         return {
           dispatched: false,
           idempotent: true,

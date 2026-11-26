@@ -1,5 +1,4 @@
 import { formatSubjectLabel } from "../../../utils/subjectLabel";
-import GuardianConsentCard from "./components/GuardianConsentCard";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,6 +25,7 @@ import {
   getApplicationPhase,
 } from "../../../utils/campaign";
 import ApplyScholarshipModal from "../../campaign/components/ApplyScholarshipModal";
+import PaperDossierInstructionCard from "../../../components/scholarship/PaperDossierInstructionCard";
 import { useMyApplicationByCampaign } from "./hooks/useMyApplications";
 import { scholarshipApplicationKeys } from "../../../services/scholarshipApplication.service";
 
@@ -114,7 +114,6 @@ export default function StudentScholarshipDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <div className="lg:col-span-8 space-y-6">
-          {campaign.dossierPolicy?.requireGuardianConsentForMinor && <GuardianConsentCard campaignId={campaign.id} />}
           <Card className="rounded-2xl border-slate-200 shadow-2xs">
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <Tag color={APPLICATION_PHASE_COLORS[phase]} className="font-semibold border-none">
@@ -185,6 +184,11 @@ export default function StudentScholarshipDetailPage() {
               {REQUIRED_DOCUMENTS.map((doc) => <li key={doc}>{doc}</li>)}
             </ul>
           </Card>
+
+          <PaperDossierInstructionCard
+            applicationCode={blockingApp?.applicationCode}
+            compact
+          />
         </div>
 
         <div className="lg:col-span-4 lg:sticky lg:top-24 space-y-4">

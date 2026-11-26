@@ -5,7 +5,9 @@ const audit = async (
   { actorAdminId = null, actorType = "ADMIN", action, targetType, targetId, beforeState, afterState },
   session
 ) => {
-  const finalActorType = !actorAdminId || actorType === "SYSTEM" ? "SYSTEM" : "ADMIN";
+  const finalActorType = !actorAdminId || actorType === "SYSTEM"
+    ? "SYSTEM"
+    : ["ADMIN", "VERIFIER"].includes(actorType) ? actorType : "ADMIN";
   await AuditLog.create(
     [{ actorAdminId, actorType: finalActorType, action, targetType, targetId, beforeState, afterState }],
     { session }

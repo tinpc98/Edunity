@@ -96,7 +96,7 @@ export function getFriendlyErrorMessage(error: unknown, fallbackMessage = "Có l
       return "Chiến dịch này hiện không trong thời gian nhận hồ sơ.";
     }
     if (err.code === "DUPLICATE_APPLICATION") {
-      return "Bạn đã có hồ sơ đang xử lý hoặc đã được duyệt cho chiến dịch này.";
+      return "Bạn đã có hồ sơ cho chiến dịch này (mỗi học sinh chỉ được nộp một hồ sơ trên mỗi chiến dịch, kể cả hồ sơ đã rút hoặc bị từ chối).";
     }
     if (err.code === "APPLICATION_NOT_RESUBMITTABLE") {
       return "Hồ sơ này hiện không ở trạng thái cần bổ sung thông tin.";

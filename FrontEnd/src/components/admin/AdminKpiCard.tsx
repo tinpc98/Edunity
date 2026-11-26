@@ -11,6 +11,7 @@ export interface AdminKpiCardProps {
   trendSubtext?: string;
   detail?: string;
   variant?: "teal" | "mint" | "amber" | "rose" | "sky" | "indigo";
+  onClick?: () => void;
 }
 
 const variantStyles: Record<
@@ -65,6 +66,7 @@ export default function AdminKpiCard({
   trendSubtext,
   detail,
   variant = "teal",
+  onClick,
 }: AdminKpiCardProps) {
   const styles = variantStyles[variant] || variantStyles.teal;
 
@@ -72,7 +74,12 @@ export default function AdminKpiCard({
   const isDown = trendDirection === "down" || (trend && trend.includes("-"));
 
   return (
-    <div className="rounded-2xl bg-white p-5 border border-[#D6E5E2] shadow-[0_2px_8px_rgba(15,118,110,0.06)] hover:shadow-md transition-all duration-300 flex flex-col justify-between group">
+    <div
+      onClick={onClick}
+      className={`rounded-2xl bg-white p-5 border border-[#D6E5E2] shadow-[0_2px_8px_rgba(15,118,110,0.06)] hover:shadow-md transition-all duration-300 flex flex-col justify-between group ${
+        onClick ? "cursor-pointer hover:border-teal-500" : ""
+      }`}
+    >
       <div>
         <div className="flex items-center justify-between mb-3">
           <span className="text-[11px] font-bold uppercase tracking-wider text-[#64748B]">

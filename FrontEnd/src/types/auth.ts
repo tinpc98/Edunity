@@ -1,4 +1,4 @@
-export type UserRole = "STUDENT" | "TEACHER" | "SPONSOR" | "ADMIN";
+export type UserRole = "STUDENT" | "TEACHER" | "SPONSOR" | "ADMIN" | "VERIFIER";
 
 export interface RegisterPayload {
   fullName: string;

@@ -90,6 +90,7 @@ import { MyReportsPage } from "../features/reports/MyReportsPage";
 import NotFoundPage from "../components/common/NotFoundPage";
 import AboutPage from "../features/about/AboutPage";
 import SupportPage from "../features/support/SupportPage";
+import VerifierScholarshipApplicationsPage from "../features/verifier/VerifierScholarshipApplicationsPage";
 
 const router = createBrowserRouter([
   {
@@ -468,6 +469,10 @@ const router = createBrowserRouter([
         element: <SponsorContributionsPage />,
       },
     ],
+  },
+  {
+    path: ROUTES.VERIFIER.SCHOLARSHIP_APPLICATIONS,
+    element: <Jade><VerifierScholarshipApplicationsPage /></Jade>,
   },
   {
     path: ROUTES.CLASSROOM,

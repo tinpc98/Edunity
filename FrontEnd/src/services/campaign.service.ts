@@ -164,11 +164,111 @@ export const campaignService = {
    * Admin: Close an OPEN_FOR_FUNDING campaign.
    * POST /api/admin/campaigns/:id/close
    */
-  async closeCampaign(id: string): Promise<ScholarshipCampaign> {
+  async closeCampaign(id: string, note?: string): Promise<ScholarshipCampaign> {
     const data = await apiClient<ApiScholarshipCampaign>(`/admin/campaigns/${id}/close`, {
       method: "POST",
+      body: JSON.stringify({ note }),
     });
     return adaptCampaign(data);
+  },
+
+  /**
+   * Admin: Delete a draft campaign (only if DRAFT and no linked data).
+   * DELETE /api/admin/campaigns/:id
+   */
+  async deleteCampaign(id: string): Promise<{ success: boolean; message: string }> {
+    return apiClient<{ success: boolean; message: string }>(`/admin/campaigns/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  /** Admin: Pause funding */
+  async pauseFunding(id: string, note?: string): Promise<ScholarshipCampaign> {
+    const data = await apiClient<ApiScholarshipCampaign>(`/admin/campaigns/${id}/pause-funding`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    });
+    return adaptCampaign(data);
+  },
+
+  /** Admin: Resume funding */
+  async resumeFunding(id: string, payload?: { newFundingEnd?: string; note?: string }): Promise<ScholarshipCampaign> {
+    const data = await apiClient<ApiScholarshipCampaign>(`/admin/campaigns/${id}/resume-funding`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+    return adaptCampaign(data);
+  },
+
+  /** Admin: Reopen funding */
+  async reopenFunding(id: string, payload?: { newFundingEnd?: string; note?: string }): Promise<ScholarshipCampaign> {
+    const data = await apiClient<ApiScholarshipCampaign>(`/admin/campaigns/${id}/reopen-funding`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+    return adaptCampaign(data);
+  },
+
+  /** Admin: Close funding */
+  async closeFunding(id: string, note?: string): Promise<ScholarshipCampaign> {
+    const data = await apiClient<ApiScholarshipCampaign>(`/admin/campaigns/${id}/close-funding`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    });
+    return adaptCampaign(data);
+  },
+
+  /** Admin: Pause applications */
+  async pauseApplications(id: string, note?: string): Promise<ScholarshipCampaign> {
+    const data = await apiClient<ApiScholarshipCampaign>(`/admin/campaigns/${id}/pause-applications`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    });
+    return adaptCampaign(data);
+  },
+
+  /** Admin: Resume applications */
+  async resumeApplications(id: string, payload?: { newApplicationEnd?: string; note?: string }): Promise<ScholarshipCampaign> {
+    const data = await apiClient<ApiScholarshipCampaign>(`/admin/campaigns/${id}/resume-applications`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+    return adaptCampaign(data);
+  },
+
+  /** Admin: Close applications */
+  async closeApplications(id: string, note?: string): Promise<ScholarshipCampaign> {
+    const data = await apiClient<ApiScholarshipCampaign>(`/admin/campaigns/${id}/close-applications`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    });
+    return adaptCampaign(data);
+  },
+
+  /** Admin: Reopen a closed campaign with controlled safety checks */
+  async reopenCampaign(
+    id: string,
+    payload: {
+      reason: string;
+      newFundingEnd?: string;
+      newApplicationEnd?: string;
+      reopenFunding?: boolean;
+      reopenApplications?: boolean;
+      confirmReopenReconciled?: boolean;
+    }
+  ): Promise<ScholarshipCampaign> {
+    const data = await apiClient<ApiScholarshipCampaign>(`/admin/campaigns/${id}/reopen`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return adaptCampaign(data);
+  },
+
+  async reconcileFunding(id: string, reason: string) {
+    return apiClient<any>(`/admin/campaigns/${id}/reconcile-funding`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
   },
 
   /**
@@ -206,5 +306,29 @@ export const campaignService = {
       pageSize: data.pageSize || 20,
       totalPages: data.totalPages || 1,
     };
+  },
+
+  /**
+   * Public: List campaign scholarship recipients (after announcement date & with consent)
+   * GET /api/campaigns/:id/recipients?page=...&pageSize=...
+   */
+  async getPublicRecipients(
+    campaignId: string,
+    params?: { page?: number; pageSize?: number }
+  ): Promise<{
+    items: import("../types/campaign").PublicRecipient[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+    isPublished: boolean;
+    resultPublicationDate?: string | null;
+    message?: string;
+  }> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+    const qs = query.toString();
+    return apiClient(`/campaigns/${campaignId}/recipients${qs ? `?${qs}` : ""}`);
   },
 };

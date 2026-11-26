@@ -20,14 +20,38 @@ export type DossierSubmissionMode = "ONLINE" | "PAPER" | "HYBRID";
 
 export interface ScholarshipGuardianInfo {
   fullName: string;
-  relationship: "FATHER" | "MOTHER" | "GRANDPARENT" | "SIBLING" | "LEGAL_GUARDIAN" | "OTHER";
+  relationship:
+    | "FATHER"
+    | "MOTHER"
+    | "GRANDPARENT"
+    | "SIBLING"
+    | "LEGAL_GUARDIAN"
+    | "OTHER";
   phone: string;
   email?: string | null;
   occupation?: string | null;
   address?: string | null;
   nationalIdLast4?: string | null;
-  householdCircumstance?: string | null;
+  cccd?: string | null;
 }
+
+export interface ScholarshipApplicantInfo {
+  fullName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  permanentAddress?: string | null;
+  permanentProvince?: string | null;
+  permanentDistrict?: string | null;
+  permanentCommune?: string | null;
+  isDisadvantaged?: boolean;
+  hardshipCategories?: ScholarshipHardshipCategory[];
+}
+
+export type ScholarshipHardshipCategory =
+  | "POOR_HOUSEHOLD"
+  | "NEAR_POOR_HOUSEHOLD"
+  | "REMOTE_AREA"
+  | "ORPHANED";
 
 export interface ScholarshipSchoolInfo {
   schoolName: string;
@@ -38,6 +62,13 @@ export interface ScholarshipSchoolInfo {
   province?: string | null;
   district?: string | null;
   schoolAddress?: string | null;
+  principalName?: string | null;
+  principalTitle?: string | null;
+  homeroomTeacherName?: string | null;
+  homeroomTeacherPhone?: string | null;
+  /** Legacy fields retained for applications saved before hardship data moved to applicantInfo. */
+  isDisadvantaged?: boolean;
+  hardshipCategories?: ScholarshipHardshipCategory[];
 }
 
 export interface ScholarshipChecklistItem {
@@ -59,16 +90,9 @@ export interface ScholarshipDossierPolicy {
   requireGuardianConsentForMinor: boolean;
 }
 
-export type ScholarshipStatus =
-  | "ACTIVE"
-  | "EXHAUSTED"
-  | "EXPIRED"
-  | "REVOKED";
+export type ScholarshipStatus = "ACTIVE" | "EXHAUSTED" | "EXPIRED" | "REVOKED";
 
-export type ScholarshipUsageStatus =
-  | "PENDING"
-  | "CONFIRMED"
-  | "RELEASED";
+export type ScholarshipUsageStatus = "PENDING" | "CONFIRMED" | "RELEASED";
 
 export type DocumentSide = "FRONT" | "BACK" | "SINGLE";
 
@@ -95,6 +119,9 @@ export interface VerificationDocumentRecord {
   documentType: string;
   files: VerificationDocumentFile[];
   status?: string;
+  reviewNote?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
   uploadedAt?: string;
 }
 
@@ -121,7 +148,12 @@ export interface CampaignSummaryInScholarship {
     courseIds?: string[];
   };
   documentChecklist?: ScholarshipChecklistItem[];
+  priorityCriteria?: import("./campaign").ScholarshipPriorityCriterion[];
+  priorityPolicyVersion?: number;
   dossierPolicy?: ScholarshipDossierPolicy;
+  applicationStart?: string | null;
+  applicationEnd?: string | null;
+  paperDeliveryGraceDays?: number;
 }
 
 export interface PublicStory {
@@ -143,7 +175,12 @@ export interface ApiScholarshipApplication {
   applicationCode?: string | null;
   submissionMode?: DossierSubmissionMode;
   guardianInfo?: ScholarshipGuardianInfo | null;
+  applicantInfo?: ScholarshipApplicantInfo | null;
   schoolInfo?: ScholarshipSchoolInfo | null;
+  hasPovertyCertificate?: boolean;
+  isDisadvantaged?: boolean;
+  hardshipCategories?: ScholarshipHardshipCategory[];
+  studentCccd?: string | null;
   checklistProgress?: ScholarshipChecklistProgress[];
   dossierVerification?: {
     status?: string;
@@ -151,11 +188,44 @@ export interface ApiScholarshipApplication {
     note?: string | null;
     checklistVerified?: boolean;
   };
+  intakeAdminId?: string | null;
+  screenedBy?: string | null;
+  screenedAt?: string | null;
+  screeningResult?: {
+    scoreStatus?: string;
+    layer1Passed?: boolean;
+    layer2Score?: number | null;
+    priorityCriteria?: { code: string; label: string; points: number }[];
+    priorityPolicyVersion?: number;
+    notes?: string;
+  } | null;
+  assignedVerifierId?: string | null;
+  verifierResult?: {
+    status?: string;
+    notes?: string;
+    verifiedBy?: string;
+    verifiedAt?: string;
+  } | null;
+  publicConsent?: {
+    consented: boolean;
+    consentedAt?: string | null;
+    revokedAt?: string | null;
+  } | null;
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
   campaign?: CampaignSummaryInScholarship;
   paperReceipts?: PaperDossierReceipt[];
+  paperDispatch?: {
+    declaredSent: boolean;
+    sentAt?: string | null;
+    carrier?: string | null;
+    trackingNumber?: string | null;
+    proofStorageKey?: string | null;
+    proofUrl?: string | null;
+    proofUrlExpiresAt?: string | null;
+    declaredAt?: string | null;
+  };
   checklistSummary?: Record<string, unknown> | null;
   // Fields present in adminListApplications
   studentName?: string;
@@ -190,9 +260,37 @@ export interface ScholarshipApplication {
   applicationCode?: string | null;
   submissionMode?: DossierSubmissionMode;
   guardianInfo?: ScholarshipGuardianInfo | null;
+  applicantInfo?: ScholarshipApplicantInfo | null;
   schoolInfo?: ScholarshipSchoolInfo | null;
+  hasPovertyCertificate?: boolean;
+  isDisadvantaged?: boolean;
+  hardshipCategories?: ScholarshipHardshipCategory[];
+  studentCccd?: string | null;
   checklistProgress?: ScholarshipChecklistProgress[];
   dossierVerification?: ApiScholarshipApplication["dossierVerification"];
+  intakeAdminId?: string | null;
+  screenedBy?: string | null;
+  screenedAt?: string | null;
+  screeningResult?: {
+    scoreStatus?: string;
+    layer1Passed?: boolean;
+    layer2Score?: number | null;
+    priorityCriteria?: { code: string; label: string; points: number }[];
+    priorityPolicyVersion?: number;
+    notes?: string;
+  } | null;
+  assignedVerifierId?: string | null;
+  verifierResult?: {
+    status?: string;
+    notes?: string;
+    verifiedBy?: string;
+    verifiedAt?: string;
+  } | null;
+  publicConsent?: {
+    consented: boolean;
+    consentedAt?: string | null;
+    revokedAt?: string | null;
+  } | null;
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
@@ -213,19 +311,75 @@ export interface ScholarshipApplication {
   documents?: VerificationDocumentRecord[];
   campaign?: CampaignSummaryInScholarship;
   paperReceipts?: PaperDossierReceipt[];
+  paperDispatch?: {
+    declaredSent: boolean;
+    sentAt?: string | null;
+    carrier?: string | null;
+    trackingNumber?: string | null;
+    proofStorageKey?: string | null;
+    proofUrl?: string | null;
+    proofUrlExpiresAt?: string | null;
+    declaredAt?: string | null;
+  };
   checklistSummary?: Record<string, unknown> | null;
   scholarship?: Scholarship;
 }
 
+export interface VerifierScholarshipApplicationDetail {
+  _id: string;
+  applicationCode?: string | null;
+  status: ScholarshipApplicationStatus;
+  submittedAt?: string | null;
+  applicantInfo?: ScholarshipApplicantInfo | null;
+  guardianInfo?: Pick<
+    ScholarshipGuardianInfo,
+    "fullName" | "relationship" | "occupation"
+  > | null;
+  schoolInfo?: ScholarshipSchoolInfo | null;
+  isDisadvantaged?: boolean;
+  hardshipCategories?: ScholarshipHardshipCategory[];
+  hasPovertyCertificate?: boolean;
+  paperDispatch?: {
+    declaredSent: boolean;
+    sentAt?: string | null;
+    carrier?: string | null;
+    trackingNumber?: string | null;
+    proofUrl?: string | null;
+  };
+  checklistProgress?: ScholarshipChecklistProgress[];
+  verifierResult?: {
+    status?: string;
+    notes?: string | null;
+    verifiedAt?: string | null;
+  } | null;
+  campaign?: {
+    title?: string;
+    documentChecklist?: ScholarshipChecklistItem[];
+    paperDeliveryGraceDays?: number;
+  } | null;
+  documents?: VerificationDocumentRecord[];
+  paperReceipts?: Pick<
+    PaperDossierReceipt,
+    | "receiptCode"
+    | "receivedAt"
+    | "status"
+    | "reconciliationNote"
+    | "discrepancyReason"
+    | "reconciledItems"
+  >[];
+}
+
 export interface ApiScholarship {
   _id: string;
+  code?: string | null;
   campaignId: string | any;
   applicationId: string | any;
   studentId: string | any;
   allocatedAmount: number | { $numberDecimal?: string } | string;
   remainingAmount: number | { $numberDecimal?: string } | string;
   validFrom: string;
-  expiresAt: string;
+  expiresAt: string | null;
+  benefitScope?: "CAMPAIGN_SCOPE" | "ALL_COURSES";
   status: ScholarshipStatus;
   campaign?: CampaignSummaryInScholarship;
   isUsable?: boolean;
@@ -235,6 +389,7 @@ export interface ApiScholarship {
 
 export interface Scholarship {
   id: string;
+  code?: string | null;
   campaignId: string;
   applicationId: string;
   studentId: string;
@@ -242,7 +397,8 @@ export interface Scholarship {
   remainingAmount: number;
   usedAmount: number;
   validFrom: string;
-  expiresAt: string;
+  expiresAt: string | null;
+  benefitScope?: "CAMPAIGN_SCOPE" | "ALL_COURSES";
   status: ScholarshipStatus;
   campaignTitle?: string;
   campaign?: CampaignSummaryInScholarship;
@@ -296,7 +452,10 @@ export interface ScholarshipDossierPayload {
   statement?: string;
   submissionMode?: DossierSubmissionMode;
   guardianInfo?: ScholarshipGuardianInfo;
+  applicantInfo?: ScholarshipApplicantInfo;
+  studentCccd?: string;
   schoolInfo?: ScholarshipSchoolInfo;
+  hasPovertyCertificate?: boolean;
   documents?: {
     checklistItemCode?: string | null;
     title?: string | null;
@@ -317,7 +476,14 @@ export interface PaperDossierReceipt {
   _id?: string;
   id?: string;
   receiptCode: string;
-  applicationId?: string | { _id?: string; applicationCode?: string; status?: ScholarshipApplicationStatus } | null;
+  applicationId?:
+    | string
+    | {
+        _id?: string;
+        applicationCode?: string;
+        status?: ScholarshipApplicationStatus;
+      }
+    | null;
   declaredApplicationCode?: string | null;
   campaignId?: string | null;
   studentId?: string | null;
@@ -338,14 +504,25 @@ export interface PaperDossierReceipt {
   receivedAt: string;
   receivingLocation?: string;
   intakeNote?: string | null;
-  status: "RECEIVED" | "IN_RECONCILIATION" | "DISCREPANCY" | "RECONCILED" | "REJECTED" | "CANCELLED";
+  status:
+    | "RECEIVED"
+    | "IN_RECONCILIATION"
+    | "DISCREPANCY"
+    | "RECONCILED"
+    | "REJECTED"
+    | "CANCELLED";
   reconciledBy?: string | null;
   reconciledAt?: string | null;
   reconciliationNote?: string | null;
   discrepancyReason?: string | null;
   reconciledItems?: {
     checklistItemCode: string;
-    itemStatus: "MATCHED" | "MISSING" | "MISMATCH" | "DAMAGED" | "NOT_APPLICABLE";
+    itemStatus:
+      | "MATCHED"
+      | "MISSING"
+      | "MISMATCH"
+      | "DAMAGED"
+      | "NOT_APPLICABLE";
     documentTitle?: string | null;
     pageCount?: number;
     isOriginal?: boolean;
@@ -378,6 +555,10 @@ export interface PaperDossierReceipt {
     status?: string;
     documentChecklist?: ScholarshipChecklistItem[];
   } | null;
+  proofStorageKey?: string | null;
+  proofPhotos?: string[];
+  proofUrl?: string | null;
+  proofUrlExpiresAt?: string | null;
 }
 
 export interface PaperDossierReceiptPayload {
@@ -390,6 +571,10 @@ export interface PaperDossierReceiptPayload {
   receivedAt?: string;
   receivingLocation?: string;
   intakeNote?: string;
+  proofStorageKey?: string | null;
+  proofPhotos?: string[];
+  reconciledItems?: PaperDossierReceipt["reconciledItems"];
+  status?: string;
   postalInfo: PaperDossierReceipt["postalInfo"];
 }
 
@@ -397,7 +582,10 @@ export interface ResubmitScholarshipPayload {
   statement?: string;
   submissionMode?: DossierSubmissionMode;
   guardianInfo?: ScholarshipGuardianInfo;
+  applicantInfo?: ScholarshipApplicantInfo;
+  studentCccd?: string;
   schoolInfo?: ScholarshipSchoolInfo;
+  hasPovertyCertificate?: boolean;
   documents?: {
     checklistItemCode?: string | null;
     title?: string | null;
@@ -414,7 +602,10 @@ export interface AdminReviewPayload {
   reviewNote?: string;
 }
 
-export const SCHOLARSHIP_APP_STATUS_LABELS: Record<ScholarshipApplicationStatus, string> = {
+export const SCHOLARSHIP_APP_STATUS_LABELS: Record<
+  ScholarshipApplicationStatus,
+  string
+> = {
   DRAFT: "Bản nháp",
   SUBMITTED: "Chờ xét duyệt",
   NEED_MORE_INFORMATION: "Cần bổ sung thông tin",
@@ -424,7 +615,10 @@ export const SCHOLARSHIP_APP_STATUS_LABELS: Record<ScholarshipApplicationStatus,
   WITHDRAWN: "Đã rút hồ sơ",
 };
 
-export const SCHOLARSHIP_APP_STATUS_COLORS: Record<ScholarshipApplicationStatus, string> = {
+export const SCHOLARSHIP_APP_STATUS_COLORS: Record<
+  ScholarshipApplicationStatus,
+  string
+> = {
   DRAFT: "default",
   SUBMITTED: "processing",
   NEED_MORE_INFORMATION: "warning",

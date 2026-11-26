@@ -100,7 +100,7 @@ export default function StudentScholarshipsPage() {
               ? Math.min(100, Math.round((sch.usedAmount / sch.allocatedAmount) * 100))
               : 0;
 
-            const isExpired = new Date(sch.expiresAt).getTime() < now;
+            const isExpired = Boolean(sch.expiresAt && new Date(sch.expiresAt).getTime() < now);
 
             return (
               <Card
@@ -123,8 +123,8 @@ export default function StudentScholarshipsPage() {
                       <div className="font-bold text-sm text-slate-900 leading-snug">
                         {sch.campaignTitle || "Học bổng Edunity"}
                       </div>
-                      <div className="text-[11px] text-slate-400">
-                        Mã học bổng: #{sch.id.slice(-6).toUpperCase()}
+                      <div className="text-[11px] text-teal-800 font-mono font-semibold bg-teal-50 px-2 py-0.5 rounded mt-0.5 inline-block">
+                        {sch.code || `SCH-${sch.id.slice(-6).toUpperCase()}`}
                       </div>
                     </div>
                   </div>
@@ -147,6 +147,11 @@ export default function StudentScholarshipsPage() {
                 {/* Balance breakdown */}
                 <div className="space-y-4">
                   <div className="bg-teal-50/40 border border-teal-100/60 rounded-xl p-4">
+                    <div className="mb-3 text-xs font-medium text-teal-800">
+                      {sch.benefitScope === "ALL_COURSES"
+                        ? "Áp dụng cho tất cả khóa học EDUNITY · Số dư không hết hạn"
+                        : "Áp dụng theo phạm vi và thời hạn được cấp"}
+                    </div>
                     <div className="text-xs text-slate-500 mb-1 flex items-center justify-between">
                       <span>Số dư khả dụng:</span>
                       <span className="font-bold text-teal-900 text-lg">
@@ -186,7 +191,7 @@ export default function StudentScholarshipsPage() {
                         <CalendarOutlined /> Hết hạn vào:
                       </span>
                       <span className={`font-medium ${isExpired ? "text-rose-600 font-bold" : "text-slate-700"}`}>
-                        {new Date(sch.expiresAt).toLocaleDateString("vi-VN")}
+                        {sch.expiresAt ? new Date(sch.expiresAt).toLocaleDateString("vi-VN") : "Không thời hạn"}
                       </span>
                     </div>
                   </div>

@@ -55,11 +55,19 @@ const releaseReservation = async (enrollmentId, targetStatus, options = {}) => {
       usage.status = "RELEASED";
       await usage.save({ session: sess });
 
-      await Scholarship.updateOne(
-        { _id: usage.scholarshipId },
-        { $inc: { remainingAmount: usage.amount } },
-        { session: sess }
-      );
+      const sch = await Scholarship.findById(usage.scholarshipId).session(sess);
+      if (sch && sch.status !== "REVOKED") {
+        const isExpired = sch.status === "EXPIRED" || (sch.expiresAt && sch.expiresAt < new Date());
+        const newStatus = isExpired ? "EXPIRED" : "ACTIVE";
+        await Scholarship.updateOne(
+          { _id: usage.scholarshipId, status: { $in: ["ACTIVE", "EXHAUSTED", "EXPIRED"] } },
+          {
+            $inc: { remainingAmount: usage.amount },
+            $set: { status: newStatus },
+          },
+          { session: sess }
+        );
+      }
     }
 
     return true;

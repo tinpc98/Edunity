@@ -148,8 +148,8 @@ const validateVerifiedWebhookData = (verifiedData, webhookBody) => {
  * the expected receiver (configured env account, intent virtual account, or linked VietQR alias).
  */
 const TRUSTED_CHANNEL_PHYSICAL_ACCOUNTS = Object.freeze({
-  TUITION: ["4008999999"], // Verified MBBank merchant account for Edunity Tuition
-  DONATION: ["4008999999"], // Verified MBBank merchant account for Edunity Donation
+  TUITION: ["4008999999", "0342582999"], // Verified merchant accounts for Edunity Tuition
+  DONATION: ["4008999999", "0342582999"], // Verified merchant accounts for Edunity Donation
 });
 
 /**
@@ -354,7 +354,7 @@ const ensureReferenceCollisionReconciliation = async (existingEvent, parsed) => 
  * Also handles REFERENCE_COLLISION when the same providerReference is reused with a different orderCode,
  * and triggers recovery dispatch if a previous webhook persisted READY_FOR_DISPATCH / DISPATCH_FAILED.
  */
-const findExistingEventResponse = async (channelKey, parsed, fingerprint) => {
+const findExistingEventResponse = async (channelKey, parsed, fingerprint, options = {}) => {
   let existingEvent = await BankTransferEvent.findOne({
     $or: [
       { fingerprint },
@@ -367,6 +367,73 @@ const findExistingEventResponse = async (channelKey, parsed, fingerprint) => {
   if (existingEvent.orderCode !== parsed.orderCode) {
     const collisionRecon = await ensureReferenceCollisionReconciliation(existingEvent, parsed);
     return formatWebhookProcessorResult(existingEvent, collisionRecon, true);
+  }
+
+  // Self-healing recovery: if the event was previously held in RECONCILIATION_REQUIRED due to
+  // an account verification mismatch (e.g. before merchant physical account was added to trusted list),
+  // re-evaluate the account check with current trusted accounts.
+  if (
+    existingEvent.dispatchStatus === "RECONCILIATION_REQUIRED" &&
+    ["ACCOUNT_MISMATCH", "NEEDS_REVIEW"].includes(existingEvent.eventStatus)
+  ) {
+    const [tuitionIntent, donationIntent] = await Promise.all([
+      Payment.findOne({ orderCode: parsed.orderCode }),
+      SponsorContribution.findOne({ orderCode: parsed.orderCode }),
+    ]);
+    const matchedIntent =
+      channelKey === "TUITION"
+        ? tuitionIntent || donationIntent
+        : donationIntent || tuitionIntent;
+    if (matchedIntent && isReceiverAccountMatch(channelKey, matchedIntent, parsed)) {
+      existingEvent.eventStatus = "READY_FOR_DISPATCH";
+      existingEvent.dispatchStatus = "PENDING_DISPATCH";
+      existingEvent.normalizedError = null;
+      await existingEvent.save();
+
+      await PaymentReconciliation.updateMany(
+        {
+          $or: [
+            { eventId: existingEvent._id },
+            { orderCode: parsed.orderCode },
+            ...(matchedIntent._id
+              ? [{ paymentId: matchedIntent._id }, { contributionId: matchedIntent._id }]
+              : []),
+          ],
+          reason: "ACCOUNT_MISMATCH",
+        },
+        {
+          $set: {
+            status: "RESOLVED",
+            resolutionNote:
+              "Re-evaluated and verified against updated trusted channel accounts",
+          },
+        }
+      );
+
+      await financialDispatchService.dispatchBankTransferEvent(existingEvent._id);
+      existingEvent = await BankTransferEvent.findById(existingEvent._id);
+      const existingRecon = await PaymentReconciliation.findOne({
+        eventId: existingEvent._id,
+      });
+      return formatWebhookProcessorResult(existingEvent, existingRecon, false);
+    }
+  }
+
+  // Recovery: if existingEvent is marked DISPATCHED, but the contribution is still PENDING:
+  if (existingEvent.purpose === "DONATION") {
+    const contrib = await SponsorContribution.findOne({
+      $or: [{ _id: existingEvent.contributionId }, { orderCode: existingEvent.orderCode }],
+    });
+    if (contrib && contrib.contributionStatus === "PENDING") {
+      await financialDispatchService.dispatchBankTransferEvent(existingEvent._id, {
+        allowReevaluation: true,
+      });
+      existingEvent = await BankTransferEvent.findById(existingEvent._id);
+      const existingRecon = await PaymentReconciliation.findOne({
+        eventId: existingEvent._id,
+      });
+      return formatWebhookProcessorResult(existingEvent, existingRecon, false);
+    }
   }
 
   // If the previous attempt saved the event as READY_FOR_DISPATCH / DISPATCH_FAILED and verify-only is off,
@@ -418,7 +485,7 @@ const settleVerifiedTransfer = async (routeChannelKey, verifiedData, options = {
 
   const workPromise = (async () => {
     // Fast pre-check for duplicate webhook delivery or reference collision
-    const existingPre = await findExistingEventResponse(channelKey, parsed, fingerprint);
+    const existingPre = await findExistingEventResponse(channelKey, parsed, fingerprint, options);
     if (existingPre) {
       return existingPre;
     }
@@ -510,8 +577,12 @@ const settleVerifiedTransfer = async (routeChannelKey, verifiedData, options = {
           reconciliationReason = "LATE_PAYMENT_REVIEW";
           normalizedError = `Transfer arrived after Enrollment (${linkedEnrollment.enrollmentStatus}) hold expired`;
         } else if (
+          !options?.allowReevaluation &&
+          provenance !== "SERVER_PROVIDER_QUERY" &&
           matchedIntent.expiredAt &&
-          new Date(matchedIntent.expiredAt) <= now
+          (parsed.transactionDateTime
+            ? new Date(parsed.transactionDateTime) > new Date(matchedIntent.expiredAt)
+            : new Date(matchedIntent.expiredAt) <= now)
         ) {
           eventStatus = "EXPIRED_PAYMENT";
           reconciliationReason =
@@ -523,11 +594,14 @@ const settleVerifiedTransfer = async (routeChannelKey, verifiedData, options = {
           expectedPurpose === "DONATION" &&
           (!linkedCampaign ||
             linkedCampaign.isDeleted ||
-            !campaignService.isAcceptingFunding(linkedCampaign, now))
+            linkedCampaign.status === "DRAFT" ||
+            linkedCampaign.fundingReconciledAt)
         ) {
           eventStatus = "NEEDS_REVIEW";
           reconciliationReason = "CAMPAIGN_NOT_ACCEPTING_FUNDING";
-          normalizedError = "Donation arrived after ScholarshipCampaign was closed or stopped accepting funding";
+          normalizedError = linkedCampaign?.fundingReconciledAt
+            ? "Donation arrived after campaign funding was already officially reconciled"
+            : "Donation arrived after ScholarshipCampaign was deleted or in DRAFT status";
         } else {
           eventStatus = "READY_FOR_DISPATCH";
           reconciliationReason = null;

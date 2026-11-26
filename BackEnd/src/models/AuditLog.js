@@ -5,7 +5,7 @@ const { Schema } = mongoose;
 const auditLogSchema = new Schema(
   {
     actorAdminId: { type: Schema.Types.ObjectId, ref: "User", required: false, default: null },
-    actorType: { type: String, enum: ["ADMIN", "SYSTEM"], default: "ADMIN" },
+    actorType: { type: String, enum: ["ADMIN", "VERIFIER", "SYSTEM"], default: "ADMIN" },
     action: { type: String, required: true },
     targetType: { type: String, required: true },
     targetId: { type: Schema.Types.ObjectId, required: true },

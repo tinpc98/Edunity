@@ -20,10 +20,11 @@ import {
   SearchOutlined,
   DollarOutlined,
   TeamOutlined,
-  CalendarOutlined,
-  ArrowRightOutlined,
+  ClockCircleOutlined,
+  HeartOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
+import dayjs from "dayjs";
 import { campaignService, campaignKeys } from "../../services/campaign.service";
 import {
   CAMPAIGN_STATUS_LABELS,
@@ -156,6 +157,10 @@ export default function CampaignsPage() {
             {filteredItems.map((campaign) => {
               const percent = campaign.fundingProgress;
               const isClosed = campaign.status === "CLOSED";
+              const isFundingOpen =
+                campaign.status === "OPEN_FOR_FUNDING" &&
+                campaign.fundingStatus === "OPEN" &&
+                (!campaign.fundingEnd || new Date(campaign.fundingEnd).getTime() > Date.now());
 
               return (
                 <Col xs={24} md={12} lg={8} key={campaign.id}>
@@ -173,8 +178,10 @@ export default function CampaignsPage() {
                           {CAMPAIGN_STATUS_LABELS[campaign.status] || campaign.status}
                         </Tag>
                         {campaign.fundingEnd && (
-                          <span className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
-                            <CalendarOutlined /> Hạn: {new Date(campaign.fundingEnd).toLocaleDateString("vi-VN")}
+                          <span className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
+                            <ClockCircleOutlined className="text-[#0D9488]" />
+                            {campaign.fundingStart ? `${dayjs(campaign.fundingStart).format("DD/MM")} - ` : ""}
+                            {dayjs(campaign.fundingEnd).format("DD/MM/YYYY HH:mm")}
                           </span>
                         )}
                       </div>
@@ -234,20 +241,29 @@ export default function CampaignsPage() {
                       </div>
                     </div>
 
-                    {/* Action Button */}
-                    <div className="pt-3 border-t border-[#D6E5E2]/60">
-                      <Link to={`/campaigns/${campaign.id}`} className="block">
+                    {/* Dual Action Buttons: Xem chi tiết & Quyên góp */}
+                    <div className="pt-3 border-t border-[#D6E5E2]/60 flex items-center gap-2">
+                      <Link to={`/campaigns/${campaign.id}`} className="flex-1">
+                        <Button
+                          block
+                          className="rounded-xl font-medium h-9 text-xs border-[#D6E5E2] text-slate-700 hover:text-[#0D9488]"
+                        >
+                          Xem chi tiết
+                        </Button>
+                      </Link>
+                      <Link to={`/campaigns/${campaign.id}`} className="flex-1">
                         <Button
                           type="primary"
                           block
-                          icon={<ArrowRightOutlined />}
-                          className={`rounded-xl font-semibold h-10 border-none shadow-xs ${
-                            isClosed
-                              ? "bg-slate-700 hover:bg-slate-600"
-                              : "bg-[#0D9488] hover:bg-[#0B746C]"
+                          disabled={!isFundingOpen}
+                          icon={<HeartOutlined />}
+                          className={`rounded-xl font-semibold h-9 text-xs border-none shadow-xs ${
+                            isFundingOpen
+                              ? "bg-[#0D9488] hover:bg-[#0B746C]"
+                              : "bg-slate-200 text-slate-400 cursor-not-allowed"
                           }`}
                         >
-                          {isClosed ? "Xem kết quả chiến dịch" : "Chi tiết & Tài trợ ngay"}
+                          {isFundingOpen ? "Quyên góp" : isClosed ? "Đã đóng" : "Tạm dừng"}
                         </Button>
                       </Link>
                     </div>

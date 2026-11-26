@@ -4,13 +4,13 @@ const { toNum, toDec } = require("../utils/money");
 const { notify } = require("./notificationService");
 
 /**
- * ACTIVE Scholarships past expiresAt become EXPIRED and their unused balance goes back to the Campaign's available
+ * Legacy ACTIVE Scholarships past expiresAt become EXPIRED and their unused balance goes back to the Campaign's available
  * fund (allocatedAmount is reduced by remainingAmount), so expired awards no longer lock sponsor money.
- * A Scholarship with a PENDING usage (a checkout in progress) is skipped: that hold is released or confirmed first,
+ * Non-expiring awards have expiresAt = null and are not selected. A Scholarship with a PENDING usage (a checkout in progress) is skipped: that hold is released or confirmed first,
  * and the next run expires it.
  */
 const expireScholarships = async (now = new Date()) => {
-  const candidates = await Scholarship.find({ status: "ACTIVE", expiresAt: { $lte: now } }).select("_id").lean();
+  const candidates = await Scholarship.find({ status: "ACTIVE", expiresAt: { $type: "date", $lte: now } }).select("_id").lean();
   const expired = [];
 
   for (const { _id } of candidates) {
@@ -20,7 +20,7 @@ const expireScholarships = async (now = new Date()) => {
     try {
       await session.withTransaction(async () => {
         const scholarship = await Scholarship.findOneAndUpdate(
-          { _id, status: "ACTIVE", expiresAt: { $lte: now } },
+          { _id, status: "ACTIVE", expiresAt: { $type: "date", $lte: now } },
           { $set: { status: "EXPIRED" } },
           { session, returnDocument: "before" }
         );

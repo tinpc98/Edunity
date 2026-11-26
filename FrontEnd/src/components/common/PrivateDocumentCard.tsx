@@ -242,19 +242,27 @@ export default function PrivateDocumentCard({
               </Tooltip>
             </>
           ) : (
-            <Tooltip title="Mở trong tab mới">
-              <Button
-                size="small"
-                type="text"
-                icon={<ExportOutlined />}
-                href={viewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-teal-600"
-              >
-                Mở tab mới
-              </Button>
-            </Tooltip>
+            <div className="flex items-center gap-1.5">
+              <Image
+                src={viewUrl}
+                alt={displayTitle}
+                width={32}
+                height={32}
+                className="rounded object-cover border border-slate-200"
+                preview={{ mask: <EyeOutlined className="text-xs" /> }}
+              />
+              <Tooltip title="Mở trong tab mới">
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<ExportOutlined />}
+                  href={viewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-teal-600"
+                />
+              </Tooltip>
+            </div>
           )}
         </div>
       </div>

@@ -44,6 +44,17 @@ const NON_LINKABLE_APP_STATUSES = ["REJECTED", "WITHDRAWN", "APPROVED"];
 const receiptNotFound = () => new AppError("Paper dossier receipt not found", "PAPER_RECEIPT_NOT_FOUND", 404);
 const applicationNotFound = () => new AppError("Scholarship application not found", "APPLICATION_NOT_FOUND", 404);
 
+const addBusinessDays = (date, businessDays) => {
+  const result = new Date(date);
+  let added = 0;
+  while (added < businessDays) {
+    result.setUTCDate(result.getUTCDate() + 1);
+    const day = result.getUTCDay();
+    if (day !== 0 && day !== 6) added += 1;
+  }
+  return result;
+};
+
 const generateReceiptCode = () => {
   const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const randPart = crypto.randomBytes(3).toString("hex").toUpperCase();
@@ -280,6 +291,13 @@ const intakePaperDossier = async (adminId, body) => {
   const receivingLocation =
     assertOptionalText(body.receivingLocation, "receivingLocation", { max: 200 }) || "Central Admission Office";
   const intakeNote = assertOptionalText(body.intakeNote, "intakeNote", { max: 1000 });
+  const proofStorageKey = assertOptionalText(body.proofStorageKey, "proofStorageKey", { max: 500 });
+  const proofPhotos = Array.isArray(body.proofPhotos)
+    ? body.proofPhotos.filter(Boolean)
+    : proofStorageKey
+    ? [proofStorageKey]
+    : [];
+  const initialItems = Array.isArray(body.reconciledItems) ? body.reconciledItems : [];
 
   if (body.campaignId !== undefined && body.campaignId !== null && !mongoose.isValidObjectId(body.campaignId)) {
     throw validationError("campaignId is invalid");
@@ -296,6 +314,24 @@ const intakePaperDossier = async (adminId, body) => {
   });
 
   if (resolved) {
+    const campaign = resolved.campaign;
+    if (resolved.application.submissionMode === "HYBRID") {
+      const dispatch = resolved.application.paperDispatch;
+      const onlineDeadline = campaign?.applicationEnd;
+      const graceDays = campaign?.paperDeliveryGraceDays || 5;
+      if (!onlineDeadline || !dispatch?.declaredSent || !dispatch.sentAt || dispatch.sentAt > onlineDeadline) {
+        throw new AppError("Student paper dispatch was not declared by the online application deadline", "PAPER_DISPATCH_NOT_CONFIRMED", 409);
+      }
+      const deliveryDeadline = addBusinessDays(onlineDeadline, graceDays);
+      if (receivedAt > deliveryDeadline) {
+        throw new AppError("Paper dossier arrived after the campaign delivery grace period", "PAPER_RECEIPT_LATE", 409);
+      }
+    } else {
+      const deadline = campaign?.applicationEnd;
+      if (deadline && receivedAt > deadline) {
+        throw new AppError("Physical paper dossier arrived after the application deadline", "PAPER_RECEIPT_LATE", 409);
+      }
+    }
     const existingActive = await PaperDossierReceipt.findOne({
       applicationId: resolved.application._id,
       status: { $in: ACTIVE_RECEIPT_STATUSES },
@@ -336,17 +372,23 @@ const intakePaperDossier = async (adminId, body) => {
             postalInfo,
             trackingKey,
             receivedBy: adminId,
-            receivedByName: adminUser.email,
+            receivedByName: adminUser.fullName || adminUser.email,
             receivedAt,
             receivingLocation,
             intakeNote,
-            status: "RECEIVED",
+            proofStorageKey: proofStorageKey || null,
+            proofPhotos,
+            reconciledItems: initialItems,
+            status: body.status === "RECONCILED" && initialItems.length > 0 ? "RECONCILED" : "RECEIVED",
+            ...(body.status === "RECONCILED" && initialItems.length > 0
+              ? { reconciledBy: adminId, reconciledAt: receivedAt }
+              : {}),
             history: [
               {
-                action: "RECEIPT_LOGGED",
+                action: body.status === "RECONCILED" && initialItems.length > 0 ? "RECONCILED_MATCHED" : "RECEIPT_LOGGED",
                 actorAdminId: adminId,
                 fromStatus: null,
-                toStatus: "RECEIVED",
+                toStatus: body.status === "RECONCILED" && initialItems.length > 0 ? "RECONCILED" : "RECEIVED",
                 note: intakeNote,
                 metadata: {
                   receiptCode,

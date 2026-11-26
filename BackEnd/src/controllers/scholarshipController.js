@@ -10,16 +10,27 @@ const body = (req) => req.body || {};
 // Campaigns — public
 exports.listCampaigns = handle((req) => campaigns.listCampaigns(req.query, parsePaging(req.query)));
 exports.getCampaign = handle((req) => campaigns.getPublicCampaign(req.params.id));
+exports.getCampaignRecipients = handle((req) => campaigns.getPublicCampaignRecipients(req.params.id, parsePaging(req.query)));
 
 // Campaigns — Admin
 exports.adminListCampaigns = handle((req) => campaigns.adminListCampaigns(req.query, parsePaging(req.query)));
 exports.adminGetCampaign = handle((req) => campaigns.adminGetCampaign(req.params.id));
 exports.createCampaign = handle((req) => campaigns.createCampaign(req.user.id, body(req)), 201);
 exports.updateCampaign = handle((req) => campaigns.updateCampaign(req.user.id, req.params.id, body(req)));
+exports.deleteCampaign = handle((req) => campaigns.deleteDraftCampaign(req.user.id, req.params.id));
 exports.getCampaignChecklist = handle((req) => campaigns.getCampaignChecklist(req.params.id, req.user?.role));
 exports.updateCampaignChecklist = handle((req) => campaigns.updateCampaignChecklist(req.user.id, req.params.id, body(req)));
 exports.publishCampaign = handle((req) => campaigns.publishCampaign(req.user.id, req.params.id));
-exports.closeCampaign = handle((req) => campaigns.closeCampaign(req.user.id, req.params.id));
+exports.closeCampaign = handle((req) => campaigns.closeCampaign(req.user.id, req.params.id, body(req).note));
+exports.pauseFunding = handle((req) => campaigns.pauseFunding(req.user.id, req.params.id, body(req).note));
+exports.resumeFunding = handle((req) => campaigns.resumeFunding(req.user.id, req.params.id, body(req)));
+exports.reopenFunding = handle((req) => campaigns.reopenFunding(req.user.id, req.params.id, body(req)));
+exports.closeFunding = handle((req) => campaigns.closeFunding(req.user.id, req.params.id, body(req).note));
+exports.pauseApplications = handle((req) => campaigns.pauseApplications(req.user.id, req.params.id, body(req).note));
+exports.resumeApplications = handle((req) => campaigns.resumeApplications(req.user.id, req.params.id, body(req)));
+exports.closeApplications = handle((req) => campaigns.closeApplications(req.user.id, req.params.id, body(req).note));
+exports.reopenCampaign = handle((req) => campaigns.reopenCampaign(req.user.id, req.params.id, body(req)));
+exports.reconcileCampaignFunding = handle((req) => campaigns.reconcileCampaignFunding(req.user.id, req.params.id, body(req)));
 exports.adminListContributions = handle((req) =>
   contributions.adminListContributions(req.params.id, req.query, parsePaging(req.query))
 );
@@ -38,10 +49,12 @@ exports.resubmitApplication = handle((req) => scholarships.resubmitApplication(r
 exports.withdrawDossier = handle((req) => scholarships.withdrawDossier(req.user.id, req.params.id, body(req)));
 exports.getMyApplications = handle((req) => scholarships.getMyApplications(req.user.id, parsePaging(req.query)));
 exports.getMyApplicationDetail = handle((req) => scholarships.getMyApplicationDetail(req.user.id, req.params.id));
+exports.declarePaperDispatch = handle((req) => scholarships.declarePaperDispatch(req.user.id, req.params.id, body(req)));
 exports.getMyApplicationPaperReceipts = handle((req) =>
   paperDossiers.studentGetApplicationPaperReceipts(req.user.id, req.params.id)
 );
 exports.getMyScholarships = handle((req) => scholarships.getMyScholarships(req.user.id));
+exports.setPublicConsent = handle((req) => scholarships.setPublicConsent(req.user.id, req.params.id, body(req)));
 exports.payWithScholarship = handle((req) =>
   scholarshipPayments.payWithScholarship(req.user.id, req.params.id, body(req).scholarshipId)
 );
@@ -50,6 +63,12 @@ exports.payWithScholarship = handle((req) =>
 exports.adminListApplications = handle((req) => scholarships.adminListApplications(req.query, parsePaging(req.query)));
 exports.adminGetApplication = handle((req) => scholarships.adminGetApplication(req.params.id));
 exports.verifyDossierApplication = handle((req) => scholarships.verifyDossierApplication(req.user.id, req.params.id, body(req)));
+exports.adminScreenApplication = handle((req) => scholarships.adminScreenApplication(req.user.id, req.params.id, body(req)));
+exports.adminAssignVerifier = handle((req) => scholarships.adminAssignVerifier(req.user.id, req.params.id, body(req)));
+exports.adminListVerifiers = handle(() => scholarships.adminListVerifiers());
+exports.getVerifierApplications = handle((req) => scholarships.getVerifierApplications(req.user.id, req.query, parsePaging(req.query)));
+exports.verifierGetApplication = handle((req) => scholarships.verifierGetApplication(req.user.id, req.params.id));
+exports.verifierSubmitResult = handle((req) => scholarships.verifierSubmitResult(req.user.id, req.params.id, body(req)));
 exports.adminReviewApplicationDocument = handle((req) =>
   scholarships.adminReviewApplicationDocument(req.user.id, req.params.id, req.params.documentId, body(req))
 );

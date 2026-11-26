@@ -7,11 +7,29 @@ const {
 } = require("../models/constants");
 const { AppError } = require("../utils/errors");
 const { validationError, isBlank } = require("../utils/http");
+const { decrypt } = require("../utils/pii");
 
 const PHONE_PATTERN = /^[0-9+(). -]{8,20}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CHECKLIST_CODE_PATTERN = /^[A-Z0-9_-]{2,40}$/;
 const ALLOWED_CHECKLIST_DOC_TYPES = ["IDENTITY", "QUALIFICATION", "SCHOLARSHIP_PROOF"];
+const DEFAULT_SCHOLARSHIP_CHECKLIST = [
+  { code: "CCCD_STUDENT", title: "CCCD học sinh", description: "Bản scan PDF từ giấy tờ công chứng.", required: true, acceptedMode: "BOTH", acceptedDocumentTypes: ["IDENTITY"], maxFiles: 1, order: 1 },
+  { code: "CCCD_GUARDIAN", title: "CCCD người giám hộ", description: "Bản scan PDF từ giấy tờ công chứng.", required: true, acceptedMode: "BOTH", acceptedDocumentTypes: ["IDENTITY"], maxFiles: 1, order: 2 },
+  { code: "TRANSCRIPT", title: "Bảng điểm / học bạ", description: "Bản scan PDF hợp lệ.", required: true, acceptedMode: "BOTH", acceptedDocumentTypes: ["QUALIFICATION", "SCHOLARSHIP_PROOF"], maxFiles: 5, order: 3 },
+  { code: "POVERTY_CERTIFICATE", title: "Giấy chứng nhận hộ nghèo / cận nghèo", description: "Nếu có, tải bản PDF hoặc ảnh.", required: false, acceptedMode: "BOTH", acceptedDocumentTypes: ["SCHOLARSHIP_PROOF"], maxFiles: 3, order: 4 },
+  { code: "HARDSHIP_CERTIFICATE", title: "Giấy xác nhận hoàn cảnh khó khăn / gia đình chính sách", description: "Nếu có, tải bản PDF hoặc ảnh.", required: false, acceptedMode: "BOTH", acceptedDocumentTypes: ["SCHOLARSHIP_PROOF"], maxFiles: 3, order: 5 },
+  { code: "ORPHAN_CERTIFICATE", title: "Giấy chứng nhận mồ côi (cha, mẹ hoặc cả hai)", description: "Nếu có, tải bản PDF hoặc ảnh.", required: false, acceptedMode: "BOTH", acceptedDocumentTypes: ["SCHOLARSHIP_PROOF"], maxFiles: 3, order: 6 },
+  { code: "DISABILITY_CERTIFICATE", title: "Giấy xác nhận khuyết tật / bệnh hiểm nghèo", description: "Nếu có, tải bản PDF hoặc ảnh.", required: false, acceptedMode: "BOTH", acceptedDocumentTypes: ["SCHOLARSHIP_PROOF"], maxFiles: 3, order: 7 },
+  { code: "ACADEMIC_ACHIEVEMENT", title: "Minh chứng thành tích học tập / giải thưởng", description: "Nếu có, tải bản PDF hoặc ảnh.", required: false, acceptedMode: "BOTH", acceptedDocumentTypes: ["QUALIFICATION", "SCHOLARSHIP_PROOF"], maxFiles: 5, order: 8 },
+  { code: "OTHER_CERTIFICATE", title: "Giấy tờ minh chứng khác", description: "Tài liệu bổ trợ khác.", required: false, acceptedMode: "BOTH", acceptedDocumentTypes: ["SCHOLARSHIP_PROOF"], maxFiles: 5, order: 9 },
+];
+
+const resolveScholarshipChecklist = (campaign) => {
+  const configured = Array.isArray(campaign?.documentChecklist) ? campaign.documentChecklist : [];
+  if (configured.length > 0) return configured;
+  return [];
+};
 
 /**
  * External dependency verifier port for AID-08 (Guardian / Minor Consent by Bao).
@@ -115,6 +133,39 @@ const parseGuardianInfo = (raw, { required = false } = {}) => {
     nationalIdLast4 = trimmedId;
   }
 
+  let cccd = null;
+  let cccdEnc = raw.cccdEnc || null;
+  let cccdHash = raw.cccdHash || null;
+  const rawCccd = raw.cccd || raw.nationalId || raw.citizenId;
+  if (rawCccd !== undefined && rawCccd !== null && rawCccd !== "") {
+    if (typeof rawCccd !== "string") {
+      throw validationError("guardianInfo.cccd must be a string");
+    }
+    const trimmedCccd = rawCccd.trim();
+    if (/^\d{12}$/.test(trimmedCccd)) {
+      cccd = trimmedCccd;
+      if (!nationalIdLast4) {
+        nationalIdLast4 = trimmedCccd.slice(-4);
+      }
+    } else if (/^\d{4}$/.test(trimmedCccd)) {
+      nationalIdLast4 = trimmedCccd;
+    } else {
+      throw validationError("guardianInfo.cccd must be a 12-digit string or 4-digit last digits");
+    }
+  } else if (raw.cccdEnc) {
+    try {
+      const decrypted = decrypt(raw.cccdEnc);
+      if (decrypted && /^\d{12}$/.test(decrypted)) {
+        cccd = decrypted;
+        if (!nationalIdLast4) {
+          nationalIdLast4 = decrypted.slice(-4);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   return {
     fullName,
     relationship,
@@ -123,9 +174,58 @@ const parseGuardianInfo = (raw, { required = false } = {}) => {
     occupation: assertOptionalText(raw.occupation, "guardianInfo.occupation", { max: 120 }),
     address: assertOptionalText(raw.address, "guardianInfo.address", { max: 300 }),
     nationalIdLast4,
-    householdCircumstance: assertOptionalText(raw.householdCircumstance, "guardianInfo.householdCircumstance", {
-      max: 1000,
-    }),
+    cccd,
+    cccdEnc,
+    cccdHash,
+  };
+};
+
+const parseApplicantInfo = (raw, { required = false } = {}) => {
+  if (raw === undefined || raw === null) {
+    if (required) throw validationError("applicantInfo is required for scholarship dossier");
+    return null;
+  }
+  assertPlainObject(raw, "applicantInfo");
+  const fullName = required
+    ? assertRequiredText(raw.fullName, "applicantInfo.fullName", { min: 2, max: 120 })
+    : assertOptionalText(raw.fullName, "applicantInfo.fullName", { max: 120 });
+  if (raw.phone !== undefined && raw.phone !== null && raw.phone !== "" && (typeof raw.phone !== "string" || !/^\d{10}$/.test(raw.phone))) {
+    throw validationError("applicantInfo.phone must be exactly 10 digits without spaces");
+  }
+  const phone = assertOptionalText(raw.phone, "applicantInfo.phone", { max: 10 });
+  if (required && !phone) throw validationError("applicantInfo.phone is required");
+  let email = null;
+  const rawEmail = assertOptionalText(raw.email, "applicantInfo.email", { max: 160 });
+  if (rawEmail) {
+    email = rawEmail.toLowerCase();
+    if (!EMAIL_PATTERN.test(email)) throw validationError("applicantInfo.email is not a valid email address");
+  }
+  const permanentProvince = assertOptionalText(raw.permanentProvince, "applicantInfo.permanentProvince", { max: 100 });
+  const permanentCommune = assertOptionalText(raw.permanentCommune, "applicantInfo.permanentCommune", { max: 100 });
+  if (raw.isDisadvantaged !== undefined && typeof raw.isDisadvantaged !== "boolean") {
+    throw validationError("applicantInfo.isDisadvantaged must be a boolean");
+  }
+  const isDisadvantaged = raw.isDisadvantaged === true;
+  const allowedHardshipCategories = ["POOR_HOUSEHOLD", "NEAR_POOR_HOUSEHOLD", "REMOTE_AREA", "ORPHANED"];
+  const hardshipCategories = raw.hardshipCategories === undefined ? [] : raw.hardshipCategories;
+  if (!Array.isArray(hardshipCategories) || hardshipCategories.some((item) => !allowedHardshipCategories.includes(item))) {
+    throw validationError("applicantInfo.hardshipCategories contains an invalid category");
+  }
+  if (isDisadvantaged && hardshipCategories.length === 0) {
+    throw validationError("Select at least one hardship category when applicantInfo.isDisadvantaged is true");
+  }
+  return {
+    fullName,
+    phone,
+    email,
+    permanentAddress: required
+      ? assertRequiredText(raw.permanentAddress, "applicantInfo.permanentAddress", { max: 300 })
+      : assertOptionalText(raw.permanentAddress, "applicantInfo.permanentAddress", { max: 300 }),
+    permanentProvince,
+    permanentDistrict: assertOptionalText(raw.permanentDistrict, "applicantInfo.permanentDistrict", { max: 100 }),
+    permanentCommune,
+    isDisadvantaged,
+    hardshipCategories: isDisadvantaged ? [...new Set(hardshipCategories)] : [],
   };
 };
 
@@ -150,32 +250,70 @@ const parseSchoolInfo = (raw, { required = false } = {}) => {
 
   const className = assertRequiredText(raw.className, "schoolInfo.className", { min: 1, max: 50 });
 
+  const academicYear = assertOptionalText(raw.academicYear, "schoolInfo.academicYear", { max: 30 });
+  const province = assertOptionalText(raw.province, "schoolInfo.province", { max: 100 });
+  const district = assertOptionalText(raw.district, "schoolInfo.district", { max: 100 });
+  const principalName = assertOptionalText(raw.principalName, "schoolInfo.principalName", { max: 120 });
+  const principalTitle = assertOptionalText(raw.principalTitle, "schoolInfo.principalTitle", { max: 100 });
+  const homeroomTeacherName = assertOptionalText(raw.homeroomTeacherName, "schoolInfo.homeroomTeacherName", { max: 120 });
+  const homeroomTeacherPhone = assertOptionalText(raw.homeroomTeacherPhone, "schoolInfo.homeroomTeacherPhone", { max: 10 });
+  if (raw.homeroomTeacherPhone !== undefined && raw.homeroomTeacherPhone !== null && raw.homeroomTeacherPhone !== "" &&
+    (typeof raw.homeroomTeacherPhone !== "string" || !/^\d{10}$/.test(raw.homeroomTeacherPhone))) {
+    throw validationError("schoolInfo.homeroomTeacherPhone must be exactly 10 digits without spaces");
+  }
+
+  if (raw.isDisadvantaged !== undefined && typeof raw.isDisadvantaged !== "boolean") {
+    throw validationError("schoolInfo.isDisadvantaged must be a boolean");
+  }
+  const isDisadvantaged = raw.isDisadvantaged === true;
+  const allowedHardshipCategories = ["POOR_HOUSEHOLD", "NEAR_POOR_HOUSEHOLD", "REMOTE_AREA", "ORPHANED"];
+  const hardshipCategories = raw.hardshipCategories === undefined ? [] : raw.hardshipCategories;
+  if (!Array.isArray(hardshipCategories) || hardshipCategories.some((item) => !allowedHardshipCategories.includes(item))) {
+    throw validationError("schoolInfo.hardshipCategories contains an invalid category");
+  }
+  if (isDisadvantaged && hardshipCategories.length === 0) {
+    throw validationError("Select at least one hardship category when isDisadvantaged is true");
+  }
+
   return {
     schoolName,
     gradeLevel,
     className,
     studentCode: assertOptionalText(raw.studentCode, "schoolInfo.studentCode", { max: 50 }),
-    academicYear: assertOptionalText(raw.academicYear, "schoolInfo.academicYear", { max: 30 }),
-    province: assertOptionalText(raw.province, "schoolInfo.province", { max: 100 }),
-    district: assertOptionalText(raw.district, "schoolInfo.district", { max: 100 }),
+    academicYear,
+    province,
+    district,
     schoolAddress: assertOptionalText(raw.schoolAddress, "schoolInfo.schoolAddress", { max: 300 }),
+    principalName,
+    principalTitle,
+    homeroomTeacherName,
+    homeroomTeacherPhone,
+    isDisadvantaged,
+    hardshipCategories: isDisadvantaged ? [...new Set(hardshipCategories)] : [],
   };
 };
 
 const parseSubmissionMode = (rawMode, campaign) => {
-  const mode = rawMode === undefined || rawMode === null || rawMode === ""
-    ? "ONLINE"
+  const allowPaper = campaign?.dossierPolicy?.allowPaperDossier !== false;
+  const defaultMode = allowPaper ? "HYBRID" : "ONLINE";
+  let mode = rawMode === undefined || rawMode === null || rawMode === ""
+    ? defaultMode
     : String(rawMode).trim().toUpperCase();
   if (!DOSSIER_SUBMISSION_MODES.includes(mode)) {
     throw validationError(`submissionMode must be one of ${DOSSIER_SUBMISSION_MODES.join(", ")}`);
   }
-  const allowPaper = campaign?.dossierPolicy?.allowPaperDossier !== false;
   if (!allowPaper && (mode === "PAPER" || mode === "HYBRID")) {
     throw new AppError(
       "This campaign does not accept paper dossier submissions",
       "PAPER_DOSSIER_NOT_ALLOWED",
       400
     );
+  }
+  const hasRequiredPaperChecklist = (campaign?.documentChecklist || []).some(
+    (it) => it.required && (it.acceptedMode === "PAPER" || it.acceptedMode === "BOTH")
+  );
+  if (hasRequiredPaperChecklist && mode === "ONLINE") {
+    mode = "HYBRID";
   }
   return mode;
 };
@@ -335,12 +473,15 @@ const evaluateChecklistProgress = ({
   submissionMode = "ONLINE",
   onlineDocuments = [],
   paperReceipts = [],
+  allowPendingOnlineForVerification = true,
 }) => {
-  const checklist = Array.isArray(campaign?.documentChecklist) ? campaign.documentChecklist : [];
-  const validOnlineDocs = (onlineDocuments || []).filter((doc) => doc && doc.status !== "REJECTED");
+  const checklist = resolveScholarshipChecklist(campaign);
+  const activeOnlineDocs = (onlineDocuments || []).filter(
+    (doc) => doc && !["SUPERSEDED", "REMOVED_BY_STUDENT"].includes(doc.status)
+  );
 
   const docsByCode = new Map();
-  for (const doc of validOnlineDocs) {
+  for (const doc of activeOnlineDocs) {
     const code = doc.checklistItemCode ? String(doc.checklistItemCode).trim().toUpperCase() : null;
     if (!code) continue;
     if (!docsByCode.has(code)) docsByCode.set(code, []);
@@ -371,15 +512,57 @@ const evaluateChecklistProgress = ({
     const code = String(item.code).trim().toUpperCase();
     const docs = docsByCode.get(code) || [];
     const paperMatch = paperItemByCode.get(code) || null;
-    const hasOnline = docs.length > 0;
+
+    const hasApprovedOnline = docs.some((d) => d.status === "APPROVED");
+    const hasPendingOnline = docs.some((d) => d.status === "PENDING");
+    const hasRejectedOnline = docs.length > 0 && docs.every((d) => d.status === "REJECTED");
+    const hasValidOnline = docs.some((d) => d.status !== "REJECTED");
+    const hasUploadedOnline = docs.length > 0;
+
     const hasMatchedPaper = Boolean(paperMatch && paperMatch.itemStatus === "MATCHED");
+    const hasPendingPaper =
+      Boolean(paperMatch && ["RECEIVED", "IN_RECONCILIATION"].includes(paperMatch.itemStatus)) ||
+      (!paperMatch && latestActiveReceipt && ["RECEIVED", "IN_RECONCILIATION"].includes(latestActiveReceipt.status));
+    const hasDiscrepancyPaper =
+      Boolean(paperMatch && paperMatch.itemStatus === "DISCREPANCY") ||
+      (!paperMatch && latestActiveReceipt && latestActiveReceipt.status === "DISCREPANCY");
+
     const mode = item.acceptedMode || "EITHER";
 
+    // Online verification: satisfied only when APPROVED (unless administrative verify-dossier explicitly allows uploaded docs)
+    const effectiveOnlineValid = allowPendingOnlineForVerification ? hasUploadedOnline && !hasRejectedOnline : hasApprovedOnline;
+
     let satisfied = false;
-    if (mode === "ONLINE") satisfied = hasOnline;
+    if (mode === "ONLINE") satisfied = effectiveOnlineValid;
     else if (mode === "PAPER") satisfied = hasMatchedPaper;
-    else if (mode === "BOTH") satisfied = hasOnline && hasMatchedPaper;
-    else satisfied = hasOnline || hasMatchedPaper; // EITHER
+    else if (mode === "BOTH") satisfied = effectiveOnlineValid && hasMatchedPaper;
+    else satisfied = effectiveOnlineValid || hasMatchedPaper; // EITHER
+
+    let itemStatus = "MISSING";
+    let missingReason = "REQUIRED_CHECKLIST_ITEM_MISSING";
+
+    if (satisfied) {
+      itemStatus = "APPROVED";
+      missingReason = null;
+    } else if (hasDiscrepancyPaper) {
+      itemStatus = "DISCREPANCY";
+      missingReason = "PAPER_ITEM_DISCREPANCY";
+    } else if (hasPendingOnline || hasPendingPaper) {
+      itemStatus = "PENDING_REVIEW";
+      missingReason = hasPendingOnline ? "REQUIRED_DOCUMENT_PENDING_REVIEW" : "RECONCILED_PAPER_ITEM_REQUIRED";
+    } else if (hasRejectedOnline) {
+      itemStatus = "REJECTED";
+      missingReason = "REQUIRED_DOCUMENT_REJECTED";
+    } else if (mode === "PAPER") {
+      itemStatus = "MISSING";
+      missingReason = "RECONCILED_PAPER_ITEM_REQUIRED";
+    } else if (mode === "BOTH") {
+      itemStatus = "MISSING";
+      missingReason = hasApprovedOnline ? "RECONCILED_PAPER_ITEM_REQUIRED" : "ONLINE_AND_PAPER_REQUIRED";
+    } else {
+      itemStatus = "MISSING";
+      missingReason = "REQUIRED_CHECKLIST_ITEM_MISSING";
+    }
 
     return {
       code,
@@ -390,6 +573,16 @@ const evaluateChecklistProgress = ({
       paperReceiptId: paperMatch ? paperMatch.receiptId : latestActiveReceipt ? latestActiveReceipt._id : null,
       paperItemStatus: paperMatch ? paperMatch.itemStatus : null,
       satisfied,
+      itemStatus,
+      missingReason,
+      hasUploadedOnline,
+      hasValidOnline,
+      hasApprovedOnline,
+      hasPendingOnline,
+      hasRejectedOnline,
+      hasMatchedPaper,
+      hasPendingPaper,
+      hasDiscrepancyPaper,
     };
   });
 
@@ -399,19 +592,15 @@ const evaluateChecklistProgress = ({
       code: entry.code,
       title: entry.title,
       acceptedMode: entry.acceptedMode,
-      reason:
-        entry.acceptedMode === "PAPER"
-          ? "RECONCILED_PAPER_ITEM_REQUIRED"
-          : entry.acceptedMode === "BOTH"
-            ? "ONLINE_AND_PAPER_REQUIRED"
-            : "REQUIRED_CHECKLIST_ITEM_MISSING",
+      reason: entry.missingReason || "REQUIRED_CHECKLIST_ITEM_MISSING",
+      status: entry.itemStatus,
     }));
 
   // Validate compatibility of checklist items with submissionMode at student submission time
   const missingOnSubmit = [];
   for (const entry of progress) {
     if (!entry.required) continue;
-    const hasOnline = entry.onlineDocumentIds.length > 0;
+    const hasOnline = entry.hasValidOnline;
     const mode = entry.acceptedMode;
 
     if (submissionMode === "ONLINE") {
@@ -446,6 +635,8 @@ const evaluateChecklistProgress = ({
       }
     }
   }
+
+  const validOnlineDocs = activeOnlineDocs.filter((d) => d.status !== "REJECTED");
 
   return {
     progress,
@@ -556,13 +747,41 @@ const redactApplicationForStudent = (application) => {
       })()
     : undefined;
 
-  return {
+  const result = {
     ...rest,
     ...(redactedVerification ? { dossierVerification: redactedVerification } : {}),
   };
+
+  if (result.guardianInfo) {
+    const g = { ...(result.guardianInfo.toObject ? result.guardianInfo.toObject() : result.guardianInfo) };
+    if (g.cccdEnc && !g.cccd) {
+      try {
+        g.cccd = decrypt(g.cccdEnc);
+      } catch {
+        // fallback
+      }
+    }
+    delete g.cccdEnc;
+    delete g.cccdHash;
+    result.guardianInfo = g;
+  }
+
+  if (result.studentCccdEnc && !result.studentCccd) {
+    try {
+      result.studentCccd = decrypt(result.studentCccdEnc);
+    } catch {
+      // fallback
+    }
+  }
+  delete result.studentCccdEnc;
+  delete result.studentCccdHash;
+
+  return result;
 };
 
 module.exports = {
+  DEFAULT_SCHOLARSHIP_CHECKLIST,
+  resolveScholarshipChecklist,
   setConsentVerifier,
   resetConsentVerifier,
   getConsentDependencyStatus,
@@ -570,6 +789,7 @@ module.exports = {
   assertRequiredText,
   assertOptionalText,
   parseGuardianInfo,
+  parseApplicantInfo,
   parseSchoolInfo,
   parseSubmissionMode,
   parseChecklistDefinition,

@@ -12,7 +12,6 @@ import {
   SafetyCertificateOutlined,
   ProfileOutlined,
   SolutionOutlined,
-  InboxOutlined,
   BarChartOutlined,
   FileTextOutlined,
   AuditOutlined,
@@ -129,12 +128,6 @@ const navGroups: NavGroup[] = [
         icon: <ProfileOutlined className="text-[17px]" />,
         path: ROUTES.ADMIN.SCHOLARSHIP_APPLICATIONS,
       },
-      {
-        key: ROUTES.ADMIN.PAPER_DOSSIERS,
-        label: "Hồ sơ giấy",
-        icon: <InboxOutlined className="text-[17px]" />,
-        path: ROUTES.ADMIN.PAPER_DOSSIERS,
-      },
     ],
   },
   {
@@ -228,7 +221,9 @@ export default function AdminSidebar({
     if (path === ROUTES.ADMIN.HOME) {
       return location.pathname === ROUTES.ADMIN.HOME;
     }
-    return location.pathname === path || location.pathname.startsWith(path + "/");
+    return (
+      location.pathname === path || location.pathname.startsWith(path + "/")
+    );
   };
 
   return (
@@ -268,7 +263,11 @@ export default function AdminSidebar({
             className={`p-1.5 rounded-lg text-[#64748B] hover:text-[#0F766E] hover:bg-[#E5F5F1] transition-colors ${
               collapsed ? "hidden" : "block"
             }`}
-            title={collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"}
+            title={
+              collapsed
+                ? "Mở rộng thanh điều hướng"
+                : "Thu gọn thanh điều hướng"
+            }
           >
             <LeftOutlined className="text-xs" />
           </button>

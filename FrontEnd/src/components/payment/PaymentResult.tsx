@@ -61,7 +61,7 @@ export function PaymentResult({
   const resolvedTitle = isConfirmedTuition
     ? "Đăng ký lớp thành công"
     : isConfirmedDonation
-    ? "Tài trợ học bổng đã được ghi nhận"
+    ? "Cảm ơn bạn đã góp sức!"
     : isReconciliationOrLate
     ? uiState === "LATE_PAYMENT_REVIEW"
       ? "Đã nhận tiền — đang đối soát (Khoản tiền đến sau hạn)"
@@ -73,7 +73,7 @@ export function PaymentResult({
   const resolvedDescription = isConfirmedTuition
     ? "Hệ thống đã xác thực khoản thanh toán học phí và kích hoạt quyền vào lớp học của bạn."
     : isConfirmedDonation
-    ? "Cảm ơn tấm lòng vàng của bạn! Khoản đóng góp đã được cộng vào Quỹ học bổng sau khi xác thực từ cổng thanh toán."
+    ? "Sự đóng góp của bạn đang giúp các em học sinh tiến gần hơn đến ước mơ học tập."
     : isReconciliationOrLate
     ? isTuition
       ? "Ngân hàng đã báo có nhưng thời hạn giữ chỗ của đơn đăng ký đã kết thúc hoặc cần kiểm tra đối soát. Hệ thống đã tự động ghi nhận hồ sơ đối soát/hoàn tiền — tuyệt đối không cấp quyền vào lớp tự động khi đơn đã hết hạn."

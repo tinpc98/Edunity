@@ -50,11 +50,14 @@ const verificationDocumentSchema = new Schema(
       default: undefined,
     },
 
-    status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], default: "PENDING" },
+    status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED", "SUPERSEDED", "REMOVED_BY_STUDENT"], default: "PENDING" },
     rejectionReason: { type: String, default: null, maxlength: 1000 }, // why THIS document was refused (BAO-05)
     reviewedBy: { type: Schema.Types.ObjectId, ref: "User", default: null }, // Admin
     reviewedAt: { type: Date, default: null },
     reviewNote: { type: String, default: null },
+    supersededByDocumentId: { type: Schema.Types.ObjectId, ref: "VerificationDocument", default: null },
+    supersededAt: { type: Date, default: null },
+    removedByStudentAt: { type: Date, default: null },
 
     uploadedAt: { type: Date, default: Date.now },
   },

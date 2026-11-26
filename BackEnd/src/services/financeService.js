@@ -9,6 +9,8 @@ const RefundCase = require("../models/RefundCase");
 const User = require("../models/User");
 const Enrollment = require("../models/Enrollment");
 const Class = require("../models/Class");
+const SponsorContribution = require("../models/SponsorContribution");
+const ScholarshipCampaign = require("../models/ScholarshipCampaign");
 const { getFinancialOutboxWorkerStatus } = require("../jobs/financialOutboxWorker");
 const { serializeDecimal128 } = require("../utils/serialize");
 const { AppError } = require("../utils/errors");
@@ -1708,6 +1710,42 @@ exports.resolveReconciliation = async (id, adminUser, body = {}) => {
           if (enrollment.classId) {
             await Class.findByIdAndUpdate(enrollment.classId, { $inc: { enrolledCount: 1 } });
           }
+        }
+      }
+    }
+
+    // Update SponsorContribution and Campaign if present
+    const contributionId =
+      recon.contributionId ||
+      (recon.purpose === "DONATION" ? recon.relatedContributionId : null);
+    if (contributionId) {
+      const contrib = await SponsorContribution.findById(contributionId);
+      if (contrib && contrib.contributionStatus !== "COMPLETED") {
+        contrib.contributionStatus = "COMPLETED";
+        contrib.providerStatus = "PAID";
+        contrib.contributedAt = contrib.contributedAt || now;
+        await contrib.save();
+
+        if (contrib.campaignId) {
+          await ScholarshipCampaign.findByIdAndUpdate(contrib.campaignId, {
+            $inc: { fundedAmount: contrib.amount },
+          });
+        }
+
+        const existingTx = await Transaction.findOne({
+          relatedContributionId: contrib._id,
+          transactionType: "SPONSOR_CONTRIBUTION",
+        });
+        if (!existingTx) {
+          await Transaction.create({
+            transactionType: "SPONSOR_CONTRIBUTION",
+            sourceUserId: contrib.sponsorId,
+            destinationUserId: null,
+            relatedContributionId: contrib._id,
+            relatedBankEventId: recon.eventId,
+            amount: contrib.amount,
+            status: "COMPLETED",
+          });
         }
       }
     }

@@ -7,7 +7,8 @@ const sponsorContributionSchema = new Schema(
     sponsorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
     amount: { type: Schema.Types.Decimal128, required: true },
-    contributionStatus: { type: String, enum: ["PENDING", "COMPLETED", "FAILED"], default: "PENDING" },
+    refundedAmount: { type: Schema.Types.Decimal128, default: () => mongoose.Types.Decimal128.fromString("0") },
+    contributionStatus: { type: String, enum: ["PENDING", "COMPLETED", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"], default: "PENDING" },
     paymentReference: { type: String, default: null }, // idempotency key cho webhook Payment Gateway (mục 9.10)
 
     // Unified Payment Intent fields (purpose = "DONATION", channelKey = "DONATION")

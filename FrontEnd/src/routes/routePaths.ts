@@ -99,4 +99,7 @@ export const ROUTES = {
     PROFILE: "/sponsor/profile",
     CONTRIBUTIONS: "/sponsor/contributions",
   },
+  VERIFIER: {
+    SCHOLARSHIP_APPLICATIONS: "/verifier/scholarship-applications",
+  },
 } as const;
