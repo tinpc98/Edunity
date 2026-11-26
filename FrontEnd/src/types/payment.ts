@@ -269,7 +269,7 @@ export interface Transaction {
   createdAt: string;
 }
 
-export type TeacherEarningStatus = "PENDING" | "AVAILABLE" | "PAID_OUT";
+export type TeacherEarningStatus = "PENDING" | "AVAILABLE" | "PAID_OUT" | "HELD" | "CANCELLED";
 
 export interface TeacherEarningItem {
   id: string;
@@ -610,12 +610,16 @@ export const TEACHER_EARNING_STATUS_LABELS: Record<TeacherEarningStatus, string>
   PENDING: "Chờ đối soát",
   AVAILABLE: "Khả dụng",
   PAID_OUT: "Đã thanh toán",
+  HELD: "Đang tạm giữ",
+  CANCELLED: "Đã hủy",
 };
 
 export const TEACHER_EARNING_STATUS_COLORS: Record<TeacherEarningStatus, string> = {
   PENDING: "gold",
   AVAILABLE: "green",
   PAID_OUT: "blue",
+  HELD: "orange",
+  CANCELLED: "default",
 };
 
 export type PayoutStatus =

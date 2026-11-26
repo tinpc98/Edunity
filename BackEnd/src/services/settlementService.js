@@ -627,6 +627,7 @@ const getTeacherSettlementSummary = async (teacherId, options = {}) => {
     .lean();
 
   let totalGross = 0;
+  let totalCommission = 0;
   let totalNet = 0;
   let pendingSettlement = 0;
   let availableForWithdrawal = 0;
@@ -635,10 +636,14 @@ const getTeacherSettlementSummary = async (teacherId, options = {}) => {
 
   const items = earnings.map((e) => {
     const gross = toNum(e.grossAmount);
+    const commission = toNum(e.commissionAmount);
     const net = toNum(e.netAmount);
 
-    totalGross += gross;
-    totalNet += net;
+    if (e.status !== "CANCELLED") {
+      totalGross += gross;
+      totalCommission += commission;
+      totalNet += net;
+    }
 
     if (e.status === "PENDING") {
       pendingSettlement += net;
@@ -659,7 +664,7 @@ const getTeacherSettlementSummary = async (teacherId, options = {}) => {
       enrollmentId: e.enrollmentId?._id?.toString() || e.enrollmentId?.toString(),
       grossAmount: gross,
       commissionRate: e.commissionRate,
-      commissionAmount: toNum(e.commissionAmount),
+      commissionAmount: commission,
       netAmount: net,
       status: e.status,
       settlementHoldRequired: e.settlementHoldRequired,
@@ -687,6 +692,7 @@ const getTeacherSettlementSummary = async (teacherId, options = {}) => {
   return {
     summary: {
       totalGross,
+      totalCommission,
       totalNet,
       pendingSettlement,
       availableForWithdrawal,
