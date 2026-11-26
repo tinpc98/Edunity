@@ -52,7 +52,7 @@ const { TextArea } = Input;
 
 type ProposalFormValues = Pick<
   CreateProposalPayload,
-  "categoryId" | "subjectId" | "title" | "gradeLevel" | "level" | "description" | "learningObjectives" | "syllabus" | "prerequisites"
+  "categoryId" | "subjectId" | "title" | "gradeLevel" | "level" | "description" | "learningObjectives" | "prerequisites"
 >;
 
 const STATUS_CONFIG: Record<ProposalStatus, { color: string; label: string; icon: React.ReactNode }> = {
@@ -155,7 +155,6 @@ export default function TeacherCourseProposalsPage() {
       title: proposal.title,
       description: proposal.description,
       learningObjectives: proposal.learningObjectives,
-      syllabus: proposal.syllabus,
       level: proposal.level,
       gradeLevel: SUPPORTED_GRADE_LEVELS.find((grade) => grade === proposal.gradeLevel), // an older one is chosen again
       prerequisites: proposal.prerequisites,
@@ -402,10 +401,10 @@ export default function TeacherCourseProposalsPage() {
               />
             </Form.Item>
 
-            <Form.Item name="level" label="Cấp độ (tùy chọn)">
+            <Form.Item name="level" label="Trình độ (tùy chọn)">
               <Select
                 allowClear
-                placeholder="Chọn cấp độ"
+                placeholder="Chọn trình độ"
                 options={COURSE_LEVELS.map((l) => ({ value: l, label: COURSE_LEVEL_LABELS[l] }))}
               />
             </Form.Item>
@@ -422,10 +421,6 @@ export default function TeacherCourseProposalsPage() {
 
           <Form.Item name="learningObjectives" label="Mục tiêu học tập">
             <TextArea rows={2} placeholder="Học viên sẽ đạt được những kiến thức gì..." />
-          </Form.Item>
-
-          <Form.Item name="syllabus" label="Khung giáo trình (Syllabus)">
-            <TextArea rows={3} placeholder="Tóm tắt các chủ đề hoặc bài học..." />
           </Form.Item>
 
           <Form.Item name="prerequisites" label="Yêu cầu tiên quyết">

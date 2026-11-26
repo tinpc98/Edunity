@@ -28,18 +28,13 @@ import {
 import dayjs from "dayjs";
 import { AdminPageHero, AdminFilterBar, AdminTableCard } from "../../../components/admin";
 import { courseProposalService } from "../../../services/courseProposal.service";
-import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 import type {
   CourseProposal,
   ProposalStatus,
-  ApproveProposalPayload,
   ReviewProposalPayload,
-  GradeLevel,
 } from "../../../types/catalog";
 import {
-  offeredGradeLevels,
-  isForeignLanguageCategory,
   GRADE_LEVEL_LABELS,
   COURSE_LEVEL_LABELS,
   PROPOSAL_STATUSES,
@@ -54,10 +49,9 @@ const STATUS_CONFIG: Record<ProposalStatus, { color: string; label: string; icon
   REJECTED: { color: "error", label: "Từ chối", icon: <CloseCircleOutlined /> },
 };
 
-type ReviewActionType = "approve" | "reject" | "request-changes";
+type ReviewActionType = "reject" | "request-changes";
 
 interface ReviewFormValues {
-  gradeLevel?: GradeLevel;
   reviewNote?: string;
 }
 
@@ -136,13 +130,6 @@ export default function AdminCourseProposalsPage() {
     }
   }, [page, totalPages, updateSearchParams]);
 
-  // Categories for gradeLevel filtering (BR-45)
-  const { data: categories = [] } = useQuery({
-    queryKey: ["admin-categories"],
-    queryFn: () => catalogService.listCategories(),
-    staleTime: 60_000,
-  });
-
   // Query single proposal detail when Detail Modal is open (CUR-04-FE-04)
   const {
     data: proposalDetailData,
@@ -161,8 +148,8 @@ export default function AdminCourseProposalsPage() {
 
   // Approve mutation
   const approveMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: ApproveProposalPayload }) =>
-      courseProposalService.approveProposal(id, payload),
+    mutationFn: ({ id, revisionNumber }: CourseProposal) =>
+      courseProposalService.approveProposal(id, { revisionNumber }),
     onSuccess: (data) => {
       messageApi.success(`Đã phê duyệt đề xuất! Khóa học "${data.course?.title || ""}" đã được đưa vào danh mục.`);
       queryClient.invalidateQueries({ queryKey: ["admin-course-proposals"] });
@@ -172,16 +159,12 @@ export default function AdminCourseProposalsPage() {
       queryClient.invalidateQueries({ queryKey: ["teacher-catalog-courses"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-proposals"] });
       queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
-      setActionType(null);
       setIsDetailModalOpen(false);
-      reviewForm.resetFields();
     },
     onError: (err: unknown) => {
       messageApi.error(getFriendlyErrorMessage(err, "Lỗi khi phê duyệt đề xuất."));
       const code = (err as { code?: string }).code;
       if (code === "COURSE_PROPOSAL_CHANGED" || code === "COURSE_PROPOSAL_NOT_PENDING") {
-        // What is on screen is stale: close the confirmation and show the current proposal
-        setActionType(null);
         queryClient.invalidateQueries({ queryKey: ["admin-course-proposals"] });
         queryClient.invalidateQueries({ queryKey: ["admin-course-proposal-detail"] });
       }
@@ -230,45 +213,18 @@ export default function AdminCourseProposalsPage() {
     setSelectedProposal(proposal);
     setActionType(type);
     reviewForm.resetFields();
-    if (type === "approve") {
-      const cat = categories.find((c) => c.id === proposal.categoryId);
-      const allowedGrades = offeredGradeLevels(cat);
-      const validGradeLevel =
-        proposal.gradeLevel && (allowedGrades as readonly string[]).includes(proposal.gradeLevel)
-          ? proposal.gradeLevel
-          : undefined;
-      reviewForm.setFieldsValue({
-        gradeLevel: validGradeLevel,
-        reviewNote: "",
-      });
-    }
   };
-
-  const selectedProposalCategory = categories.find(
-    (c) => c.id === selectedProposal?.categoryId
-  );
-  const allowedProposalGradeLevels: readonly GradeLevel[] = offeredGradeLevels(selectedProposalCategory);
-  const isLanguageProposal = isForeignLanguageCategory(selectedProposalCategory);
 
   const handleExecuteAction = (values: ReviewFormValues) => {
     if (!selectedProposal || !actionType) return;
-    if (actionType === "approve") {
-      approveMutation.mutate({
-        id: selectedProposal.id,
-        payload: {
-          gradeLevel: values.gradeLevel ?? null, // a cleared select must not fall back to the teacher's grade
-          revisionNumber: selectedProposal.revisionNumber,
-          reviewNote: values.reviewNote?.trim() || undefined,
-        },
-      });
-    } else if (actionType === "reject") {
+    if (actionType === "reject") {
       rejectMutation.mutate({
         id: selectedProposal.id,
         payload: {
           reviewNote: values.reviewNote?.trim() || undefined,
         },
       });
-    } else if (actionType === "request-changes") {
+    } else {
       requestChangesMutation.mutate({
         id: selectedProposal.id,
         payload: {
@@ -445,12 +401,15 @@ export default function AdminCourseProposalsPage() {
                         size="small"
                         type="primary"
                         className="bg-emerald-600 hover:bg-emerald-700"
-                        onClick={() => handleOpenReview(record, "approve")}
+                        loading={approveMutation.isPending && approveMutation.variables?.id === record.id}
+                        disabled={isSubmitting}
+                        onClick={() => approveMutation.mutate(record)}
                       >
                         Duyệt
                       </Button>
                       <Button
                         size="small"
+                        disabled={isSubmitting}
                         className="text-amber-600 border-amber-300 hover:border-amber-500"
                         onClick={() => handleOpenReview(record, "request-changes")}
                       >
@@ -459,6 +418,7 @@ export default function AdminCourseProposalsPage() {
                       <Button
                         size="small"
                         danger
+                        disabled={isSubmitting}
                         onClick={() => handleOpenReview(record, "reject")}
                       >
                         Từ chối
@@ -519,9 +479,10 @@ export default function AdminCourseProposalsPage() {
                 <Button
                   key="approve"
                   type="primary"
+                  loading={approveMutation.isPending}
                   disabled={isSubmitting}
                   className="bg-emerald-600 hover:bg-emerald-700"
-                  onClick={() => handleOpenReview(activeProposal, "approve")}
+                  onClick={() => approveMutation.mutate(activeProposal)}
                 >
                   Duyệt
                 </Button>,
@@ -633,63 +594,6 @@ export default function AdminCourseProposalsPage() {
                 </div>
               )}
 
-              {activeProposal.syllabusDraft && (
-                <div>
-                  <h4 className="font-semibold text-gray-800">Đề cương có cấu trúc (Teacher đề xuất):</h4>
-                  {activeProposal.syllabusDraft.summary && (
-                    <p className="text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg border border-gray-100 mt-1">
-                      {activeProposal.syllabusDraft.summary}
-                    </p>
-                  )}
-                  {activeProposal.syllabusDraft.units?.length ? (
-                    <ol className="list-decimal space-y-2 bg-gray-50 p-3 pl-8 rounded-lg border border-gray-100 mt-1">
-                      {activeProposal.syllabusDraft.units.map((unit, index) => (
-                        <li key={`${unit.unitOrder}-${unit.title}-${index}`}>
-                          <div className="font-medium text-gray-700">{unit.title}</div>
-                          {unit.description && <div className="text-gray-600">{unit.description}</div>}
-                          {unit.learningObjectives && (
-                            <div className="text-gray-600">Mục tiêu: {unit.learningObjectives}</div>
-                          )}
-                          {unit.topics?.length ? (
-                            <div className="text-gray-500">Chủ đề: {unit.topics.join(" · ")}</div>
-                          ) : null}
-                          {unit.durationMinutes != null && (
-                            <div className="text-xs text-gray-500">{unit.durationMinutes} phút</div>
-                          )}
-                        </li>
-                      ))}
-                    </ol>
-                  ) : !activeProposal.syllabusDraft.summary ? (
-                    <p className="text-gray-500 text-sm mt-1">Chưa có nội dung đề cương có cấu trúc.</p>
-                  ) : null}
-                </div>
-              )}
-
-              {activeProposal.pricingExpectation && (
-                <div>
-                  <h4 className="font-semibold text-gray-800">Kỳ vọng giá (chỉ mang tính đề xuất):</h4>
-                  <div className="text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100 mt-1 space-y-1">
-                    <div>
-                      Loại lớp: {activeProposal.pricingExpectation.suggestedClassType || "Chưa đề xuất"}
-                    </div>
-                    <div>
-                      Khoảng giá:{" "}
-                      {activeProposal.pricingExpectation.suggestedMinPrice != null ||
-                      activeProposal.pricingExpectation.suggestedMaxPrice != null
-                        ? `${activeProposal.pricingExpectation.suggestedMinPrice?.toLocaleString("vi-VN") ?? "—"} – ${activeProposal.pricingExpectation.suggestedMaxPrice?.toLocaleString("vi-VN") ?? "—"} đ`
-                        : "Chưa đề xuất"}
-                    </div>
-                    <div>Số buổi dự kiến: {activeProposal.pricingExpectation.estimatedSessions ?? "Chưa xác định"}</div>
-                    {activeProposal.pricingExpectation.notes && (
-                      <div>Ghi chú: {activeProposal.pricingExpectation.notes}</div>
-                    )}
-                    <div className="text-xs text-amber-700">
-                      Đây không phải giá áp dụng; giáo viên đặt học phí khi tạo lớp, trong giới hạn của Edunity.
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {activeProposal.syllabus && (
                 <div>
                   <h4 className="font-semibold text-gray-800">Khung chương trình (Syllabus):</h4>
@@ -743,13 +647,11 @@ export default function AdminCourseProposalsPage() {
       </Modal>
 
       {/* ================================================= */}
-      {/* MODAL: REVIEW ACTION (APPROVE / REJECT / NEED_CHANGES) */}
+      {/* MODAL: REVIEW ACTION (REJECT / NEED_CHANGES) */}
       {/* ================================================= */}
       <Modal
         title={
-          actionType === "approve"
-            ? "Phê duyệt đề xuất khóa học"
-            : actionType === "reject"
+          actionType === "reject"
             ? "Từ chối đề xuất khóa học"
             : "Yêu cầu giáo viên chỉnh sửa đề xuất"
         }
@@ -766,56 +668,6 @@ export default function AdminCourseProposalsPage() {
           onFinish={handleExecuteAction}
           className="mt-4"
         >
-          {actionType === "approve" && (
-            <>
-              <Alert
-                type="info"
-                message={`Khóa học "${selectedProposal?.title ?? ""}" sẽ được tạo ở trạng thái Hoạt động`}
-                description="Giáo viên có thể chọn khóa học này để tạo lớp và người gửi đề xuất sẽ nhận thông báo."
-                showIcon
-                className="mb-4"
-              />
-              {!selectedProposal?.level && (
-                <Alert
-                  type="warning"
-                  message="Đề xuất chưa có cấp độ"
-                  description="Sau khi duyệt, cần bổ sung cấp độ ở trang Khóa học thì giáo viên mới tạo lớp được."
-                  showIcon
-                  className="mb-4"
-                />
-              )}
-
-              <Form.Item
-                name="gradeLevel"
-                label={isLanguageProposal ? "Khối lớp áp dụng (tùy chọn)" : "Xác nhận khối lớp áp dụng"}
-                rules={[
-                  {
-                    required: !isLanguageProposal,
-                    message: "Chọn khối: Lớp 6–12 hoặc Ôn thi đại học.",
-                  },
-                ]}
-              >
-                <Select
-                  allowClear={isLanguageProposal}
-                  disabled={allowedProposalGradeLevels.length === 0}
-                  placeholder={
-                    isLanguageProposal ? "Không theo khối" : allowedProposalGradeLevels.length === 0
-                      ? "Danh mục ngoài phạm vi Lớp 6–12 và Ôn thi đại học"
-                      : "Chọn khối lớp phù hợp"
-                  }
-                  options={allowedProposalGradeLevels.map((g) => ({
-                    value: g,
-                    label: GRADE_LEVEL_LABELS[g],
-                  }))}
-                />
-              </Form.Item>
-
-              <Form.Item name="reviewNote" label="Ghi chú cho giáo viên (tùy chọn)">
-                <TextArea rows={3} placeholder="Nội dung lời nhắn đến giáo viên..." />
-              </Form.Item>
-            </>
-          )}
-
           {actionType === "reject" && (
             <>
               <Alert
@@ -852,7 +704,7 @@ export default function AdminCourseProposalsPage() {
               >
                 <TextArea
                   rows={3}
-                  placeholder="Ghi rõ các điểm cần bổ sung (ví dụ: syllabus chi tiết hơn, mục tiêu học tập...)"
+                  placeholder="Ghi rõ các điểm cần bổ sung..."
                 />
               </Form.Item>
             </>
@@ -867,16 +719,12 @@ export default function AdminCourseProposalsPage() {
               htmlType="submit"
               loading={isSubmitting}
               className={
-                actionType === "approve"
-                  ? "bg-emerald-600 hover:bg-emerald-700"
-                  : actionType === "reject"
+                actionType === "reject"
                   ? "bg-red-600 hover:bg-red-700"
                   : "bg-amber-600 hover:bg-amber-700"
               }
             >
-              {actionType === "approve"
-                ? "Xác nhận Phê duyệt"
-                : actionType === "reject"
+              {actionType === "reject"
                 ? "Xác nhận Từ chối"
                 : "Gửi yêu cầu chỉnh sửa"}
             </Button>

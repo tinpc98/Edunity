@@ -100,7 +100,7 @@ export const sessionService = {
   },
 
   /**
-   * Teacher of the class or its enrolled students: the session's materials, each with a short-lived download URL.
+   * Admin, class teacher or enrolled students: materials with short-lived download URLs.
    * GET /api/sessions/:id/materials
    */
   async listMaterials(sessionId: string): Promise<SessionMaterial[]> {

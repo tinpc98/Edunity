@@ -222,7 +222,7 @@ export default function SessionMaterials({ sessionId, canManage = false }: Sessi
             </Button>
           </Upload>
           <div className="text-xs text-gray-500 mt-1.5">
-            PDF, Word, PowerPoint hoặc ảnh, tối đa {MAX_MATERIAL_MB} MB mỗi tệp và {MAX_MATERIALS} tệp mỗi buổi. Chỉ học viên đã đăng ký lớp xem được.
+            PDF, Word, PowerPoint hoặc ảnh, tối đa {MAX_MATERIAL_MB} MB mỗi tệp và {MAX_MATERIALS} tệp mỗi buổi. Quản trị viên và học viên đã đăng ký lớp có thể xem tài liệu.
             {' '}PDF, ảnh và Word (.docx) xem được ngay trên trang; nên lưu slide PowerPoint thành PDF để học viên xem trực tiếp.
           </div>
         </div>

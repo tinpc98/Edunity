@@ -113,6 +113,7 @@ exports.livekitWebhook = async (req, res, next) => {
 
 // Admin — class approval & lifecycle
 exports.listPendingClasses = handle((req) => adminClasses.listPendingClasses(parsePaging(req.query)));
+exports.adminListClasses = handle((req) => adminClasses.listClasses(req.query, parsePaging(req.query)));
 exports.getClassForReview = handle((req) => adminClasses.getClassForReview(req.params.id));
 exports.getClassReadiness = handle((req) => adminClasses.getClassReadiness(req.params.id));
 exports.approveClass = handle((req) => adminClasses.approveClass(req.user.id, req.params.id, body(req)));

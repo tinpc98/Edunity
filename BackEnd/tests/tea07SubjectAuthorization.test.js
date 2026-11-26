@@ -107,7 +107,7 @@ describe("TASK TEA-07: Teacher Subject Authorization Suite", () => {
       expect(paths.subjectId.isRequired).toBe(true);
       expect(paths.categoryId.isRequired).toBe(true);
       expect(paths.gradeLevel).toBeDefined();
-      expect(paths.level.options.enum).toEqual(["BEGINNER", "INTERMEDIATE", "ADVANCED"]);
+      expect(paths.level.options.enum).toEqual(["BEGINNER", "INTERMEDIATE", "ADVANCED", "ALL_AGES"]);
       expect(paths.status.options.enum).toEqual(["PENDING", "APPROVED", "SUSPENDED"]);
       expect(paths.status.options.default).toBe("PENDING");
       expect(paths.approvedBy).toBeDefined();

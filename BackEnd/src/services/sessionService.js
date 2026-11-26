@@ -508,7 +508,7 @@ const presentMaterial = (content) => {
 
 const materialsOf = (session) => [...(session.contents || [])].sort((a, b) => a.order - b.order).map(presentMaterial);
 
-/** The teacher of the class, and its students with a confirmed enrollment, read the materials of a session. */
+/** Admins, the class teacher and its enrolled students can read the session materials. */
 const listSessionMaterials = async (user, sessionId) => {
   if (!mongoose.isValidObjectId(sessionId)) throw sessionNotFound();
   const session = await Session.findById(sessionId).select("teacherId classId contents").lean();
@@ -519,7 +519,7 @@ const listSessionMaterials = async (user, sessionId) => {
     const enrolled = await Enrollment.exists({ studentId: user.id, classId: session.classId, enrollmentStatus: { $in: ["CONFIRMED", "COMPLETED"] } });
     if (!enrolled) throw new AppError("Not enrolled in this class", "NOT_ENROLLED", 403);
   } else if (user.role !== "ADMIN") {
-    throw FORBIDDEN("Only the class's teacher and students can read its materials");
+    throw FORBIDDEN("Only admins, the class's teacher and its students can read its materials");
   }
   return materialsOf(session);
 };

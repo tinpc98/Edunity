@@ -10,6 +10,8 @@ import type {
   ClassListFilters,
   PaginatedClasses,
   ClassStudentRosterItem,
+  ClassStatus,
+  ClassType,
 } from "../types/class";
 import {
   adaptClassFromApi,
@@ -35,11 +37,20 @@ export const classKeys = {
   teacherDetail: (id: string) => ["classes", "teacher", "detail", id] as const,
   teacherStudents: (id: string, status?: string) => ["classes", "teacher", "students", id, status] as const,
   adminPending: (filters?: Record<string, any>) => ["classes", "admin", "pending", filters] as const,
+  adminList: (filters: AdminClassListParams) => ["classes", "admin", "list", filters] as const,
   adminDetail: (id: string) => ["classes", "admin", "detail", id] as const,
   // Nested under each detail key, so invalidating the detail refreshes its readiness too
   teacherReadiness: (id: string) => ["classes", "teacher", "detail", id, "readiness"] as const,
   adminReadiness: (id: string) => ["classes", "admin", "detail", id, "readiness"] as const,
 };
+
+interface AdminClassListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: ClassStatus;
+  classType?: ClassType;
+}
 
 function buildQueryString(params: Record<string, any>): string {
   const query = new URLSearchParams();
@@ -144,6 +155,17 @@ export const classService = {
   },
 
   // ---------------- ADMIN API ----------------
+  async listAdminClasses(params: AdminClassListParams): Promise<PaginatedClasses> {
+    const data = await apiClient<{
+      items: ApiClass[];
+      total: number;
+      page: number;
+      pageSize: number;
+      totalPages?: number;
+    }>(`/admin/classes${buildQueryString(params)}`);
+    return adaptClassListFromApi(data);
+  },
+
   async listPendingClasses(
     params: { page?: number; pageSize?: number } = {}
   ): Promise<PaginatedClasses> {
