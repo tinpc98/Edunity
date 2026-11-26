@@ -100,7 +100,8 @@ export default function TeacherSubjectAuthorizationCard() {
             <Tag key={authorization.id} color={AUTH_STATUS[authorization.status].color} className="!m-0 px-2 py-1">
               {authorization.categoryName} · {formatSubjectLabel(authorization.subjectName, undefined, authorization.categoryName)}
               {authorization.gradeLevel ? ` · ${GRADE_LEVEL_LABELS[authorization.gradeLevel]}` : " · Không theo khối"}
-              {` · ${COURSE_LEVEL_LABELS[authorization.level]} · ${AUTH_STATUS[authorization.status].label}`}
+              {authorization.level ? ` · ${COURSE_LEVEL_LABELS[authorization.level]}` : ""}
+              {` · ${AUTH_STATUS[authorization.status].label}`}
               {authorization.reviewNote ? ` · ${authorization.reviewNote}` : ""}
             </Tag>
           ))}

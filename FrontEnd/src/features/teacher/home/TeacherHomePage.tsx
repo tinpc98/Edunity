@@ -1,5 +1,6 @@
 import { Row, Col, Skeleton, Alert, Button } from "antd";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import TeacherWelcomeHero from "./components/TeacherWelcomeHero";
 import DashboardStatCard from "../../../components/dashboard/DashboardStatCard";
 import TodaySchedule from "./components/TodaySchedule";
@@ -11,6 +12,7 @@ import {
   getVerificationGuidanceMessage,
   useTeacherVerification,
 } from "../../../hooks/useTeacherVerification";
+import { teacherContractService } from "../../../services/teacherContract.service";
 import { ROUTES } from "../../../routes/routePaths";
 import { getFriendlyErrorMessage } from "../../../utils/apiErrorMap";
 import {
@@ -20,6 +22,7 @@ import {
   StarOutlined,
   SafetyCertificateFilled,
   ReloadOutlined,
+  FileProtectOutlined,
 } from "@ant-design/icons";
 
 export default function TeacherHomePage() {
@@ -34,6 +37,14 @@ export default function TeacherHomePage() {
     refetch: refetchVerification,
   } = useTeacherVerification();
   const verificationGuidance = getVerificationGuidanceMessage(verificationStatus);
+
+  const { data: myContracts = [] } = useQuery({
+    queryKey: ["teacher-contracts"],
+    queryFn: teacherContractService.listMine,
+    enabled: Boolean(isTeacher && isVerified),
+  });
+  const pendingContract = myContracts.find((c) => c.status === "PENDING_SIGNATURE");
+  const hasActiveContract = myContracts.some((c) => c.status === "ACTIVE" || c.status === "SIGNED");
 
   const {
     teacherName,
@@ -161,6 +172,33 @@ export default function TeacherHomePage() {
           className="rounded-2xl shadow-sm"
           title="Hồ sơ xác minh đang chờ Admin xét duyệt"
           description="Edunity đã nhận hồ sơ chuyên môn của bạn và đang tiến hành thẩm định. Quyền tạo lớp học sẽ được kích hoạt ngay sau khi hồ sơ được phê duyệt."
+        />
+      );
+    }
+
+    if (verification.verificationStatus === "VERIFIED" && pendingContract && !hasActiveContract) {
+      return (
+        <Alert
+          type="warning"
+          showIcon
+          icon={<FileProtectOutlined />}
+          className="rounded-2xl shadow-sm"
+          title={`Hợp đồng cộng tác giảng dạy (${pendingContract.contractCode}) đang chờ bạn ký điện tử`}
+          description={
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-1">
+              <span className="text-sm text-slate-700">
+                Hồ sơ xác minh giáo viên của bạn đã được Admin phê duyệt. Vui lòng đọc và ký hợp đồng cộng tác giảng dạy (phân chia doanh thu 90% Giáo viên / 10% Edunity) để kích hoạt quyền tạo lớp học mới.
+              </span>
+              <Link to={ROUTES.TEACHER.PROFILE} className="self-start sm:self-auto shrink-0">
+                <Button
+                  type="primary"
+                  className="bg-teal-600 hover:bg-teal-700 font-semibold rounded-lg"
+                >
+                  Đọc & Ký hợp đồng ngay
+                </Button>
+              </Link>
+            </div>
+          }
         />
       );
     }

@@ -29,13 +29,22 @@ router.post("/admin/teacher-verifications/:teacherId/identity/reveal", admin, co
 router.post("/admin/teacher-verifications/:teacherId/approve", admin, controller.approveVerification);
 router.post("/admin/teacher-verifications/:teacherId/reject", admin, controller.rejectVerification);
 
-// Teacher contracts (TEA-12 / BAO-06..08)
+// Teacher contracts (TEA-12 / BAO-06..08 / Internal eContract)
 const contractController = require("../controllers/contractController");
 router.get("/teacher/contracts", teacher, contractController.listMyContracts);
+router.get("/teacher/contracts/:id", teacher, contractController.getMyContractDetail);
+router.get("/teacher/contracts/:id/pdf", teacher, contractController.getMyContractPdf);
+router.post("/teacher/contracts/:id/sign", teacher, contractController.signMyContract);
+router.post("/teacher/contracts/:id/reject", teacher, contractController.rejectMyContract);
 router.post("/teacher/contracts/:id/sandbox-sign", teacher, contractController.sandboxSign);
+router.get("/admin/contracts", admin, contractController.adminListAllContracts);
+router.get("/admin/contracts/:id", admin, contractController.adminGetContractDetail);
+router.get("/admin/contracts/:id/pdf", admin, contractController.adminGetContractPdf);
 router.get("/admin/teachers/:teacherId/contracts", admin, contractController.adminListContracts);
 router.post("/admin/teachers/:teacherId/contracts", admin, contractController.adminCreateContract);
+router.post("/admin/teachers/:teacherId/contracts/retry", admin, contractController.adminRetryContract);
 router.post("/admin/contracts/:id/end", admin, contractController.adminEndContract);
+router.get("/contracts/verify/:code", contractController.verifyContractPublic);
 router.post("/contracts/econtract-webhook", contractController.econtractWebhook);
 
 // Teacher payout bank account (BAO-09)
