@@ -503,6 +503,7 @@ const reviewVerification = async (adminId, teacherId, body, status) => {
     session.endSession();
   }
 
+  let contractGeneration = null;
   if (status === "VERIFIED") {
     // Teaching rights follow the approved profile. A failure here is not fatal: the class gate grants them on demand.
     try {
@@ -510,27 +511,32 @@ const reviewVerification = async (adminId, teacherId, body, status) => {
     } catch (err) {
       console.error("[teacher-verification] granting teaching authorizations failed:", err.message);
     }
-    // Next step for the teacher: sign the teaching contract. Not sent again while one is current or awaiting signature.
-    // A failure (e.g. no e-contract provider configured) leaves sending it to the Admin, as before.
+    // Next step for the teacher: sign the teaching contract. Automatically generated with personalized PDF.
     try {
       const contracts = require("./teacherContractService");
-      const current = await contracts.verifyContract({ teacherId: teacher._id, now });
-      const stillCurrent =
-        current &&
-        (current.status === "PENDING_SIGNATURE" ||
-          current.status === "NOT_YET_EFFECTIVE" ||
-          (current.status === "ACTIVE" && new Date(current.expiresAt) > now));
-      if (!stillCurrent) {
-        await contracts.adminCreateContract(adminId, teacher._id.toString(), { note: "Tự động gửi sau khi duyệt hồ sơ giáo viên" });
-      }
+      const result = await contracts.ensureContractOnVerificationApproved(adminId, teacher._id.toString(), {
+        note: "Tự động gửi sau khi duyệt hồ sơ giáo viên",
+      });
+      contractGeneration = {
+        status: result.outcome,
+        contractId: result.contract.id,
+        contractCode: result.contract.contractCode,
+        contractStatus: result.contract.status,
+      };
     } catch (err) {
       console.error("[teacher-verification] sending the teaching contract failed:", err.message);
+      contractGeneration = {
+        status: "FAILED",
+        error: err.message,
+        canRetry: true,
+      };
     }
     await notify(teacher._id, "Hồ sơ giáo viên đã được xác minh", "Bạn có thể tạo lớp học và gửi duyệt.", "TEACHER_VERIFIED");
   } else {
     await notify(teacher._id, "Hồ sơ giáo viên bị từ chối", body.reviewNote, "TEACHER_VERIFICATION_REJECTED");
   }
-  return adminGetVerification(teacher._id);
+  const view = await adminGetVerification(teacher._id);
+  return contractGeneration ? { ...view, contractGeneration } : view;
 };
 
 /**

@@ -21,6 +21,7 @@ export const ROUTES = {
   COURSE_DETAIL: "/courses/:courseId",
   CAMPAIGNS: "/campaigns",
   CAMPAIGN_DETAIL: "/campaigns/:campaignId",
+  CONTRACT_VERIFY: "/contracts/verify/:code",
   AUTH: {
     LOGIN: "/login",
     FORGOT_PASSWORD: "/forgot-password",

@@ -2,7 +2,7 @@ import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App as AntdApp, Button, Form, Input, Modal, Select, Skeleton, Space, Tag } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { DownOutlined, PlusOutlined, UpOutlined } from "@ant-design/icons";
 import { teacherSubjectAuthorizationService } from "../../../services/teacherSubjectAuthorization.service";
 import { courseCatalogService as catalogService } from "../../../services/courseCatalog.service";
 import { GRADE_LEVEL_LABELS, COURSE_LEVELS, COURSE_LEVEL_LABELS, offeredGradeLevels, isForeignLanguageCategory } from "../../../types/catalog";
@@ -30,6 +30,7 @@ export default function TeacherSubjectAuthorizationCard() {
   const { user } = useAuthStore();
   const { isTeacher } = useTeacherVerification();
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [showAllAuthorizations, setShowAllAuthorizations] = useState(false);
   const [requestForm] = Form.useForm<AuthorizationFormValues>();
 
   const categoriesQuery = useQuery({
@@ -95,16 +96,36 @@ export default function TeacherSubjectAuthorizationCard() {
           action={<Button size="small" onClick={() => authorizationsQuery.refetch()}>Thử lại</Button>}
         />
       ) : authorizations.length ? (
-        <Space wrap>
-          {authorizations.map((authorization: TeacherSubjectAuthorization) => (
-            <Tag key={authorization.id} color={AUTH_STATUS[authorization.status].color} className="!m-0 px-2 py-1">
-              {authorization.categoryName} · {formatSubjectLabel(authorization.subjectName, undefined, authorization.categoryName)}
-              {authorization.gradeLevel ? ` · ${GRADE_LEVEL_LABELS[authorization.gradeLevel]}` : " · Không theo khối"}
-              {` · ${COURSE_LEVEL_LABELS[authorization.level]} · ${AUTH_STATUS[authorization.status].label}`}
-              {authorization.reviewNote ? ` · ${authorization.reviewNote}` : ""}
-            </Tag>
-          ))}
-        </Space>
+        <div className="flex flex-col gap-3">
+          <Space wrap>
+            {(showAllAuthorizations ? authorizations : authorizations.slice(0, 4)).map(
+              (authorization: TeacherSubjectAuthorization) => (
+                <Tag key={authorization.id} color={AUTH_STATUS[authorization.status].color} className="!m-0 px-2 py-1">
+                  {authorization.categoryName} · {formatSubjectLabel(authorization.subjectName, undefined, authorization.categoryName)}
+                  {authorization.gradeLevel ? ` · ${GRADE_LEVEL_LABELS[authorization.gradeLevel]}` : " · Không theo khối"}
+                  {authorization.level ? ` · ${COURSE_LEVEL_LABELS[authorization.level]}` : ""}
+                  {` · ${AUTH_STATUS[authorization.status].label}`}
+                  {authorization.reviewNote ? ` · ${authorization.reviewNote}` : ""}
+                </Tag>
+              )
+            )}
+          </Space>
+          {authorizations.length > 4 && (
+            <div>
+              <Button
+                type="link"
+                size="small"
+                icon={showAllAuthorizations ? <UpOutlined /> : <DownOutlined />}
+                onClick={() => setShowAllAuthorizations((prev) => !prev)}
+                className="!px-0 text-xs font-semibold text-teal-700 hover:text-teal-800"
+              >
+                {showAllAuthorizations
+                  ? "Thu gọn"
+                  : `Xem tất cả (${authorizations.length} quyền giảng dạy)`}
+              </Button>
+            </div>
+          )}
+        </div>
       ) : (
         <Alert
           type="info"

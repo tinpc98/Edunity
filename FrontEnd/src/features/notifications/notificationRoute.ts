@@ -132,6 +132,7 @@ export function getNotificationLabel(type: string | undefined): string {
   if (t.startsWith("REPORT_")) return "Khiếu nại";
   if (t.startsWith("REVIEW_")) return "Đánh giá";
   if (t.startsWith("CLASS_") || t.startsWith("COURSE_PROPOSAL_")) return "Lớp học";
+  if (t.startsWith("TEACHER_CONTRACT_") || t.startsWith("CONTRACT_")) return "Hợp đồng điện tử";
   if (t.startsWith("TEACHER_VERIF")) return "Xác minh giáo viên";
   if (t.includes("YELLOW") || t.includes("_RED") || t.includes("NO_SHOW") || t.includes("VIOLATION") || t.includes("DISCIPLINE")) {
     return "Cảnh báo";

@@ -85,6 +85,7 @@ import CoursesPage from "../features/course/CoursesPage";
 import CourseDetailPage from "../features/course/CourseDetailPage";
 import CampaignsPage from "../features/campaign/CampaignsPage";
 import PublicCampaignDetailPage from "../features/campaign/CampaignDetailPage";
+import ContractVerificationPage from "../features/contracts/ContractVerificationPage";
 import ClassroomPage from "../features/classroom/ClassroomPage";
 import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { MessagesPage } from "../features/messages/MessagesPage";
@@ -200,6 +201,10 @@ const router = createBrowserRouter([
       {
         path: ROUTES.CAMPAIGN_DETAIL,
         element: <PublicCampaignDetailPage />,
+      },
+      {
+        path: ROUTES.CONTRACT_VERIFY,
+        element: <ContractVerificationPage />,
       },
       {
         path: ROUTES.NOTIFICATIONS,

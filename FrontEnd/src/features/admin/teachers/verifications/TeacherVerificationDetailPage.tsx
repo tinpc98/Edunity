@@ -57,9 +57,17 @@ export default function TeacherVerificationDetailPage() {
 
   const approveMutation = useMutation({
     mutationFn: (reviewNote?: string) => teacherVerificationService.adminApproveVerification(teacherId as string, reviewNote),
-    onSuccess: () => {
-      message.success('Đã phê duyệt và cấp chứng nhận giáo viên thành công!');
+    onSuccess: (res: any) => {
+      const cg = res?.contractGeneration;
+      if (cg?.status === 'CREATED') {
+        message.success(`Đã phê duyệt giáo viên và tự động khởi tạo hợp đồng điện tử ${cg.contractCode} (Chờ giáo viên ký)!`);
+      } else if (cg?.status === 'FAILED') {
+        message.warning('Đã phê duyệt giáo viên, nhưng tạo hợp đồng tự động gặp lỗi. Vui lòng nhấn Đồng bộ/Tạo hợp đồng ở mục Hợp đồng.');
+      } else {
+        message.success('Đã phê duyệt và cấp chứng nhận giáo viên thành công!');
+      }
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verification', teacherId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-teacher-contracts', teacherId] });
       queryClient.invalidateQueries({ queryKey: ['admin-teacher-verifications'] });
       queryClient.invalidateQueries({ queryKey: adminUserKeys.summary() });
       setIsApproveModalOpen(false);
