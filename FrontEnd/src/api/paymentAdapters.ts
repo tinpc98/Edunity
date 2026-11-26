@@ -200,7 +200,12 @@ export function adaptTeacherEarnings(raw: any): TeacherEarningsResponse {
 
   const summary: TeacherEarningsSummary = {
     totalGross: parseDecimal(raw?.summary?.totalGross),
-    totalCommission: parseDecimal(raw?.summary?.totalCommission),
+    totalCommission: parseDecimal(
+      raw?.summary?.totalCommission ?? items.reduce(
+        (sum, item) => item.status === "CANCELLED" ? sum : sum + item.commissionAmount,
+        0,
+      ),
+    ),
     totalNet: parseDecimal(raw?.summary?.totalNet),
     pending: parseDecimal(raw?.summary?.pending),
     available: parseDecimal(raw?.summary?.available),

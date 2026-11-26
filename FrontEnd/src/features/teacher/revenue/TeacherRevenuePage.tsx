@@ -115,18 +115,18 @@ export default function TeacherRevenuePage() {
       ),
     },
     {
-      title: "Phí nền tảng (10%)",
+      title: "Phí nền tảng",
       dataIndex: "commissionAmount",
       key: "commissionAmount",
       align: "right",
       render: (amount: number) => (
         <span className="text-slate-500 text-xs">
-          - {formatVND(amount)}
+          {formatVND(amount ? -amount : 0)}
         </span>
       ),
     },
     {
-      title: "Thực nhận (90%)",
+      title: "Thực nhận",
       dataIndex: "netAmount",
       key: "netAmount",
       align: "right",
@@ -198,7 +198,7 @@ export default function TeacherRevenuePage() {
         <Col xs={24} sm={12} lg={8}>
           <Card className="rounded-2xl border-slate-200/80 shadow-xs">
             <Statistic
-              title={<span className="text-xs font-semibold text-slate-500 uppercase">Phí nền tảng (10%)</span>}
+              title={<span className="text-xs font-semibold text-slate-500 uppercase">Phí nền tảng</span>}
               value={rawSummary.totalCommission}
               formatter={(val) => formatVND(Number(val))}
               prefix={<PercentageOutlined className="text-amber-500 text-lg mr-2" />}
@@ -220,7 +220,7 @@ export default function TeacherRevenuePage() {
               valueStyle={{ color: "#059669", fontWeight: "bold" }}
             />
             <div className="mt-2 text-xs text-emerald-600/80">
-              Tổng thu nhập ròng 90% thuộc về Quý Thầy/Cô
+              Tổng thu nhập sau khi trừ phí nền tảng
             </div>
           </Card>
         </Col>

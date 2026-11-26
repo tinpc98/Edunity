@@ -111,9 +111,9 @@ export function useTeacherDashboard() {
   // Revenue computations
   const earningsSummary = earningsQuery.data?.summary;
   const earningsItems = useMemo(() => earningsQuery.data?.items || [], [earningsQuery.data]);
-  const totalNetRevenue = earningsSummary?.totalNet ? parseFloat(String(earningsSummary.totalNet)) : 0;
-  const totalGrossRevenue = earningsSummary?.totalGross ? parseFloat(String(earningsSummary.totalGross)) : 0;
-  const totalCommission = earningsSummary?.totalCommission ? parseFloat(String(earningsSummary.totalCommission)) : 0;
+  const totalNetRevenue = earningsSummary?.totalNet ?? 0;
+  const totalGrossRevenue = earningsSummary?.totalGross ?? 0;
+  const totalCommission = earningsSummary?.totalCommission ?? 0;
 
   // Monthly revenue for the last 6 months
   const monthlyRevenueData = useMemo(() => {
@@ -129,7 +129,7 @@ export function useTeacherDashboard() {
       const sumNet = earningsItems
         .filter((item) => {
           const itemDate = new Date(item.createdAt);
-          return itemDate.getUTCFullYear() === year && itemDate.getUTCMonth() === month;
+          return item.status !== "CANCELLED" && itemDate.getUTCFullYear() === year && itemDate.getUTCMonth() === month;
         })
         .reduce((sum, item) => sum + (item.netAmount || 0), 0);
 

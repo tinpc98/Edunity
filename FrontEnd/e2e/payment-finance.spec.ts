@@ -248,36 +248,60 @@ test.describe('E2E Browser Test Suite: Payment, Finance & PayOS Gates', () => {
     await expect(page).toHaveURL(/.*refunds.*/);
   });
 
-  // Flow 6: Teacher Earnings & Revenue Page
-  test('Flow 6: Teacher Revenue page displays earnings breakdown and platform fee', async ({ page }) => {
-    await setupAuth(page, {
+  test('Teacher overview and revenue show the recorded fee when the API omits the total', async ({ page }) => {
+    const teacher = {
       id: 'teacher-pr10',
+      userId: 'teacher-pr10',
       email: 'teacher@edunity.test',
       fullName: 'Teacher Minh',
       role: 'TEACHER',
       status: 'ACTIVE',
+    };
+    await setupAuth(page, teacher);
+    await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort());
+
+    const summary = { totalGross: 5000, totalNet: 4500, available: 4500 };
+    const item = {
+      id: 'earning-test',
+      className: 'Lớp kiểm thử học phí',
+      grossAmount: 5000,
+      commissionAmount: { $numberDecimal: '500' },
+      netAmount: 4500,
+      status: 'AVAILABLE',
+      createdAt: '2026-11-26T00:00:00.000Z',
+    };
+    const responses: Record<string, unknown> = {
+      '/api/auth/me': teacher,
+      '/api/teacher/verification': { verificationStatus: 'VERIFIED' },
+      '/api/teacher/classes': { items: [], page: 1, pageSize: 50, total: 0 },
+      '/api/teacher/earnings': {
+        summary,
+        items: [
+          item,
+          { ...item, id: 'refunded-earning', className: 'Lớp đã hoàn tiền', commissionAmount: '1000', status: 'CANCELLED' },
+        ],
+      },
+      '/api/teacher/settlements': { summary },
+      '/api/teacher/bank-account': {
+        bankName: 'VCB',
+        accountNumberMasked: '******1234',
+        accountHolderName: 'TEACHER MINH',
+        status: 'VERIFIED',
+        payoutLockedUntil: '2026-01-01T00:00:00.000Z',
+      },
+    };
+    await page.route((url) => url.pathname.startsWith('/api/'), (route) => {
+      const { pathname } = new URL(route.request().url());
+      return route.fulfill({ json: { success: true, data: responses[pathname] ?? [] } });
     });
 
-    await page.route('**/api/teacher/revenue**', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: {
-            totalGross: 10000000,
-            platformFeeRate: 0.1,
-            totalPlatformFee: 1000000,
-            totalNet: 9000000,
-            availableBalance: 9000000,
-            pendingBalance: 0,
-          },
-        }),
-      });
-    });
+    await page.goto('/teacher');
+    await expect(page.getByText('-500 đ', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /Xem chi tiết doanh thu/ }).click();
 
-    await page.goto('/teacher/revenue');
-    await expect(page).toHaveURL(/.*revenue.*/);
+    const feeSummary = page.locator('.ant-statistic').filter({ hasText: 'Phí nền tảng' });
+    await expect(feeSummary.locator('.ant-statistic-content-value')).toHaveText('500 đ');
+    await expect(page.getByRole('row', { name: /Lớp kiểm thử học phí/ })).toContainText('-500 đ');
   });
 
   // Flow 7: Teacher Withdrawal Request (Settlement Window)

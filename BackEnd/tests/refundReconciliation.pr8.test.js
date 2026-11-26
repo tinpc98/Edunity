@@ -1650,7 +1650,8 @@ describe("PR8: Safe Refund & Reconciliation Engine - Financial Closure & Bank Pr
     });
 
     test("F57: PR7: Teacher revenue stage breakdown aggregates 6 KPI buckets accurately", async () => {
-      await seedTuitionPaymentFixture({ earningStatus: "AVAILABLE", amount: 1000000 });
+      await seedTuitionPaymentFixture({ earningStatus: "AVAILABLE", amount: 5000 });
+      await seedTuitionPaymentFixture({ earningStatus: "CANCELLED", amount: 10000 });
 
       const res = await request(app)
         .get("/api/teacher/earnings")
@@ -1658,8 +1659,16 @@ describe("PR8: Safe Refund & Reconciliation Engine - Financial Closure & Bank Pr
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.summary).toBeDefined();
-      expect(res.body.data.summary.available).toBe(900000);
+      expect(res.body.data.summary).toMatchObject({
+        totalGross: 5000,
+        totalCommission: 500,
+        totalNet: 4500,
+        available: 4500,
+      });
+      expect(res.body.data.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ status: "AVAILABLE", commissionAmount: 500 }),
+        expect.objectContaining({ status: "CANCELLED", commissionAmount: 1000 }),
+      ]));
     });
 
     test("F58: FREE class enrollment never creates payment intents or teacher earnings", async () => {
