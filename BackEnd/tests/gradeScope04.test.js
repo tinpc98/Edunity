@@ -76,13 +76,13 @@ const newClass = (courseId, extra = {}) =>
   call(teacher, "post", "/teacher/classes", { courseId, className: "Lớp", classType: "PAID", price: 500000, capacity: 20, ...extra });
 const register = (gradeLevel) =>
   call(teacher, "post", "/teacher/subject-authorizations", { subjectId: subject._id, gradeLevel, level: "BEGINNER" });
-const propose = (gradeLevel) =>
+const propose = (gradeLevel, level = "BEGINNER") =>
   call(teacher, "post", "/teacher/course-proposals", {
     categoryId: category._id,
     subjectId: subject._id,
     title: "Khóa đề xuất",
     description: "Mô tả",
-    level: "BEGINNER",
+    level,
     gradeLevel,
   });
 
@@ -124,6 +124,18 @@ const makeOlder = async ({ id, course }, gradeLevel) => {
 };
 
 describe("The offered grades", () => {
+  test("an all-ages proposal keeps its submitted grade and level when approved directly", async () => {
+    const submitted = await propose("GRADE_8", "ALL_AGES");
+    expect(submitted.statusCode).toBe(201);
+    expect(submitted.body.data.level).toBe("ALL_AGES");
+    const proposal = await CourseProposal.findOne();
+    const approved = await call(admin, "post", `/admin/course-proposals/${proposal.id}/approve`, {
+      revisionNumber: proposal.revisionNumber,
+    });
+    expect(approved.statusCode).toBe(200);
+    expect(approved.body.data.course).toMatchObject({ level: "ALL_AGES", gradeLevel: "GRADE_8" });
+  });
+
   test("an ungraded language course needs the matching scope and can be opened under a verified teaching profile", async () => {
     await Category.updateOne({ _id: category._id }, { $set: { name: "Ngoại ngữ", slug: "ngoai-ngu" } });
     const issued = await call(admin, "post", "/admin/courses", {

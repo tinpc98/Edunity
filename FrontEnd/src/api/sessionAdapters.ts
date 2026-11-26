@@ -108,9 +108,9 @@ export function formatSessionTimeRange(startIso: string, endIso: string): string
 /** Same as the Backend (JOIN_WINDOW_BEFORE_MS): the room opens this many minutes before a session starts */
 export const JOIN_EARLY_MINUTES = 10;
 
-/** When the room of a SCHEDULED session opens, or null when it is open already */
+/** When a scheduled or waiting room can be entered, or null if the opening time has passed. */
 export const roomOpensLater = (session: { status: string; startDatetime: string }, now: number): Date | null => {
-  if (session.status !== "SCHEDULED") return null;
+  if (session.status !== "SCHEDULED" && session.status !== "WAITING") return null;
   const opensAt = new Date(new Date(session.startDatetime).getTime() - JOIN_EARLY_MINUTES * 60_000);
   return now < opensAt.getTime() ? opensAt : null;
 };

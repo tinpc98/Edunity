@@ -2,7 +2,7 @@ import { formatSubjectLabel } from "../../../utils/subjectLabel";
 import { useState } from 'react';
 import { 
   Typography, Breadcrumb, Tag, Button, Row, Col, Card, 
-  Modal, Input, Skeleton, Alert, message, List, Tooltip
+  Modal, Input, Skeleton, Alert, message, Collapse, Tooltip
 } from 'antd';
 import { 
   CheckCircleOutlined, 
@@ -17,8 +17,10 @@ import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../types/class';
 import { GRADE_LEVEL_LABELS } from '../../../types/catalog';
 import type { GradeLevel } from '../../../types/catalog';
 import { deriveScheduleText } from '../../../api/classAdapters';
+import { adaptSessions } from '../../../api/sessionAdapters';
 import { getFriendlyErrorMessage } from '../../../utils/apiErrorMap';
 import ClassReadinessCard from '../../../components/common/ClassReadinessCard';
+import SessionMaterials from '../../../components/common/SessionMaterials';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -311,25 +313,29 @@ export default function AdminClassDetailPage() {
             </Card>
 
             {/* Sessions Plan Card */}
-            <Card className="rounded-2xl shadow-sm border-gray-100 p-2" title={`Kế hoạch Buổi học (${cls.sessions?.length || 0} buổi)`}>
+            <Card className="rounded-2xl shadow-sm border-gray-100 p-2" title={`Buổi học và tài liệu (${cls.sessions?.length || 0} buổi)`}>
               {(!cls.sessions || cls.sessions.length === 0) ? (
                 <div className="py-6 text-center text-gray-400 text-sm">
                   Chưa có danh sách buổi học cụ thể.
                 </div>
               ) : (
-                <List
-                  dataSource={cls.sessions}
-                  renderItem={(session: any, index: number) => (
-                    <div key={session._id || index} className="p-3 border-b last:border-0 flex justify-between items-center text-sm">
-                      <div>
-                        <span className="font-semibold text-gray-800">Buổi {index + 1}: {session.title || session.className || 'Buổi học'}</span>
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          {session.startDatetime ? new Date(session.startDatetime).toLocaleString('vi-VN') : '-'}
+                <Collapse
+                  destroyOnHidden
+                  items={adaptSessions(cls.sessions).map((session, index) => ({
+                    key: session.id,
+                    label: (
+                      <div className="flex justify-between items-center gap-2 text-sm">
+                        <div>
+                          <span className="font-semibold text-gray-800">Buổi {index + 1}: {session.title || session.className || 'Buổi học'}</span>
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            {session.startDatetime ? new Date(session.startDatetime).toLocaleString('vi-VN') : '-'}
+                          </div>
                         </div>
+                        <Tag color="blue">{session.status || 'SCHEDULED'}</Tag>
                       </div>
-                      <Tag color="blue">{session.status || 'SCHEDULED'}</Tag>
-                    </div>
-                  )}
+                    ),
+                    children: <SessionMaterials sessionId={session.id} />,
+                  }))}
                 />
               )}
             </Card>

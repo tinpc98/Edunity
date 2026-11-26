@@ -127,8 +127,8 @@ export default function AdminHomePage() {
             value={finance ? finance.revenueThisMonth.toLocaleString("vi-VN") : "0"}
             suffix="đ"
             icon={<DollarOutlined />}
-            trend={finance && finance.commission > 0 ? `Hoa hồng: ${finance.commission.toLocaleString("vi-VN")}đ` : undefined}
-            trendDirection="up"
+            trend={finance ? `Phí nền tảng ${finance.commissionThisMonth.toLocaleString("vi-VN")}đ` : undefined}
+            trendDirection="neutral"
             detail={finance ? `${finance.transactions} giao dịch thành công` : undefined}
             variant="teal"
           />
@@ -142,7 +142,7 @@ export default function AdminHomePage() {
       <Row gutter={[20, 20]}>
         {/* Left Column: Live Filtered Financial Overview */}
         <Col xs={24} xl={15} className="flex flex-col gap-6">
-          <AdminFinanceOverview finance={finance} />
+          <AdminFinanceOverview />
         </Col>
 
         {/* Right Column: Scholarship & Recent Activities */}

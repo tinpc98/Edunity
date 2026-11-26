@@ -101,7 +101,7 @@ const validateAuthorizationScope = async (body = {}) => {
 
   const level = catalog.resolveLevel(body.level);
   if (!level) {
-    throw validationError("level is required and must be BEGINNER, INTERMEDIATE, or ADVANCED");
+    throw validationError("level is required");
   }
 
   const gradeLevel = requireGradeLevel(category, body.gradeLevel);

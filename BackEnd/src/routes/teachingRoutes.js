@@ -69,6 +69,7 @@ router.post("/admin/subject-authorizations/:id/approve", admin, controller.appro
 router.post("/admin/subject-authorizations/:id/suspend", admin, controller.suspendSubjectAuthorization);
 
 // Admin — class approval & Smart Classroom / Incident / Discipline / Reschedule / Refund review (TIN-05E)
+router.get("/admin/classes", admin, controller.adminListClasses);
 router.get("/admin/classes/pending", admin, controller.listPendingClasses);
 router.get("/admin/classes/:id", admin, controller.getClassForReview);
 router.get("/admin/classes/:id/readiness", admin, controller.getClassReadiness);

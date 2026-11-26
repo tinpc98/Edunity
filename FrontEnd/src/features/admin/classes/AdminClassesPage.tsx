@@ -14,16 +14,17 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ROUTES } from '../../../routes/routePaths';
 import { classService, classKeys } from '../../../services/class.service';
-import type { ClassModel, ClassStatus } from '../../../types/class';
+import type { ClassModel, ClassStatus, ClassType } from '../../../types/class';
 import { CLASS_STATUS_LABELS, CLASS_STATUS_COLORS } from '../../../types/class';
 
 export default function AdminClassesPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'pending' | 'all'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'all'>('all');
   const [pendingPage, setPendingPage] = useState(1);
   const [allPage, setAllPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<ClassStatus | 'all'>('all');
+  const [classTypeFilter, setClassTypeFilter] = useState<ClassType | 'all'>('all');
 
   const queryClient = useQueryClient();
   const [deleteTargetClass, setDeleteTargetClass] = useState<ClassModel | null>(null);
@@ -69,24 +70,20 @@ export default function AdminClassesPage() {
     staleTime: 1000 * 30,
   });
 
-  // 2. All Public / System Classes Query for monitoring (Backend endpoint: GET /api/classes)
+  const listParams = {
+    page: allPage,
+    pageSize: 10,
+    search: searchTerm.trim() || undefined,
+    status: statusFilter === 'all' ? undefined : statusFilter,
+    classType: classTypeFilter === 'all' ? undefined : classTypeFilter,
+  };
   const { 
     data: allData, 
     isLoading: isAllLoading
   } = useQuery({
-    queryKey: classKeys.publicList({ 
-      page: allPage, 
-      search: searchTerm || undefined, 
-      statuses: statusFilter !== 'all' ? statusFilter : undefined 
-    }),
-    queryFn: () => classService.getClasses({ 
-      page: allPage, 
-      pageSize: 10,
-      search: searchTerm || undefined,
-      statuses: statusFilter !== 'all' ? statusFilter : undefined,
-    }),
+    queryKey: classKeys.adminList(listParams),
+    queryFn: () => classService.listAdminClasses(listParams),
     enabled: activeTab === 'all',
-    staleTime: 1000 * 30,
   });
 
   const pendingCount = pendingData?.total ?? 0;
@@ -121,7 +118,7 @@ export default function AdminClassesPage() {
       render: (_: any, record: ClassModel) => (
         <div>
           <Tag color={record.classType === 'PAID' ? 'cyan' : 'green'} className="!m-0 font-bold text-xs">
-            {record.classType}
+            {record.classType === 'PAID' ? 'Có phí' : 'Miễn phí'}
           </Tag>
           <div className="text-xs font-semibold text-gray-700 mt-1">
             {record.formattedPrice}
@@ -244,9 +241,9 @@ export default function AdminClassesPage() {
                 <div>
                   <AdminFilterBar
                     title="Bộ lọc lớp học"
-                    gridClassName="md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_240px_auto]"
-                    hasFilter={searchTerm !== '' || statusFilter !== 'all'}
-                    onReset={() => { setSearchTerm(''); setStatusFilter('all'); setAllPage(1); }}
+                    gridClassName="md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_200px_180px_auto]"
+                    hasFilter={searchTerm !== '' || statusFilter !== 'all' || classTypeFilter !== 'all'}
+                    onReset={() => { setSearchTerm(''); setStatusFilter('all'); setClassTypeFilter('all'); setAllPage(1); }}
                   >
                     <AdminFilterField label="Tìm kiếm">
                     <Input
@@ -264,10 +261,18 @@ export default function AdminClassesPage() {
                       onChange={(v) => { setStatusFilter(v); setAllPage(1); }}
                       options={[
                         { value: 'all', label: 'Tất cả trạng thái' },
-                        { value: 'OPEN', label: 'Đang mở (OPEN)' },
-                        { value: 'IN_PROGRESS', label: 'Đang học (IN_PROGRESS)' },
-                        { value: 'COMPLETED', label: 'Hoàn thành (COMPLETED)' },
-                        { value: 'CANCELLED', label: 'Đã hủy (CANCELLED)' },
+                        ...Object.entries(CLASS_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+                      ]}
+                    />
+                    </AdminFilterField>
+                    <AdminFilterField label="Học phí">
+                    <Select
+                      value={classTypeFilter}
+                      onChange={(v) => { setClassTypeFilter(v); setAllPage(1); }}
+                      options={[
+                        { value: 'all', label: 'Tất cả mức học phí' },
+                        { value: 'FREE', label: 'Miễn phí' },
+                        { value: 'PAID', label: 'Có phí' },
                       ]}
                     />
                     </AdminFilterField>

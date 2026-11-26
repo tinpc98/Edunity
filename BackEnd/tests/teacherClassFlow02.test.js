@@ -148,6 +148,22 @@ describe("Creating and saving a DRAFT", () => {
     expect(res.body.data.pricingPolicyId).toBeNull();
   });
 
+  test("Admin lists new drafts and filters by tuition type before pagination", async () => {
+    const free = (await create({ className: "Lớp [thử] miễn phí", classType: "FREE", price: 0 })).body.data;
+    const paid = (await create()).body.data;
+    const deleted = (await create({ className: "Lớp đã xóa" })).body.data;
+    await Class.updateOne({ _id: deleted.id }, { $set: { isDeleted: true } });
+
+    const list = "/admin/classes?status=DRAFT";
+    const all = await call(admin, "get", `${list}&pageSize=1`);
+    expect(all.statusCode).toBe(200);
+    expect(all.body.data.total).toBe(2);
+    expect(all.body.data.items[0]._id).toBe(paid.id);
+    expect((await call(admin, "get", `${list}&classType=FREE&search=%5Bth%E1%BB%AD%5D`)).body.data.items.map((item) => item._id)).toEqual([free.id]);
+    expect((await call(admin, "get", `${list}&classType=PAID`)).body.data.items.map((item) => item._id)).toEqual([paid.id]);
+    expect((await call(teacher, "get", list)).statusCode).toBe(403);
+  });
+
   test.each([
     ["no authorization", () => revokeAuthorization(), "SUBJECT_AUTHORIZATION_REQUIRED"],
     ["an authorization for another grade", () => grant.authorization({ gradeLevel: "GRADE_11" }), "SUBJECT_AUTHORIZATION_REQUIRED"],
@@ -804,7 +820,7 @@ describe("Session materials", () => {
     expect((await upload(teacher, Buffer.concat([pdf, Buffer.alloc(21 * 1024 * 1024)]), "big.pdf", "application/pdf")).statusCode).toBe(413);
   });
 
-  test("the teacher attaches materials, enrolled students read them, the file downloads under its name", async () => {
+  test("the teacher attaches materials, admins and enrolled students read them, the file downloads under its name", async () => {
     const { classId, session } = await firstSession();
     const key = (await upload(teacher, zipWith("ppt/"), "Bài 1 – Đa thức.pptx", PPTX)).body.data.storageKey;
 
@@ -817,6 +833,12 @@ describe("Session materials", () => {
 
     const cls = await Class.findById(classId).lean();
     expect((await materials(session._id, student)).statusCode).toBe(403);
+    const adminRead = await materials(session._id, admin);
+    expect(adminRead.statusCode).toBe(200);
+    expect(adminRead.body.data[0]).toMatchObject({ id: added.body.data[0].id, title: "Bài 1 – Đa thức.pptx" });
+    const adminDownload = new URL(adminRead.body.data[0].url);
+    await request(app).get(adminDownload.pathname + adminDownload.search).expect(200);
+    expect((await call(admin, "delete", `/teacher/sessions/${session._id}/materials/${added.body.data[0].id}`)).statusCode).toBe(403);
     await Enrollment.create({ classId, courseId: cls.courseId, teacherId: teacher._id, studentId: student._id, enrollmentStatus: "CONFIRMED", paymentSource: "DIRECT_PAYMENT" });
     const read = await materials(session._id, student);
     expect(read.statusCode).toBe(200);
