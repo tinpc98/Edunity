@@ -316,18 +316,15 @@ export default function TeacherProfilePage() {
 
     if (status === "VERIFIED") {
       return (
-        <>
-          <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 flex items-start gap-3">
-            <CheckCircleFilled className="text-emerald-500 text-xl mt-0.5" />
-            <div className="flex-1">
-              <h4 className="text-emerald-800 font-bold m-0 text-base">Hồ sơ đã được xác minh</h4>
-              <p className="text-emerald-700 text-sm mt-1 mb-0">
-                Hồ sơ của bạn đã được quản trị viên phê duyệt. Bạn có thể mở lớp khi có hợp đồng giảng dạy còn hiệu lực.
-              </p>
-            </div>
+        <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 flex items-start gap-3">
+          <CheckCircleFilled className="text-emerald-500 text-xl mt-0.5" />
+          <div className="flex-1">
+            <h4 className="text-emerald-800 font-bold m-0 text-base">Hồ sơ đã được xác minh</h4>
+            <p className="text-emerald-700 text-sm mt-1 mb-0">
+              Hồ sơ của bạn đã được quản trị viên phê duyệt. Bạn có thể mở lớp khi có hợp đồng giảng dạy còn hiệu lực.
+            </p>
           </div>
-          <TeacherContractCard />
-        </>
+        </div>
       );
     }
 
@@ -414,68 +411,13 @@ export default function TeacherProfilePage() {
         <h1 className="text-2xl font-bold text-slate-800 leading-tight">Hồ sơ giáo viên</h1>
       </div>
 
-      {/* Verification Status Banner */}
+      {/* 1. Verification Status Banner */}
       <div className="bg-white rounded-2xl p-5 sm:px-6 border border-slate-100 shadow-sm flex flex-col gap-4">
         <h3 className="text-[17px] font-bold text-slate-800 m-0">Trạng thái xác minh giảng viên</h3>
         {renderVerificationStatus()}
-        {verificationSubmissions.length ? (
-          <div className="border-t border-slate-100 pt-4">
-            <h4 className="mb-3 text-sm font-bold text-slate-800">Lịch sử gửi và xử lý</h4>
-            <div className="space-y-3">
-              {verificationSubmissions.map((submission, index) => (
-                <div key={submission.key} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-800">
-                      Lần gửi {verificationSubmissions.length - index}
-                    </span>
-                    <Tag
-                      color={
-                        submission.status === "APPROVED"
-                          ? "success"
-                          : submission.status === "REJECTED"
-                            ? "error"
-                            : submission.status === "PENDING"
-                              ? "processing"
-                              : "default"
-                      }
-                    >
-                      {submission.status === "APPROVED"
-                        ? "Đã duyệt"
-                        : submission.status === "REJECTED"
-                          ? "Từ chối"
-                          : submission.status === "PENDING"
-                            ? "Chờ duyệt"
-                            : "Không rõ"}
-                    </Tag>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    Gửi lúc: {submission.submittedAt ? new Date(submission.submittedAt).toLocaleString("vi-VN") : "—"}
-                    {submission.reviewedAt
-                      ? ` · Xử lý lúc: ${new Date(submission.reviewedAt).toLocaleString("vi-VN")}`
-                      : ""}
-                  </div>
-                  {submission.reviewNote && (
-                    <p className="mb-0 mt-2 whitespace-pre-wrap text-sm text-slate-700">
-                      Ghi chú Admin: {submission.reviewNote}
-                    </p>
-                  )}
-                  {submission.documents
-                    .filter((doc) => doc.rejectionReason)
-                    .map((doc) => (
-                      <p key={doc._id ?? doc.documentType} className="mb-0 mt-1 text-sm text-rose-700">
-                        {doc.documentType === "IDENTITY" ? "Giấy tờ định danh" : "Bằng cấp / chứng chỉ"}: {doc.rejectionReason}
-                      </p>
-                    ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
 
-      <TeacherSubjectAuthorizationCard />
-
-      {/* Profile Header & Avatar Card */}
+      {/* 2. Profile Header & Avatar Card */}
       <div className="bg-white rounded-2xl p-5 sm:px-6 border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="relative">
@@ -513,7 +455,7 @@ export default function TeacherProfilePage() {
         </Upload>
       </div>
 
-      {/* Professional Information Card */}
+      {/* 2b. Professional Information Card */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
         <div className="p-5 sm:px-6 border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-[17px] font-bold text-slate-800 m-0">Thông tin chuyên môn & Giới thiệu</h3>
@@ -586,6 +528,78 @@ export default function TeacherProfilePage() {
           )}
         </div>
       </div>
+
+      {/* 3. Subject Authorizations */}
+      <TeacherSubjectAuthorizationCard />
+
+      {/* 4. eContract & Verification Submission History */}
+      {((verificationStatus?.verificationStatus || profile.verificationStatus) === "VERIFIED" ||
+        verificationSubmissions.length > 0) && (
+        <div className="bg-white rounded-2xl p-5 sm:px-6 border border-slate-100 shadow-sm flex flex-col gap-4">
+          {(verificationStatus?.verificationStatus || profile.verificationStatus) === "VERIFIED" && (
+            <TeacherContractCard />
+          )}
+          {verificationSubmissions.length ? (
+            <div
+              className={
+                (verificationStatus?.verificationStatus || profile.verificationStatus) === "VERIFIED"
+                  ? "border-t border-slate-100 pt-4"
+                  : ""
+              }
+            >
+              <h4 className="mb-3 text-sm font-bold text-slate-800">Lịch sử gửi và xử lý</h4>
+              <div className="space-y-3">
+                {verificationSubmissions.map((submission, index) => (
+                  <div key={submission.key} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-800">
+                        Lần gửi {verificationSubmissions.length - index}
+                      </span>
+                      <Tag
+                        color={
+                          submission.status === "APPROVED"
+                            ? "success"
+                            : submission.status === "REJECTED"
+                              ? "error"
+                              : submission.status === "PENDING"
+                                ? "processing"
+                                : "default"
+                        }
+                      >
+                        {submission.status === "APPROVED"
+                          ? "Đã duyệt"
+                          : submission.status === "REJECTED"
+                            ? "Từ chối"
+                            : submission.status === "PENDING"
+                              ? "Chờ duyệt"
+                              : "Không rõ"}
+                      </Tag>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Gửi lúc: {submission.submittedAt ? new Date(submission.submittedAt).toLocaleString("vi-VN") : "—"}
+                      {submission.reviewedAt
+                        ? ` · Xử lý lúc: ${new Date(submission.reviewedAt).toLocaleString("vi-VN")}`
+                        : ""}
+                    </div>
+                    {submission.reviewNote && (
+                      <p className="mb-0 mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                        Ghi chú Admin: {submission.reviewNote}
+                      </p>
+                    )}
+                    {submission.documents
+                      .filter((doc) => doc.rejectionReason)
+                      .map((doc) => (
+                        <p key={doc._id ?? doc.documentType} className="mb-0 mt-1 text-sm text-rose-700">
+                          {doc.documentType === "IDENTITY" ? "Giấy tờ định danh" : "Bằng cấp / chứng chỉ"}: {doc.rejectionReason}
+                        </p>
+                      ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Verification Submission Modal */}
       <Modal

@@ -4,11 +4,14 @@ import { Alert, App as AntdApp, Button, Skeleton, Tag } from "antd";
 import {
   CheckCircleFilled,
   ClockCircleFilled,
+  DownOutlined,
   DownloadOutlined,
   EditOutlined,
   EyeOutlined,
   FileProtectOutlined,
+  InfoCircleFilled,
   SafetyCertificateOutlined,
+  UpOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { Link } from "react-router-dom";
@@ -29,6 +32,7 @@ export default function TeacherContractCard() {
   const queryClient = useQueryClient();
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState<boolean>(false);
 
   const {
     data: contracts = [],
@@ -67,17 +71,26 @@ export default function TeacherContractCard() {
 
   const pendingContract = contracts.find((c) => c.status === "PENDING_SIGNATURE");
   const activeContract = contracts.find((c) => c.status === "ACTIVE" || c.status === "SIGNED");
+  const primaryContract = pendingContract || activeContract || contracts[0];
+
+  const renderToggleDetailButton = () => (
+    <Button
+      size="small"
+      icon={isDetailsExpanded ? <UpOutlined /> : <DownOutlined />}
+      onClick={() => setIsDetailsExpanded((prev) => !prev)}
+      className="rounded-xl text-xs font-semibold shrink-0 bg-white/90 hover:bg-white border-slate-200 text-slate-700"
+    >
+      {isDetailsExpanded ? "Thu gọn" : "Xem chi tiết"}
+    </Button>
+  );
 
   return (
-    <div className="border-t border-slate-100 pt-4 space-y-3">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="m-0 text-sm font-bold text-slate-800 flex items-center gap-2">
           <FileProtectOutlined className="text-teal-600" />
           Hợp đồng cộng tác giảng dạy điện tử (eContract)
         </h4>
-        <Tag color="teal" className="text-xs font-semibold !m-0">
-          Phân chia doanh thu: 90% Giáo viên / 10% Edunity
-        </Tag>
       </div>
 
       {pendingContract && (
@@ -92,14 +105,18 @@ export default function TeacherContractCard() {
               <span className="text-xs text-slate-700">
                 Hồ sơ xác minh của bạn đã được phê duyệt. Vui lòng mở hợp đồng, đọc toàn bộ 09 điều khoản và ký điện tử để kích hoạt quyền tạo lớp học.
               </span>
-              <Button
-                type="primary"
-                icon={<EditOutlined />}
-                onClick={() => setSelectedContractId(pendingContract.id)}
-                className="bg-teal-600 hover:bg-teal-700 font-bold text-xs rounded-xl shrink-0"
-              >
-                Đọc & Ký hợp đồng ngay
-              </Button>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {renderToggleDetailButton()}
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => setSelectedContractId(pendingContract.id)}
+                  className="bg-teal-600 hover:bg-teal-700 font-bold text-xs rounded-xl shrink-0"
+                >
+                  Đọc & Ký hợp đồng ngay
+                </Button>
+              </div>
             </div>
           }
         />
@@ -113,10 +130,31 @@ export default function TeacherContractCard() {
           className="rounded-xl"
           message={`Hợp đồng ${activeContract.contractCode} đã được ký và đang có hiệu lực`}
           description={
-            <span className="text-xs text-slate-700">
-              Bạn đã đủ điều kiện hợp đồng để mở lớp học trực tuyến trên Edunity (Hiệu lực đến{" "}
-              {formatDate(activeContract.expiresAt)}).
-            </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-1">
+              <span className="text-xs text-slate-700">
+                Bạn đã đủ điều kiện hợp đồng để mở lớp học trực tuyến trên Edunity (Hiệu lực đến{" "}
+                {formatDate(activeContract.expiresAt)}).
+              </span>
+              {renderToggleDetailButton()}
+            </div>
+          }
+        />
+      )}
+
+      {!pendingContract && !activeContract && primaryContract && (
+        <Alert
+          type="info"
+          showIcon
+          icon={<InfoCircleFilled />}
+          className="rounded-xl"
+          message={`Hợp đồng gần nhất: ${primaryContract.contractCode} (${CONTRACT_STATUS_META[primaryContract.status].label})`}
+          description={
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-1">
+              <span className="text-xs text-slate-700">
+                Bạn hiện chưa có hợp đồng đang hiệu lực để mở lớp mới. Nhấn xem chi tiết để tra cứu lịch sử hợp đồng.
+              </span>
+              {renderToggleDetailButton()}
+            </div>
           }
         />
       )}
@@ -125,8 +163,8 @@ export default function TeacherContractCard() {
         <p className="text-sm text-slate-500 m-0">
           Bạn chưa có hợp đồng cộng tác giảng dạy. Hệ thống sẽ tự động khởi tạo hợp đồng điện tử ngay khi Quản trị viên phê duyệt hồ sơ xác minh của bạn.
         </p>
-      ) : (
-        <div className="space-y-3">
+      ) : isDetailsExpanded ? (
+        <div className="space-y-3 animate-fadeIn">
           {contracts.map((contract) => {
             const meta = CONTRACT_STATUS_META[contract.status];
             const isPendingSig = contract.status === "PENDING_SIGNATURE";
@@ -135,13 +173,12 @@ export default function TeacherContractCard() {
             return (
               <div
                 key={contract.id}
-                className={`rounded-xl border p-4 flex flex-col gap-3 transition-all ${
-                  isPendingSig
-                    ? "border-amber-300 bg-amber-50/30"
-                    : isSigned
-                      ? "border-teal-200 bg-teal-50/20"
-                      : "border-slate-200 bg-slate-50"
-                }`}
+                className={`rounded-xl border p-4 flex flex-col gap-3 transition-all ${isPendingSig
+                  ? "border-amber-300 bg-amber-50/30"
+                  : isSigned
+                    ? "border-teal-200 bg-teal-50/20"
+                    : "border-slate-200 bg-slate-50"
+                  }`}
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -254,7 +291,7 @@ export default function TeacherContractCard() {
             );
           })}
         </div>
-      )}
+      ) : null}
 
       <TeacherContractDetailModal
         contractId={selectedContractId}
